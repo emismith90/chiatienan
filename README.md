@@ -100,22 +100,25 @@ Copy `.env.example` → `.env` and fill it in. Key vars:
 
 ## Deploy (DigitalOcean droplet)
 
+Full runbook: [`deploy/README.md`](deploy/README.md). In short:
+
 1. Provision a droplet (**≥ 1 GB RAM**) with Docker + Compose, point an A-record
    at it (`CADDY_DOMAIN`).
 2. Clone the repo, `cp .env.example .env`, and fill in `.env`.
-3. Bring it up (Caddy fetches TLS automatically):
+3. Bring it up from the repo root (Caddy fetches TLS automatically):
 
    ```bash
-   cd deploy
-   docker compose --env-file ../.env up --build -d
+   docker compose up -d --build
    ```
 
-4. Register the Azure Bot resource's messaging endpoint as
+4. Validate the Cursor SDK bridge runs in-container (B3):
+   `curl -X POST https://<CADDY_DOMAIN>/internal/bridge-smoke -H "X-Admin-Password: <ADMIN_PASSWORD>"`.
+5. Register the Azure Bot resource's messaging endpoint as
    `https://<CADDY_DOMAIN>/api/messages`.
-5. Open `https://<CADDY_DOMAIN>/admin`, add the roster (names, aliases, bank
+6. Open `https://<CADDY_DOMAIN>/admin`, add the roster (names, aliases, bank
    details). Members the bot captures on first mention appear here (highlighted)
    for you to complete + activate.
-6. Nightly backups: schedule `deploy/backup.sh` from cron (see the script header).
+7. Nightly backups: schedule `deploy/backup.sh` from cron (see the script header).
 
 ### Teams app package
 
