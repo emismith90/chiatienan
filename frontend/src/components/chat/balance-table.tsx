@@ -25,7 +25,7 @@ export function BalanceTable({ rows }: { rows: Row[] }) {
               <td className="py-1 text-[var(--text-primary)]">{r.name}</td>
               <td className="py-1 text-right text-[var(--text-secondary)]">{fmt(r.paid)}</td>
               <td className="py-1 text-right text-[var(--text-secondary)]">{fmt(r.consumed)}</td>
-              <td className={`py-1 text-right font-medium ${r.balance >= 0 ? "text-[var(--accent-primary)]" : "text-red-500"}`}>
+              <td className={`py-1 text-right font-medium ${r.balance >= 0 ? "text-[var(--accent-primary)]" : "text-[var(--danger)]"}`}>
                 {r.balance >= 0 ? "+" : ""}{fmt(r.balance)}
               </td>
             </tr>
