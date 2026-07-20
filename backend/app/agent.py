@@ -42,6 +42,7 @@ class TurnResult:
     final_text: str = ""
     tools: list[ToolInvocation] = field(default_factory=list)
     error: str | None = None
+    turn_id: str | None = None
 
     def last_result(self, name: str) -> dict | None:
         """Most-recent successful (``ok``) result dict for a given tool name."""
@@ -155,8 +156,14 @@ def _build_message(text: str, images):
     )
 
 
-async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
-    """Run one turn to completion and return the assembled :class:`TurnResult`."""
+async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> TurnResult:
+    """Run one turn to completion and return the assembled :class:`TurnResult`.
+
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the
+    live ``agent.*`` timeline events (:mod:`app.agui`) for this turn's SSE
+    stream. When ``emit is None`` this function's behavior is unchanged from
+    before streaming was added.
+    """
     from cursor_sdk import (
         AgentOptions,
         AsyncClient,
@@ -171,6 +178,15 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
         resolve_cursor_api_key,
         resolve_model_selection,
     )
+
+    import uuid
+
+    from app import agui
+
+    turn_id = uuid.uuid4().hex
+    if emit:
+        for ev in agui.start(turn_id):
+            await emit(ev)
 
     result = TurnResult()
     workspace = _ensure_workspace()
@@ -203,6 +219,9 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
                     message, SendOptions(model=selection, local=LocalSendOptions(force=True))
                 )
                 async for msg in run.messages():
+                    if emit:
+                        for ev in agui.translate(msg, turn_id):
+                            await emit(ev)
                     mtype = getattr(msg, "type", None)
                     if mtype == "assistant":
                         text_parts.append(_assistant_text(msg))
@@ -242,4 +261,10 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
             result.error = str(exc)
 
     result.final_text = "".join(text_parts).strip()
+
+    if emit:
+        for ev in agui.finish(turn_id, error=result.error):
+            await emit(ev)
+    result.turn_id = turn_id
+
     return result

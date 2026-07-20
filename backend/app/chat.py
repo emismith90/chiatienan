@@ -114,13 +114,16 @@ def _meal_body(attachments: dict) -> str:
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
-                        text: str, images=None) -> RoomMessage:
+                        text: str, images=None, emit=None) -> RoomMessage:
     """Run the agent for one ``@bot`` turn and persist its reply.
 
     Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
     from concurrent turns never interleaves with another. Meal turns never write
     directly — ``propose_meal`` only proposes, and the turn ends with a pending
     ``expense_draft`` for a human to edit/commit.
+
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
+    :func:`app.agent.run_turn` for live ``agent.*`` progress; unused otherwise.
     """
     from app.agent import run_turn
     from app.tools import ToolContext
@@ -128,7 +131,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
                        sender_name=member_name, turn_mentions=[])
     async with _agent_lock:
-        result = await run_turn(text, ctx, images=images)
+        result = await run_turn(text, ctx, images=images, emit=emit)
 
     from app import drafts
 

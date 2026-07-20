@@ -72,7 +72,7 @@ async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
         m = Member(room_id=r.id, display_name="An", nickname="an", pin="1"); s.add(m); s.flush()
         room_id, member_id = r.id, m.id
 
-    async def _fake_run_turn(user_text, ctx, images=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
         return TurnResult(final_text="", error="boom")
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
@@ -103,7 +103,7 @@ async def test_run_bot_turn_settlement_body_uses_tool_amounts(monkeypatch, db):
         "committed": False,
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
         return TurnResult(
             final_text="Đã chốt xong nhé, Bình nợ An 999đ thôi",  # deliberately wrong
             tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
@@ -133,7 +133,7 @@ async def test_run_bot_turn_settlement_body_no_transfers_uses_tool_message(monke
         "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
         return TurnResult(
             final_text="mọi người xong hết rồi",
             tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
@@ -171,7 +171,7 @@ async def test_run_bot_turn_meal_proposal_creates_pending_draft(monkeypatch, db)
         "per_head_preview": 150000,
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
         return TurnResult(
             final_text="ghi rồi nhé, mỗi người 1đ thôi",  # must be ignored entirely
             tools=[ToolInvocation(name="propose_meal", args={}, result=proposal_result)],

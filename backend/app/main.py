@@ -188,9 +188,13 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         await hub.publish(room_id, {"type": "bot.typing"})
 
         async def _run():
+            async def emit(ev):
+                await hub.publish(room_id, ev)
+
             try:
                 bot_msg = await chat.run_bot_turn(
-                    db, room_id, ctx.member_id, ctx.display_name, body.body, images=clean,
+                    db, room_id, ctx.member_id, ctx.display_name, body.body,
+                    images=clean, emit=emit,
                 )
                 await hub.publish(room_id, {"type": "message", **chat.message_to_dict(bot_msg, None)})
             except Exception:  # noqa: BLE001 — never leave the room stuck

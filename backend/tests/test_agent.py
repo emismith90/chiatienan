@@ -1,9 +1,11 @@
 import json
 import types
+from types import SimpleNamespace
 
 import pytest
 
 import app.agent as agent_mod
+from app import agui
 from app.agent import (
     ToolInvocation,
     TurnResult,
@@ -137,3 +139,29 @@ async def test_run_turn_collects_text_and_tool_results(monkeypatch, db):
     assert "cân bằng" in result.final_text
     settle = result.last_result("settle_period")
     assert settle is not None and settle["transfers"] == []
+
+
+# --- emit contract ---------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_emit_receives_events_for_messages():
+    # Exercise the same loop shape run_turn uses: translate + await emit.
+    seen = []
+    async def emit(ev): seen.append(ev)
+    msgs = [
+        SimpleNamespace(type="assistant",
+                        message=SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])),
+        SimpleNamespace(type="tool_call", call_id="c1", name="propose_meal",
+                        status="completed", args={"total": 1}, result={"ok": True}),
+    ]
+    turn_id = "t1"
+    for ev in agui.start(turn_id):
+        await emit(ev)
+    for m in msgs:
+        for ev in agui.translate(m, turn_id):
+            await emit(ev)
+    for ev in agui.finish(turn_id):
+        await emit(ev)
+    kinds = [e["type"] for e in seen]
+    assert kinds[0] == "agent.run.started" and kinds[-1] == "agent.run.finished"
+    assert "agent.text.delta" in kinds and "agent.tool.result" in kinds
