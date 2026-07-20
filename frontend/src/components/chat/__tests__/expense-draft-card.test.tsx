@@ -17,4 +17,13 @@ describe("perHead", () => {
   it("counts guests toward the head count", () => {
     expect(perHead(300_000, 2, 1)).toBe(perHead(300_000, 3, 0));
   });
+
+  it("subtracts the adjustments total before dividing, matching the server's base", () => {
+    // total 400_000, 4 heads, one member adjusted +50_000 -> base = (400_000 - 50_000) / 4
+    expect(perHead(400_000, 4, 0, 50_000)).toBe(87_500);
+  });
+
+  it("defaults the adjustments total to 0 when omitted (back-compat)", () => {
+    expect(perHead(400_000, 4, 0)).toBe(perHead(400_000, 4, 0, 0));
+  });
 });

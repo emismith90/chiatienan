@@ -66,8 +66,20 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
     return s;
   }
   if (e.type === "message") {
-    if (s.messages.some((m) => m.id === e.id)) return s;
     const { type, ...msg } = e;
+    const existingIdx = s.messages.findIndex((m) => m.id === e.id);
+    if (existingIdx !== -1) {
+      // Most messages are immutable once published, so a repeat of a known id
+      // is just a duplicate delivery to ignore. Expense drafts are the
+      // exception: the backend re-publishes the SAME draft id with
+      // attachments.status flipped (pending -> committed/cancelled) after
+      // Ghi ngay / Huỷ, so that update must replace the stored message in
+      // place or the card would look pending forever.
+      if (e.kind === "expense_draft") {
+        return { ...s, messages: s.messages.map((m, i) => (i === existingIdx ? msg : m)) };
+      }
+      return s;
+    }
     const withoutPending = s.messages.filter(
       (m) =>
         !(

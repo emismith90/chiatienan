@@ -53,4 +53,29 @@ describe("mergeEvent", () => {
     expect(s1.messages.filter((m) => m.pending).length).toBe(0);
     expect(s1.messages.length).toBe(1);
   });
+
+  it("replaces an expense_draft message in place when its status changes (commit)", () => {
+    const s0: RoomState = {
+      messages: [
+        {
+          id: 42,
+          kind: "expense_draft",
+          body: "",
+          attachments: { status: "pending", bill_total: 400_000 },
+        },
+      ],
+      typing: false,
+      timelines: {},
+      activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, {
+      type: "message",
+      id: 42,
+      kind: "expense_draft",
+      body: "",
+      attachments: { status: "committed", bill_total: 400_000 },
+    });
+    expect(s1.messages.length).toBe(1);
+    expect(s1.messages[0].attachments.status).toBe("committed");
+  });
 });
