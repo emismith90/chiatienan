@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import now_ict, today_ict
-from app.models import Meal, MealShare, Member, ProcessedActivity, Settlement
+from app.models import Meal, MealShare, Member, Settlement
 from app.money import split_shares
 
 
@@ -24,6 +24,7 @@ class LedgerError(ValueError):
 def record_meal(
     session: Session,
     *,
+    room_id: int,
     payer_member_id: int,
     participants: list[int],
     total_amount: int,
@@ -31,7 +32,7 @@ def record_meal(
     occurred_on: date | None = None,
     note: str | None = None,
     raw_input: str | None = None,
-    source: str = "teams",
+    source: str = "web",
     logged_by: str | None = None,
 ) -> dict:
     """Validate, split, and write ``meals`` + ``meal_shares`` in one transaction.
@@ -42,10 +43,15 @@ def record_meal(
     through the LLM).
     """
     payer = session.get(Member, payer_member_id)
-    if payer is None:
+    if payer is None or payer.room_id != room_id:
         raise LedgerError(f"Người trả tiền (id={payer_member_id}) không tồn tại.")
 
-    known = {m.id for m in session.scalars(select(Member).where(Member.id.in_(participants)))}
+    known = {
+        m.id
+        for m in session.scalars(
+            select(Member).where(Member.id.in_(participants), Member.room_id == room_id)
+        )
+    }
     missing = [p for p in participants if p not in known]
     if missing:
         raise LedgerError(f"Người tham gia không tồn tại: {missing}.")
@@ -54,6 +60,7 @@ def record_meal(
     shares = split_shares(total_amount, participants, adjustments, payer_id=payer_member_id)
 
     meal = Meal(
+        room_id=room_id,
         occurred_on=occurred_on or today_ict(),
         payer_member_id=payer_member_id,
         total_amount=total_amount,
@@ -77,10 +84,10 @@ def record_meal(
     }
 
 
-def void_meal(session: Session, meal_id: int, by: str | None = None) -> dict:
+def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = None) -> dict:
     """Soft-delete a meal for a correction (design 6.1: void, then re-record)."""
     meal = session.get(Meal, meal_id)
-    if meal is None:
+    if meal is None or meal.room_id != room_id:
         raise LedgerError(f"Không tìm thấy bữa ăn #{meal_id}.")
     if meal.voided:
         return {"meal_id": meal_id, "already_voided": True}
@@ -92,15 +99,16 @@ def void_meal(session: Session, meal_id: int, by: str | None = None) -> dict:
 
 
 def period_balances(
-    session: Session, from_date: date | None, to_date: date
+    session: Session, room_id: int, from_date: date | None, to_date: date
 ) -> dict[int, dict[str, int]]:
     """Per-member ``paid`` / ``consumed`` / ``balance`` over an inclusive window.
 
     Excludes voided meals. ``from_date=None`` means "from the beginning of the
-    ledger". Only members with any activity in the window appear.
+    ledger". Only members with any activity in the window appear. Scoped to
+    ``room_id`` — other rooms' meals never contribute.
     """
     def _in_window(col):
-        conds = [Meal.voided.is_(False), col <= to_date]
+        conds = [Meal.room_id == room_id, Meal.voided.is_(False), col <= to_date]
         if from_date is not None:
             conds.append(col >= from_date)
         return conds
@@ -130,15 +138,19 @@ def period_balances(
     return out
 
 
-def last_settlement(session: Session) -> Settlement | None:
+def last_settlement(session: Session, room_id: int) -> Settlement | None:
     return session.scalars(
-        select(Settlement).order_by(Settlement.period_to.desc(), Settlement.id.desc()).limit(1)
+        select(Settlement)
+        .where(Settlement.room_id == room_id)
+        .order_by(Settlement.period_to.desc(), Settlement.id.desc())
+        .limit(1)
     ).first()
 
 
 def record_settlement(
     session: Session,
     *,
+    room_id: int,
     period_from: date | None,
     period_to: date,
     requested_by: str | None,
@@ -146,6 +158,7 @@ def record_settlement(
 ) -> Settlement:
     """Append a committed settle event (the only thing that closes a period)."""
     row = Settlement(
+        room_id=room_id,
         period_from=period_from,
         period_to=period_to,
         requested_by=requested_by,
@@ -156,25 +169,14 @@ def record_settlement(
     return row
 
 
-# --- idempotency ----------------------------------------------------------- #
-
-def already_processed(session: Session, activity_id: str) -> bool:
-    return session.get(ProcessedActivity, activity_id) is not None
-
-
-def mark_processed(session: Session, activity_id: str) -> None:
-    session.add(ProcessedActivity(activity_id=activity_id))
-    session.flush()
-
-
 def get_meal(session: Session, meal_id: int) -> Meal | None:
     return session.get(Meal, meal_id)
 
 
 def meals_in_window(
-    session: Session, from_date: date | None, to_date: date
+    session: Session, room_id: int, from_date: date | None, to_date: date
 ) -> Iterable[Meal]:
-    conds = [Meal.voided.is_(False), Meal.occurred_on <= to_date]
+    conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
     if from_date is not None:
         conds.append(Meal.occurred_on >= from_date)
     return session.scalars(select(Meal).where(*conds).order_by(Meal.occurred_on, Meal.id)).all()
