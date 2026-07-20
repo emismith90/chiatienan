@@ -29,25 +29,19 @@ logger = logging.getLogger("chiatienan")
 
 @dataclass
 class ToolContext:
-    """Per-turn context the tools close over (never seen by the model)."""
+    """Per-turn context the tools close over (never seen by the model).
+
+    Room-scoped: every tool call is confined to ``room_id``, and the sender is
+    whoever is logged in for this PWA session (``sender_member_id``) — no more
+    Teams identity capture.
+    """
 
     db: Database
-    sender_teams_id: str | None = None
+    room_id: int
+    sender_member_id: int | None = None
     sender_name: str | None = None
-    sender_aad: str | None = None
     # People @mentioned in this message (bot mention already stripped):
     turn_mentions: list[dict] = field(default_factory=list)
-
-    def sender_member_id(self, session) -> int | None:
-        if not self.sender_teams_id:
-            return None
-        member = roster.capture_sender(
-            session,
-            teams_user_id=self.sender_teams_id,
-            aad_object_id=self.sender_aad,
-            name=self.sender_name or "Người dùng mới",
-        )
-        return member.id
 
 
 def _err(message: str) -> dict:
@@ -62,8 +56,8 @@ def _parse_iso(value) -> date | None:
     return date.fromisoformat(str(value))
 
 
-def _names_for(session, ids) -> dict[int, str]:
-    return {m.id: m.display_name for m in roster.list_members(session) if m.id in set(ids)}
+def _names_for(session, room_id, ids) -> dict[int, str]:
+    return {m.id: m.display_name for m in roster.list_members(session, room_id) if m.id in set(ids)}
 
 
 # --------------------------------------------------------------------------- #
@@ -81,10 +75,6 @@ _FIND_SCHEMA = {
         "all_active": {
             "type": "boolean",
             "description": "True để lấy toàn bộ thành viên đang hoạt động ('cả nhóm').",
-        },
-        "include_tagged": {
-            "type": "boolean",
-            "description": "Gộp những người được @tag trong tin nhắn này (mặc định true).",
         },
     },
 }
@@ -168,10 +158,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         args = args or {}
         names = list(args.get("names") or [])
         all_active = bool(args.get("all_active"))
-        include_tagged = args.get("include_tagged", True)
-        mentions = ctx.turn_mentions if include_tagged else []
         with db.session() as s:
-            return {"ok": True, **roster.resolve(s, names=names, mentions=mentions, all_active=all_active)}
+            return {
+                "ok": True,
+                **roster.resolve(s, ctx.room_id, names=names, mentions=ctx.turn_mentions, all_active=all_active),
+            }
 
     def record_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -191,7 +182,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             return _err("Ngày (occurred_on) không hợp lệ, cần dạng YYYY-MM-DD.")
 
         with db.session() as s:
-            payer = args.get("payer") or ctx.sender_member_id(s)
+            payer = args.get("payer") or ctx.sender_member_id
             if not payer:
                 return _err("Không xác định được người trả tiền (payer).")
             if not participants:
@@ -199,6 +190,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             try:
                 res = ledger.record_meal(
                     s,
+                    room_id=ctx.room_id,
                     payer_member_id=int(payer),
                     participants=[int(p) for p in participants],
                     total_amount=total,
@@ -206,13 +198,13 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     occurred_on=occurred_on,
                     note=args.get("note"),
                     raw_input=None,
-                    source="teams",
-                    logged_by=ctx.sender_teams_id,
+                    source="web",
+                    logged_by=str(ctx.sender_member_id),
                 )
             except (MoneyError, ledger.LedgerError) as exc:
                 return _err(str(exc))
 
-            names = _names_for(s, [res["payer_member_id"], *res["shares"].keys()])
+            names = _names_for(s, ctx.room_id, [res["payer_member_id"], *res["shares"].keys()])
             return {
                 "ok": True,
                 "meal_id": res["meal_id"],
@@ -232,14 +224,17 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             return _err("Thiếu meal_id.")
         with db.session() as s:
             try:
-                return {"ok": True, **ledger.void_meal(s, meal_id, by=ctx.sender_teams_id)}
+                return {
+                    "ok": True,
+                    **ledger.void_meal(s, meal_id, room_id=ctx.room_id, by=str(ctx.sender_member_id)),
+                }
             except ledger.LedgerError as exc:
                 return _err(str(exc))
 
     def resolve_period_tool(args, _tool_ctx=None) -> dict:
         args = args or {}
         with db.session() as s:
-            last = ledger.last_settlement(s)
+            last = ledger.last_settlement(s, ctx.room_id)
             try:
                 period = resolve_period(
                     args.get("keyword"),
@@ -267,8 +262,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         if to_date is None:
             return _err("Thiếu ngày kết thúc (to).")
         with db.session() as s:
-            balances = ledger.period_balances(s, from_date, to_date)
-            names = _names_for(s, balances.keys())
+            balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
+            names = _names_for(s, ctx.room_id, balances.keys())
         return {
             "ok": True,
             "from": from_date.isoformat() if from_date else None,
@@ -284,7 +279,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         args = args or {}
         commit = bool(args.get("commit"))
         with db.session() as s:
-            last = ledger.last_settlement(s)
+            last = ledger.last_settlement(s, ctx.room_id)
             try:
                 period = resolve_period(
                     args.get("keyword"),
@@ -297,7 +292,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 return _err(str(exc))
 
             from_date, to_date = period["from"], period["to"]
-            balances = ledger.period_balances(s, from_date, to_date)
+            balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
             if not any(v["balance"] for v in balances.values()):
                 return {
                     "ok": True,
@@ -308,7 +303,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 }
 
             transfers = net_transfers({mid: v["balance"] for mid, v in balances.items()})
-            members = {m.id: m for m in roster.list_members(s)}
+            members = {m.id: m for m in roster.list_members(s, ctx.room_id)}
             note = f"Chia tien an {to_date.isoformat()}"
 
             rows: list[dict] = []
@@ -335,9 +330,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             if commit:
                 ledger.record_settlement(
                     s,
+                    room_id=ctx.room_id,
                     period_from=from_date,
                     period_to=to_date,
-                    requested_by=ctx.sender_teams_id,
+                    requested_by=str(ctx.sender_member_id),
                     transfers=rows,
                 )
                 committed = True
@@ -353,7 +349,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     return {
         "find_members": CustomTool(
             execute=find_members,
-            description="Tra cứu member id từ tên/biệt danh, @tag, hoặc toàn nhóm (all_active).",
+            description="Tra cứu member id từ tên/biệt danh, hoặc toàn nhóm (all_active).",
             input_schema=_FIND_SCHEMA,
         ),
         "record_meal": CustomTool(

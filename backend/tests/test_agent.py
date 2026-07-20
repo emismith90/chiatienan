@@ -130,7 +130,7 @@ async def test_run_turn_collects_text_and_tool_results(monkeypatch, db):
 
     monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _fake_launch)
 
-    ctx = ToolContext(db=db, sender_teams_id="29:an", sender_name="An")
+    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="An")
     result = await run_turn("ai trả tuần này", ctx)
 
     assert result.error is None

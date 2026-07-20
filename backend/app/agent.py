@@ -175,7 +175,9 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
     result = TurnResult()
     workspace = _ensure_workspace()
     api_key = resolve_cursor_api_key()
-    selection = resolve_model_selection(api_key, default_cursor_model(), reasoning="medium")
+    selection = await asyncio.to_thread(
+        resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
+    )
 
     prompt = build_system_prompt(sender_name=ctx.sender_name)
     message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
