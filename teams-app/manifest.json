@@ -3,12 +3,12 @@
   "manifestVersion": "1.16",
   "version": "1.0.0",
   "id": "REPLACE_WITH_MICROSOFT_APP_ID",
-  "packageName": "se.niteco.chiatienan",
+  "packageName": "com.hungle.chiatienan",
   "developer": {
-    "name": "Niteco",
-    "websiteUrl": "https://chiatienan.duckdns.org",
-    "privacyUrl": "https://chiatienan.duckdns.org/privacy",
-    "termsOfUseUrl": "https://chiatienan.duckdns.org/terms"
+    "name": "Hung Le",
+    "websiteUrl": "https://github.com/emismith90/chiatienan",
+    "privacyUrl": "https://github.com/emismith90/chiatienan/blob/main/PRIVACY.md",
+    "termsOfUseUrl": "https://github.com/emismith90/chiatienan/blob/main/TERMS.md"
   },
   "name": {
     "short": "chiatienan",
