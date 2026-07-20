@@ -5,8 +5,13 @@ import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { ChatImage } from "@/types/chat";
 
-export type TimelineStep = { kind: "text" | "tool"; name?: string; status?: string; text?: string };
-export type RoomState = { messages: any[]; typing: boolean; timelines: Record<string, TimelineStep[]> };
+export type TimelineStep = { kind: "text" | "tool"; name?: string; status?: string; text?: string; callId?: string };
+export type RoomState = {
+  messages: any[];
+  typing: boolean;
+  timelines: Record<string, TimelineStep[]>;
+  activeTurn: string | null;
+};
 
 /**
  * Pure reducer for a single stream event. Kept side-effect free so it can be
@@ -21,7 +26,7 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
   if (e.type === "bot.typing") return { ...s, typing: true };
   if (e.type === "bot.done") return { ...s, typing: false };
   if (e.type === "agent.run.started") {
-    return { ...s, timelines: { ...s.timelines, [e.turn_id]: [] } };
+    return { ...s, timelines: { ...s.timelines, [e.turn_id]: [] }, activeTurn: e.turn_id };
   }
   if (e.type === "agent.text.delta") {
     const prev = s.timelines[e.turn_id] ?? [];
@@ -33,17 +38,33 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
   }
   if (e.type === "agent.tool.start") {
     const prev = s.timelines[e.turn_id] ?? [];
-    return { ...s, timelines: { ...s.timelines, [e.turn_id]: [...prev, { kind: "tool" as const, name: e.name, status: "running" }] } };
+    return {
+      ...s,
+      timelines: {
+        ...s.timelines,
+        [e.turn_id]: [...prev, { kind: "tool" as const, name: e.name, status: "running", callId: e.call_id }],
+      },
+    };
   }
   if (e.type === "agent.tool.result") {
     const prev = s.timelines[e.turn_id] ?? [];
-    const i = [...prev].reverse().findIndex((x) => x.kind === "tool" && x.name === e.name && x.status === "running");
-    if (i === -1) return { ...s, timelines: { ...s.timelines, [e.turn_id]: [...prev, { kind: "tool" as const, name: e.name, status: e.status }] } };
-    const idx = prev.length - 1 - i;
+    let idx = e.call_id != null ? prev.findIndex((x) => x.kind === "tool" && x.callId === e.call_id) : -1;
+    if (idx === -1) {
+      // Fall back to matching by name on the most recent running step of that
+      // name, for events that don't carry a call_id.
+      const i = [...prev].reverse().findIndex((x) => x.kind === "tool" && x.name === e.name && x.status === "running");
+      idx = i === -1 ? -1 : prev.length - 1 - i;
+    }
+    if (idx === -1) return { ...s, timelines: { ...s.timelines, [e.turn_id]: [...prev, { kind: "tool" as const, name: e.name, status: e.status }] } };
     const steps = prev.map((x, j) => (j === idx ? { ...x, status: e.status } : x));
     return { ...s, timelines: { ...s.timelines, [e.turn_id]: steps } };
   }
-  if (e.type === "agent.run.finished" || e.type === "agent.run.error") return s; // timeline stays; collapses in UI
+  if (e.type === "agent.run.finished" || e.type === "agent.run.error") {
+    // Timeline stays (collapses in UI); only clear activeTurn if this event
+    // belongs to the turn that's currently marked live.
+    if (s.activeTurn === e.turn_id) return { ...s, activeTurn: null };
+    return s;
+  }
   if (e.type === "message") {
     if (s.messages.some((m) => m.id === e.id)) return s;
     const { type, ...msg } = e;
@@ -53,7 +74,7 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
 }
 
 export function useRoom(roomId: number) {
-  const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {} });
+  const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {}, activeTurn: null });
   const { signOut } = useSession();
   const lastId = useRef(0);
 
@@ -61,13 +82,13 @@ export function useRoom(roomId: number) {
     const ac = new AbortController();
     let stop = false;
     lastId.current = 0;
-    setState({ messages: [], typing: false, timelines: {} });
+    setState({ messages: [], typing: false, timelines: {}, activeTurn: null });
 
     (async () => {
       try {
         const { messages } = await api.getMessages(roomId, 0);
         messages.forEach((m: any) => (lastId.current = Math.max(lastId.current, m.id)));
-        setState({ messages, typing: false, timelines: {} });
+        setState({ messages, typing: false, timelines: {}, activeTurn: null });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           signOut();
@@ -116,5 +137,5 @@ export function useRoom(roomId: number) {
   const send = (text: string, images?: ChatImage[]) =>
     api.postMessage(roomId, text, images);
 
-  return { messages: state.messages, typing: state.typing, timelines: state.timelines, send };
+  return { messages: state.messages, typing: state.typing, timelines: state.timelines, activeTurn: state.activeTurn, send };
 }

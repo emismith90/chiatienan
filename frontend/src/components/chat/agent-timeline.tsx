@@ -11,7 +11,7 @@ const LABELS: Record<string, string> = {
 };
 
 export function AgentTimeline({ steps, live }: { steps: TimelineStep[]; live: boolean }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   if (steps.length === 0 && !live) return null;
   const collapsed = !live && !open;
   return (
