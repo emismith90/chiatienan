@@ -46,6 +46,17 @@
   >200 messages add a `limit`+descending "last N" initial load (backend minor) — acceptable to defer
   for a small group, but note it.
 
+### Studio-apartment / dual-key model (apply to Tasks 4–6)
+
+- **Link opens the app into the room; PIN is the personal key.** The join screen (Task 5) keeps two
+  modes: **"I'm new" (self-register:** name/nickname/bank/PIN → `POST /accounts`) and **"I have a
+  name / claim" (`POST /identify` with nickname + PIN)**. Because the backend `identify` auto-claims
+  an unclaimed (agent-added) nickname, the same login form doubles as the **claim** flow — label it
+  "Nhập biệt danh + đặt/nhập PIN". No separate claim screen needed.
+- **No admin UI.** Every resident is equal; there is no admin-only view. `@bot add …` (agent) is how
+  people are pre-added — no frontend "add member" form required (the member list from Task 6 is
+  read-only display).
+
 ## File Structure
 
 - `frontend/` — lifted from the sample; adapted below.

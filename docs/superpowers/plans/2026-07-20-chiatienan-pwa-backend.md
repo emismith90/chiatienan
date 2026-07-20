@@ -70,6 +70,24 @@
   insensitively. Add a Task-10 test for **SSE catch-up via `since`** and **cross-room 403** on
   `/messages`. If `caddy_domain` is empty, return `invite_token` without a broken `invite_link`.
 
+### Studio-apartment / dual-key model (spec D5/D5a/D7 update — apply across tasks)
+
+- **`Member.pin` is nullable** (Task 1): `pin: Mapped[str | None] = mapped_column(String(20))`.
+  `pin IS NULL` = unclaimed (agent-added). Drop `nullable=False` on pin.
+- **`accounts.identify` also claims** (Task 6): if the nickname exists with `pin IS NULL`, set the
+  provided PIN (claim) and return a session; if `pin` is set, require a match; else 401. Add
+  `add_unclaimed(session, room, *, display_name, nickname, bank_code, account_number, account_holder) -> Member`
+  (creates a member with `pin=None`; rejects duplicate nickname).
+- **New agent tool `add_member`** (Task 4, `tools.py`): input `{display_name, nickname, bank_code?,
+  account_number?, account_holder?}`; calls `accounts.add_unclaimed(s, room, ...)` for `ctx.room_id`;
+  returns `{ok, member_id, nickname}` or `{ok: False, error}` on duplicate. Any resident can invoke it
+  via `@bot add …` — there is **no admin gate** on tools. Add it to `build_tools`'s returned dict and
+  document it in `prompt.py`.
+- **No per-room admin.** Only `POST /api/rooms` uses `require_admin`; every other route is
+  `require_session` (any resident is equal). Do not add admin checks to log/query/add/settle.
+- Tests: `add_member` creates an unclaimed member; `identify` claims an unclaimed nickname then
+  enforces the PIN on the next call.
+
 ## File Structure
 
 - `backend/app/models.py` — **modify**: add `Room`, `Session`, `RoomMessage`; add `room_id` to `Member`/`Meal`/`Settlement`; add `nickname`/`pin` to `Member`; drop `teams_user_id`/`aad_object_id` and `ProcessedActivity`.

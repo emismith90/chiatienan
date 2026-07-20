@@ -36,9 +36,10 @@ no multi-currency, no fixed cadence.
 | D2 | **Reuse the sample's chat flow** (AG-UI streaming + renderers) as the primary UI | It already does streamed chat, tool-call timeline, image attach, markdown/chart renderers. |
 | D3 | **Reuse the whole deterministic core + agent** unchanged | `money/ledger/periods/qr/tools/agent/cursor_runner/models/db/prompt/images` are channel-agnostic. |
 | D4 | **Multi-room**; all ledger data scoped by `room_id` | One server can host several independent groups. |
-| D5 | **Rooms created with the server `ADMIN_PASSWORD`**; joining needs only the invite link | Stops strangers spinning up rooms on the public URL. |
+| D5 | **Studio-apartment model: flat, no per-room admin.** Server `ADMIN_PASSWORD` only *mints new rooms*; inside a room **every resident is equal** — anyone with the invite link (the door key) can add members (via the agent), log meals, and query. | Matches the group's reality; the link is the trust boundary, so a privileged admin role adds nothing. Room creation stays gated to stop strangers spamming rooms on the public URL. |
+| D5a | **Members can be added two ways:** (a) self-register via the link; (b) **`@bot add <name> …`** creates an *unclaimed* profile (no PIN). | Onboarding is conversational; a resident can pre-add a friend's name+bank, who later claims it. |
 | D6 | **Realtime via SSE fan-out** (per-room, in-process pub/sub) | Server pushes every message (human + bot) to all members live; single-instance makes in-proc pub/sub sufficient. |
-| D7 | **Identity = nickname + PIN mapping** (not authentication) | The **invite link is the only trust boundary**; inside a room everyone shares read access, and a VN bank number + holder is a receive-only "payment address," not sensitive. The PIN just maps a device to a member and allows resume on another device. |
+| D7 | **Dual-key identity = invite link (shared door key) + personal PIN** (not authentication) | The link gets you into the apartment; the PIN identifies *which resident* you are (attribution + which bank to use) and lets you resume on another device. A VN bank number + holder is a receive-only "payment address," not sensitive. `pin` is **nullable** until a profile is claimed (agent-added profiles start unclaimed). |
 | D8 | **No security machinery** (no PIN hashing, rate-limiting, or lockouts) | There is no privileged data to guard behind the link; those measures would protect nothing. HTTPS + link secrecy is the model. |
 | D9 | **Agent acts only on `@bot`** | The room is a human chat with a bot participant invoked on demand. |
 | D10 | **Deploy: existing droplet + Docker + Caddy + TLS**, add a frontend container | Reuses the validated infra (B3 cursor-sdk bridge confirmed); Caddy path-routes `/` → frontend, `/api` + SSE → backend. |
@@ -84,8 +85,9 @@ All timestamps ICT (`Asia/Ho_Chi_Minh`); week = Mon–Sun. New/changed tables:
 
 - **`rooms`**: `id, name, invite_token (unguessable), created_at`.
 - **`accounts`** (a room member): `id, room_id (fk), display_name, nickname, bank_code,
-  account_number, account_holder, pin, created_at`. `(room_id, nickname)` unique. `pin` stored plain
-  (D8 — not a secret; identity mapping only).
+  account_number, account_holder, pin (nullable), created_at`. `(room_id, nickname)` unique. `pin`
+  stored plain (D8 — not a secret; identity mapping only). `pin IS NULL` ⇒ **unclaimed** (agent-added,
+  awaiting first-time claim). Claiming = setting the PIN for an unclaimed nickname.
 - **`sessions`**: `id, account_id (fk), token, created_at` — one per device; no expiry.
 - **`room_messages`**: `id, room_id (fk), author_account_id (null = bot), kind (text|bot),
   body, attachments (json), created_at`. The shared chat log; ordered by id.
@@ -102,8 +104,10 @@ append-only `settlements` for "since last settlement" — unchanged from the pri
 **Rooms / accounts / auth**
 - `POST /api/rooms` — **admin-password** → `{room, invite_link}`.
 - `GET  /api/rooms/{invite_token}` — public room summary (name) for the join screen.
-- `POST /api/rooms/{invite_token}/accounts` — create account (name, nickname, bank, PIN) → session token.
-- `POST /api/rooms/{invite_token}/identify` — nickname + PIN → session token (resume on a device).
+- `POST /api/rooms/{invite_token}/accounts` — self-register (name, nickname, bank, PIN) → session token.
+- `POST /api/rooms/{invite_token}/identify` — nickname + PIN → session token. If the nickname is an
+  **unclaimed** profile (`pin IS NULL`), this **claims** it (sets the PIN) and returns a session.
+- (No HTTP route to add members — that's the agent `add_member` tool, callable by any resident.)
 - `GET/PUT /api/me` — read/update own profile + banking (session token).
 
 **Chat / realtime**
@@ -153,8 +157,10 @@ needs network).
 
 Runs **only when `@bot`-mentioned**. Same deterministic tools, now **room-scoped** (the run carries
 `room_id` in tool context; `find_members`/`record_meal`/`settle_period`/… operate within that room's
-`accounts`/ledger). The reply streams into the room SSE for all members; numbers never round-trip
-tool→LLM→tool (composite `settle_period`), money math stays in code.
+`accounts`/ledger). A new **`add_member`** tool lets any resident onboard someone by chat
+(`@bot add Bình, VCB 123, Bình Nguyen`) — it creates an **unclaimed** account (PIN null) in the room.
+The reply is posted as one bot message to all members; numbers never round-trip tool→LLM→tool
+(composite `settle_period`), money math stays in code.
 
 ---
 
