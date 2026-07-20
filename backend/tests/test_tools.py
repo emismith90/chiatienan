@@ -30,53 +30,103 @@ def _other_room_member(d):
         return r2.id, other.id
 
 
-def test_record_meal_tool_scopes_to_room_and_sender():
-    d, (room_id, an, bi) = _ctx()
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
+def _seed_room(db, n, *, token="tok"):
+    """Create a room with ``n`` members directly. Mirrors the helper in
+    ``test_ledger.py``. Returns ``(room_id, [member_id, ...])``.
+    """
+    with db.session() as s:
+        room = Room(name="Room", invite_token=token)
+        s.add(room)
+        s.flush()
+        members = [
+            Member(room_id=room.id, display_name=f"M{i}", nickname=f"m{i}", pin=str(i))
+            for i in range(1, n + 1)
+        ]
+        s.add_all(members)
+        s.flush()
+        return room.id, [m.id for m in members]
+
+
+def test_propose_meal_writes_nothing_and_previews(db):
+    from app import ledger
+    from app.models import Meal
+    from app.tools import ToolContext, build_tools
+
+    room_id, (a, b, c) = _seed_room(db, 3)   # reuse the helper pattern in this file
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
     tools = build_tools(ctx)
-    out = tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
-    assert out["ok"] and out["payer"]["id"] == an
-    assert {sh["id"]: sh["amount"] for sh in out["shares"]} == {an: 50000, bi: 50000}
+    out = tools["propose_meal"].execute({
+        "payer": a, "participants": [a, b, c], "total": 400_000, "guests": ["Emi"],
+        "dish": "phở", "note": "test",
+    })
+    assert out["ok"] is True
+    assert out["type"] == "expense_draft"
+    assert out["member_participants"] == [a, b, c]
+    assert out["guests"] == ["Emi"]
+    assert out["bill_total"] == 400_000
+    assert out["per_head_preview"] == 100_000
+    assert out["dish"] == "phở"
+    # nothing persisted
+    with db.session() as s:
+        assert s.query(Meal).count() == 0
 
 
-def test_record_meal_tool_writes_source_web_and_logged_by_sender():
-    d, (room_id, an, bi) = _ctx()
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
-    tools = build_tools(ctx)
-    out = tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
-    with d.session() as s:
-        meal = s.get(Meal, out["meal_id"])
-        assert meal.source == "web"
-        assert meal.logged_by == str(an)
+def test_propose_meal_defaults_payer_to_sender(db):
+    from app.tools import ToolContext, build_tools
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    out = build_tools(ctx)["propose_meal"].execute({"participants": [a, b], "total": 200_000})
+    assert out["payer_member_id"] == a
 
 
-def test_record_meal_tool_explicit_payer_overrides_sender_but_logged_by_stays_sender():
-    d, (room_id, an, bi) = _ctx()
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
-    tools = build_tools(ctx)
-    out = tools["record_meal"].execute({"payer": bi, "participants": [an, bi], "total": 100000})
-    assert out["ok"] and out["payer"]["id"] == bi
-    with d.session() as s:
-        meal = s.get(Meal, out["meal_id"])
-        assert meal.logged_by == str(an)
+def test_propose_meal_explicit_payer_overrides_sender(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    out = build_tools(ctx)["propose_meal"].execute({"payer": b, "participants": [a, b], "total": 200_000})
+    assert out["ok"] is True
+    assert out["payer_member_id"] == b
+    with db.session() as s:
+        assert s.query(Meal).count() == 0
 
 
-def test_record_meal_tool_rejects_participant_from_another_room():
-    d, (room_id, an, bi) = _ctx()
-    _, outsider_id = _other_room_member(d)
-
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
-    tools = build_tools(ctx)
-    out = tools["record_meal"].execute({"participants": [an, outsider_id], "total": 100000})
-    assert out["ok"] is False and "error" in out
-
-
-def test_record_meal_tool_no_payer_and_no_sender_errors():
-    d, (room_id, an, bi) = _ctx()
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=None)
-    tools = build_tools(ctx)
-    out = tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
+def test_propose_meal_no_payer_and_no_sender_errors(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=None)
+    out = build_tools(ctx)["propose_meal"].execute({"participants": [a, b], "total": 100_000})
     assert out["ok"] is False
+    with db.session() as s:
+        assert s.query(Meal).count() == 0
+
+
+def test_propose_meal_adjustments_round_trip(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    out = build_tools(ctx)["propose_meal"].execute({
+        "participants": [a, b], "total": 300_000, "adjustments": [{"member": b, "amount": 50_000}],
+    })
+    assert out["ok"] is True
+    assert out["adjustments"] == [{"member": b, "amount": 50_000}]
+    with db.session() as s:
+        assert s.query(Meal).count() == 0
+
+
+def _seed_meal(d, room_id, payer, participants, total, **kwargs):
+    """Write a meal straight through ``ledger.record_meal`` (the deterministic
+    commit path), bypassing the (now write-nothing) ``propose_meal`` tool, so
+    void/balances/settle tests still have a meal to work against.
+    """
+    with d.session() as s:
+        res = ledger.record_meal(
+            s,
+            room_id=room_id,
+            payer_member_id=payer,
+            participants=participants,
+            total_amount=total,
+            source="web",
+            logged_by=str(payer),
+            **kwargs,
+        )
+        return res["meal_id"]
 
 
 def test_find_members_tool_matches_names_and_all_active():
@@ -112,14 +162,14 @@ def test_find_members_tool_schema_has_no_include_tagged():
 
 def test_void_meal_tool_marks_voided_with_sender_as_by():
     d, (room_id, an, bi) = _ctx()
+    meal_id = _seed_meal(d, room_id, an, [an, bi], 100000)
+
     ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
     tools = build_tools(ctx)
-    recorded = tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
-
-    out = tools["void_meal"].execute({"meal_id": recorded["meal_id"]})
+    out = tools["void_meal"].execute({"meal_id": meal_id})
     assert out["ok"] is True and out["voided"] is True
     with d.session() as s:
-        meal = s.get(Meal, recorded["meal_id"])
+        meal = s.get(Meal, meal_id)
         assert meal.voided is True
         assert meal.voided_by == str(an)
 
@@ -127,24 +177,18 @@ def test_void_meal_tool_marks_voided_with_sender_as_by():
 def test_void_meal_tool_cannot_void_another_rooms_meal():
     d, (room_id, an, bi) = _ctx()
     other_room_id, other_id = _other_room_member(d)
-
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
-    tools = build_tools(ctx)
-    recorded = tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
+    meal_id = _seed_meal(d, room_id, an, [an, bi], 100000)
 
     other_ctx = ToolContext(db=d, room_id=other_room_id, sender_member_id=other_id)
     other_tools = build_tools(other_ctx)
-    out = other_tools["void_meal"].execute({"meal_id": recorded["meal_id"]})
+    out = other_tools["void_meal"].execute({"meal_id": meal_id})
     assert out["ok"] is False and "error" in out
 
 
 def test_get_period_balances_tool_scoped_to_room():
     d, (room_id, an, bi) = _ctx()
     other_room_id, other_id = _other_room_member(d)
-
-    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
-    tools = build_tools(ctx)
-    tools["record_meal"].execute({"participants": [an, bi], "total": 100000})
+    _seed_meal(d, room_id, an, [an, bi], 100000)
 
     other_ctx = ToolContext(db=d, room_id=other_room_id, sender_member_id=other_id)
     other_tools = build_tools(other_ctx)
@@ -173,10 +217,10 @@ def test_add_member_tool_creates_unclaimed_member_and_rejects_duplicate_nickname
 
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
+    _seed_meal(d, room_id, an, [an, bi], 100000)
+
     ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
     tools = build_tools(ctx)
-    tools["record_meal"].execute({"participants": [an, bi], "total": 100000, "payer": an})
-
     out = tools["settle_period"].execute({"keyword": "since_last", "commit": True})
     assert out["ok"] is True and out["committed"] is True
 

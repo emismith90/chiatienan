@@ -2,9 +2,12 @@
 
 The model decides *when* to call these; the tools own all arithmetic and all
 QR-building (design D3). Each tool opens its own short-lived DB session, so a
-turn that fails before ``record_meal`` never half-writes. Validation failures are
-returned as ``{"ok": False, "error": ...}`` dicts (a clarifying-question result)
-rather than raised, so the model can ask the user instead of guessing.
+turn that fails before ``settle_period`` commits never half-writes.
+``propose_meal`` never writes at all — it only returns a draft payload for the
+user to confirm; the deterministic commit happens elsewhere via
+``ledger.record_meal``. Validation failures are returned as
+``{"ok": False, "error": ...}`` dicts (a clarifying-question result) rather
+than raised, so the model can ask the user instead of guessing.
 
 Numbers that end up in a QR are computed and rendered entirely inside
 ``settle_period`` — they never round-trip tool → LLM → tool.
@@ -20,7 +23,7 @@ from cursor_sdk import CustomTool
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
-from app.money import MoneyError, net_transfers
+from app.money import MoneyError, net_transfers, split_with_guests
 from app.periods import resolve_period
 from app.qr import QRError, make_qr_url
 
@@ -79,29 +82,22 @@ _FIND_SCHEMA = {
     },
 }
 
-_RECORD_SCHEMA = {
+_PROPOSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "payer": {"type": "integer", "description": "member id người trả tiền; bỏ trống = người đang nhắn."},
-        "participants": {
-            "type": "array",
-            "items": {"type": "integer"},
-            "description": "member id những người ăn (chia phần).",
-        },
-        "total": {"type": "integer", "description": "Tổng tiền, VND nguyên (vd 840k → 840000)."},
-        "adjustments": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "member": {"type": "integer"},
-                    "amount": {"type": "integer", "description": "VND có dấu (+ đắt hơn, - rẻ hơn)."},
-                },
-                "required": ["member", "amount"],
-            },
-        },
-        "occurred_on": {"type": "string", "description": "Ngày ISO (YYYY-MM-DD); mặc định hôm nay (ICT)."},
-        "note": {"type": "string"},
+        "payer": {"type": "integer", "description": "member id người trả; bỏ trống = người đang nhắn."},
+        "participants": {"type": "array", "items": {"type": "integer"},
+                         "description": "member id những người ăn (chia phần)."},
+        "total": {"type": "integer", "description": "Tổng hoá đơn, VND nguyên (840k → 840000)."},
+        "guests": {"type": "array", "items": {"type": "string"},
+                   "description": "Tên khách vãng lai (không phải thành viên, trả tiền mặt)."},
+        "adjustments": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"member": {"type": "integer"}, "amount": {"type": "integer"}},
+            "required": ["member", "amount"]}},
+        "dish": {"type": "string", "description": "Món ăn (nếu người dùng có nói)."},
+        "initiator": {"type": "string", "description": "Ai rủ ăn (nếu có)."},
+        "note": {"type": "string", "description": "Ghi chú tự do (vd 'An đổi ý')."},
     },
     "required": ["participants", "total"],
 }
@@ -176,58 +172,41 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 **roster.resolve(s, ctx.room_id, names=names, mentions=ctx.turn_mentions, all_active=all_active),
             }
 
-    def record_meal(args, _tool_ctx=None) -> dict:
+    def propose_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
-        participants = list(args.get("participants") or [])
+        participants = [int(p) for p in (args.get("participants") or [])]
         total = args.get("total")
         if not isinstance(total, int):
             return _err("Thiếu tổng tiền (total) dạng số nguyên VND.")
+        if not participants:
+            return _err("Chưa có người tham gia (participants).")
+        guests = [str(g) for g in (args.get("guests") or [])]
         adjustments = {}
         for adj in args.get("adjustments") or []:
             try:
                 adjustments[int(adj["member"])] = int(adj["amount"])
             except (KeyError, TypeError, ValueError):
                 return _err("Điều chỉnh (adjustments) phải có {member, amount} là số.")
+        payer = args.get("payer") or ctx.sender_member_id
+        if not payer:
+            return _err("Không xác định được người trả tiền (payer).")
         try:
-            occurred_on = _parse_iso(args.get("occurred_on"))
-        except ValueError:
-            return _err("Ngày (occurred_on) không hợp lệ, cần dạng YYYY-MM-DD.")
-
-        with db.session() as s:
-            payer = args.get("payer") or ctx.sender_member_id
-            if not payer:
-                return _err("Không xác định được người trả tiền (payer).")
-            if not participants:
-                return _err("Chưa có người tham gia (participants).")
-            try:
-                res = ledger.record_meal(
-                    s,
-                    room_id=ctx.room_id,
-                    payer_member_id=int(payer),
-                    participants=[int(p) for p in participants],
-                    total_amount=total,
-                    adjustments=adjustments,
-                    occurred_on=occurred_on,
-                    note=args.get("note"),
-                    raw_input=None,
-                    source="web",
-                    logged_by=str(ctx.sender_member_id),
-                )
-            except (MoneyError, ledger.LedgerError) as exc:
-                return _err(str(exc))
-
-            names = _names_for(s, ctx.room_id, [res["payer_member_id"], *res["shares"].keys()])
-            return {
-                "ok": True,
-                "meal_id": res["meal_id"],
-                "occurred_on": res["occurred_on"],
-                "total_amount": res["total_amount"],
-                "payer": {"id": res["payer_member_id"], "name": names.get(res["payer_member_id"], "?")},
-                "shares": [
-                    {"id": mid, "name": names.get(mid, "?"), "amount": amt}
-                    for mid, amt in res["shares"].items()
-                ],
-            }
+            preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
+        except MoneyError as exc:
+            return _err(str(exc))
+        return {
+            "ok": True,
+            "type": "expense_draft",
+            "payer_member_id": int(payer),
+            "member_participants": participants,
+            "guests": guests,
+            "bill_total": total,
+            "adjustments": [{"member": m, "amount": a} for m, a in adjustments.items()],
+            "dish": args.get("dish"),
+            "initiator": args.get("initiator"),
+            "note": args.get("note"),
+            "per_head_preview": preview["per_head"],
+        }
 
     def void_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -386,10 +365,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             description="Tra cứu member id từ tên/biệt danh, hoặc toàn nhóm (all_active).",
             input_schema=_FIND_SCHEMA,
         ),
-        "record_meal": CustomTool(
-            execute=record_meal,
-            description="Ghi một bữa ăn: chia phần đều + điều chỉnh, ghi sổ. CÔNG CỤ CUỐI trong lượt ghi.",
-            input_schema=_RECORD_SCHEMA,
+        "propose_meal": CustomTool(
+            execute=propose_meal,
+            description="Đề xuất một bữa ăn (KHÔNG ghi sổ) để người dùng xác nhận. CÔNG CỤ CUỐI khi ghi bữa ăn.",
+            input_schema=_PROPOSE_SCHEMA,
         ),
         "void_meal": CustomTool(
             execute=void_meal,
