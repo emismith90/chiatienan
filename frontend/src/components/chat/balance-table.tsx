@@ -1,5 +1,5 @@
 "use client";
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
+import { fmt } from "@/lib/format";
 
 interface Row { id: number; name: string; paid: number; consumed: number; balance: number }
 

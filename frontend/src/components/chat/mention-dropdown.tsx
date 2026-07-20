@@ -10,6 +10,23 @@ export function mentionQuery(text: string, caret: number): string | null {
   return m ? m[1] : null;
 }
 
+/** Splices an accepted `@handle` into `text`, replacing the `[start, end)`
+ * mention span. Strips any leading word-characters immediately after `end`
+ * as the dangling remainder of the same token being completed — accepting
+ * "@bo|ot" (caret after "bo", `end` there) yields "@bot ", not "@bot ot".
+ * Returns the new text and the caret position right after the insertion. */
+export function spliceMention(
+  text: string,
+  start: number,
+  end: number,
+  handle: string,
+): { next: string; caret: number } {
+  const before = text.slice(0, start);
+  const after = text.slice(end).replace(/^[\w-]+/, "");
+  const insertion = `@${handle}${/^\s/.test(after) ? "" : " "}`;
+  return { next: before + insertion + after, caret: before.length + insertion.length };
+}
+
 export function MentionDropdown({
   items,
   active,

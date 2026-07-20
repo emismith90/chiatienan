@@ -2,6 +2,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BalanceTable } from "./balance-table";
+import { fmt } from "@/lib/format";
 
 interface Transfer {
   from_name: string;
@@ -19,8 +20,6 @@ interface BotMessageProps {
   body: string;
   attachments?: any;
 }
-
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 function SettlementCard({ attachments }: { attachments: any }) {
   const transfers: Transfer[] = attachments.transfers ?? [];

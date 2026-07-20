@@ -1,6 +1,8 @@
 "use client";
 import { BotMessage } from "./bot-message";
 import { ExpenseDraftCard } from "./expense-draft-card";
+import { AgentTimeline } from "./agent-timeline";
+import type { TimelineStep } from "@/hooks/use-room";
 
 interface Member {
   id: number;
@@ -77,19 +79,28 @@ export function MessageList({
   messages,
   members,
   roomId,
+  timelines,
 }: {
   messages: Message[];
   members: Member[];
   roomId: number;
+  /** Per-turn agent timelines (turn_id -> steps), keyed the same as
+   * useRoom's `timelines`. A finished turn's timeline attaches, collapsed,
+   * above the draft message it produced — see room-view.tsx for the
+   * companion live-only rendering at the bottom of the thread. */
+  timelines?: Record<string, TimelineStep[]>;
 }) {
   return (
     <div className="flex flex-col gap-4">
-      {messages.map((m) =>
-        m.kind === "expense_draft" ? (
+      {messages.map((m) => {
+        const turnId = m.kind === "expense_draft" ? m.attachments?.turn_id : undefined;
+        const turnSteps = turnId ? timelines?.[turnId] : undefined;
+        return m.kind === "expense_draft" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
               Bot
             </span>
+            {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
             <ExpenseDraftCard message={m} members={members} roomId={roomId} />
           </div>
         ) : m.kind === "bot" ? (
@@ -101,8 +112,8 @@ export function MessageList({
           </div>
         ) : (
           <HumanMessage key={m.id} message={m} />
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }

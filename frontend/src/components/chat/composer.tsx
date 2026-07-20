@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatImage } from "@/types/chat";
 import { botHandle } from "@/lib/api";
-import { mentionQuery, MentionDropdown } from "./mention-dropdown";
+import { mentionQuery, spliceMention, MentionDropdown } from "./mention-dropdown";
 
 const MAX_IMAGES = 4;
 /** Caret-position keys that only move the cursor (no `onChange`), so the
@@ -79,18 +79,14 @@ export function Composer({ onSend }: ComposerProps) {
 
   function acceptMention(handle: string) {
     if (!mention) return;
-    const before = text.slice(0, mention.start);
-    const after = text.slice(mention.end);
-    const insertion = `@${handle}${/^\s/.test(after) ? "" : " "}`;
-    const next = before + insertion + after;
+    const { next, caret } = spliceMention(text, mention.start, mention.end, handle);
     setText(next);
     setMention(null);
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (!el) return;
-      const pos = before.length + insertion.length;
       el.focus();
-      el.setSelectionRange(pos, pos);
+      el.setSelectionRange(caret, caret);
     });
   }
 
@@ -209,6 +205,7 @@ export function Composer({ onSend }: ComposerProps) {
             onKeyDown={onKeyDown}
             onKeyUp={onKeyUp}
             onClick={(e) => recomputeMention(e.currentTarget)}
+            onBlur={() => setMention(null)}
             rows={1}
             placeholder="Nhắn tin… (dùng @bot để gọi bot)"
             aria-expanded={mention !== null && mentionItems.length > 0}

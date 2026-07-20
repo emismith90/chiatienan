@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { fmt } from "@/lib/format";
 import type { ExpenseDraft } from "@/types/chat";
 
 interface Member { id: number; display_name: string; nickname?: string | null }
 type Adjustment = { member: number; amount: number };
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 /** Provisional per-head over (billed members + guests), honoring the same
  * base the server computes: base = floor((total - Σadjustments) / heads).
@@ -36,6 +37,7 @@ export function ExpenseDraftCard({
   const [note, setNote] = useState<string>(att.note ?? "");
   const [guestName, setGuestName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timer = useRef<any>(null);
   const skipFirstRun = useRef(true);
 
@@ -157,12 +159,21 @@ export function ExpenseDraftCard({
         </p>
       )}
 
+      {error && (
+        <p className="mb-2 text-xs text-[var(--danger)]">{error}</p>
+      )}
+
       {!readonly && (
         <div className="flex gap-2">
           <button type="button" disabled={busy}
             onClick={() => {
               setBusy(true);
-              api.commitDraft(roomId, message.id).catch(() => {}).finally(() => setBusy(false));
+              setError(null);
+              api.commitDraft(roomId, message.id)
+                .catch((err) => {
+                  setError(err instanceof ApiError ? err.message : "Không thể ghi sổ, vui lòng thử lại.");
+                })
+                .finally(() => setBusy(false));
             }}
             className="flex-1 rounded-lg bg-[var(--accent-primary)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
             Ghi ngay
@@ -170,7 +181,12 @@ export function ExpenseDraftCard({
           <button type="button" disabled={busy}
             onClick={() => {
               setBusy(true);
-              api.cancelDraft(roomId, message.id).catch(() => {}).finally(() => setBusy(false));
+              setError(null);
+              api.cancelDraft(roomId, message.id)
+                .catch((err) => {
+                  setError(err instanceof ApiError ? err.message : "Không thể huỷ, vui lòng thử lại.");
+                })
+                .finally(() => setBusy(false));
             }}
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
             Huỷ

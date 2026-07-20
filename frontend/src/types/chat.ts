@@ -23,4 +23,8 @@ export interface ExpenseDraft {
   initiator: string | null;
   note: string | null;
   per_head_preview: number;
+  /** The agent turn that produced this draft. Used to attach that turn's
+   * (now-finished) timeline above the card once it arrives — see
+   * MessageList / RoomView. */
+  turn_id?: string;
 }

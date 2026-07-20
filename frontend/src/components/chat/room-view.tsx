@@ -97,10 +97,13 @@ export function RoomView({ roomId }: { roomId: number }) {
               Chưa có tin nhắn nào. Bắt đầu bằng cách nhắn @bot.
             </p>
           )}
-          <MessageList messages={messages} members={members} roomId={roomId} />
-          {Object.entries(timelines).map(([tid, steps]) => (
-            <AgentTimeline key={tid} steps={steps} live={tid === activeTurn} />
-          ))}
+          <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines} />
+          {/* Only the in-progress turn (no draft/bot message yet) renders here,
+              live. Once it finishes, its timeline attaches collapsed above the
+              message it produced — see MessageList. */}
+          {activeTurn && timelines[activeTurn] && (
+            <AgentTimeline steps={timelines[activeTurn]} live={true} />
+          )}
           {typing && (
             <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
               <span className="flex gap-1">
