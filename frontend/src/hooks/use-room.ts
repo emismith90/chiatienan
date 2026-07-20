@@ -69,7 +69,12 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
     if (s.messages.some((m) => m.id === e.id)) return s;
     const { type, ...msg } = e;
     const withoutPending = s.messages.filter(
-      (m) => !(m.pending && m.body === e.body && m.author?.id === e.author?.id),
+      (m) =>
+        !(
+          m.pending &&
+          m.body === e.body &&
+          (m.author?.id == null || m.author?.id === e.author?.id)
+        ),
     );
     return { ...s, messages: [...withoutPending, msg] };
   }

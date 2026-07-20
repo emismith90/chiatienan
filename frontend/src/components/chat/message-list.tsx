@@ -33,7 +33,7 @@ function HumanMessage({ message }: { message: Message }) {
         } bg-[var(--accent-primary)] ${message.pending ? "opacity-60" : ""}`}
       >
         {message.error && (
-          <p className="mb-1 text-xs font-medium text-white/90">Gửi thất bại — vui lòng thử lại.</p>
+          <p className="mb-1 text-xs font-medium text-white/90">Gửi thất bại.</p>
         )}
         {message.body && (
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">

@@ -14,12 +14,12 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg-base:#0F0F0F; --bg-surface:#1D1D1D;
   --text-primary:#E6E6E6; --text-secondary:#999999;
-  --border:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.08); --danger:#F87171;
 }}
 :root[data-theme="dark"]{
   --bg-base:#0F0F0F; --bg-surface:#1D1D1D;
   --text-primary:#E6E6E6; --text-secondary:#999999;
-  --border:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.08); --danger:#F87171;
 }
 @theme inline {
   --color-base:var(--bg-base); --color-surface:var(--bg-surface);

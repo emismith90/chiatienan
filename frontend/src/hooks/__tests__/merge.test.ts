@@ -43,4 +43,14 @@ describe("mergeEvent", () => {
     expect(s1.messages.some((m) => m.id === 42)).toBe(true);
     expect(s1.messages.length).toBe(1);
   });
+
+  it("reconciles a pending bubble sent before memberId loaded (author.id null) against the real message", () => {
+    const s0: RoomState = {
+      messages: [{ id: -1, kind: "text", body: "hi", author: { id: null }, pending: true }],
+      typing: false, timelines: {}, activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, { type: "message", id: 42, kind: "text", body: "hi", author: { id: 7 } });
+    expect(s1.messages.filter((m) => m.pending).length).toBe(0);
+    expect(s1.messages.length).toBe(1);
+  });
 });
