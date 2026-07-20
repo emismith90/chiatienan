@@ -10,7 +10,6 @@ dependencies = [
     "pydantic>=2",
     "sqlalchemy>=2",
     "botbuilder-core>=4.16",
-    "botbuilder-integration-aiohttp>=4.16",
     "aiohttp>=3.9",
     "python-multipart>=0.0.9",
 ]

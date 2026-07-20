@@ -1,0 +1,6 @@
+# Caddy reads CADDY_DOMAIN from the container env (env_file ../.env). It fetches
+# and renews a Let's Encrypt certificate automatically, then reverse-proxies the
+# Teams messaging endpoint to the backend.
+{$CADDY_DOMAIN} {
+	reverse_proxy backend:8000
+}
