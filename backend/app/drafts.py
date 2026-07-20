@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app import chat, ledger, roster
 from app.clock import today_ict
 from app.models import RoomMessage
+from app.periods import resolve_period
 
 _EDITABLE = {
     "payer_member_id", "member_participants", "guests", "bill_total",
@@ -114,8 +115,12 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
 
 def current_balances(session: Session, room_id: int) -> list[dict]:
     last = ledger.last_settlement(session, room_id)
-    from_date = last.period_to if last else None
-    balances = ledger.period_balances(session, room_id, from_date, today_ict())
+    period = resolve_period(
+        "since_last",
+        today=today_ict(),
+        last_settlement_to=last.period_to if last else None,
+    )
+    balances = ledger.period_balances(session, room_id, period["from"], period["to"])
     names = {mem.id: mem.display_name for mem in roster.list_members(session, room_id)}
     rows = [{"id": mid, "name": names.get(mid, "?"), **vals} for mid, vals in balances.items()]
     return sorted(rows, key=lambda r: r["balance"], reverse=True)
