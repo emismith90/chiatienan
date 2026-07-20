@@ -29,7 +29,7 @@ def make_qr_url(payee: Member, amount: int, note: str, *, template: str | None =
         raise QRError(f"Số tiền QR phải lớn hơn 0 (nhận {amount}).")
     if not payee.has_bank_details():
         raise QRError(
-            f"{payee.display_name} chưa có thông tin ngân hàng — nhờ admin cập nhật ở trang /admin."
+            f"{payee.display_name} chưa có thông tin ngân hàng — nhờ cập nhật ở trang /profile."
         )
 
     tmpl = template or settings.qr_template

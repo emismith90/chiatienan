@@ -7,7 +7,7 @@ See the design spec §9–§11 for rationale and the full prerequisite list.
 
 - **Droplet:** Ubuntu 24.04, ≥ 2 GB RAM, this Mac's SSH key added.
 - **Domain:** an A-record → droplet IP (e.g. a free `*.duckdns.org`).
-- **Secrets:** Cursor API key; an admin password you choose. (Teams/Entra values added later.)
+- **Secrets:** Cursor API key; an admin password you choose.
 
 ## 1. One-time droplet setup
 
@@ -56,15 +56,14 @@ curl -X POST https://<CADDY_DOMAIN>/internal/bridge-smoke \
 # -> {"ok": true, "elapsed_s": ..., "messages_seen": >0, "text": "...pong..."}
 ```
 
-If the bridge smoke returns `"ok": true`, B3 is confirmed on this host and we proceed to build
-the Teams gateway, tools, and ledger. If it fails, capture the `error` field and
-`docker compose logs backend` — that tells us whether the bridge subprocess couldn't launch.
+If the bridge smoke returns `"ok": true`, the Cursor SDK bridge is confirmed working on this
+host. If it fails, capture the `error` field and `docker compose logs backend` — that tells you
+whether the bridge subprocess couldn't launch.
 
-## 5. Later (after IT provides Teams/Entra)
+## 5. Later (frontend)
 
-- Add `MICROSOFT_APP_*` to `.env`, redeploy.
-- Set the Azure Bot **messaging endpoint** to `https://<CADDY_DOMAIN>/api/messages`.
-- Upload the Teams app package to the group (needs IT-enabled sideloading).
+The PWA frontend service will be added to `docker-compose.yml` by a later plan; redeploy after
+pulling it in the same way as step 3.
 
 ## Redeploy (after code changes)
 

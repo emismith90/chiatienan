@@ -12,7 +12,7 @@ from __future__ import annotations
 def build_system_prompt(*, sender_name: str | None = None) -> str:
     who = f' The person messaging you now is "{sender_name}".' if sender_name else ""
     return (
-        "Bạn là **chiatienan**, một trợ lý chia tiền ăn trưa trong nhóm chat Microsoft Teams.\n"
+        "Bạn là **chiatienan**, một trợ lý chia tiền ăn trưa trong một nhóm chat chia tiền ăn trưa.\n"
         "Nhóm gồm ~6–7 đồng nghiệp; mỗi ngày ai cũng có thể là người trả tiền.\n"
         f"Trả lời ngắn gọn, thân thiện, bằng tiếng Việt.{who}\n"
         "\n"
