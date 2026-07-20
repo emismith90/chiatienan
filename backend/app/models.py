@@ -85,7 +85,7 @@ class Meal(Base):
     note: Mapped[str | None] = mapped_column(String(400))
     raw_input: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)  # web|admin
-    logged_by: Mapped[str | None] = mapped_column(String(120))  # teams_user_id
+    logged_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) of the logging session
     voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     voided_by: Mapped[str | None] = mapped_column(String(120))
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -115,5 +115,5 @@ class Settlement(Base):
     period_from: Mapped[date | None] = mapped_column(Date)  # None = from ledger start
     period_to: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
-    requested_by: Mapped[str | None] = mapped_column(String(120))  # teams_user_id
+    requested_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) who requested the settle
     transfers: Mapped[list] = mapped_column(JSON, default=list, nullable=False)  # snapshot

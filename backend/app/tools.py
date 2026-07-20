@@ -32,8 +32,8 @@ class ToolContext:
     """Per-turn context the tools close over (never seen by the model).
 
     Room-scoped: every tool call is confined to ``room_id``, and the sender is
-    whoever is logged in for this PWA session (``sender_member_id``) — no more
-    Teams identity capture.
+    whoever is logged in for this PWA session (``sender_member_id``) — a plain
+    room member id, not any external chat-platform identity.
     """
 
     db: Database

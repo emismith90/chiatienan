@@ -1,6 +1,6 @@
 import app.agent as agent_mod
 from app import chat
-from app.agent import TurnResult
+from app.agent import ToolInvocation, TurnResult
 from app.db import Database
 from app.models import Room, Member
 
@@ -9,6 +9,11 @@ def test_mentions_bot():
     assert chat.mentions_bot("@bot ai trả tuần này")
     assert chat.mentions_bot("hey @Bot log 100k")
     assert not chat.mentions_bot("just chatting")
+
+
+def test_mentions_bot_ignores_email_like_text():
+    assert not chat.mentions_bot("email me at user@bot.com")
+    assert chat.mentions_bot("@bot hi")
 
 
 def test_post_and_list_since():
@@ -71,3 +76,100 @@ async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
     assert msg.kind == "bot"
     assert "boom" in msg.body
     assert "⚠️" in msg.body
+
+
+# --- run_bot_turn money-safety: body built from tool result, not final_text - #
+
+async def test_run_bot_turn_settlement_body_uses_tool_amounts(monkeypatch, db):
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-settle"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="An", nickname="an-settle", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    settle_result = {
+        "ok": True,
+        "period": {"from": "2026-07-01", "to": "2026-07-20"},
+        "transfers": [
+            {"from_id": 1, "from_name": "Bình", "to_id": 2, "to_name": "An",
+             "amount": 123456, "note": "x", "qr_url": None},
+        ],
+        "warnings": [],
+        "committed": False,
+    }
+
+    async def _fake_run_turn(user_text, ctx, images=None):
+        return TurnResult(
+            final_text="Đã chốt xong nhé, Bình nợ An 999đ thôi",  # deliberately wrong
+            tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
+        )
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot chốt kỳ")
+
+    assert msg.kind == "bot"
+    assert "Bình" in msg.body and "An" in msg.body
+    assert "123,456đ" in msg.body
+    assert "999" not in msg.body
+
+
+async def test_run_bot_turn_settlement_body_no_transfers_uses_tool_message(monkeypatch, db):
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-settle2"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="An", nickname="an-settle2", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    settle_result = {
+        "ok": True,
+        "period": {"from": None, "to": "2026-07-20"},
+        "transfers": [],
+        "committed": False,
+        "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
+    }
+
+    async def _fake_run_turn(user_text, ctx, images=None):
+        return TurnResult(
+            final_text="mọi người xong hết rồi",
+            tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
+        )
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot chốt kỳ")
+
+    assert "Không có gì để chốt" in msg.body
+
+
+async def test_run_bot_turn_meal_body_uses_tool_amounts(monkeypatch, db):
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-meal"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="An", nickname="an-meal", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    meal_result = {
+        "ok": True,
+        "meal_id": 42,
+        "occurred_on": "2026-07-20",
+        "total_amount": 300000,
+        "payer": {"id": member_id, "name": "An"},
+        "shares": [
+            {"id": member_id, "name": "An", "amount": 150000},
+            {"id": member_id + 1, "name": "Bình", "amount": 150000},
+        ],
+    }
+
+    async def _fake_run_turn(user_text, ctx, images=None):
+        return TurnResult(
+            final_text="ghi rồi nhé, mỗi người 1đ thôi",  # deliberately wrong
+            tools=[ToolInvocation(name="record_meal", args={}, result=meal_result)],
+        )
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 300k An Bình")
+
+    assert msg.kind == "bot"
+    assert "#42" in msg.body
+    assert "300,000đ" in msg.body
+    assert "An 150,000đ" in msg.body
+    assert "Bình 150,000đ" in msg.body

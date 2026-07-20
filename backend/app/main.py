@@ -209,6 +209,10 @@ async def stream(room_id: int, since: int = 0, ctx: AuthCtx = Depends(require_se
 
     async def gen():
         try:
+            # Subscribed first, then catch-up is read: a message that lands
+            # between subscribe() and this read can be delivered twice (once
+            # via catch-up, once via the live queue). Clients must dedupe by
+            # message `id`.
             with get_db().session() as s:  # catch-up
                 for msg in chat.list_messages(s, room_id, since_id=since):
                     yield f"data: {json.dumps({'type': 'message', **msg})}\n\n"

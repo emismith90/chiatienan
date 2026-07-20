@@ -23,10 +23,6 @@ def list_members(session: Session, room_id: int) -> list[Member]:
     return list(session.scalars(stmt))
 
 
-def get_member(session: Session, member_id: int) -> Member | None:
-    return session.get(Member, member_id)
-
-
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
 

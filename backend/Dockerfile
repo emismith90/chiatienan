@@ -20,4 +20,8 @@ RUN pip install .
 RUN mkdir -p /data
 EXPOSE 8000
 
+# MUST stay a single worker/process: app.chat._agent_lock and app.realtime.hub
+# are in-process state (asyncio.Lock + in-memory pub/sub queues) and assume
+# one process owns the whole app. Do not add --workers or run multiple
+# replicas behind the same DB without redesigning those.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

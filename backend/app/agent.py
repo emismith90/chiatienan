@@ -1,11 +1,11 @@
-"""Cursor SDK orchestration — run one Teams turn to completion.
+"""Cursor SDK orchestration — run one PWA room-chat turn to completion.
 
 Unlike the reference sample (which streams AG-UI/SSE to a web chat), this runs the
 agent to completion and assembles ONE result: the final assistant text plus the
-**structured results of every tool call**. The worker renders the Teams reply
-from those structured results (never from LLM-transcribed numbers), so a
-``settle_period`` payload's amounts + QR URLs reach the user exactly as the tool
-computed them (design D3).
+**structured results of every tool call**. :mod:`app.chat` renders the bot's
+reply in the room from those structured results (never from LLM-transcribed
+numbers), so a ``settle_period`` payload's amounts + QR URLs reach the user
+exactly as the tool computed them (design D3).
 
 Bridge lifecycle: per-turn ``launch_bridge`` (design §8) with a launch-retry
 because the bridge is transiently flaky ("exited before discovery").

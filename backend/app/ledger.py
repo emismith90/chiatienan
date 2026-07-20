@@ -7,7 +7,6 @@ Every function takes an open :class:`~sqlalchemy.orm.Session`; the caller's
 from __future__ import annotations
 
 from datetime import date
-from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -167,16 +166,3 @@ def record_settlement(
     session.add(row)
     session.flush()
     return row
-
-
-def get_meal(session: Session, meal_id: int) -> Meal | None:
-    return session.get(Meal, meal_id)
-
-
-def meals_in_window(
-    session: Session, room_id: int, from_date: date | None, to_date: date
-) -> Iterable[Meal]:
-    conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    if from_date is not None:
-        conds.append(Meal.occurred_on >= from_date)
-    return session.scalars(select(Meal).where(*conds).order_by(Meal.occurred_on, Meal.id)).all()

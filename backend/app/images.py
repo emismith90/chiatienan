@@ -1,10 +1,10 @@
 """Server-side image-attachment validation for the vision turn.
 
-Ported from the reference sample's ``_sanitize_images``. Teams pasted-inline
-images are downloaded by the worker (with the bot bearer token) and handed here
-as ``{"data": <base64>, "mimeType": ...}``. This drops any ``data:`` prefix,
-rejects disallowed types, and enforces per-image + total size caps so a giant
-bill photo can't blow up the vision turn.
+Ported from the reference sample's ``_sanitize_images``. The PWA client
+uploads images inline with the chat message as ``{"data": <base64>,
+"mimeType": ...}``. This drops any ``data:`` prefix, rejects disallowed types,
+and enforces per-image + total size caps so a giant bill photo can't blow up
+the vision turn.
 """
 from __future__ import annotations
 

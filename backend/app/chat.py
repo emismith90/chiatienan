@@ -19,12 +19,18 @@ from app.config import settings
 from app.db import Database
 from app.models import Member, RoomMessage
 
+# In-process lock: only correct with a single uvicorn worker/process (see
+# Dockerfile CMD). Multiple processes would each get their own lock and could
+# interleave ledger-writing tool calls.
 _agent_lock = asyncio.Lock()  # serialize agent runs (ledger single-writer)
 
 
 def mentions_bot(text: str) -> bool:
     handle = re.escape(settings.bot_handle)
-    return re.search(rf"@(bot|{handle})\b", text or "", re.IGNORECASE) is not None
+    # Negative lookbehind so an email/handle like `user@bot.com` doesn't count
+    # as a mention — only a `@bot`/`@<handle>` preceded by a non-word, non-dot
+    # boundary (e.g. start of string or whitespace) matches.
+    return re.search(rf"(?<![\w.])@(bot|{handle})\b", text or "", re.IGNORECASE) is not None
 
 
 def message_to_dict(m: RoomMessage, author: Member | None) -> dict:
@@ -70,6 +76,39 @@ def render_bot_attachments(result) -> dict | None:
     return None
 
 
+def _settlement_body(attachments: dict) -> str:
+    """Deterministic Vietnamese summary of a settlement, straight from the
+    tool-result dict — never from LLM prose (design D3, money-safety)."""
+    period = attachments.get("period") or {}
+    p_from, p_to = period.get("from"), period.get("to")
+    header = f"Chốt kỳ {p_from} → {p_to}:" if p_from else f"Chốt kỳ đến {p_to}:"
+
+    transfers = attachments.get("transfers") or []
+    lines = [header]
+    if transfers:
+        lines.extend(
+            f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ" for t in transfers
+        )
+    else:
+        lines.append(attachments.get("message") or "Không có gì để chốt.")
+
+    for w in attachments.get("warnings") or []:
+        lines.append(f"⚠️ {w}")
+    return "\n".join(lines)
+
+
+def _meal_body(attachments: dict) -> str:
+    """Deterministic Vietnamese summary of a recorded meal, straight from the
+    tool-result dict — never from LLM prose (design D3, money-safety)."""
+    payer = attachments.get("payer") or {}
+    shares = attachments.get("shares") or []
+    shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
+    return (
+        f"Đã ghi #{attachments.get('meal_id')}: {payer.get('name', '?')} trả "
+        f"tổng {attachments.get('total_amount', 0):,}đ • {shares_str}"
+    )
+
+
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
                         text: str, images=None) -> RoomMessage:
     """Run the agent for one ``@bot`` turn and persist its reply.
@@ -84,7 +123,17 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                        sender_name=member_name, turn_mentions=[])
     async with _agent_lock:
         result = await run_turn(text, ctx, images=images)
-    body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
     attachments = render_bot_attachments(result)
+
+    # Money turns get a body built server-side from the tool-result dict, so
+    # the visible text can never disagree with the QR/attachment numbers
+    # (the LLM's `final_text` is never used for the amounts themselves).
+    if attachments and attachments.get("type") == "settlement":
+        body = _settlement_body(attachments)
+    elif attachments and attachments.get("type") == "meal":
+        body = _meal_body(attachments)
+    else:
+        body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+
     with db.session() as s:
         return post_message(s, room_id, None, body, attachments=attachments, kind="bot")
