@@ -1,15 +1,13 @@
-# Python
 __pycache__/
 *.egg-info/
-.venv/
 *.pyc
-
-# Secrets & data — never commit
+.venv/
+venv/
 .env
-data/
 *.db
+*.db-wal
+*.db-shm
 .cursor-store/
-
-# Node (reference frontend only)
+.pytest_cache/
+data/
 node_modules/
-.next/
