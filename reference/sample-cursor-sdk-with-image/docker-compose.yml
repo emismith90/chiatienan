@@ -1,0 +1,16 @@
+services:
+  backend:
+    build: ./backend
+    ports: ["8000:8000"]
+    environment:
+      CURSOR_API_KEY: ${CURSOR_API_KEY}
+      CURSOR_SDK_MODEL: ${CURSOR_SDK_MODEL:-composer-2.5}
+      CORS_ORIGINS: http://localhost:3000
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on: [backend]

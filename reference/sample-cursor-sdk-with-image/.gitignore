@@ -1,0 +1,12 @@
+__pycache__/
+*.egg-info/
+.venv/
+node_modules/
+.next/
+.env
+*.db
+.cursor-store/
+next-env.d.ts
+
+# TS build cache
+*.tsbuildinfo
