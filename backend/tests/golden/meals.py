@@ -1,0 +1,48 @@
+"""Golden scenarios: member indices are 1-based into the seeded room
+(An=1, Bình=2, Cường=3, Dung=4). Amounts are integer VND.
+
+Each case: draft payload (member indices) + expected member shares (by index),
+expected balances (by index), and expected persisted tracked total.
+"""
+
+CASES = [
+    {"id": "G1", "desc": "Even split all members",
+     "payer": 1, "participants": [1, 2, 3, 4], "total": 400_000, "guests": [],
+     "shares": {1: 100_000, 2: 100_000, 3: 100_000, 4: 100_000},
+     "balances": {1: 300_000, 2: -100_000, 3: -100_000, 4: -100_000}, "tracked": 400_000},
+    {"id": "G2", "desc": "Exclude a member",
+     "payer": 2, "participants": [2, 3, 4], "total": 300_000, "guests": [],
+     "shares": {2: 100_000, 3: 100_000, 4: 100_000},
+     "balances": {2: 200_000, 3: -100_000, 4: -100_000}, "tracked": 300_000},
+    {"id": "G3", "desc": "Payer not a participant",
+     "payer": 1, "participants": [2, 3], "total": 200_000, "guests": [],
+     "shares": {2: 100_000, 3: 100_000},
+     "balances": {1: 200_000, 2: -100_000, 3: -100_000}, "tracked": 200_000},
+    {"id": "G4", "desc": "Adjustment +50k",
+     "payer": 1, "participants": [1, 2], "total": 250_000, "guests": [],
+     "adjustments": [{"member": 2, "amount": 50_000}],
+     "shares": {1: 100_000, 2: 150_000},
+     "balances": {1: 150_000, 2: -150_000}, "tracked": 250_000},
+    {"id": "G5", "desc": "Remainder to payer",
+     "payer": 1, "participants": [1, 2, 3], "total": 100_000, "guests": [],
+     "shares": {1: 33_334, 2: 33_333, 3: 33_333},
+     "balances": {1: 66_666, 2: -33_333, 3: -33_333}, "tracked": 100_000},
+    {"id": "G6", "desc": "One guest pays cash",
+     "payer": 1, "participants": [1, 2, 3], "total": 400_000, "guests": ["Emi"],
+     "shares": {1: 100_000, 2: 100_000, 3: 100_000},
+     "balances": {1: 200_000, 2: -100_000, 3: -100_000}, "tracked": 300_000},
+    {"id": "G7", "desc": "Two guests pay cash",
+     "payer": 2, "participants": [2, 3], "total": 400_000, "guests": ["X", "Y"],
+     "shares": {2: 100_000, 3: 100_000},
+     "balances": {2: 100_000, 3: -100_000}, "tracked": 200_000},
+    {"id": "G8", "desc": "Guest + remainder stays on payer",
+     "payer": 1, "participants": [1, 2], "total": 100_000, "guests": ["Z"],
+     "shares": {1: 33_334, 2: 33_333},
+     "balances": {1: 33_333, 2: -33_333}, "tracked": 66_667},
+    {"id": "G12", "desc": "Metadata round-trip",
+     "payer": 1, "participants": [1, 2], "total": 200_000, "guests": [],
+     "dish": "phở", "initiator": "Emi", "note": "An đổi ý",
+     "shares": {1: 100_000, 2: 100_000},
+     "balances": {1: 100_000, 2: -100_000}, "tracked": 200_000,
+     "expect_meta": {"dish": "phở", "initiator": "Emi", "note": "An đổi ý"}},
+]
