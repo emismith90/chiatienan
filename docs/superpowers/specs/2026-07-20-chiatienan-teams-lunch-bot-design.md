@@ -1,7 +1,10 @@
 # chiatienan — Teams Lunch-Splitting Bot — Design
 
 **Date:** 2026-07-20
-**Status:** Approved design (revised after Fable design review) — ready for implementation plan
+**Status:** ⚠️ SUPERSEDED by `2026-07-20-chiatienan-pwa-design.md` — the Teams channel was
+abandoned (IT would not approve a personal custom Teams app / sideloading). The deterministic
+ledger + Cursor-SDK agent core described here is reused by the PWA design; only the Teams gateway
+was dropped. Kept for history.
 **Repo:** `chiatienan` (this repo, currently empty)
 
 ---
