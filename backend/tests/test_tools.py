@@ -153,6 +153,24 @@ def test_get_period_balances_tool_scoped_to_room():
     assert out["balances"] == []
 
 
+def test_add_member_tool_creates_unclaimed_member_and_rejects_duplicate_nickname():
+    d, (room_id, an, bi) = _ctx()
+    ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
+    tools = build_tools(ctx)
+
+    out = tools["add_member"].execute({"display_name": "Chi", "nickname": "chi"})
+    assert out["ok"] is True
+    assert out["nickname"] == "chi"
+    with d.session() as s:
+        m = s.get(Member, out["member_id"])
+        assert m.room_id == room_id
+        assert m.pin is None
+        assert m.display_name == "Chi"
+
+    dup = tools["add_member"].execute({"display_name": "Chi2", "nickname": "chi"})
+    assert dup["ok"] is False and "error" in dup
+
+
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
     ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")

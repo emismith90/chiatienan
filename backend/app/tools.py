@@ -17,7 +17,7 @@ from datetime import date
 
 from cursor_sdk import CustomTool
 
-from app import ledger, roster
+from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
 from app.money import MoneyError, net_transfers
@@ -131,6 +131,18 @@ _BALANCES_SCHEMA = {
         "to": {"type": "string", "description": "Ngày ISO."},
     },
     "required": ["to"],
+}
+
+_ADD_MEMBER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "display_name": {"type": "string", "description": "Tên hiển thị."},
+        "nickname": {"type": "string", "description": "Biệt danh dùng để đăng nhập, duy nhất trong phòng."},
+        "bank_code": {"type": "string"},
+        "account_number": {"type": "string"},
+        "account_holder": {"type": "string"},
+    },
+    "required": ["display_name", "nickname"],
 }
 
 _SETTLE_SCHEMA = {
@@ -274,6 +286,28 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             ],
         }
 
+    def add_member(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        display_name = args.get("display_name")
+        nickname = args.get("nickname")
+        with db.session() as s:
+            room = rooms.room_by_id(s, ctx.room_id)
+            if room is None:
+                return _err("Không tìm thấy phòng.")
+            try:
+                m = accounts.add_unclaimed(
+                    s,
+                    room,
+                    display_name=display_name,
+                    nickname=nickname,
+                    bank_code=args.get("bank_code"),
+                    account_number=args.get("account_number"),
+                    account_holder=args.get("account_holder"),
+                )
+            except accounts.AccountError as exc:
+                return _err(str(exc))
+            return {"ok": True, "member_id": m.id, "nickname": m.nickname}
+
     def settle_period(args, _tool_ctx=None) -> dict:
         """Composite, server-side end-to-end: balances → net → QR → payload."""
         args = args or {}
@@ -376,5 +410,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=settle_period,
             description="Tính ai trả ai + tạo mã QR VietQR cho cả kỳ. commit:true để CHỐT.",
             input_schema=_SETTLE_SCHEMA,
+        ),
+        "add_member": CustomTool(
+            execute=add_member,
+            description="Thêm thành viên mới vào phòng (chưa đặt PIN); họ sẽ tự đặt PIN khi vào.",
+            input_schema=_ADD_MEMBER_SCHEMA,
         ),
     }
