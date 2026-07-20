@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.clock import now_ict, today_ict
 from app.models import Meal, MealShare, Member, Settlement
-from app.money import split_shares
+from app.money import split_with_guests
 
 
 class LedgerError(ValueError):
@@ -28,6 +28,9 @@ def record_meal(
     participants: list[int],
     total_amount: int,
     adjustments: dict[int, int] | None = None,
+    guests: list[str] | None = None,
+    dish: str | None = None,
+    initiator: str | None = None,
     occurred_on: date | None = None,
     note: str | None = None,
     raw_input: str | None = None,
@@ -36,11 +39,12 @@ def record_meal(
 ) -> dict:
     """Validate, split, and write ``meals`` + ``meal_shares`` in one transaction.
 
-    The payer need not be a participant (they paid but didn't eat). Returns a
-    breakdown dict with the persisted ``meal_id`` and per-member shares — the
-    single source of truth the reply is rendered from (numbers never go back
-    through the LLM).
+    ``total_amount`` is the bill the group saw; ``guests`` are occasional
+    non-members who pay their share in cash (they shrink the per-head but are
+    never billed). The persisted ``Meal.total_amount`` is the **tracked** member
+    total (bill − guest total), so balances/settlement stay correct.
     """
+    guests = list(guests or [])
     payer = session.get(Member, payer_member_id)
     if payer is None or payer.room_id != room_id:
         raise LedgerError(f"Người trả tiền (id={payer_member_id}) không tồn tại.")
@@ -55,31 +59,38 @@ def record_meal(
     if missing:
         raise LedgerError(f"Người tham gia không tồn tại: {missing}.")
 
-    # split_shares raises MoneyError on any invalid split — let it propagate.
-    shares = split_shares(total_amount, participants, adjustments, payer_id=payer_member_id)
+    split = split_with_guests(
+        total_amount, participants, len(guests), adjustments, payer_id=payer_member_id
+    )
+    shares = split["shares"]
+    tracked_total = split["tracked_total"]
 
     meal = Meal(
         room_id=room_id,
         occurred_on=occurred_on or today_ict(),
         payer_member_id=payer_member_id,
-        total_amount=total_amount,
+        total_amount=tracked_total,
         note=note,
         raw_input=raw_input,
+        dish=dish,
+        initiator=initiator,
+        guests=guests,
         source=source,
         logged_by=logged_by,
     )
-    meal.shares = [
-        MealShare(member_id=mid, share_amount=amt) for mid, amt in shares.items()
-    ]
+    meal.shares = [MealShare(member_id=mid, share_amount=amt) for mid, amt in shares.items()]
     session.add(meal)
-    session.flush()  # assign meal.id
+    session.flush()
 
     return {
         "meal_id": meal.id,
         "occurred_on": meal.occurred_on.isoformat(),
         "payer_member_id": payer_member_id,
-        "total_amount": total_amount,
-        "shares": {mid: amt for mid, amt in shares.items()},
+        "bill_total": total_amount,
+        "tracked_total": tracked_total,
+        "total_amount": tracked_total,
+        "guests": guests,
+        "shares": dict(shares),
     }
 
 

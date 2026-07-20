@@ -68,7 +68,7 @@ class RoomMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
     author_member_id: Mapped[int | None] = mapped_column(ForeignKey("members.id"))  # None = bot
-    kind: Mapped[str] = mapped_column(String(20), default="text", nullable=False)  # text|bot
+    kind: Mapped[str] = mapped_column(String(20), default="text", nullable=False)  # text|bot|expense_draft
     body: Mapped[str] = mapped_column(Text, default="", nullable=False)
     attachments: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
@@ -84,6 +84,9 @@ class Meal(Base):
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
     note: Mapped[str | None] = mapped_column(String(400))
     raw_input: Mapped[str | None] = mapped_column(Text)
+    dish: Mapped[str | None] = mapped_column(String(120))
+    initiator: Mapped[str | None] = mapped_column(String(120))
+    guests: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)  # web|admin
     logged_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) of the logging session
     voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
