@@ -4,7 +4,6 @@ _REQUIRED_UNSET = (
     "CURSOR_SDK_MODEL",
     "CURSOR_AGENT_MAX_TOOLS",
     "CURSOR_AGENT_MAX_SECONDS",
-    "MICROSOFT_APP_TYPE",
     "BOT_HANDLE",
     "DATABASE_URL",
     "TZ",
@@ -20,8 +19,7 @@ def test_defaults_when_env_absent(monkeypatch):
     assert s.cursor_model == "composer-2.5"
     assert s.max_tools == 40
     assert s.max_seconds == 120
-    assert s.microsoft_app_type == "SingleTenant"
-    assert s.bot_handle == "chiatienan"
+    assert s.bot_handle == "bot"
     assert s.database_url == "sqlite:////data/chiatienan.db"
     assert s.timezone == "Asia/Ho_Chi_Minh"
     assert s.qr_base_url == "https://img.vietqr.io/image"

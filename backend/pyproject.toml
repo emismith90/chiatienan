@@ -1,7 +1,7 @@
 [project]
 name = "chiatienan"
 version = "0.1.0"
-description = "Teams lunch-splitting bot (Cursor SDK agent + deterministic ledger)"
+description = "PWA lunch-splitting bot (Cursor SDK agent + deterministic ledger)"
 requires-python = ">=3.11"
 dependencies = [
     "cursor-sdk>=0.1.7",
@@ -9,8 +9,6 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2",
     "sqlalchemy>=2",
-    "botbuilder-core>=4.16",
-    "aiohttp>=3.9",
     "python-multipart>=0.0.9",
 ]
 

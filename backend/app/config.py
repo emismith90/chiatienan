@@ -1,4 +1,4 @@
-"""Env-var settings for the chiatienan Teams lunch-splitting bot.
+"""Env-var settings for the chiatienan PWA lunch-splitting bot.
 
 One frozen ``Settings`` dataclass, hydrated from the environment. A module-level
 singleton ``settings`` is created on import; tests build fresh instances via
@@ -29,11 +29,7 @@ class Settings:
     cursor_api_base: str
     max_tools: int
     max_seconds: int
-    # Teams / Bot Framework
-    microsoft_app_id: str
-    microsoft_app_password: str
-    microsoft_app_type: str
-    microsoft_app_tenant_id: str
+    # Bot
     bot_handle: str
     # Storage
     database_url: str
@@ -56,11 +52,7 @@ class Settings:
             cursor_api_base=((os.environ.get("CURSOR_API_BASE") or "").strip() or "https://api.cursor.com").rstrip("/"),
             max_tools=_int_env("CURSOR_AGENT_MAX_TOOLS", 40),
             max_seconds=_int_env("CURSOR_AGENT_MAX_SECONDS", 120),
-            microsoft_app_id=(os.environ.get("MICROSOFT_APP_ID") or "").strip(),
-            microsoft_app_password=(os.environ.get("MICROSOFT_APP_PASSWORD") or "").strip(),
-            microsoft_app_type=(os.environ.get("MICROSOFT_APP_TYPE") or "").strip() or "SingleTenant",
-            microsoft_app_tenant_id=(os.environ.get("MICROSOFT_APP_TENANT_ID") or "").strip(),
-            bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "chiatienan",
+            bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "bot",
             database_url=(os.environ.get("DATABASE_URL") or "").strip() or "sqlite:////data/chiatienan.db",
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",
             admin_password=(os.environ.get("ADMIN_PASSWORD") or "").strip(),
