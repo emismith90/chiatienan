@@ -6,9 +6,9 @@
   "packageName": "se.niteco.chiatienan",
   "developer": {
     "name": "Niteco",
-    "websiteUrl": "https://REPLACE_WITH_DOMAIN",
-    "privacyUrl": "https://REPLACE_WITH_DOMAIN/privacy",
-    "termsOfUseUrl": "https://REPLACE_WITH_DOMAIN/terms"
+    "websiteUrl": "https://chiatienan.duckdns.org",
+    "privacyUrl": "https://chiatienan.duckdns.org/privacy",
+    "termsOfUseUrl": "https://chiatienan.duckdns.org/terms"
   },
   "name": {
     "short": "chiatienan",
@@ -32,5 +32,5 @@
     }
   ],
   "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["REPLACE_WITH_DOMAIN"]
+  "validDomains": ["chiatienan.duckdns.org"]
 }
