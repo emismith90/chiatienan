@@ -1,5 +1,12 @@
 "use client";
 import { BotMessage } from "./bot-message";
+import { ExpenseDraftCard } from "./expense-draft-card";
+
+interface Member {
+  id: number;
+  display_name: string;
+  nickname?: string | null;
+}
 
 interface AttachmentImage {
   data: string;
@@ -66,11 +73,26 @@ function HumanMessage({ message }: { message: Message }) {
   );
 }
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({
+  messages,
+  members,
+  roomId,
+}: {
+  messages: Message[];
+  members: Member[];
+  roomId: number;
+}) {
   return (
     <div className="flex flex-col gap-4">
       {messages.map((m) =>
-        m.kind === "bot" ? (
+        m.kind === "expense_draft" ? (
+          <div key={m.id} className="flex flex-col items-start">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
+              Bot
+            </span>
+            <ExpenseDraftCard message={m} members={members} roomId={roomId} />
+          </div>
+        ) : m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
               Bot

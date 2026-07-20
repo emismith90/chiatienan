@@ -97,7 +97,7 @@ export function RoomView({ roomId }: { roomId: number }) {
               Chưa có tin nhắn nào. Bắt đầu bằng cách nhắn @bot.
             </p>
           )}
-          <MessageList messages={messages} />
+          <MessageList messages={messages} members={members} roomId={roomId} />
           {Object.entries(timelines).map(([tid, steps]) => (
             <AgentTimeline key={tid} steps={steps} live={tid === activeTurn} />
           ))}
