@@ -47,7 +47,7 @@ function SettlementCard({ attachments }: { attachments: any }) {
             <span className="font-medium">{t.from_name}</span>
             <span className="mx-1.5 text-[var(--text-secondary)]">→</span>
             <span className="font-medium">{t.to_name}</span>
-            <span className="ml-2 font-semibold text-[var(--accent-primary)]">
+            <span className="ml-2 font-semibold text-[var(--accent-text)]">
               {fmt(t.amount)} đ
             </span>
           </div>
@@ -63,7 +63,7 @@ function SettlementCard({ attachments }: { attachments: any }) {
         </div>
       ))}
       {warnings.map((w, i) => (
-        <p key={i} className="text-sm text-[var(--accent-primary)]">
+        <p key={i} className="text-sm text-[var(--accent-text)]">
           ⚠️ {w}
         </p>
       ))}
@@ -81,7 +81,7 @@ function MealCard({ attachments }: { attachments: any }) {
       <div className="flex flex-wrap items-baseline gap-x-2 text-sm text-[var(--text-primary)]">
         <span className="text-[var(--text-secondary)]">Người trả:</span>
         <span className="font-medium">{payer.name ?? "?"}</span>
-        <span className="ml-auto font-semibold text-[var(--accent-primary)]">
+        <span className="ml-auto font-semibold text-[var(--accent-text)]">
           {fmt(total)} đ
         </span>
       </div>
@@ -108,7 +108,7 @@ export function BotMessage({ body, attachments }: BotMessageProps) {
   const type = attachments?.type;
   return (
     <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-sm">
-      <div className="prose-chat text-sm leading-relaxed text-[var(--text-primary)] [&_a]:text-[var(--accent-primary)] [&_a]:underline [&_code]:rounded [&_code]:bg-[var(--bg-base)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_h1]:mb-2 [&_h1]:mt-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-1 [&_h2]:text-sm [&_h2]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+      <div className="prose-chat text-sm leading-relaxed text-[var(--text-primary)] [&_a]:text-[var(--accent-text)] [&_a]:underline [&_code]:rounded [&_code]:bg-[var(--bg-base)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_h1]:mb-2 [&_h1]:mt-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-1 [&_h2]:text-sm [&_h2]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
       </div>
       {type === "settlement" && <SettlementCard attachments={attachments} />}
