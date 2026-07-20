@@ -47,6 +47,11 @@ async function req(path: string, init: RequestInit = {}) {
 
 export const roomInfo = (t: string) => req(`/api/rooms/${t}`);
 
+/** The bot's @-mention handle. Scope is bot-only for now, so this is a stable
+ * constant rather than a network round-trip; swap for a real lookup if
+ * multiple bot handles are ever configured. */
+export const botHandle = async (): Promise<string> => "bot";
+
 export const createAccount = (t: string, b: any) =>
   req(`/api/rooms/${t}/accounts`, { method: "POST", body: JSON.stringify(b) });
 
