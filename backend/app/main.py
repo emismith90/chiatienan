@@ -16,13 +16,13 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app import accounts, chat, roster, rooms
+from app import accounts, chat, drafts, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
 from app.bridge_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member
+from app.models import Member, RoomMessage
 from app.realtime import hub
 
 logging.basicConfig(level=logging.INFO)
@@ -64,6 +64,18 @@ class MessageIn(BaseModel):
     images: list[dict] | None = None
 
 
+class DraftPatchIn(BaseModel):
+    payer_member_id: int | None = None
+    member_participants: list[int] | None = None
+    guests: list[str] | None = None
+    bill_total: int | None = None
+    adjustments: list[dict] | None = None
+    dish: str | None = None
+    initiator: str | None = None
+    note: str | None = None
+    status: str | None = None   # only "cancelled" is accepted
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -85,7 +97,7 @@ async def room_info(invite_token: str):
         r = rooms.room_by_invite(s, invite_token)
         if not r:
             raise HTTPException(404, "room not found")
-        return {"room_id": r.id, "name": r.name}
+        return {"room_id": r.id, "name": r.name, "bot_handle": settings.bot_handle}
 
 
 @app.post("/api/rooms/{invite_token}/accounts")
@@ -200,6 +212,43 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         t.add_done_callback(_BG.discard)
 
     return {"ok": True, "id": payload["id"]}
+
+
+@app.patch("/api/rooms/{room_id}/drafts/{draft_id}")
+async def patch_draft(room_id: int, draft_id: int, body: DraftPatchIn,
+                      ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    patch = body.model_dump(exclude_unset=True)
+    if patch.get("status") not in (None, "cancelled"):
+        raise HTTPException(400, "status chỉ nhận 'cancelled'")
+    db = get_db()
+    with db.session() as s:
+        try:
+            m = drafts.update_draft(s, draft_id, room_id, patch)
+        except Exception as e:  # LedgerError → 404/409
+            raise HTTPException(404, str(e))
+        payload = chat.message_to_dict(m, None)
+    await hub.publish(room_id, {"type": "message", **payload})
+    return {"ok": True}
+
+
+@app.post("/api/rooms/{room_id}/drafts/{draft_id}/commit")
+async def commit_draft_route(room_id: int, draft_id: int,
+                             ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                meal_msg = drafts.commit_draft(s, draft_id, room_id, logged_by=str(ctx.member_id))
+            except Exception as e:
+                raise HTTPException(409, str(e))
+            meal_payload = chat.message_to_dict(meal_msg, None)
+            draft_payload = chat.message_to_dict(s.get(RoomMessage, draft_id), None)
+            meal_id = meal_msg.attachments["meal_id"]
+    await hub.publish(room_id, {"type": "message", **draft_payload})
+    await hub.publish(room_id, {"type": "message", **meal_payload})
+    return {"ok": True, "meal_id": meal_id}
 
 
 @app.get("/api/rooms/{room_id}/stream")

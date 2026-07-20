@@ -3,9 +3,11 @@
 Human messages are appended via :func:`post_message` (called by the route
 layer). A message that :func:`mentions_bot` triggers :func:`run_bot_turn`,
 which serializes agent runs through a module-level ``asyncio.Lock`` (the
-ledger has a single writer — design §3) and posts the reply as a
-``kind="bot"`` message, with structured tool results rendered via
-:func:`render_bot_attachments` rather than re-parsed from LLM prose (design D3).
+ledger has a single writer — design §3). A meal proposal ends the turn as a
+pending ``kind="expense_draft"`` card (see :mod:`app.drafts`) instead of an
+immediate reply; other turns post a ``kind="bot"`` message, with structured
+tool results rendered via :func:`render_bot_attachments` rather than
+re-parsed from LLM prose (design D3).
 """
 from __future__ import annotations
 
@@ -70,9 +72,6 @@ def render_bot_attachments(result) -> dict | None:
     settle = result.last_result("settle_period")
     if settle:
         return {"type": "settlement", **settle}
-    meal = result.last_result("record_meal")
-    if meal:
-        return {"type": "meal", **meal}
     return None
 
 
@@ -118,8 +117,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                         text: str, images=None) -> RoomMessage:
     """Run the agent for one ``@bot`` turn and persist its reply.
 
-    Serialized by ``_agent_lock`` so ledger-writing tool calls (``record_meal``,
-    ``settle_period``) from concurrent turns never interleave.
+    Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
+    from concurrent turns never interleaves with another. Meal turns never write
+    directly — ``propose_meal`` only proposes, and the turn ends with a pending
+    ``expense_draft`` for a human to edit/commit.
     """
     from app.agent import run_turn
     from app.tools import ToolContext
@@ -128,6 +129,23 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                        sender_name=member_name, turn_mentions=[])
     async with _agent_lock:
         result = await run_turn(text, ctx, images=images)
+
+    from app import drafts
+
+    # A meal turn never writes directly: the LLM only proposes, and the turn
+    # ends with an editable draft card for the human to confirm (design D3,
+    # money-safety) — the draft may itself supersede/commit a prior pending
+    # draft via drafts.create_draft.
+    proposal = result.last_result("propose_meal")
+    if proposal:
+        payload = {k: proposal[k] for k in (
+            "payer_member_id", "member_participants", "guests", "bill_total",
+            "adjustments", "dish", "initiator", "note", "per_head_preview")}
+        payload["raw_input"] = text
+        payload["logged_by"] = str(member_id)
+        with db.session() as s:
+            return drafts.create_draft(s, room_id, payload)
+
     attachments = render_bot_attachments(result)
 
     # Money turns get a body built server-side from the tool-result dict, so
@@ -135,8 +153,6 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     # (the LLM's `final_text` is never used for the amounts themselves).
     if attachments and attachments.get("type") == "settlement":
         body = _settlement_body(attachments)
-    elif attachments and attachments.get("type") == "meal":
-        body = _meal_body(attachments)
     else:
         body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 
