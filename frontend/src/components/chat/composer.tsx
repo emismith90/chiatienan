@@ -114,7 +114,8 @@ export function Composer({ onSend }: ComposerProps) {
           onKeyDown={onKeyDown}
           rows={1}
           placeholder="Nhắn tin… (dùng @bot để gọi bot)"
-          className="max-h-40 min-h-10 flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+          aria-label="Soạn tin nhắn"
+          className="max-h-40 min-h-10 flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
         />
         <button
           type="button"

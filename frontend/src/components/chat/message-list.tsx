@@ -60,7 +60,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
       {messages.map((m) =>
         m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">
-            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
             </span>
             <BotMessage body={m.body} attachments={m.attachments} />

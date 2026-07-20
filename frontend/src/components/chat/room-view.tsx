@@ -61,8 +61,8 @@ export function RoomView({ roomId }: { roomId: number }) {
   }, [messages, typing]);
 
   return (
-    <main className="flex h-screen flex-col bg-[var(--bg-base)]">
-      <header className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
+    <main className="flex h-dvh flex-col bg-[var(--bg-base)]">
+      <header className="pt-safe border-b border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-base font-semibold text-[var(--text-primary)]">
@@ -98,8 +98,8 @@ export function RoomView({ roomId }: { roomId: number }) {
           )}
           <MessageList messages={messages} />
           {typing && (
-            <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-              <span className="flex gap-1">
+            <div role="status" className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <span aria-hidden className="flex gap-1">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.15s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)]" />
@@ -111,7 +111,7 @@ export function RoomView({ roomId }: { roomId: number }) {
         </div>
       </div>
 
-      <div className="border-t border-[var(--border)] bg-[var(--bg-surface)]">
+      <div className="pb-safe border-t border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <Composer onSend={send} />
         </div>
