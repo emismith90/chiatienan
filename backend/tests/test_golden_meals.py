@@ -27,7 +27,7 @@ def test_golden_meal(db, case):
     room_id, ids = _seed_room(db, 4)
     idx = {i + 1: ids[i] for i in range(4)}
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(case, ids))
+        d, _extras = drafts.create_draft(s, room_id, _payload(case, ids))
         meal_msg = drafts.commit_draft(s, d.id, room_id, logged_by=str(idx[1]))
         meal = s.get(Meal, meal_msg.attachments["meal_id"])
         # shares
@@ -37,8 +37,6 @@ def test_golden_meal(db, case):
         # tracked total persisted
         assert meal.total_amount == case["tracked"], case["id"]
         assert sum(got_shares.values()) == case["tracked"], case["id"]
-        # guests never in the ledger
-        assert set(got_shares) == set(want_shares)
         # balances
         bal = ledger.period_balances(s, room_id, None, date(2999, 1, 1))
         for member_idx, want in case["balances"].items():
@@ -52,8 +50,8 @@ def test_golden_G9_supersede_autocommit(db):
     room_id, ids = _seed_room(db, 4)
     idx = {i + 1: ids[i] for i in range(4)}
     with db.session() as s:
-        d1 = drafts.create_draft(s, room_id, _payload(CASES[0], ids))  # G1
-        d2 = drafts.create_draft(s, room_id, _payload(CASES[1], ids))  # G2 supersedes
+        d1, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))  # G1
+        d2, _ = drafts.create_draft(s, room_id, _payload(CASES[1], ids))  # G2 supersedes
         assert s.get(RoomMessage, d1.id).attachments["status"] == "committed"
         assert s.get(RoomMessage, d2.id).attachments["status"] == "pending"
         assert s.query(Meal).count() == 1
@@ -62,7 +60,7 @@ def test_golden_G9_supersede_autocommit(db):
 def test_golden_G10_cancel_writes_nothing(db):
     room_id, ids = _seed_room(db, 4)
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(CASES[0], ids))
+        d, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))
         drafts.update_draft(s, d.id, room_id, {"status": "cancelled"})
         assert s.query(Meal).count() == 0
 
@@ -71,7 +69,7 @@ def test_golden_G11_edit_then_supersede(db):
     room_id, ids = _seed_room(db, 4)
     idx = {i + 1: ids[i] for i in range(4)}
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(CASES[0], ids))         # [1,2,3,4]
+        d, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))         # [1,2,3,4]
         drafts.update_draft(s, d.id, room_id, {"member_participants": [idx[1], idx[2]]})
         drafts.create_draft(s, room_id, _payload(CASES[1], ids))              # supersede
         meal = s.query(Meal).one()

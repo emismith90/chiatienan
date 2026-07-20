@@ -190,10 +190,13 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> 
     completed_tools = 0
     text_parts: list[str] = []
 
-    try:
+    async def _emit(events) -> None:
         if emit:
-            for ev in agui.start(turn_id):
+            for ev in events:
                 await emit(ev)
+
+    try:
+        await _emit(agui.start(turn_id))
 
         workspace = _ensure_workspace()
         api_key = resolve_cursor_api_key()
@@ -219,9 +222,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> 
                     message, SendOptions(model=selection, local=LocalSendOptions(force=True))
                 )
                 async for msg in run.messages():
-                    if emit:
-                        for ev in agui.translate(msg, turn_id):
-                            await emit(ev)
+                    await _emit(agui.translate(msg, turn_id))
                     mtype = getattr(msg, "type", None)
                     if mtype == "assistant":
                         text_parts.append(_assistant_text(msg))
@@ -262,9 +263,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> 
 
     result.final_text = "".join(text_parts).strip()
 
-    if emit:
-        for ev in agui.finish(turn_id, error=result.error):
-            await emit(ev)
+    await _emit(agui.finish(turn_id, error=result.error))
     result.turn_id = turn_id
 
     return result

@@ -98,6 +98,20 @@ def test_propose_meal_no_payer_and_no_sender_errors(db):
         assert s.query(Meal).count() == 0
 
 
+def test_propose_meal_invalid_participant_id_returns_error(db):
+    """Fix 4: a non-int participant id must not raise uncaught out of the
+    tool — it's a clarifying-question result like every other bad input."""
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    out = build_tools(ctx)["propose_meal"].execute({
+        "participants": [a, "not-an-id"], "total": 100_000,
+    })
+    assert out["ok"] is False
+    assert "error" in out
+    with db.session() as s:
+        assert s.query(Meal).count() == 0
+
+
 def test_propose_meal_adjustments_round_trip(db):
     room_id, (a, b) = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")

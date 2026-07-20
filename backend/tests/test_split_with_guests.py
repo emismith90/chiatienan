@@ -60,3 +60,10 @@ def test_rejects_zero_total():
 def test_rejects_adjustment_for_non_member():
     with pytest.raises(MoneyError):
         split_with_guests(100_000, [1, 2], 1, {9: 10_000}, payer_id=1)
+
+
+def test_rejects_negative_member_id():
+    """Fix 9: a negative member id would collide with the guest placeholder
+    ids (``-(i+1)``), silently corrupting the split — reject it up front."""
+    with pytest.raises(MoneyError):
+        split_with_guests(100_000, [1, -2], 1, payer_id=1)

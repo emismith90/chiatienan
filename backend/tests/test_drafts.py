@@ -17,15 +17,16 @@ def _payload(a, b, c, total=400_000, guests=None):
 def test_create_draft_is_pending(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(a, b, c))
+        d, extras = drafts.create_draft(s, room_id, _payload(a, b, c))
         assert d.kind == "expense_draft"
         assert d.attachments["status"] == "pending"
+        assert extras == []
 
 
 def test_commit_draft_writes_meal_and_balances(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(a, b, c))
+        d, _extras = drafts.create_draft(s, room_id, _payload(a, b, c))
         meal_msg = drafts.commit_draft(s, d.id, room_id, logged_by=str(a))
         assert meal_msg.kind == "bot"
         att = meal_msg.attachments
@@ -42,18 +43,60 @@ def test_commit_draft_writes_meal_and_balances(db):
 def test_second_draft_supersedes_first(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
-        d1 = drafts.create_draft(s, room_id, _payload(a, b, c))
-        d2 = drafts.create_draft(s, room_id, _payload(b, a, c))
+        d1, extras1 = drafts.create_draft(s, room_id, _payload(a, b, c))
+        d2, extras2 = drafts.create_draft(s, room_id, _payload(b, a, c))
         assert s.get(RoomMessage, d1.id).attachments["status"] == "committed"
         assert d2.attachments["status"] == "pending"
         assert drafts.get_pending_draft(s, room_id).id == d2.id
         assert s.query(Meal).count() == 1   # only d1 committed so far
+        assert extras1 == []           # no prior pending draft for d1
+        assert len(extras2) == 2       # d2 superseded d1: committed draft + meal card
+
+
+def test_supersede_returns_extras_for_publishing(db):
+    """Fix 1: create_draft must hand back the messages a supersede-commit
+    produced (the flipped-to-committed prior draft + its meal card), so the
+    caller can publish them over SSE — commit_draft's DB writes alone never
+    reach live clients."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d1, extras1 = drafts.create_draft(s, room_id, _payload(a, b, c))
+        assert extras1 == []  # no pending draft to supersede yet
+
+        d2, extras2 = drafts.create_draft(s, room_id, _payload(b, a, c))
+        assert len(extras2) == 2
+        committed_prev, meal_msg = extras2
+        assert committed_prev.id == d1.id
+        assert committed_prev.attachments["status"] == "committed"
+        assert meal_msg.kind == "bot"
+        assert meal_msg.attachments["type"] == "meal"
+        assert meal_msg.attachments["meal_id"] == committed_prev.attachments["committed_meal_id"]
+
+
+def test_supersede_of_invalid_prior_draft_cancels_instead_of_committing(db):
+    """Fix 3: if the prior pending draft was edited into an invalid state
+    (here: bill_total edited to 0), committing it would raise MoneyError.
+    create_draft must not lose the new proposal — it cancels the broken prior
+    draft instead, and the new draft still becomes pending."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d1, _ = drafts.create_draft(s, room_id, _payload(a, b, c))
+        drafts.update_draft(s, d1.id, room_id, {"bill_total": 0})
+
+        d2, extras = drafts.create_draft(s, room_id, _payload(b, a, c))
+
+        prev = s.get(RoomMessage, d1.id)
+        assert prev.attachments["status"] == "cancelled"
+        assert "committed_meal_id" not in prev.attachments
+        assert s.query(Meal).count() == 0   # no Meal row for the broken draft
+        assert d2.attachments["status"] == "pending"
+        assert extras == [prev]
 
 
 def test_cancel_writes_nothing(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(a, b, c))
+        d, _extras = drafts.create_draft(s, room_id, _payload(a, b, c))
         drafts.update_draft(s, d.id, room_id, {"status": "cancelled"})
         assert s.get(RoomMessage, d.id).attachments["status"] == "cancelled"
         assert s.query(Meal).count() == 0
@@ -81,7 +124,7 @@ def test_current_balances_excludes_settlement_boundary_day(db):
             s, room_id=room_id, payer_member_id=b, participants=[b, c],
             total_amount=200_000, occurred_on=D + timedelta(days=5),
         )
-        d = drafts.create_draft(s, room_id, _payload(c, a, b, total=300_000))
+        d, _extras = drafts.create_draft(s, room_id, _payload(c, a, b, total=300_000))
         meal_msg = drafts.commit_draft(s, d.id, room_id, logged_by=str(c))
 
     balances = {row["id"]: row for row in meal_msg.attachments["balances"]}
@@ -96,7 +139,7 @@ def test_current_balances_excludes_settlement_boundary_day(db):
 def test_edit_then_supersede_saves_edits(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
-        d = drafts.create_draft(s, room_id, _payload(a, b, c))
+        d, _extras = drafts.create_draft(s, room_id, _payload(a, b, c))
         drafts.update_draft(s, d.id, room_id, {"member_participants": [a, b]})  # drop c
         drafts.create_draft(s, room_id, _payload(b, a, c))                       # supersede
         meal = s.query(Meal).one()

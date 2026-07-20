@@ -125,7 +125,7 @@ def _seed_draft(room_id, a, b, **overrides):
     }
     payload.update(overrides)
     with get_db().session() as s:
-        d = drafts.create_draft(s, room_id, payload)
+        d, _extras = drafts.create_draft(s, room_id, payload)
         return d.id
 
 

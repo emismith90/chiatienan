@@ -145,6 +145,8 @@ def split_with_guests(
         raise MoneyError("Cần ít nhất một thành viên trong bữa ăn.")
     if guest_count < 0:
         raise MoneyError("Số khách không hợp lệ.")
+    if any(m < 0 for m in member_ids):
+        raise MoneyError("Member id không được âm (trùng với id khách vãng lai).")
 
     # Guest placeholders use negative ids so they never collide with real (positive)
     # member ids; adjustments only ever name members.

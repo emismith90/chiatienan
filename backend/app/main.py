@@ -16,13 +16,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app import accounts, chat, drafts, roster, rooms
+from app import accounts, chat, drafts, ledger, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
 from app.bridge_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
 from app.models import Member, RoomMessage
+from app.money import MoneyError
 from app.realtime import hub
 
 logging.basicConfig(level=logging.INFO)
@@ -229,7 +230,7 @@ async def patch_draft(room_id: int, draft_id: int, body: DraftPatchIn,
     with db.session() as s:
         try:
             m = drafts.update_draft(s, draft_id, room_id, patch)
-        except Exception as e:  # LedgerError → 404/409
+        except (ledger.LedgerError, MoneyError) as e:
             raise HTTPException(404, str(e))
         payload = chat.message_to_dict(m, None)
     await hub.publish(room_id, {"type": "message", **payload})
@@ -245,7 +246,7 @@ async def commit_draft_route(room_id: int, draft_id: int,
         with db.session() as s:
             try:
                 meal_msg = drafts.commit_draft(s, draft_id, room_id, logged_by=str(ctx.member_id))
-            except Exception as e:
+            except (ledger.LedgerError, MoneyError) as e:
                 raise HTTPException(409, str(e))
             meal_payload = chat.message_to_dict(meal_msg, None)
             draft_payload = chat.message_to_dict(s.get(RoomMessage, draft_id), None)

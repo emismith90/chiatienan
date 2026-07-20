@@ -120,44 +120,63 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
     from concurrent turns never interleaves with another. Meal turns never write
     directly — ``propose_meal`` only proposes, and the turn ends with a pending
-    ``expense_draft`` for a human to edit/commit.
+    ``expense_draft`` for a human to edit/commit. The draft write itself
+    (``drafts.create_draft``, which may supersede/commit or cancel a prior
+    pending draft — a ledger write) runs under the SAME lock as ``run_turn``,
+    so the ledger's single-writer property covers this path too.
 
     ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
-    :func:`app.agent.run_turn` for live ``agent.*`` progress; unused otherwise.
+    :func:`app.agent.run_turn` for live ``agent.*`` progress. When a proposal
+    supersedes a pending draft, the extra messages that produces (the
+    committed/cancelled prior draft, and its meal card if committed) are
+    published via ``emit`` too — after the lock is released, since publishing
+    isn't a DB write — so live clients see them and not just the new draft.
     """
+    from app import drafts
     from app.agent import run_turn
     from app.tools import ToolContext
 
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
                        sender_name=member_name, turn_mentions=[])
+
+    extra_payloads: list[dict] = []
+
     async with _agent_lock:
         result = await run_turn(text, ctx, images=images, emit=emit)
 
-    from app import drafts
+        # A meal turn never writes directly: the LLM only proposes, and the
+        # turn ends with an editable draft card for the human to confirm
+        # (design D3, money-safety).
+        proposal = result.last_result("propose_meal")
+        if proposal:
+            payload = {k: proposal[k] for k in (
+                "payer_member_id", "member_participants", "guests", "bill_total",
+                "adjustments", "dish", "initiator", "note", "per_head_preview")}
+            payload["raw_input"] = text
+            payload["logged_by"] = str(member_id)
+            payload["turn_id"] = result.turn_id
+            with db.session() as s:
+                new_msg, extras = drafts.create_draft(s, room_id, payload)
+                extra_payloads = [message_to_dict(m, None) for m in extras]
+        else:
+            attachments = render_bot_attachments(result)
 
-    # A meal turn never writes directly: the LLM only proposes, and the turn
-    # ends with an editable draft card for the human to confirm (design D3,
-    # money-safety) — the draft may itself supersede/commit a prior pending
-    # draft via drafts.create_draft.
-    proposal = result.last_result("propose_meal")
-    if proposal:
-        payload = {k: proposal[k] for k in (
-            "payer_member_id", "member_participants", "guests", "bill_total",
-            "adjustments", "dish", "initiator", "note", "per_head_preview")}
-        payload["raw_input"] = text
-        payload["logged_by"] = str(member_id)
-        with db.session() as s:
-            return drafts.create_draft(s, room_id, payload)
+            # Money turns get a body built server-side from the tool-result
+            # dict, so the visible text can never disagree with the
+            # QR/attachment numbers (the LLM's `final_text` is never used for
+            # the amounts themselves).
+            if attachments and attachments.get("type") == "settlement":
+                body = _settlement_body(attachments)
+            else:
+                body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 
-    attachments = render_bot_attachments(result)
+            with db.session() as s:
+                new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
 
-    # Money turns get a body built server-side from the tool-result dict, so
-    # the visible text can never disagree with the QR/attachment numbers
-    # (the LLM's `final_text` is never used for the amounts themselves).
-    if attachments and attachments.get("type") == "settlement":
-        body = _settlement_body(attachments)
-    else:
-        body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+    # Publish any supersede-commit/cancel extras BEFORE the new draft (which
+    # main._run publishes itself from this function's return value).
+    if emit:
+        for ev in extra_payloads:
+            await emit({"type": "message", **ev})
 
-    with db.session() as s:
-        return post_message(s, room_id, None, body, attachments=attachments, kind="bot")
+    return new_msg

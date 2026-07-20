@@ -174,7 +174,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
 
     def propose_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
-        participants = [int(p) for p in (args.get("participants") or [])]
+        try:
+            participants = [int(p) for p in (args.get("participants") or [])]
+        except (TypeError, ValueError):
+            return _err("Danh sách người tham gia không hợp lệ.")
         total = args.get("total")
         if not isinstance(total, int):
             return _err("Thiếu tổng tiền (total) dạng số nguyên VND.")
