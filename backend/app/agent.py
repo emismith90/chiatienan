@@ -184,34 +184,34 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> 
     from app import agui
 
     turn_id = uuid.uuid4().hex
-    if emit:
-        for ev in agui.start(turn_id):
-            await emit(ev)
-
     result = TurnResult()
-    workspace = _ensure_workspace()
-    api_key = resolve_cursor_api_key()
-    selection = await asyncio.to_thread(
-        resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
-    )
-
-    prompt = build_system_prompt(sender_name=ctx.sender_name)
-    message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
-
-    local = LocalAgentOptions(
-        cwd=workspace,
-        custom_tools=build_tools(ctx),
-        store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
-    )
-    options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
-    message = _build_message(message_text, images)
-
     max_tools, max_seconds = settings.max_tools, settings.max_seconds
     started = time.monotonic()
     completed_tools = 0
     text_parts: list[str] = []
 
     try:
+        if emit:
+            for ev in agui.start(turn_id):
+                await emit(ev)
+
+        workspace = _ensure_workspace()
+        api_key = resolve_cursor_api_key()
+        selection = await asyncio.to_thread(
+            resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
+        )
+
+        prompt = build_system_prompt(sender_name=ctx.sender_name)
+        message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
+
+        local = LocalAgentOptions(
+            cwd=workspace,
+            custom_tools=build_tools(ctx),
+            store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
+        )
+        options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
+        message = _build_message(message_text, images)
+
         client = await _launch_bridge_resilient(AsyncClient, workspace, local)
         async with client:
             async with await client.agents.create(options) as agent:
