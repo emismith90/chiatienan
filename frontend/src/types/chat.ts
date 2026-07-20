@@ -6,25 +6,3 @@ export interface ChatImage {
   mimeType: string;
   name?: string;
 }
-
-export interface ToolCallEntry {
-  id: string;
-  name: string;
-  args: string;
-  result: string | null;
-  status: "running" | "completed" | "error";
-  startedAt: number;
-  endedAt: number | null;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "context" | "reasoning";
-  content: string;
-  toolCalls?: ToolCallEntry[];
-  isStreaming?: boolean;
-  runId?: string;
-  feedback?: string | null;
-  /** Image attachments (user turns only). */
-  images?: ChatImage[];
-}

@@ -26,6 +26,7 @@ export class ApiError extends Error {
     msg: string,
   ) {
     super(msg);
+    this.name = "ApiError";
   }
 }
 
