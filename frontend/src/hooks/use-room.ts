@@ -68,14 +68,17 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
   if (e.type === "message") {
     if (s.messages.some((m) => m.id === e.id)) return s;
     const { type, ...msg } = e;
-    return { ...s, messages: [...s.messages, msg] };
+    const withoutPending = s.messages.filter(
+      (m) => !(m.pending && m.body === e.body && m.author?.id === e.author?.id),
+    );
+    return { ...s, messages: [...withoutPending, msg] };
   }
   return s;
 }
 
 export function useRoom(roomId: number) {
   const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {}, activeTurn: null });
-  const { signOut } = useSession();
+  const { signOut, memberId } = useSession();
   const lastId = useRef(0);
 
   useEffect(() => {
@@ -134,8 +137,27 @@ export function useRoom(roomId: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  const send = (text: string, images?: ChatImage[]) =>
-    api.postMessage(roomId, text, images);
+  const send = (text: string, images?: ChatImage[]) => {
+    // Optimistic echo: show the user's own message immediately instead of
+    // waiting for the POST -> SSE round-trip. Reconciled (or marked errored)
+    // once the real event arrives or the request fails; see mergeEvent's
+    // "message" branch above for the pending-bubble dedupe.
+    const tempId = -Date.now();
+    setState((prev) => ({
+      ...prev,
+      messages: [
+        ...prev.messages,
+        { id: tempId, kind: "text", body: text, author: { id: memberId }, pending: true },
+      ],
+    }));
+    return api.postMessage(roomId, text, images).catch((err) => {
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.map((m) => (m.id === tempId ? { ...m, error: true } : m)),
+      }));
+      throw err;
+    });
+  };
 
   return { messages: state.messages, typing: state.typing, timelines: state.timelines, activeTurn: state.activeTurn, send };
 }

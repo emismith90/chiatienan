@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mergeEvent } from "../use-room";
+import type { RoomState } from "../use-room";
 
 describe("mergeEvent", () => {
   it("appends messages, dedupes by id, toggles typing", () => {
@@ -30,5 +31,16 @@ describe("mergeEvent", () => {
     const start = { messages: [{ id: 1 }], typing: true, timelines: {}, activeTurn: null };
     expect(mergeEvent(start, { type: "__closed__" })).toBe(start);
     expect(mergeEvent(start, { type: "something.else" })).toBe(start);
+  });
+
+  it("reconciles an optimistic pending bubble with the real message", () => {
+    const s0: RoomState = {
+      messages: [{ id: -1, kind: "text", body: "hi", author: { id: 7 }, pending: true }],
+      typing: false, timelines: {}, activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, { type: "message", id: 42, kind: "text", body: "hi", author: { id: 7 } });
+    expect(s1.messages.filter((m) => m.pending).length).toBe(0);
+    expect(s1.messages.some((m) => m.id === 42)).toBe(true);
+    expect(s1.messages.length).toBe(1);
   });
 });

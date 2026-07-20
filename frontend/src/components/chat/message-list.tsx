@@ -13,16 +13,28 @@ interface Message {
   body: string;
   attachments?: any;
   created_at?: string | null;
-  author?: { id: number; name: string; nickname?: string | null } | null;
+  author?: { id: number; name?: string; nickname?: string | null } | null;
+  pending?: boolean;
+  error?: boolean;
 }
 
 function HumanMessage({ message }: { message: Message }) {
   const images: AttachmentImage[] = message.attachments?.images ?? [];
-  const name = message.author?.name ?? "Ẩn danh";
+  // The optimistic pending bubble only carries the author id (no display
+  // name yet) — label it "Bạn" (You) rather than falling through to the
+  // "unknown author" copy until the real message reconciles it.
+  const name = message.pending ? "Bạn" : (message.author?.name ?? "Ẩn danh");
   return (
     <div className="flex flex-col items-end">
       <span className="mb-1 px-1 text-xs text-[var(--text-secondary)]">{name}</span>
-      <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--accent-primary)] px-4 py-2.5 text-white shadow-sm">
+      <div
+        className={`max-w-[85%] rounded-lg border px-4 py-2.5 text-white shadow-sm transition-opacity duration-150 ${
+          message.error ? "border-[var(--danger)]" : "border-[var(--border)]"
+        } bg-[var(--accent-primary)] ${message.pending ? "opacity-60" : ""}`}
+      >
+        {message.error && (
+          <p className="mb-1 text-xs font-medium text-white/90">Gửi thất bại — vui lòng thử lại.</p>
+        )}
         {message.body && (
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
             {message.body}
