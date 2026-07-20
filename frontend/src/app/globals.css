@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Gilroy Sans — Niteco primary typeface. Brand rule: use Gilroy when the files
+   are available (they are, bundled in /public/fonts) — never default to Arial. */
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Niteco Dark Theme (brand single-source-of-truth).
+   Niteco Black background (never pure #000), white text, Niteco Yellow accent.
+   Raw tokens live in :root; @theme inline registers them as Tailwind v4 colors. */
+:root {
+  --background: #262524;          /* Niteco Black */
+  --foreground: #ffffff;          /* White */
+  --card: #3d3c3b;                /* Black 90% — panel surface */
+  --card-foreground: #ffffff;
+  --popover: #3d3c3b;
+  --popover-foreground: #ffffff;
+  --primary: #ffd400;             /* Niteco Yellow */
+  --primary-foreground: #262524;  /* black text on yellow CTAs */
+  --secondary: #3d3c3b;
+  --secondary-foreground: #ffffff;
+  --muted: #3d3c3b;               /* Black 90% */
+  --muted-foreground: rgba(255, 255, 255, 0.7); /* brand muted/caption = white 70% */
+  --accent: #535252;              /* Black 80% — subtle hover surface */
+  --accent-foreground: #ffffff;
+  --destructive: #f44336;         /* Signal Red (extended palette) — error states */
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: #3d3c3b;
+  --ring: #ffd400;
+  --radius: 0.5rem;
+
+  /* Data-viz palette: Niteco Yellow is always the first series; extended palette
+     (brighter variants, visible on dark) for 3rd+. Never used for bg/headlines. */
+  --color-chart-1: #ffd400;       /* Niteco Yellow */
+  --color-chart-2: #2196f3;       /* Signal Blue */
+  --color-chart-3: #4caf50;       /* Signal Green */
+  --color-chart-4: #ff9800;       /* Signal Orange */
+  --color-chart-5: #7b1fa2;       /* Purple */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --font-sans: "Gilroy", system-ui, Arial, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Gilroy", system-ui, Arial, sans-serif;
+}
