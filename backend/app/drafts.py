@@ -113,6 +113,9 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("Thẻ nháp đã được xử lý.")
+    if (att.get("payer_member_id") is None or att.get("bill_total") is None
+            or not att.get("member_participants")):
+        raise ledger.LedgerError("Thẻ nháp chưa đủ thông tin để ghi sổ.")
 
     res = ledger.record_meal(
         session,

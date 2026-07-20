@@ -93,6 +93,42 @@ def test_supersede_of_invalid_prior_draft_cancels_instead_of_committing(db):
         assert extras == [prev]
 
 
+def test_commit_draft_with_null_bill_total_raises_ledger_error(db):
+    """A client can PATCH bill_total to null (DraftPatchIn types it as
+    int | None). commit_draft must reject this with a clean LedgerError,
+    not blow up with a TypeError from int(None)."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, _payload(a, b, c))
+        drafts.update_draft(s, d.id, room_id, {"bill_total": None})
+
+        import pytest
+        with pytest.raises(ledger.LedgerError):
+            drafts.commit_draft(s, d.id, room_id, logged_by=str(a))
+        assert s.query(Meal).count() == 0
+
+
+def test_supersede_of_prior_draft_with_null_bill_total_cancels_instead_of_committing(db):
+    """Same bug via the supersede path: a prior pending draft edited to have
+    bill_total=None must not raise a bare TypeError inside create_draft's
+    except (MoneyError, LedgerError) — that would lose the new proposal
+    entirely. It must be caught as LedgerError and the prior draft cancelled,
+    with the new draft still becoming pending."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d1, _ = drafts.create_draft(s, room_id, _payload(a, b, c))
+        drafts.update_draft(s, d1.id, room_id, {"bill_total": None})
+
+        d2, extras = drafts.create_draft(s, room_id, _payload(b, a, c))
+
+        prev = s.get(RoomMessage, d1.id)
+        assert prev.attachments["status"] == "cancelled"
+        assert "committed_meal_id" not in prev.attachments
+        assert s.query(Meal).count() == 0
+        assert d2.attachments["status"] == "pending"
+        assert extras == [prev]
+
+
 def test_cancel_writes_nothing(db):
     room_id, (a, b, c) = _seed_room(db, 3)
     with db.session() as s:
