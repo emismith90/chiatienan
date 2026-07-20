@@ -81,7 +81,7 @@ export function Composer({ onSend }: ComposerProps) {
     if (!mention) return;
     const before = text.slice(0, mention.start);
     const after = text.slice(mention.end);
-    const insertion = `@${handle} `;
+    const insertion = `@${handle}${/^\s/.test(after) ? "" : " "}`;
     const next = before + insertion + after;
     setText(next);
     setMention(null);
