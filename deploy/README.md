@@ -60,16 +60,54 @@ If the bridge smoke returns `"ok": true`, the Cursor SDK bridge is confirmed wor
 host. If it fails, capture the `error` field and `docker compose logs backend` — that tells you
 whether the bridge subprocess couldn't launch.
 
-## 5. Later (frontend)
+## 5. Frontend (PWA)
 
-The PWA frontend service will be added to `docker-compose.yml` by a later plan; redeploy after
-pulling it in the same way as step 3.
+`docker-compose.yml` now has a `frontend` service (Next.js, `output: "standalone"`, port 3000
+internal-only) and `Caddyfile` routes `/api/*` + `/internal/*` to `backend:8000`, everything else
+to `frontend:3000` (Caddy streams the SSE route unbuffered by default — no extra config needed).
+
+> **M8 — do not build the frontend image on a tiny droplet.** `next build` OOMs on a 512 MB
+> droplet; a plain `docker compose up -d --build` there can hang or get OOM-killed. Pick one:
+>
+> **Option A — build on-box, but only with the 2 GB swap from step 1 already enabled.**
+> ```bash
+> free -h   # confirm the 2G swapfile from step 1 is active before building
+> cd /opt/chiatienan && git pull && docker compose up -d --build
+> ```
+>
+> **Option B — build elsewhere and transfer the image (no swap needed on the droplet).**
+> ```bash
+> # on a machine with >= 2 GB RAM (a laptop or CI runner), from a checkout of this repo:
+> docker compose build frontend
+> docker save chiatienan-frontend | ssh root@<DROPLET_IP> 'docker load'
+> # then, on the droplet: rebuild only backend, and bring everything up without rebuilding
+> # frontend (compose reuses the just-loaded image since it's already tagged correctly):
+> ssh root@<DROPLET_IP> 'cd /opt/chiatienan && git pull && docker compose build backend && docker compose up -d'
+> ```
+> (`chiatienan-frontend` is the image name Compose derives from the project dir + service name —
+> confirm with `docker compose images frontend` if the project folder isn't named `chiatienan` on
+> both machines.)
+
+After either option, validate:
+
+```bash
+curl -I https://<CADDY_DOMAIN>/          # -> 200 from the Next.js frontend
+curl https://<CADDY_DOMAIN>/health       # -> {"status":"ok"} from the backend, still routed correctly
+```
+
+Then do the phone/PWA walkthrough: open `https://<CADDY_DOMAIN>` on a phone, install the PWA, open
+an admin-created invite link, create an account, send `@bot ghi 100k, an và binh`, confirm the bot
+reply appears for all members.
 
 ## Redeploy (after code changes)
 
 ```bash
 cd /opt/chiatienan && git pull && docker compose up -d --build
 ```
+
+Backend-only or Caddy-only changes: the command above is fine as-is. If the change touches
+`frontend/`, do **not** run a blanket `--build` on the droplet — see the M8 note in
+section 5 and use Option A (with swap) or Option B (build-elsewhere + `docker load`) instead.
 
 ## Backup (optional)
 

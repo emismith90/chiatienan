@@ -23,6 +23,12 @@ services:
     expose:
       - "8000"              # internal only; Caddy terminates TLS and proxies in
 
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    expose: ["3000"]
+    depends_on: [backend]
+
 volumes:
   caddy_data:
   caddy_config:
