@@ -78,7 +78,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--bg-base)] flex justify-center p-4">
+    <main className="min-h-dvh pt-safe pb-safe bg-[var(--bg-base)] flex justify-center p-4">
       <div className="bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-md max-w-md w-full p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">Hồ sơ</h1>
@@ -96,10 +96,11 @@ export default function ProfilePage() {
           <>
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+                <label htmlFor="pf-nickname" className="mb-1 block text-xs text-[var(--text-secondary)]">
                   Biệt danh
                 </label>
                 <input
+                  id="pf-nickname"
                   value={nickname}
                   disabled
                   readOnly
@@ -107,10 +108,11 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+                <label htmlFor="pf-display-name" className="mb-1 block text-xs text-[var(--text-secondary)]">
                   Tên hiển thị
                 </label>
                 <input
+                  id="pf-display-name"
                   placeholder="Tên hiển thị"
                   value={f.display_name}
                   onChange={(e) => set("display_name", e.target.value)}
@@ -118,10 +120,11 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+                <label htmlFor="pf-bank-code" className="mb-1 block text-xs text-[var(--text-secondary)]">
                   Mã ngân hàng
                 </label>
                 <input
+                  id="pf-bank-code"
                   placeholder="Mã ngân hàng (vd VCB)"
                   value={f.bank_code}
                   onChange={(e) => set("bank_code", e.target.value)}
@@ -129,10 +132,11 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+                <label htmlFor="pf-account-number" className="mb-1 block text-xs text-[var(--text-secondary)]">
                   Số tài khoản
                 </label>
                 <input
+                  id="pf-account-number"
                   placeholder="Số tài khoản"
                   value={f.account_number}
                   onChange={(e) => set("account_number", e.target.value)}
@@ -140,10 +144,11 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--text-secondary)]">
+                <label htmlFor="pf-account-holder" className="mb-1 block text-xs text-[var(--text-secondary)]">
                   Tên chủ tài khoản
                 </label>
                 <input
+                  id="pf-account-holder"
                   placeholder="Tên chủ tài khoản"
                   value={f.account_holder}
                   onChange={(e) => set("account_holder", e.target.value)}
@@ -152,7 +157,11 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {err && <p className="text-sm text-[var(--accent-primary)]">{err}</p>}
+            {err && (
+              <p role="alert" className="text-sm text-[var(--accent-text)]">
+                {err}
+              </p>
+            )}
             {saved && !err && (
               <p className="text-sm text-[var(--text-secondary)]">Đã lưu</p>
             )}

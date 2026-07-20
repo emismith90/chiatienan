@@ -53,7 +53,7 @@ export function MentionDropdown({
             }}
             className={`block w-full px-3 py-2 text-left text-sm ${
               i === active
-                ? "bg-[var(--bg-base)] text-[var(--accent-primary)]"
+                ? "bg-[var(--bg-base)] text-[var(--accent-text)]"
                 : "text-[var(--text-primary)]"
             }`}
           >

@@ -208,9 +208,10 @@ export function Composer({ onSend }: ComposerProps) {
             onBlur={() => setMention(null)}
             rows={1}
             placeholder="Nhắn tin… (dùng @bot để gọi bot)"
+            aria-label="Soạn tin nhắn"
             aria-expanded={mention !== null && mentionItems.length > 0}
             aria-haspopup="listbox"
-            className="max-h-40 min-h-10 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+            className="max-h-40 min-h-10 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           />
           {mention && mentionItems.length > 0 && (
             <MentionDropdown items={mentionItems} active={mention.active} onPick={acceptMention} />

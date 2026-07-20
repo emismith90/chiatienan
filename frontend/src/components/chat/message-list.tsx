@@ -97,7 +97,7 @@ export function MessageList({
         const turnSteps = turnId ? timelines?.[turnId] : undefined;
         return m.kind === "expense_draft" ? (
           <div key={m.id} className="flex flex-col items-start">
-            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
             </span>
             {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
@@ -105,7 +105,7 @@ export function MessageList({
           </div>
         ) : m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">
-            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-primary)]">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
             </span>
             <BotMessage body={m.body} attachments={m.attachments} />

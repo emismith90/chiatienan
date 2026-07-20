@@ -58,7 +58,7 @@ export default function Join() {
 
   if (notFound) {
     return (
-      <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center p-4">
+      <main className="min-h-dvh pt-safe pb-safe bg-[var(--bg-base)] flex items-center justify-center p-4">
         <div className="bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-md max-w-md w-full p-6 text-center">
           <p className="text-[var(--text-primary)] font-medium">Link không hợp lệ.</p>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
@@ -72,7 +72,7 @@ export default function Join() {
   if (!room) return null;
 
   return (
-    <main className="min-h-screen bg-[var(--bg-base)] flex items-center justify-center p-4">
+    <main className="min-h-dvh pt-safe pb-safe bg-[var(--bg-base)] flex items-center justify-center p-4">
       <div className="bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-md max-w-md w-full p-6 space-y-4">
         <div>
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -89,7 +89,7 @@ export default function Join() {
             onClick={() => setMode("create")}
             className={`-mb-px pb-2 font-medium transition-all duration-150 ${
               mode === "create"
-                ? "text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)]"
+                ? "text-[var(--accent-text)] border-b-2 border-[var(--accent-primary)]"
                 : "text-[var(--text-secondary)]"
             }`}
           >
@@ -100,7 +100,7 @@ export default function Join() {
             onClick={() => setMode("login")}
             className={`-mb-px pb-2 font-medium transition-all duration-150 ${
               mode === "login"
-                ? "text-[var(--accent-primary)] border-b-2 border-[var(--accent-primary)]"
+                ? "text-[var(--accent-text)] border-b-2 border-[var(--accent-primary)]"
                 : "text-[var(--text-secondary)]"
             }`}
           >
@@ -111,6 +111,7 @@ export default function Join() {
         <div className="space-y-3">
           {mode === "create" && (
             <input
+              aria-label="Tên hiển thị"
               placeholder="Tên hiển thị"
               value={f.display_name}
               onChange={(e) => set("display_name", e.target.value)}
@@ -118,12 +119,14 @@ export default function Join() {
             />
           )}
           <input
+            aria-label="Biệt danh"
             placeholder="Biệt danh"
             value={f.nickname}
             onChange={(e) => set("nickname", e.target.value)}
             className={inputClass}
           />
           <input
+            aria-label="PIN"
             placeholder="PIN"
             type="password"
             inputMode="numeric"
@@ -134,18 +137,21 @@ export default function Join() {
           {mode === "create" && (
             <>
               <input
+                aria-label="Mã ngân hàng"
                 placeholder="Mã ngân hàng (vd VCB)"
                 value={f.bank_code}
                 onChange={(e) => set("bank_code", e.target.value)}
                 className={inputClass}
               />
               <input
+                aria-label="Số tài khoản"
                 placeholder="Số tài khoản"
                 value={f.account_number}
                 onChange={(e) => set("account_number", e.target.value)}
                 className={inputClass}
               />
               <input
+                aria-label="Tên chủ tài khoản"
                 placeholder="Tên chủ tài khoản"
                 value={f.account_holder}
                 onChange={(e) => set("account_holder", e.target.value)}
@@ -155,7 +161,11 @@ export default function Join() {
           )}
         </div>
 
-        {err && <p className="text-sm text-[var(--accent-primary)]">{err}</p>}
+        {err && (
+          <p role="alert" className="text-sm text-[var(--accent-text)]">
+            {err}
+          </p>
+        )}
 
         <button
           type="button"

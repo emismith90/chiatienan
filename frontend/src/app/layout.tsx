@@ -14,12 +14,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#CC4E33",
+  themeColor: "#C0472E",
+  width: "device-width",
+  initialScale: 1,
+  // Content extends under the notch / home indicator; components opt back in
+  // to the safe area with the .pt-safe / .pb-safe utilities.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="vi" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
       <body>
         <SessionProvider>{children}</SessionProvider>
         <ServiceWorkerRegister />

@@ -133,7 +133,7 @@ export function ExpenseDraftCard({
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
 
       <button type="button" onClick={() => setAdvancedOpen((v) => !v)}
-        className="mb-2 text-xs font-medium text-[var(--accent-primary)]">
+        className="mb-2 text-xs font-medium text-[var(--accent-text)]">
         Điều chỉnh (nâng cao) {advancedOpen ? "▲" : "▼"}
       </button>
       {advancedOpen && (
