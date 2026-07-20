@@ -118,3 +118,51 @@ def net_transfers(balances: dict[int, int]) -> list[Transfer]:
             del creditors[c]
 
     return transfers
+
+
+def split_with_guests(
+    total: int,
+    member_ids: list[int],
+    guest_count: int,
+    adjustments: dict[int, int] | None = None,
+    payer_id: int | None = None,
+) -> dict:
+    """Split ``total`` over ``member_ids`` + ``guest_count`` guest heads.
+
+    Guests shrink the per-head number but are never billed (guest-pays-cash): the
+    per-head is computed over members + guests, members are billed their share
+    (+ adjustments), and the guest heads' shares are dropped (assumed settled in
+    cash). The integer-division remainder is assigned by :func:`split_shares`
+    (payer if a participant, else the first participant) — the payer is always a
+    member here, so the remainder stays inside the tracked (member) total.
+
+    Returns ``{shares, per_head, tracked_total, guest_total, headcount}`` where
+    ``shares`` maps member id → VND and ``tracked_total == sum(shares.values())``.
+    Raises :class:`MoneyError` (via :func:`split_shares`) on any invalid split, or
+    directly if there are no members.
+    """
+    if len(member_ids) < 1:
+        raise MoneyError("Cần ít nhất một thành viên trong bữa ăn.")
+    if guest_count < 0:
+        raise MoneyError("Số khách không hợp lệ.")
+    if any(m < 0 for m in member_ids):
+        raise MoneyError("Member id không được âm (trùng với id khách vãng lai).")
+
+    # Guest placeholders use negative ids so they never collide with real (positive)
+    # member ids; adjustments only ever name members.
+    guest_ids = [-(i + 1) for i in range(guest_count)]
+    full_participants = list(member_ids) + guest_ids
+    full = split_shares(total, full_participants, adjustments, payer_id=payer_id)
+
+    shares = {m: full[m] for m in member_ids}
+    tracked_total = sum(shares.values())
+    n = len(full_participants)
+    sum_adj = sum((adjustments or {}).values())
+    per_head = (total - sum_adj) // n
+    return {
+        "shares": shares,
+        "per_head": per_head,
+        "tracked_total": tracked_total,
+        "guest_total": total - tracked_total,
+        "headcount": n,
+    }

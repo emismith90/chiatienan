@@ -164,3 +164,35 @@ def test_record_and_balances_are_room_scoped(db):
         assert bal[an]["balance"] == 50000 and bal[bi]["balance"] == -50000
         # other room sees nothing
         assert ledger.period_balances(s, 999, None, date(2999, 1, 1)) == {}
+
+
+def test_record_meal_with_guest_tracks_members_only(db):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        res = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=a, participants=[a, b, c],
+            total_amount=400_000, guests=["Emi"], occurred_on=date(2026, 7, 15),
+        )
+        assert res["bill_total"] == 400_000
+        assert res["tracked_total"] == 300_000
+        assert res["total_amount"] == 300_000       # persisted total = tracked
+        assert res["guests"] == ["Emi"]
+        assert sum(res["shares"].values()) == 300_000
+        bal = ledger.period_balances(s, room_id, date(2026, 7, 1), date(2026, 7, 31))
+        assert bal[a]["balance"] == 200_000          # paid 300k, consumed 100k
+        assert bal[b]["balance"] == -100_000
+        assert bal[c]["balance"] == -100_000
+
+
+def test_record_meal_stores_metadata(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        res = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=a, participants=[a, b],
+            total_amount=200_000, dish="phở", initiator="Emi",
+            note="An đổi ý", raw_input="@bot 200k phở",
+        )
+        meal = s.get(__import__("app.models", fromlist=["Meal"]).Meal, res["meal_id"])
+        assert meal.dish == "phở" and meal.initiator == "Emi"
+        assert meal.note == "An đổi ý" and meal.raw_input == "@bot 200k phở"
+        assert meal.guests == []

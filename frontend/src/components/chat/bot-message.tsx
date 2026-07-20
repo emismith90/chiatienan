@@ -1,6 +1,8 @@
 "use client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { BalanceTable } from "./balance-table";
+import { fmt } from "@/lib/format";
 
 interface Transfer {
   from_name: string;
@@ -18,8 +20,6 @@ interface BotMessageProps {
   body: string;
   attachments?: any;
 }
-
-const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
 function SettlementCard({ attachments }: { attachments: any }) {
   const transfers: Transfer[] = attachments.transfers ?? [];
@@ -74,7 +74,8 @@ function SettlementCard({ attachments }: { attachments: any }) {
 function MealCard({ attachments }: { attachments: any }) {
   const payer = attachments.payer ?? {};
   const shares: Share[] = attachments.shares ?? [];
-  const total: number = attachments.total_amount ?? 0;
+  const bill: number = attachments.bill_total ?? attachments.tracked_total ?? 0;
+  const guests: string[] = attachments.guests ?? [];
 
   return (
     <div className="mt-3 space-y-2">
@@ -82,9 +83,17 @@ function MealCard({ attachments }: { attachments: any }) {
         <span className="text-[var(--text-secondary)]">Người trả:</span>
         <span className="font-medium">{payer.name ?? "?"}</span>
         <span className="ml-auto font-semibold text-[var(--accent-text)]">
-          {fmt(total)} đ
+          {fmt(bill)} đ
         </span>
       </div>
+      {guests.length > 0 && (
+        <p className="text-xs text-[var(--text-secondary)]">
+          gồm {guests.length} khách trả tiền mặt: {guests.join(", ")}
+        </p>
+      )}
+      {attachments.dish && (
+        <p className="text-xs text-[var(--text-secondary)]">Món: {attachments.dish}</p>
+      )}
       {shares.length > 0 && (
         <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
           {shares.map((s, i) => (
@@ -100,6 +109,7 @@ function MealCard({ attachments }: { attachments: any }) {
           ))}
         </ul>
       )}
+      <BalanceTable rows={attachments.balances ?? []} />
     </div>
   );
 }

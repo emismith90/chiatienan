@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/lib/theme";
 import { useRoom } from "@/hooks/use-room";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
+import { AgentTimeline } from "./agent-timeline";
 
 interface Member {
   id: number;
@@ -38,7 +39,7 @@ function MemberChips({ members }: { members: Member[] }) {
 }
 
 export function RoomView({ roomId }: { roomId: number }) {
-  const { messages, typing, send } = useRoom(roomId);
+  const { messages, typing, timelines, activeTurn, send } = useRoom(roomId);
   const { signOut } = useSession();
   const [members, setMembers] = useState<Member[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -96,7 +97,13 @@ export function RoomView({ roomId }: { roomId: number }) {
               Chưa có tin nhắn nào. Bắt đầu bằng cách nhắn @bot.
             </p>
           )}
-          <MessageList messages={messages} />
+          <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines} />
+          {/* Only the in-progress turn (no draft/bot message yet) renders here,
+              live. Once it finishes, its timeline attaches collapsed above the
+              message it produced — see MessageList. */}
+          {activeTurn && timelines[activeTurn] && (
+            <AgentTimeline steps={timelines[activeTurn]} live={true} />
+          )}
           {typing && (
             <div role="status" className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
               <span aria-hidden className="flex gap-1">

@@ -47,6 +47,11 @@ async function req(path: string, init: RequestInit = {}) {
 
 export const roomInfo = (t: string) => req(`/api/rooms/${t}`);
 
+/** The bot's @-mention handle. Scope is bot-only for now, so this is a stable
+ * constant rather than a network round-trip; swap for a real lookup if
+ * multiple bot handles are ever configured. */
+export const botHandle = async (): Promise<string> => "bot";
+
 export const createAccount = (t: string, b: any) =>
   req(`/api/rooms/${t}/accounts`, { method: "POST", body: JSON.stringify(b) });
 
@@ -58,6 +63,18 @@ export const getMe = () => req(`/api/me`);
 export const updateMe = (b: any) => req(`/api/me`, { method: "PUT", body: JSON.stringify(b) });
 
 export const getMembers = (roomId: number) => req(`/api/rooms/${roomId}/members`);
+
+export const patchDraft = (roomId: number, draftId: number, patch: any) =>
+  req(`/api/rooms/${roomId}/drafts/${draftId}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export const commitDraft = (roomId: number, draftId: number) =>
+  req(`/api/rooms/${roomId}/drafts/${draftId}/commit`, { method: "POST" });
+
+export const cancelDraft = (roomId: number, draftId: number) =>
+  req(`/api/rooms/${roomId}/drafts/${draftId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "cancelled" }),
+  });
 
 export const getMessages = (roomId: number, since = 0) =>
   req(`/api/rooms/${roomId}/messages?since=${since}`);

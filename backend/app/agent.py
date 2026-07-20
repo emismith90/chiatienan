@@ -42,6 +42,7 @@ class TurnResult:
     final_text: str = ""
     tools: list[ToolInvocation] = field(default_factory=list)
     error: str | None = None
+    turn_id: str | None = None
 
     def last_result(self, name: str) -> dict | None:
         """Most-recent successful (``ok``) result dict for a given tool name."""
@@ -155,8 +156,14 @@ def _build_message(text: str, images):
     )
 
 
-async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
-    """Run one turn to completion and return the assembled :class:`TurnResult`."""
+async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> TurnResult:
+    """Run one turn to completion and return the assembled :class:`TurnResult`.
+
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the
+    live ``agent.*`` timeline events (:mod:`app.agui`) for this turn's SSE
+    stream. When ``emit is None`` this function's behavior is unchanged from
+    before streaming was added.
+    """
     from cursor_sdk import (
         AgentOptions,
         AsyncClient,
@@ -172,30 +179,42 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
         resolve_model_selection,
     )
 
+    import uuid
+
+    from app import agui
+
+    turn_id = uuid.uuid4().hex
     result = TurnResult()
-    workspace = _ensure_workspace()
-    api_key = resolve_cursor_api_key()
-    selection = await asyncio.to_thread(
-        resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
-    )
-
-    prompt = build_system_prompt(sender_name=ctx.sender_name)
-    message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
-
-    local = LocalAgentOptions(
-        cwd=workspace,
-        custom_tools=build_tools(ctx),
-        store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
-    )
-    options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
-    message = _build_message(message_text, images)
-
     max_tools, max_seconds = settings.max_tools, settings.max_seconds
     started = time.monotonic()
     completed_tools = 0
     text_parts: list[str] = []
 
+    async def _emit(events) -> None:
+        if emit:
+            for ev in events:
+                await emit(ev)
+
     try:
+        await _emit(agui.start(turn_id))
+
+        workspace = _ensure_workspace()
+        api_key = resolve_cursor_api_key()
+        selection = await asyncio.to_thread(
+            resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
+        )
+
+        prompt = build_system_prompt(sender_name=ctx.sender_name)
+        message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
+
+        local = LocalAgentOptions(
+            cwd=workspace,
+            custom_tools=build_tools(ctx),
+            store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
+        )
+        options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
+        message = _build_message(message_text, images)
+
         client = await _launch_bridge_resilient(AsyncClient, workspace, local)
         async with client:
             async with await client.agents.create(options) as agent:
@@ -203,6 +222,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
                     message, SendOptions(model=selection, local=LocalSendOptions(force=True))
                 )
                 async for msg in run.messages():
+                    await _emit(agui.translate(msg, turn_id))
                     mtype = getattr(msg, "type", None)
                     if mtype == "assistant":
                         text_parts.append(_assistant_text(msg))
@@ -242,4 +262,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None) -> TurnResult:
             result.error = str(exc)
 
     result.final_text = "".join(text_parts).strip()
+
+    await _emit(agui.finish(turn_id, error=result.error))
+    result.turn_id = turn_id
+
     return result

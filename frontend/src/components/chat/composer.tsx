@@ -1,8 +1,22 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatImage } from "@/types/chat";
+import { botHandle } from "@/lib/api";
+import { mentionQuery, spliceMention, MentionDropdown } from "./mention-dropdown";
 
 const MAX_IMAGES = 4;
+/** Caret-position keys that only move the cursor (no `onChange`), so the
+ * mention state has to be recomputed for them explicitly. */
+const CARET_NAV_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
+
+interface MentionState {
+  /** Index of the "@" in `text`. */
+  start: number;
+  /** Caret index right after the partial handle. */
+  end: number;
+  query: string;
+  active: number;
+}
 
 /** Read a File into `{ data, mimeType, name }`, stripping the
  * `data:<mime>;base64,` prefix so only raw base64 is sent to the API. */
@@ -28,9 +42,53 @@ export function Composer({ onSend }: ComposerProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<ChatImage[]>([]);
   const [sending, setSending] = useState(false);
+  const [handles, setHandles] = useState<string[]>(["bot"]);
+  const [mention, setMention] = useState<MentionState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    let live = true;
+    botHandle().then((h) => {
+      if (live) setHandles([h]);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const mentionItems = useMemo(() => {
+    if (!mention) return [];
+    const q = mention.query.toLowerCase();
+    return handles.filter((h) => h.toLowerCase().startsWith(q));
+  }, [mention, handles]);
 
   const canSend = (text.trim().length > 0 || images.length > 0) && !sending;
+
+  /** Recompute the `@`-mention state from the textarea's current value and
+   * caret position; clears it when the caret isn't inside a mention. */
+  function recomputeMention(el: HTMLTextAreaElement) {
+    const caret = el.selectionStart ?? el.value.length;
+    const query = mentionQuery(el.value, caret);
+    if (query === null) {
+      setMention(null);
+      return;
+    }
+    setMention({ start: caret - query.length - 1, end: caret, query, active: 0 });
+  }
+
+  function acceptMention(handle: string) {
+    if (!mention) return;
+    const { next, caret } = spliceMention(text, mention.start, mention.end, handle);
+    setText(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -60,10 +118,38 @@ export function Composer({ onSend }: ComposerProps) {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mention && mentionItems.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMention((m) => (m ? { ...m, active: (m.active + 1) % mentionItems.length } : m));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMention((m) =>
+          m ? { ...m, active: (m.active - 1 + mentionItems.length) % mentionItems.length } : m,
+        );
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        acceptMention(mentionItems[mention.active]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
+  }
+
+  function onKeyUp(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (CARET_NAV_KEYS.has(e.key)) recomputeMention(e.currentTarget);
   }
 
   return (
@@ -108,15 +194,29 @@ export function Composer({ onSend }: ComposerProps) {
         >
           📎
         </button>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={1}
-          placeholder="Nhắn tin… (dùng @bot để gọi bot)"
-          aria-label="Soạn tin nhắn"
-          className="max-h-40 min-h-10 flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-        />
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              recomputeMention(e.target);
+            }}
+            onKeyDown={onKeyDown}
+            onKeyUp={onKeyUp}
+            onClick={(e) => recomputeMention(e.currentTarget)}
+            onBlur={() => setMention(null)}
+            rows={1}
+            placeholder="Nhắn tin… (dùng @bot để gọi bot)"
+            aria-label="Soạn tin nhắn"
+            aria-expanded={mention !== null && mentionItems.length > 0}
+            aria-haspopup="listbox"
+            className="max-h-40 min-h-10 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+          />
+          {mention && mentionItems.length > 0 && (
+            <MentionDropdown items={mentionItems} active={mention.active} onPick={acceptMention} />
+          )}
+        </div>
         <button
           type="button"
           onClick={submit}

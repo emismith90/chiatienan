@@ -1,9 +1,11 @@
 import json
 import types
+from types import SimpleNamespace
 
 import pytest
 
 import app.agent as agent_mod
+from app import agui
 from app.agent import (
     ToolInvocation,
     TurnResult,
@@ -13,6 +15,7 @@ from app.agent import (
     run_turn,
 )
 from app.tools import ToolContext
+from tests.test_ledger import _seed_room
 
 
 # --- pure helpers ---------------------------------------------------------- #
@@ -137,3 +140,62 @@ async def test_run_turn_collects_text_and_tool_results(monkeypatch, db):
     assert "cân bằng" in result.final_text
     settle = result.last_result("settle_period")
     assert settle is not None and settle["transfers"] == []
+
+
+# --- emit contract ---------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_emit_receives_events_for_messages():
+    # Exercise the same loop shape run_turn uses: translate + await emit.
+    seen = []
+    async def emit(ev): seen.append(ev)
+    msgs = [
+        SimpleNamespace(type="assistant",
+                        message=SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])),
+        SimpleNamespace(type="tool_call", call_id="c1", name="propose_meal",
+                        status="completed", args={"total": 1}, result={"ok": True}),
+    ]
+    turn_id = "t1"
+    for ev in agui.start(turn_id):
+        await emit(ev)
+    for m in msgs:
+        for ev in agui.translate(m, turn_id):
+            await emit(ev)
+    for ev in agui.finish(turn_id):
+        await emit(ev)
+    kinds = [e["type"] for e in seen]
+    assert kinds[0] == "agent.run.started" and kinds[-1] == "agent.run.finished"
+    assert "agent.text.delta" in kinds and "agent.tool.result" in kinds
+
+
+@pytest.mark.asyncio
+async def test_run_turn_emits_finish_on_setup_failure(monkeypatch, db):
+    """A setup-time failure (e.g. resolve_cursor_api_key raising because
+    CURSOR_API_KEY is unset) must still reach agui.finish — otherwise a
+    consumer sees agent.run.started with no terminal event and the timeline
+    UI hangs forever."""
+
+    def _boom(*a, **k):
+        raise RuntimeError("CURSOR_API_KEY is not set")
+
+    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
+    monkeypatch.setattr(
+        "app.cursor_runner.resolve_cursor_api_key", _boom, raising=False
+    )
+
+    room_id, member_ids = _seed_room(db, 1)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_ids[0], sender_name="An")
+
+    seen = []
+
+    async def emit(ev):
+        seen.append(ev)
+
+    result = await run_turn("ai trả tuần này", ctx, emit=emit)
+
+    kinds = [e["type"] for e in seen]
+    assert "agent.run.started" in kinds
+    assert kinds[-1] in ("agent.run.finished", "agent.run.error")
+    turn_ids = {e["turn_id"] for e in seen}
+    assert len(turn_ids) == 1  # same turn_id on start and finish
+    assert result.error is not None

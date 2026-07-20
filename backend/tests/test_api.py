@@ -104,3 +104,79 @@ def test_members_endpoint_has_no_banking(client):
     m = members[0]
     assert set(m.keys()) == {"id", "display_name", "nickname"}
     assert "account_number" not in m and "bank_code" not in m
+
+
+def test_room_info_exposes_bot_handle(client):
+    token = _room(client)
+    r = client.get(f"/api/rooms/{token}")
+    assert r.status_code == 200
+    assert "bot_handle" in r.json()
+
+
+def _seed_draft(room_id, a, b, **overrides):
+    from app import drafts
+    from app.db import get_db
+
+    payload = {
+        "payer_member_id": a, "member_participants": [a, b], "guests": [],
+        "bill_total": 200_000, "adjustments": [], "dish": None,
+        "initiator": None, "note": None, "per_head_preview": 100_000,
+        "raw_input": "seed",
+    }
+    payload.update(overrides)
+    with get_db().session() as s:
+        d, _extras = drafts.create_draft(s, room_id, payload)
+        return d.id
+
+
+def test_patch_and_commit_draft(client):
+    token = _room(client)
+    sess_a, room_id = _join(client, token, "an")
+    sess_b, _ = _join(client, token, "binh")
+    ha = {"Authorization": f"Bearer {sess_a}"}
+    hb = {"Authorization": f"Bearer {sess_b}"}
+    a = client.get("/api/me", headers=ha).json()["id"]
+    b = client.get("/api/me", headers=hb).json()["id"]
+
+    draft_id = _seed_draft(room_id, a, b)
+
+    r = client.patch(f"/api/rooms/{room_id}/drafts/{draft_id}", json={"dish": "phở"}, headers=ha)
+    assert r.status_code == 200, r.text
+
+    r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=ha)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert "meal_id" in body
+
+    # committed draft can no longer be edited/committed again.
+    r = client.patch(f"/api/rooms/{room_id}/drafts/{draft_id}", json={"dish": "bún"}, headers=ha)
+    assert r.status_code == 404
+    r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=ha)
+    assert r.status_code == 409
+
+
+def test_patch_draft_rejects_bad_status(client):
+    token = _room(client)
+    sess_a, room_id = _join(client, token, "an")
+    sess_b, _ = _join(client, token, "binh")
+    ha = {"Authorization": f"Bearer {sess_a}"}
+    hb = {"Authorization": f"Bearer {sess_b}"}
+    a = client.get("/api/me", headers=ha).json()["id"]
+    b = client.get("/api/me", headers=hb).json()["id"]
+
+    draft_id = _seed_draft(room_id, a, b)
+
+    r = client.patch(f"/api/rooms/{room_id}/drafts/{draft_id}", json={"status": "committed"}, headers=ha)
+    assert r.status_code == 400
+
+
+def test_patch_and_commit_unknown_draft_is_404(client):
+    token = _room(client)
+    sess, room_id = _join(client, token, "an")
+    h = {"Authorization": f"Bearer {sess}"}
+
+    r = client.patch(f"/api/rooms/{room_id}/drafts/999999", json={"dish": "phở"}, headers=h)
+    assert r.status_code == 404
+    r = client.post(f"/api/rooms/{room_id}/drafts/999999/commit", headers=h)
+    assert r.status_code == 409

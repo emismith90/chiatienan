@@ -3,9 +3,11 @@
 Human messages are appended via :func:`post_message` (called by the route
 layer). A message that :func:`mentions_bot` triggers :func:`run_bot_turn`,
 which serializes agent runs through a module-level ``asyncio.Lock`` (the
-ledger has a single writer — design §3) and posts the reply as a
-``kind="bot"`` message, with structured tool results rendered via
-:func:`render_bot_attachments` rather than re-parsed from LLM prose (design D3).
+ledger has a single writer — design §3). A meal proposal ends the turn as a
+pending ``kind="expense_draft"`` card (see :mod:`app.drafts`) instead of an
+immediate reply; other turns post a ``kind="bot"`` message, with structured
+tool results rendered via :func:`render_bot_attachments` rather than
+re-parsed from LLM prose (design D3).
 """
 from __future__ import annotations
 
@@ -70,9 +72,6 @@ def render_bot_attachments(result) -> dict | None:
     settle = result.last_result("settle_period")
     if settle:
         return {"type": "settlement", **settle}
-    meal = result.last_result("record_meal")
-    if meal:
-        return {"type": "meal", **meal}
     return None
 
 
@@ -98,42 +97,86 @@ def _settlement_body(attachments: dict) -> str:
 
 
 def _meal_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a recorded meal, straight from the
+    """Deterministic Vietnamese summary of a committed meal, straight from the
     tool-result dict — never from LLM prose (design D3, money-safety)."""
     payer = attachments.get("payer") or {}
     shares = attachments.get("shares") or []
     shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
+    bill = attachments.get("bill_total", attachments.get("tracked_total", attachments.get("total_amount", 0)))
+    guests = attachments.get("guests") or []
+    guest_str = f" (gồm {len(guests)} khách trả tiền mặt)" if guests else ""
+    dish = attachments.get("dish")
+    dish_str = f" — {dish}" if dish else ""
     return (
-        f"Đã ghi #{attachments.get('meal_id')}: {payer.get('name', '?')} trả "
-        f"tổng {attachments.get('total_amount', 0):,}đ • {shares_str}"
+        f"Đã ghi #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} trả "
+        f"tổng {bill:,}đ{guest_str} • {shares_str}"
     )
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
-                        text: str, images=None) -> RoomMessage:
+                        text: str, images=None, emit=None) -> RoomMessage:
     """Run the agent for one ``@bot`` turn and persist its reply.
 
-    Serialized by ``_agent_lock`` so ledger-writing tool calls (``record_meal``,
-    ``settle_period``) from concurrent turns never interleave.
+    Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
+    from concurrent turns never interleaves with another. Meal turns never write
+    directly — ``propose_meal`` only proposes, and the turn ends with a pending
+    ``expense_draft`` for a human to edit/commit. The draft write itself
+    (``drafts.create_draft``, which may supersede/commit or cancel a prior
+    pending draft — a ledger write) runs under the SAME lock as ``run_turn``,
+    so the ledger's single-writer property covers this path too.
+
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
+    :func:`app.agent.run_turn` for live ``agent.*`` progress. When a proposal
+    supersedes a pending draft, the extra messages that produces (the
+    committed/cancelled prior draft, and its meal card if committed) are
+    published via ``emit`` too — after the lock is released, since publishing
+    isn't a DB write — so live clients see them and not just the new draft.
     """
+    from app import drafts
     from app.agent import run_turn
     from app.tools import ToolContext
 
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
                        sender_name=member_name, turn_mentions=[])
+
+    extra_payloads: list[dict] = []
+
     async with _agent_lock:
-        result = await run_turn(text, ctx, images=images)
-    attachments = render_bot_attachments(result)
+        result = await run_turn(text, ctx, images=images, emit=emit)
 
-    # Money turns get a body built server-side from the tool-result dict, so
-    # the visible text can never disagree with the QR/attachment numbers
-    # (the LLM's `final_text` is never used for the amounts themselves).
-    if attachments and attachments.get("type") == "settlement":
-        body = _settlement_body(attachments)
-    elif attachments and attachments.get("type") == "meal":
-        body = _meal_body(attachments)
-    else:
-        body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+        # A meal turn never writes directly: the LLM only proposes, and the
+        # turn ends with an editable draft card for the human to confirm
+        # (design D3, money-safety).
+        proposal = result.last_result("propose_meal")
+        if proposal:
+            payload = {k: proposal[k] for k in (
+                "payer_member_id", "member_participants", "guests", "bill_total",
+                "adjustments", "dish", "initiator", "note", "per_head_preview")}
+            payload["raw_input"] = text
+            payload["logged_by"] = str(member_id)
+            payload["turn_id"] = result.turn_id
+            with db.session() as s:
+                new_msg, extras = drafts.create_draft(s, room_id, payload)
+                extra_payloads = [message_to_dict(m, None) for m in extras]
+        else:
+            attachments = render_bot_attachments(result)
 
-    with db.session() as s:
-        return post_message(s, room_id, None, body, attachments=attachments, kind="bot")
+            # Money turns get a body built server-side from the tool-result
+            # dict, so the visible text can never disagree with the
+            # QR/attachment numbers (the LLM's `final_text` is never used for
+            # the amounts themselves).
+            if attachments and attachments.get("type") == "settlement":
+                body = _settlement_body(attachments)
+            else:
+                body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+
+            with db.session() as s:
+                new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
+
+    # Publish any supersede-commit/cancel extras BEFORE the new draft (which
+    # main._run publishes itself from this function's return value).
+    if emit:
+        for ev in extra_payloads:
+            await emit({"type": "message", **ev})
+
+    return new_msg
