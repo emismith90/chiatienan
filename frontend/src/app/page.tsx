@@ -1,8 +1,30 @@
+"use client";
+import { useSession } from "@/lib/session";
+// NOTE: RoomView is built in Task 6. Until then, signed-in users see a
+// placeholder card below instead of <RoomView roomId={roomId} />.
+
 export default function Home() {
+  const { token, roomId, ready } = useSession();
+
+  if (!ready) return null;
+
+  if (!token || !roomId) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] p-8">
+        <div className="max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-8 py-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">chiatienan</h1>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Mở link mời từ admin để tham gia phòng.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-8 py-6 shadow-sm">
-        <p className="text-lg font-medium text-[var(--text-primary)]">chiatienan</p>
+    <main className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] p-8">
+      <div className="max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-8 py-8 text-center shadow-sm">
+        <p className="text-lg font-medium text-[var(--text-primary)]">Đang mở phòng…</p>
       </div>
     </main>
   );
