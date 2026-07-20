@@ -69,9 +69,12 @@ Caddy (TLS · chiatienan.duckdns.org)
 `admin.py` roster page (replaced by room/account self-service APIs).
 **New:** `rooms.py`, `accounts.py`, `chat.py`, `realtime.py`, a session dependency, and the frontend.
 
-**Streaming note:** reuse the sample's `cursor_agui.py` (Cursor run → AG-UI events) so the frontend
-renderers work unchanged. A `@bot` turn runs the agent and its AG-UI events are **multiplexed into
-the room SSE stream** as a live bot message, then the final text is persisted as a `room_message`.
+**Streaming note (amended after review):** the bot does **not** token-stream. A `@bot` turn runs
+`agent.run_turn` **to completion** (reusing the existing run-to-completion agent — no `cursor_agui`
+adaptation), then persists **one** `room_message` (kind=`bot`) whose numbers come straight from the
+tool results (`settle_period`/`record_meal`). The room SSE carries a `bot.typing` event when the run
+starts and a `bot.done` when it finishes, with the final bot `message` in between. This is simpler
+and keeps money numbers out of any LLM-streamed text (D3).
 
 ---
 
@@ -107,9 +110,16 @@ append-only `settlements` for "since last settlement" — unchanged from the pri
 - `GET  /api/rooms/{id}/messages?since=<id>` — page history (also used for SSE catch-up).
 - `POST /api/rooms/{id}/messages` — persist a message → publish to subscribers. If it `@bot`-mentions,
   enqueue an **agent run** (concurrency 1 → serializes ledger writes).
-- `GET  /api/rooms/{id}/stream?since=<id>` — authenticated **SSE**; emits room events:
-  `message` (human), `bot.start` / `bot.delta` / `bot.tool` / `bot.end` (agent AG-UI, streamed),
-  `presence` (optional). `since` lets a reconnecting client catch up gap-free.
+- `GET  /api/rooms/{id}/members` — room roster `[{id, display_name, nickname}]` (banking omitted).
+- `GET  /api/rooms/{id}/stream?since=<id>` — authenticated **SSE**; emits `message` (human or bot),
+  `bot.typing`, `bot.done`, and a periodic `: ping` heartbeat (~25 s) so dead connections are
+  detected and the client reconnects. `since` lets a reconnecting client catch up gap-free; on
+  subscriber-queue overflow the server **closes the stream** (client reconnects with `since`) rather
+  than silently dropping events.
+
+**Chat images:** a message may carry image attachments; they are validated by `images.sanitize_images`
+and **persisted on the `room_message`** (so all members see the bill photo in history), in addition
+to being passed to the agent on a `@bot` turn.
 
 Auth = `Authorization: Bearer <session token>`; every room route checks the session belongs to that
 room. Invite token and session token are bearer secrets over HTTPS (D7/D8).

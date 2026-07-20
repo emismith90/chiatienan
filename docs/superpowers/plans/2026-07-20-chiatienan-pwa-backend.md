@@ -23,6 +23,53 @@
 
 ---
 
+## Revisions after Fable review (these OVERRIDE the tasks below where they conflict)
+
+- **B2 — tests use the existing fixtures, not in-memory/monkeypatch.** All new tests use the
+  `db` fixture in `backend/tests/conftest.py` (file-backed `tmp_path` SQLite) and the
+  `ADMIN_PASSWORD=test-admin-pw` it sets. For API tests, override the app's DB by monkeypatching the
+  module singleton: `monkeypatch.setattr("app.db._default", db, raising=False)` (so `get_db()` returns
+  it) — do **not** monkeypatch the frozen `Settings`, and do **not** use `Database("sqlite://")` with
+  `TestClient`. Use `X-Admin-Password: test-admin-pw` in admin calls.
+- **B3 — stale tests must be migrated in the task that breaks them.** Task 3 **replaces the entire
+  contents** of `tests/test_roster.py`. Task 4 **replaces the entire contents** of `tests/test_tools.py`
+  and edits `tests/test_agent.py` (drop `sender_teams_id=`; use `room_id=`, `sender_member_id=`).
+  Task 10 **deletes** `tests/test_main.py` (Teams `/api/messages`+`/admin` assertions) and **rewrites**
+  `tests/test_config.py` (drop `microsoft_*`, assert `bot_handle == "bot"`), plus deletes
+  `test_teams_parse.py`/`test_reply.py`/`test_worker.py`. Every "full suite green" gate assumes these.
+- **M4 — agent dispatch (Task 10 `post_message`).** Keep a reference to the task
+  (`_BG: set = set(); t = asyncio.create_task(_run()); _BG.add(t); t.add_done_callback(_BG.discard)`).
+  Wrap `_run` in `try/except/finally`; the `finally` **always** publishes `bot.done`; on exception
+  post an error bot message (`chat.post_message(..., kind="bot", body="⚠️ …")`) and publish it. Never
+  leave the typing indicator stuck.
+- **M5 — never block the event loop.** In `agent.run_turn`, run the synchronous model resolution off
+  the loop: `selection = await asyncio.to_thread(resolve_model_selection, api_key, default_cursor_model(), reasoning="medium")`
+  (`cursor_runner._list_models`/`_alias_index` use blocking `urllib`/`Cursor.models.list`).
+- **M2 — SSE hardening (Tasks 8 & 10).** `stream()` uses `await asyncio.wait_for(q.get(), timeout=25)`;
+  on `TimeoutError` yield `": ping\n\n"` and continue. `RoomHub.publish`: on `asyncio.QueueFull`,
+  `unsubscribe` that queue and put a `{"type":"__closed__"}` sentinel so its generator exits and the
+  client reconnects with `?since=` (do not silently drop).
+- **M6 — add `GET /api/rooms/{room_id}/members`** (Task 10): `require_session` + `_check_room` →
+  `[{ "id", "display_name", "nickname" }]` from `roster.list_members(s, room_id)` (no banking).
+- **M7 — persist chat images.** `MessageIn.images` (list of `{data, mimeType}`) is validated with
+  `app.images.sanitize_images` and stored on the message: `attachments={"images": clean}` (merged with
+  bot attachments for bot messages). `post_message`/`message_to_dict` carry `attachments` through; the
+  frontend renders them. Reuse `sanitize_images` — do not accept unbounded base64.
+- **M8 — deps + build.** In `backend/pyproject.toml` remove `botbuilder-core` and `aiohttp`, fix the
+  description; keep `sqlalchemy`, `python-multipart` only if used. Do **not** `--build` the frontend on
+  the 512 MB droplet (see frontend plan); the backend image is light and builds fine on-box.
+- **M9 — text sweep (own task, before deploy).** `prompt.py`: replace "nhóm chat Microsoft Teams"
+  wording with room/PWA-neutral text. `qr.py`: change the "/admin" hint to "/profile". `tools.py`:
+  `find_members` schema `include_tagged`/@tag text — `turn_mentions` is always `[]` now; drop the
+  tagged-people path (names + `all_active` only).
+- **Minors.** `tools._names_for(session, room_id, ids)` gains `room_id`. Keep `roster.resolve`'s
+  return key **`{"matched": [{id, display_name}]}`** (do not rename to `resolved`/`name`) to avoid
+  churn — update Task 3's test to `matched`/`display_name`. `message_to_dict(m, author)` (2 args).
+  `PUT /api/me` must allow clearing a bank field (accept explicit empty string; use
+  `model_dump(exclude_unset=True)` and set even when `""`). `resolve_bearer` strips `Bearer ` case-
+  insensitively. Add a Task-10 test for **SSE catch-up via `since`** and **cross-room 403** on
+  `/messages`. If `caddy_domain` is empty, return `invite_token` without a broken `invite_link`.
+
 ## File Structure
 
 - `backend/app/models.py` — **modify**: add `Room`, `Session`, `RoomMessage`; add `room_id` to `Member`/`Meal`/`Settlement`; add `nickname`/`pin` to `Member`; drop `teams_user_id`/`aad_object_id` and `ProcessedActivity`.

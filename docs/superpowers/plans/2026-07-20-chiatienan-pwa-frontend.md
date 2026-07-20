@@ -18,6 +18,34 @@
 - Bot replies render from the message's structured `attachments` (`type: "settlement"|"meal"`), not re-parsed text.
 - Reuse the sample under `reference/sample-cursor-sdk-with-image/frontend/` as the starting point; keep its renderers/ui, drop model-selector + localStorage conversation history.
 
+## Revisions after Fable review (these OVERRIDE the tasks below where they conflict)
+
+- **B1 — the sample has no `composer.tsx`; the composer is inside `chat-sidebar.tsx`.** In **Task 1**
+  also delete `src/components/chat/chat-sidebar.tsx` and `src/hooks/use-chat-sidebar.ts` (both depend
+  on the deleted `use-chat`/`use-conversations`). In **Task 6**, build `composer.tsx` by **extracting**
+  the textarea + file-input + base64 image-encode logic out of the old `chat-sidebar.tsx` (there is
+  nothing to "adapt" from a standalone file). Confirm no surviving file imports `use-chat`,
+  `use-conversations`, `chat-storage`, `chat-payload`, `conversation-list`, or `chat-sidebar`.
+- **M3 — robust SSE client (Tasks 3 & 6).** `streamRoom`: throw `ApiError` if `!res.ok`; don't send
+  `Bearer null` (guard when no token → return/redirect to join). `useRoom`: `await new Promise(r=>setTimeout(r,2000))`
+  on **every** loop iteration (not only in `catch`), and stop the loop on a 401 (session gone → sign out).
+  Ignore the `{"type":"__closed__"}` sentinel except to trigger a reconnect.
+- **M6 — member list (spec §7).** Add `getMembers(roomId)` to `api.ts` and render a member list in
+  `room-view.tsx` (from `GET /api/rooms/{id}/members`).
+- **M7 — chat images.** The composer encodes attached images to `{data, mimeType}` and sends them with
+  the message. `message-list`/`bot-message` render `attachments.images` as `<img src="data:...">` for
+  **both** human and bot messages (bill photo visible to everyone).
+- **M8 — build off the droplet.** `next build` OOMs on 512 MB. Build the frontend image locally (or in
+  CI) and `docker push`, or build on a machine with ≥2 GB and deploy the image — do not
+  `docker compose build frontend` on the droplet. Document this in Task 9.
+- **Minors.** `getRoomId` needs the same `typeof localStorage !== "undefined"` guard as `getToken`.
+  **PWA wiring (Task 8):** the sample root layout is a server component with no `<head>` — use the Next
+  Metadata API (`export const metadata = { manifest: "/manifest.webmanifest" }` and `themeColor` via
+  the viewport export), and register the SW from a small `"use client"` component mounted in the layout,
+  not a raw `<script>`/`<head>`. Initial `getMessages(roomId, 0)` loads oldest-first; for rooms with
+  >200 messages add a `limit`+descending "last N" initial load (backend minor) — acceptable to defer
+  for a small group, but note it.
+
 ## File Structure
 
 - `frontend/` — lifted from the sample; adapted below.
