@@ -1,0 +1,5 @@
+# Automatic HTTPS (Let's Encrypt) for the droplet's domain.
+# CADDY_DOMAIN is injected from .env via docker-compose.
+{$CADDY_DOMAIN} {
+	reverse_proxy backend:8000
+}

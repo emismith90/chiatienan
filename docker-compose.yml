@@ -1,0 +1,28 @@
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data        # SQLite DB persists here (DATABASE_URL=sqlite:////data/chiatienan.db)
+    expose:
+      - "8000"              # internal only; Caddy terminates TLS and proxies in
+
+volumes:
+  caddy_data:
+  caddy_config:

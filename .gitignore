@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+*.pyc
+
+# Secrets & data — never commit
+.env
+data/
+*.db
+.cursor-store/
+
+# Node (reference frontend only)
+node_modules/
+.next/

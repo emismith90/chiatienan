@@ -1,0 +1,21 @@
+[project]
+name = "chiatienan-backend"
+version = "0.1.0"
+description = "chiatienan — Teams lunch-splitting bot backend"
+requires-python = ">=3.12"
+dependencies = [
+    "cursor-sdk>=0.1.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "httpx>=0.27", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
