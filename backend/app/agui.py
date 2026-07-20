@@ -22,6 +22,16 @@ def _unwrap_args(args):
     return args
 
 
+def _json_safe(obj):
+    """Round-trip through JSON so the event payload is plain JSON types; never
+    raises — falls back to a string on any non-serializable structure (e.g. a
+    non-string dict key)."""
+    try:
+        return json.loads(json.dumps(obj, default=str))
+    except (TypeError, ValueError):
+        return str(obj)
+
+
 def _assistant_text(msg) -> str:
     message = getattr(msg, "message", None)
     content = getattr(message, "content", None)
@@ -58,7 +68,7 @@ def translate(msg, turn_id: str) -> list[dict]:
             result = getattr(msg, "result", None)
             return [{"type": "agent.tool.result", "turn_id": turn_id, "call_id": call_id,
                      "name": name, "status": status,
-                     "result": json.loads(json.dumps(result, default=str)) if result is not None else None}]
+                     "result": _json_safe(result) if result is not None else None}]
         return [{"type": "agent.tool.start", "turn_id": turn_id, "call_id": call_id,
-                 "name": name, "args": json.loads(json.dumps(_unwrap_args(raw_args), default=str))}]
+                 "name": name, "args": _json_safe(_unwrap_args(raw_args))}]
     return []

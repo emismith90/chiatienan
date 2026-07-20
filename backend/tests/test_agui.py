@@ -37,3 +37,11 @@ def test_mcp_unwrap_names_the_real_tool():
     ev = agui.translate(_tool("c2", "mcp", "running",
                               args={"toolName": "find_members", "args": {"names": ["An"]}}), "t1")
     assert ev[0]["name"] == "find_members"
+    assert ev[0]["args"] == {"names": ["An"]}
+
+
+def test_tool_result_with_non_string_dict_key_does_not_raise():
+    ev = agui.translate(_tool("c4", "propose_meal", "completed",
+                              result={("tuple", "key"): 1}), "t1")
+    assert ev[0]["type"] == "agent.tool.result"
+    assert ev[0]["call_id"] == "c4"
