@@ -153,6 +153,42 @@ needs network).
 
 ---
 
+## 7a. UI Design System (Tailwind v4)
+
+The PWA adopts a **Claude/Anthropic-style** aesthetic: warm, soft grays (never pure black/white),
+a single orange accent, generous spacing on an 8px rhythm, rounded soft cards, and full light/dark
+support. Implemented as **CSS custom properties + Tailwind v4 `@theme`** in `globals.css` (no runtime
+external fetches — CSP-safe), with fonts self-hosted via `next/font`.
+
+**Typography** — `Inter` (primary sans) + `JetBrains Mono` (code), both via `next/font/google`
+(self-hosted). Base `16px` / line-height `1.5`.
+
+**Spacing** — 8px grid: `xs 4 · sm 8 · md 16 · lg 24 · xl 32` (px). Use Tailwind's scale to keep this rhythm.
+
+**Color tokens** (CSS vars, swapped by `prefers-color-scheme` + a `:root[data-theme]` override):
+
+| Token | Light | Dark |
+|-------|-------|------|
+| `--bg-base` | `#F9F9F8` | `#0F0F0F` |
+| `--bg-surface` | `#FFFFFF` | `#1D1D1D` |
+| `--text-primary` | `#222222` | `#E6E6E6` |
+| `--text-secondary` | `#666666` | `#999999` |
+| `--accent-primary` | `#CC4E33` | `#CC4E33` |
+| `--accent-hover` | `#B33C21` | `#B33C21` |
+| `--border` | `rgba(0,0,0,0.08)` | `rgba(255,255,255,0.08)` |
+
+**Containers** — radius `md 8px` / `lg 12px`; soft shadows `sm 0 1px 2px rgba(0,0,0,.05)`,
+`md 0 4px 12px rgba(0,0,0,.04)`. Chat is full-width bubbles separated by subtle borders.
+
+**Interaction** — `transition-all duration-150 ease-in-out`; focus ring
+`0 0 0 2px var(--accent-primary)` with transparent offset.
+
+**Layout** — chat column `max-w-3xl` centered. A settlement (transfers + QR) renders as a
+**card**; an optional right-hand "artifact" panel (~50% on desktop) is a future enhancement, not
+required now (YAGNI — settlement renders inline).
+
+**Theme toggle** — a light/dark toggle stamps `data-theme` on `:root`; default follows the OS.
+
 ## 8. Agent behavior
 
 Runs **only when `@bot`-mentioned**. Same deterministic tools, now **room-scoped** (the run carries

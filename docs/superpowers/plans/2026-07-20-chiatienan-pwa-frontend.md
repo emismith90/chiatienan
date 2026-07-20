@@ -57,6 +57,71 @@
   people are pre-added — no frontend "add member" form required (the member list from Task 6 is
   read-only display).
 
+## UI Design System (Tailwind v4) — foundation task + mandate on all UI tasks
+
+Adopt the Claude/Anthropic aesthetic (spec §7a). **Run the foundation task below right after Task 1**,
+before building any screen. **Every UI task (5 join, 6 room view/message-list/bot-message/composer,
+7 profile, 8 PWA theme) MUST use these tokens** — no ad-hoc hex, no default Tailwind grays. Concretely:
+surfaces are `bg-[var(--bg-surface)]` cards on a `bg-[var(--bg-base)]` page; text
+`text-[var(--text-primary)]`/`--text-secondary`; primary buttons `bg-[var(--accent-primary)]` →
+`hover:bg-[var(--accent-hover)]` white text; inputs/cards use radius `rounded-lg`, `border-[var(--border)]`,
+shadow-sm; focus rings `focus-visible:ring-2 ring-[var(--accent-primary)]`; chat column `max-w-3xl mx-auto`;
+transitions `transition-all duration-150 ease-in-out`; 8px spacing rhythm; light+dark both correct.
+
+### Task DS: Design-system foundation (Tailwind tokens + fonts + dark mode)
+
+**Files:** `frontend/src/app/globals.css`, `frontend/src/app/layout.tsx`, `frontend/src/lib/theme.tsx` (theme toggle, optional-but-recommended).
+
+- [ ] **Step 1 — tokens in `globals.css`** (Tailwind v4 is CSS-first). Keep `@import "tailwindcss";` and add:
+
+```css
+:root {
+  --bg-base:#F9F9F8; --bg-surface:#FFFFFF;
+  --text-primary:#222222; --text-secondary:#666666;
+  --accent-primary:#CC4E33; --accent-hover:#B33C21;
+  --border:rgba(0,0,0,0.08);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.05); --shadow-md:0 4px 12px rgba(0,0,0,.04);
+  --radius-md:8px; --radius-lg:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg-base:#0F0F0F; --bg-surface:#1D1D1D;
+  --text-primary:#E6E6E6; --text-secondary:#999999;
+  --border:rgba(255,255,255,0.08);
+}}
+:root[data-theme="dark"]{
+  --bg-base:#0F0F0F; --bg-surface:#1D1D1D;
+  --text-primary:#E6E6E6; --text-secondary:#999999;
+  --border:rgba(255,255,255,0.08);
+}
+@theme inline {
+  --color-base:var(--bg-base); --color-surface:var(--bg-surface);
+  --color-primary:var(--text-primary); --color-muted:var(--text-secondary);
+  --color-accent:var(--accent-primary); --color-accent-hover:var(--accent-hover);
+  --color-border:var(--border);
+  --font-sans:var(--font-inter); --font-mono:var(--font-jetbrains);
+}
+html,body{background:var(--bg-base);color:var(--text-primary);
+  font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;}
+```
+
+- [ ] **Step 2 — fonts in `layout.tsx`** via `next/font/google` (self-hosted, CSP-safe):
+
+```tsx
+import { Inter, JetBrains_Mono } from "next/font/google";
+const inter = Inter({ subsets:["latin","vietnamese"], variable:"--font-inter" });
+const mono = JetBrains_Mono({ subsets:["latin"], variable:"--font-jetbrains" });
+// on <html className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning> …
+```
+Remove the sample's Gilroy/Niteco font wiring. Set `export const metadata`/viewport `themeColor`
+to `#CC4E33` (also used by the PWA manifest in Task 8).
+
+- [ ] **Step 3 — theme toggle** (`theme.tsx`, `"use client"`): a small control that sets/removes
+`document.documentElement.dataset.theme` (`"light"`/`"dark"`) and persists to `localStorage`
+(`chiatienan.theme`); default = OS. Mount it in the room-view header (Task 6). No test required
+(pure DOM/UI); verify `npm run build` compiles.
+
+- [ ] **Step 4 — commit** `git commit -m "feat(frontend): design-system tokens, fonts, dark mode"`.
+
 ## File Structure
 
 - `frontend/` — lifted from the sample; adapted below.
