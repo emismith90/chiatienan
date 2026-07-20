@@ -1,7 +1,6 @@
 "use client";
 import { useSession } from "@/lib/session";
-// NOTE: RoomView is built in Task 6. Until then, signed-in users see a
-// placeholder card below instead of <RoomView roomId={roomId} />.
+import { RoomView } from "@/components/chat/room-view";
 
 export default function Home() {
   const { token, roomId, ready } = useSession();
@@ -21,11 +20,5 @@ export default function Home() {
     );
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] p-8">
-      <div className="max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-8 py-8 text-center shadow-sm">
-        <p className="text-lg font-medium text-[var(--text-primary)]">Đang mở phòng…</p>
-      </div>
-    </main>
-  );
+  return <RoomView roomId={roomId} />;
 }
