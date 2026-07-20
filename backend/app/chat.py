@@ -98,14 +98,19 @@ def _settlement_body(attachments: dict) -> str:
 
 
 def _meal_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a recorded meal, straight from the
+    """Deterministic Vietnamese summary of a committed meal, straight from the
     tool-result dict — never from LLM prose (design D3, money-safety)."""
     payer = attachments.get("payer") or {}
     shares = attachments.get("shares") or []
     shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
+    bill = attachments.get("bill_total", attachments.get("tracked_total", attachments.get("total_amount", 0)))
+    guests = attachments.get("guests") or []
+    guest_str = f" (gồm {len(guests)} khách trả tiền mặt)" if guests else ""
+    dish = attachments.get("dish")
+    dish_str = f" — {dish}" if dish else ""
     return (
-        f"Đã ghi #{attachments.get('meal_id')}: {payer.get('name', '?')} trả "
-        f"tổng {attachments.get('total_amount', 0):,}đ • {shares_str}"
+        f"Đã ghi #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} trả "
+        f"tổng {bill:,}đ{guest_str} • {shares_str}"
     )
 
 
