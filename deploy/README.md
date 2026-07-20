@@ -13,11 +13,20 @@ See the design spec §9–§11 for rationale and the full prerequisite list.
 
 ```bash
 ssh root@<DROPLET_IP>
-apt-get update && apt-get install -y docker.io docker-compose-plugin git
+apt-get update && apt-get install -y git curl
+curl -fsSL https://get.docker.com | sh        # docker-ce + compose plugin (Ubuntu repos lack docker-compose-plugin)
 systemctl enable --now docker
 git clone https://github.com/emismith90/chiatienan.git /opt/chiatienan
 cd /opt/chiatienan
 ```
+
+> **Low-RAM droplet?** On a 1 GB (or smaller) droplet, add swap first so the build and the
+> bridge subprocess don't OOM:
+> ```bash
+> fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+> echo '/swapfile none swap sw 0 0' >> /etc/fstab
+> ```
+> ≥ 2 GB RAM is still recommended (see spec §9).
 
 ## 2. Configure secrets (you do this — secrets never go in chat or git)
 
