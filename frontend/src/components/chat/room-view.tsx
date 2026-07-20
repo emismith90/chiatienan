@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/lib/theme";
 import { useRoom } from "@/hooks/use-room";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
+import { AgentTimeline } from "./agent-timeline";
 
 interface Member {
   id: number;
@@ -38,7 +39,7 @@ function MemberChips({ members }: { members: Member[] }) {
 }
 
 export function RoomView({ roomId }: { roomId: number }) {
-  const { messages, typing, send } = useRoom(roomId);
+  const { messages, typing, timelines, send } = useRoom(roomId);
   const { signOut } = useSession();
   const [members, setMembers] = useState<Member[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -97,6 +98,9 @@ export function RoomView({ roomId }: { roomId: number }) {
             </p>
           )}
           <MessageList messages={messages} />
+          {Object.entries(timelines).map(([tid, steps]) => (
+            <AgentTimeline key={tid} steps={steps} live={typing} />
+          ))}
           {typing && (
             <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
               <span className="flex gap-1">

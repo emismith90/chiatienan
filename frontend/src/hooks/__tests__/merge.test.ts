@@ -3,7 +3,7 @@ import { mergeEvent } from "../use-room";
 
 describe("mergeEvent", () => {
   it("appends messages, dedupes by id, toggles typing", () => {
-    let s = { messages: [] as any[], typing: false };
+    let s = { messages: [] as any[], typing: false, timelines: {} };
     s = mergeEvent(s, { type: "message", id: 1, body: "hi" });
     s = mergeEvent(s, { type: "message", id: 1, body: "hi" }); // dup
     s = mergeEvent(s, { type: "bot.typing" });
@@ -16,7 +16,7 @@ describe("mergeEvent", () => {
   });
 
   it("strips the event type from the stored message", () => {
-    const s = mergeEvent({ messages: [], typing: false }, {
+    const s = mergeEvent({ messages: [], typing: false, timelines: {} }, {
       type: "message",
       id: 5,
       body: "yo",
@@ -27,7 +27,7 @@ describe("mergeEvent", () => {
   });
 
   it("ignores unknown / __closed__ events without mutating state", () => {
-    const start = { messages: [{ id: 1 }], typing: true };
+    const start = { messages: [{ id: 1 }], typing: true, timelines: {} };
     expect(mergeEvent(start, { type: "__closed__" })).toBe(start);
     expect(mergeEvent(start, { type: "something.else" })).toBe(start);
   });
