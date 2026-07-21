@@ -76,10 +76,10 @@ def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMes
 def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> RoomMessage:
     m = session.get(RoomMessage, draft_id)
     if m is None or m.room_id != room_id or m.kind != "expense_draft":
-        raise ledger.LedgerError(f"Không tìm thấy thẻ nháp #{draft_id}.")
+        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
-        raise ledger.LedgerError("Thẻ nháp đã được xử lý.")
+        raise ledger.LedgerError("This draft has already been processed.")
     if patch.get("status") == "cancelled":
         att["status"] = "cancelled"
     else:
@@ -109,13 +109,13 @@ def _all_member_names(session: Session, room_id: int) -> dict[int, str]:
 def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str | None) -> RoomMessage:
     m = session.get(RoomMessage, draft_id)
     if m is None or m.room_id != room_id or m.kind != "expense_draft":
-        raise ledger.LedgerError(f"Không tìm thấy thẻ nháp #{draft_id}.")
+        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
-        raise ledger.LedgerError("Thẻ nháp đã được xử lý.")
+        raise ledger.LedgerError("This draft has already been processed.")
     if (att.get("payer_member_id") is None or att.get("bill_total") is None
             or not att.get("member_participants")):
-        raise ledger.LedgerError("Thẻ nháp chưa đủ thông tin để ghi sổ.")
+        raise ledger.LedgerError("The draft is missing required fields to record.")
 
     res = ledger.record_meal(
         session,

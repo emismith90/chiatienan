@@ -3,11 +3,11 @@ import { useState } from "react";
 import type { TimelineStep } from "@/hooks/use-room";
 
 const LABELS: Record<string, string> = {
-  find_members: "Đang tra thành viên…",
-  propose_meal: "Đang soạn bữa ăn…",
-  settle_period: "Đang tính chuyển khoản…",
-  get_period_balances: "Đang tính số dư…",
-  resolve_period: "Đang xác định kỳ…",
+  find_members: "Looking up members…",
+  propose_meal: "Drafting the meal…",
+  settle_period: "Computing transfers…",
+  get_period_balances: "Computing balances…",
+  resolve_period: "Resolving the period…",
 };
 
 export function AgentTimeline({ steps, live }: { steps: TimelineStep[]; live: boolean }) {
@@ -18,7 +18,7 @@ export function AgentTimeline({ steps, live }: { steps: TimelineStep[]; live: bo
     <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)]">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 text-left">
         <span className="font-medium text-[var(--accent-text)]">
-          {live ? "Bot đang xử lý…" : `▸ ${steps.length} bước`}
+          {live ? "Bot is working…" : `▸ ${steps.length} steps`}
         </span>
       </button>
       {!collapsed && (
@@ -28,7 +28,7 @@ export function AgentTimeline({ steps, live }: { steps: TimelineStep[]; live: bo
               {s.kind === "tool" ? (
                 <>
                   <span aria-hidden>{s.status === "running" ? "⏳" : s.status === "error" ? "⚠️" : "✓"}</span>
-                  <span>{s.name ? LABELS[s.name] ?? s.name : "công cụ"}</span>
+                  <span>{s.name ? LABELS[s.name] ?? s.name : "tool"}</span>
                 </>
               ) : (
                 <span className="italic">{s.text}</span>

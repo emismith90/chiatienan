@@ -55,10 +55,12 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      aria-label="Toggle theme"
-      className="rounded-lg border-[var(--border)] border px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-all duration-150 ease-in-out hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+      aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      className="shrink-0 whitespace-nowrap rounded-lg border-[var(--border)] border px-2.5 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-all duration-150 ease-in-out hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] sm:px-3"
     >
-      {theme === "dark" ? "Light mode" : "Dark mode"}
+      {/* Icon on small screens (header space is tight), full label from sm up. */}
+      <span aria-hidden className="sm:hidden">{theme === "dark" ? "☀️" : "🌙"}</span>
+      <span className="hidden sm:inline">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
     </button>
   );
 }

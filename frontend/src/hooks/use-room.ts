@@ -73,8 +73,8 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
       // is just a duplicate delivery to ignore. Expense drafts are the
       // exception: the backend re-publishes the SAME draft id with
       // attachments.status flipped (pending -> committed/cancelled) after
-      // Ghi ngay / Huỷ, so that update must replace the stored message in
-      // place or the card would look pending forever.
+      // Record now / Cancel, so that update must replace the stored message
+      // in place or the card would look pending forever.
       if (e.kind === "expense_draft") {
         return { ...s, messages: s.messages.map((m, i) => (i === existingIdx ? msg : m)) };
       }

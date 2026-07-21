@@ -69,20 +69,20 @@ export function RoomView({ roomId }: { roomId: number }) {
             <h1 className="text-base font-semibold text-[var(--text-primary)]">
               chiatienan
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <ThemeToggle />
               <Link
                 href="/profile"
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] sm:px-3"
               >
-                Hồ sơ
+                Profile
               </Link>
               <button
                 type="button"
                 onClick={signOut}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] sm:px-3"
               >
-                Đăng xuất
+                Sign out
               </button>
             </div>
           </div>
@@ -94,7 +94,7 @@ export function RoomView({ roomId }: { roomId: number }) {
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
           {messages.length === 0 && !typing && (
             <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">
-              Chưa có tin nhắn nào. Bắt đầu bằng cách nhắn @bot.
+              No messages yet. Start by messaging @bot.
             </p>
           )}
           <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines} />
@@ -111,7 +111,7 @@ export function RoomView({ roomId }: { roomId: number }) {
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.15s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)]" />
               </span>
-              bot đang trả lời…
+              bot is replying…
             </div>
           )}
           <div ref={bottomRef} />

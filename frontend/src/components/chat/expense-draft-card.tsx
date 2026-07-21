@@ -78,16 +78,16 @@ export function ExpenseDraftCard({
   const hasAdjustments = adjustments.some((a) => a.amount !== 0);
 
   const statusLabel =
-    att.status === "committed" ? "Đã ghi sổ" : att.status === "cancelled" ? "Đã huỷ" : null;
+    att.status === "committed" ? "Recorded" : att.status === "cancelled" ? "Cancelled" : null;
 
   return (
     <div className="mt-1 w-full max-w-[95%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-semibold text-[var(--text-primary)]">Nháp bữa ăn</span>
+        <span className="text-sm font-semibold text-[var(--text-primary)]">Meal draft</span>
         {statusLabel && <span className="text-xs text-[var(--text-secondary)]">{statusLabel}</span>}
       </div>
 
-      <label className="block text-xs text-[var(--text-secondary)]">Người trả</label>
+      <label className="block text-xs text-[var(--text-secondary)]">Payer</label>
       <select disabled={readonly} value={payer} onChange={(e) => setPayer(Number(e.target.value))}
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm">
         {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
@@ -104,7 +104,7 @@ export function ExpenseDraftCard({
         ))}
         {guests.map((g, i) => (
           <span key={`g${i}`} className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">
-            {g} (khách)
+            {g} (guest)
             {!readonly && <button type="button" onClick={() => setGuests((x) => x.filter((_, j) => j !== i))}>×</button>}
           </span>
         ))}
@@ -114,27 +114,27 @@ export function ExpenseDraftCard({
         <div className="mb-2 flex gap-2">
           <input value={guestName} onChange={(e) => setGuestName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGuest())}
-            placeholder="Thêm khách…" className="flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
+            placeholder="Add guest…" className="flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
           <button type="button" onClick={addGuest} className="rounded-md border border-[var(--border)] px-2 text-sm">+</button>
         </div>
       )}
 
-      <label className="block text-xs text-[var(--text-secondary)]">Tổng hoá đơn (đ)</label>
+      <label className="block text-xs text-[var(--text-secondary)]">Bill total (đ)</label>
       <input type="number" disabled={readonly} value={total} onChange={(e) => setTotal(Number(e.target.value))}
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
 
       <div className="mb-2 grid grid-cols-2 gap-2">
-        <input disabled={readonly} value={dish} onChange={(e) => setDish(e.target.value)} placeholder="Món ăn"
+        <input disabled={readonly} value={dish} onChange={(e) => setDish(e.target.value)} placeholder="Dish"
           className="rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
-        <input disabled={readonly} value={initiator} onChange={(e) => setInitiator(e.target.value)} placeholder="Ai rủ"
+        <input disabled={readonly} value={initiator} onChange={(e) => setInitiator(e.target.value)} placeholder="Initiator"
           className="rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
       </div>
-      <input disabled={readonly} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (vd 'An đổi ý')"
+      <input disabled={readonly} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (e.g. 'An changed their mind')"
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
 
       <button type="button" onClick={() => setAdvancedOpen((v) => !v)}
         className="mb-2 text-xs font-medium text-[var(--accent-text)]">
-        Điều chỉnh (nâng cao) {advancedOpen ? "▲" : "▼"}
+        Adjustments (advanced) {advancedOpen ? "▲" : "▼"}
       </button>
       {advancedOpen && (
         <div className="mb-2 flex flex-col gap-1.5 rounded-md border border-[var(--border)] p-2">
@@ -150,12 +150,12 @@ export function ExpenseDraftCard({
       )}
 
       <p className="mb-2 text-xs text-[var(--text-secondary)]">
-        Tạm tính: <span className="font-medium text-[var(--text-primary)]">{fmt(ph)} đ/người</span>
-        {guests.length > 0 && ` • ${guests.length} khách trả tiền mặt`}
+        Estimate: <span className="font-medium text-[var(--text-primary)]">{fmt(ph)} đ/person</span>
+        {guests.length > 0 && ` • ${guests.length} guest(s) paying cash`}
       </p>
       {hasAdjustments && (
         <p className="mb-2 text-xs text-[var(--text-secondary)]">
-          * Thành viên có điều chỉnh trả mức trên ± phần điều chỉnh riêng.
+          * Members with an adjustment pay the amount above ± their own adjustment.
         </p>
       )}
 
@@ -171,12 +171,12 @@ export function ExpenseDraftCard({
               setError(null);
               api.commitDraft(roomId, message.id)
                 .catch((err) => {
-                  setError(err instanceof ApiError ? err.message : "Không thể ghi sổ, vui lòng thử lại.");
+                  setError(err instanceof ApiError ? err.message : "Couldn't record, please try again.");
                 })
                 .finally(() => setBusy(false));
             }}
             className="flex-1 rounded-lg bg-[var(--accent-primary)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
-            Ghi ngay
+            Record now
           </button>
           <button type="button" disabled={busy}
             onClick={() => {
@@ -184,12 +184,12 @@ export function ExpenseDraftCard({
               setError(null);
               api.cancelDraft(roomId, message.id)
                 .catch((err) => {
-                  setError(err instanceof ApiError ? err.message : "Không thể huỷ, vui lòng thử lại.");
+                  setError(err instanceof ApiError ? err.message : "Couldn't cancel, please try again.");
                 })
                 .finally(() => setBusy(false));
             }}
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
-            Huỷ
+            Cancel
           </button>
         </div>
       )}

@@ -26,10 +26,10 @@ def make_qr_url(payee: Member, amount: int, note: str, *, template: str | None =
     surfaces a clear "ask admin to fill bank info" instead of a broken image).
     """
     if amount <= 0:
-        raise QRError(f"Số tiền QR phải lớn hơn 0 (nhận {amount}).")
+        raise QRError(f"QR amount must be greater than 0 (got {amount}).")
     if not payee.has_bank_details():
         raise QRError(
-            f"{payee.display_name} chưa có thông tin ngân hàng — nhờ cập nhật ở trang /profile."
+            f"{payee.display_name} has no bank details yet — please update them on /profile."
         )
 
     tmpl = template or settings.qr_template

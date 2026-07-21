@@ -50,7 +50,7 @@ export default function Join() {
       signIn(res.token, res.room_id);
       router.push("/");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Có lỗi xảy ra, thử lại.");
+      setErr(e instanceof Error ? e.message : "Something went wrong, please try again.");
     } finally {
       setLoading(false);
     }
@@ -60,9 +60,9 @@ export default function Join() {
     return (
       <main className="min-h-dvh pt-safe pb-safe bg-[var(--bg-base)] flex items-center justify-center p-4">
         <div className="bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-md max-w-md w-full p-6 text-center">
-          <p className="text-[var(--text-primary)] font-medium">Link không hợp lệ.</p>
+          <p className="text-[var(--text-primary)] font-medium">Invalid link.</p>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Vui lòng kiểm tra lại đường dẫn được chia sẻ.
+            Please double-check the shared link.
           </p>
         </div>
       </main>
@@ -76,10 +76,10 @@ export default function Join() {
       <div className="bg-[var(--bg-surface)] rounded-lg border border-[var(--border)] shadow-md max-w-md w-full p-6 space-y-4">
         <div>
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">
-            Tham gia &ldquo;{room.name}&rdquo;
+            Join &ldquo;{room.name}&rdquo;
           </h1>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Chia tiền phòng, điện nước, chợ búa &mdash; công bằng cho cả nhà.
+            Split rent, utilities, and groceries &mdash; fair for everyone.
           </p>
         </div>
 
@@ -93,7 +93,7 @@ export default function Join() {
                 : "text-[var(--text-secondary)]"
             }`}
           >
-            Tạo tài khoản
+            Create account
           </button>
           <button
             type="button"
@@ -104,23 +104,23 @@ export default function Join() {
                 : "text-[var(--text-secondary)]"
             }`}
           >
-            Tôi đã có / vào lại
+            Already joined / sign in
           </button>
         </div>
 
         <div className="space-y-3">
           {mode === "create" && (
             <input
-              aria-label="Tên hiển thị"
-              placeholder="Tên hiển thị"
+              aria-label="Display name"
+              placeholder="Display name"
               value={f.display_name}
               onChange={(e) => set("display_name", e.target.value)}
               className={inputClass}
             />
           )}
           <input
-            aria-label="Biệt danh"
-            placeholder="Biệt danh"
+            aria-label="Nickname"
+            placeholder="Nickname"
             value={f.nickname}
             onChange={(e) => set("nickname", e.target.value)}
             className={inputClass}
@@ -137,22 +137,22 @@ export default function Join() {
           {mode === "create" && (
             <>
               <input
-                aria-label="Mã ngân hàng"
-                placeholder="Mã ngân hàng (vd VCB)"
+                aria-label="Bank code"
+                placeholder="Bank code (e.g. VCB)"
                 value={f.bank_code}
                 onChange={(e) => set("bank_code", e.target.value)}
                 className={inputClass}
               />
               <input
-                aria-label="Số tài khoản"
-                placeholder="Số tài khoản"
+                aria-label="Account number"
+                placeholder="Account number"
                 value={f.account_number}
                 onChange={(e) => set("account_number", e.target.value)}
                 className={inputClass}
               />
               <input
-                aria-label="Tên chủ tài khoản"
-                placeholder="Tên chủ tài khoản"
+                aria-label="Account holder"
+                placeholder="Account holder"
                 value={f.account_holder}
                 onChange={(e) => set("account_holder", e.target.value)}
                 className={inputClass}
@@ -173,7 +173,7 @@ export default function Join() {
           disabled={loading}
           className="w-full rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white py-2 transition-all duration-150 disabled:opacity-50"
         >
-          {loading ? "Đang xử lý…" : mode === "create" ? "Tạo & vào phòng" : "Vào phòng"}
+          {loading ? "Processing…" : mode === "create" ? "Create & join" : "Sign in"}
         </button>
       </div>
     </main>

@@ -40,7 +40,7 @@ export function MentionDropdown({
   return (
     <ul
       role="listbox"
-      aria-label="Gợi ý nhắc tên"
+      aria-label="Mention suggestions"
       className="absolute bottom-full left-0 mb-1 w-48 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
     >
       {items.map((h, i) => (
