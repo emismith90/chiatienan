@@ -73,6 +73,25 @@ export const patchDraft = (roomId: number, draftId: number, patch: any) =>
 export const commitDraft = (roomId: number, draftId: number) =>
   req(`/api/rooms/${roomId}/drafts/${draftId}/commit`, { method: "POST" });
 
+export const recommitDraft = (
+  roomId: number,
+  draftId: number,
+  fields: {
+    payer_member_id: number;
+    member_participants: number[];
+    guests: string[];
+    bill_total: number;
+    adjustments: { member: number; amount: number }[];
+    dish?: string | null;
+    initiator?: string | null;
+    note?: string | null;
+  },
+) =>
+  req(`/api/rooms/${roomId}/drafts/${draftId}/recommit`, {
+    method: "POST",
+    body: JSON.stringify(fields),
+  });
+
 export const cancelDraft = (roomId: number, draftId: number) =>
   req(`/api/rooms/${roomId}/drafts/${draftId}`, {
     method: "PATCH",
