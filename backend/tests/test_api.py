@@ -209,6 +209,64 @@ def test_patch_and_commit_draft(client):
     assert r.status_code == 409
 
 
+def test_recommit_route_edits_committed_meal(client):
+    token = _room(client)
+    sess_a, room_id = _join(client, token, "an")
+    sess_b, _ = _join(client, token, "binh")
+    ha = {"Authorization": f"Bearer {sess_a}"}
+    hb = {"Authorization": f"Bearer {sess_b}"}
+    a = client.get("/api/me", headers=ha).json()["id"]
+    b = client.get("/api/me", headers=hb).json()["id"]
+
+    draft_id = _seed_draft(room_id, a, b)
+    r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=ha)
+    assert r.status_code == 200, r.text
+    old_meal_id = r.json()["meal_id"]
+
+    r = client.post(
+        f"/api/rooms/{room_id}/drafts/{draft_id}/recommit",
+        json={"payer_member_id": a, "member_participants": [a, b],
+              "guests": [], "bill_total": 600_000, "adjustments": []},
+        headers=ha,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["meal_id"] > 0
+    assert body["meal_id"] != old_meal_id
+
+
+def test_recommit_route_rejects_settled_meal(client):
+    token = _room(client)
+    sess_a, room_id = _join(client, token, "an")
+    sess_b, _ = _join(client, token, "binh")
+    ha = {"Authorization": f"Bearer {sess_a}"}
+    hb = {"Authorization": f"Bearer {sess_b}"}
+    a = client.get("/api/me", headers=ha).json()["id"]
+    b = client.get("/api/me", headers=hb).json()["id"]
+
+    draft_id = _seed_draft(room_id, a, b)
+    r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=ha)
+    assert r.status_code == 200, r.text
+
+    from app import ledger
+    from app.clock import today_ict
+    from app.db import get_db
+    with get_db().session() as s:
+        ledger.record_settlement(
+            s, room_id=room_id, period_from=None, period_to=today_ict(),
+            requested_by=str(a), transfers=[],
+        )
+
+    r = client.post(
+        f"/api/rooms/{room_id}/drafts/{draft_id}/recommit",
+        json={"payer_member_id": a, "member_participants": [a, b],
+              "guests": [], "bill_total": 600_000, "adjustments": []},
+        headers=ha,
+    )
+    assert r.status_code == 409
+
+
 def test_patch_draft_rejects_bad_status(client):
     token = _room(client)
     sess_a, room_id = _join(client, token, "an")
