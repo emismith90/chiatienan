@@ -101,7 +101,13 @@ export function MessageList({
       {messages.map((m) => {
         const turnId = m.kind === "expense_draft" ? m.attachments?.turn_id : undefined;
         const turnSteps = turnId ? timelines?.[turnId] : undefined;
-        return m.kind === "expense_draft" ? (
+        return m.kind === "context_reset" ? (
+          <div key={m.id} className="flex justify-center py-1">
+            <span className="rounded-full bg-[var(--surface-2,transparent)] px-3 py-1 text-center text-xs text-[var(--text-secondary)]">
+              {m.body}
+            </span>
+          </div>
+        ) : m.kind === "expense_draft" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
