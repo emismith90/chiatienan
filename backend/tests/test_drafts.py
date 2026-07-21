@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+import pytest
+
 from app import drafts, ledger
 from app.models import Meal, RoomMessage
 from tests.test_ledger import _seed_room
@@ -107,3 +109,39 @@ def test_edit_then_commit_saves_edits(db):
         meal = s.get(Meal, meal_msg.attachments["meal_id"])
         member_ids = {sh.member_id for sh in meal.shares}
         assert member_ids == {a, b}   # committed the edited set, not the original
+
+
+def test_recommit_draft_edits_committed_meal(db):
+    from app.models import Meal, RoomMessage
+    from app import drafts, ledger
+    from tests.test_ledger import _seed_room
+    room_id, ids = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": ids[0], "member_participants": ids, "guests": [],
+            "bill_total": 300, "adjustments": [], "per_head_preview": 100, "raw_input": "x"})
+        drafts.commit_draft(s, d.id, room_id, logged_by="1")
+        old_meal_id = s.get(RoomMessage, d.id).attachments["committed_meal_id"]
+        drafts.recommit_draft(s, d.id, room_id, {"bill_total": 600}, logged_by="1")
+        att = s.get(RoomMessage, d.id).attachments
+        assert att["committed_meal_id"] != old_meal_id
+        assert s.get(Meal, old_meal_id).voided is True
+        assert s.get(Meal, att["committed_meal_id"]).total_amount == 600
+
+
+def test_recommit_blocked_when_meal_is_settled(db):
+    from datetime import date
+    from app.models import RoomMessage
+    from app import drafts, ledger
+    from tests.test_ledger import _seed_room
+    room_id, ids = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": ids[0], "member_participants": ids, "guests": [],
+            "bill_total": 300, "adjustments": [], "per_head_preview": 100, "raw_input": "x"})
+        meal_msg = drafts.commit_draft(s, d.id, room_id, logged_by="1")
+        occurred = date.fromisoformat(meal_msg.attachments["occurred_on"])
+        ledger.record_settlement(s, room_id=room_id, period_from=None,
+                                 period_to=occurred, requested_by="1", transfers=[])
+        with pytest.raises(ledger.LedgerError):
+            drafts.recommit_draft(s, d.id, room_id, {"bill_total": 600}, logged_by="1")
