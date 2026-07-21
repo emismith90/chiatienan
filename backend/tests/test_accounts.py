@@ -65,3 +65,54 @@ def test_add_unclaimed_rejects_duplicate_nickname():
         accounts.add_unclaimed(s, room, display_name="An", nickname="an")
         with pytest.raises(accounts.AccountError):
             accounts.add_unclaimed(s, room, display_name="An2", nickname="an")
+
+
+def test_find_member_by_id_and_nickname_incl_inactive():
+    d, rid = _room()
+    with d.session() as s:
+        room = rooms.room_by_id(s, rid)
+        m = accounts.add_unclaimed(s, room, display_name="An", nickname="an")
+        mid = m.id
+        accounts.soft_delete_member(s, m)  # inactive
+    with d.session() as s:
+        assert accounts.find_member(s, rid, mid).id == mid          # by id
+        assert accounts.find_member(s, rid, "an").id == mid          # by nickname, still findable
+        assert accounts.find_member(s, rid, str(mid)).id == mid      # digit string -> id
+        assert accounts.find_member(s, rid, "nope") is None
+
+
+def test_soft_delete_deactivates_and_clears_sessions():
+    d, rid = _room()
+    with d.session() as s:
+        room = rooms.room_by_id(s, rid)
+        m, tok = accounts.create_account(s, room, display_name="An", nickname="an", pin="1234",
+                                         bank_code=None, account_number=None, account_holder=None)
+        mid = m.id
+        assert accounts.member_for_token(s, tok) is not None
+        accounts.soft_delete_member(s, m)
+    with d.session() as s:
+        from app.models import Member
+        assert s.get(Member, mid).active is False
+        assert accounts.member_for_token(s, tok) is None            # signed out
+        room = rooms.room_by_id(s, rid)
+        assert accounts.identify(s, room, nickname="an", pin="1234") is None  # can't sign back in
+
+
+def test_update_member_renames_with_uniqueness_and_restores():
+    d, rid = _room()
+    with d.session() as s:
+        room = rooms.room_by_id(s, rid)
+        a = accounts.create_account(s, room, display_name="An", nickname="an", pin="1",
+                                    bank_code=None, account_number=None, account_holder=None)[0]
+        b = accounts.add_unclaimed(s, room, display_name="Binh", nickname="binh")
+        # rename b -> collides with an
+        with pytest.raises(accounts.AccountError):
+            accounts.update_member(s, b, nickname="an")
+        # valid rename + detail edit
+        accounts.update_member(s, b, nickname="binhh", display_name="Bình", bank_code="VCB")
+        assert (b.nickname, b.display_name, b.bank_code) == ("binhh", "Bình", "VCB")
+        # soft-delete then restore via update_member(active=True)
+        accounts.soft_delete_member(s, a)
+        assert a.active is False
+        accounts.update_member(s, a, active=True)
+        assert a.active is True

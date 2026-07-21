@@ -113,13 +113,28 @@ export function Composer({ onSend }: ComposerProps) {
     });
   }
 
-  async function handleFiles(files: FileList | null) {
+  async function handleFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
+    // Filter to images so a paste (which can carry non-image files) matches the
+    // file picker's `accept="image/*"` constraint.
+    const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (imageFiles.length === 0) return;
     const room = MAX_IMAGES - images.length;
-    const picked = Array.from(files).slice(0, Math.max(0, room));
+    const picked = imageFiles.slice(0, Math.max(0, room));
     const next = await Promise.all(picked.map(fileToImage));
     setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /** Paste an image straight into the composer (screenshots, copied images),
+   * routed through the same attach path as the file picker. Only swallow the
+   * paste when it actually carries an image, so pasting text still works. */
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const files = e.clipboardData?.files;
+    if (files && Array.from(files).some((f) => f.type.startsWith("image/"))) {
+      e.preventDefault();
+      handleFiles(files);
+    }
   }
 
   function removeImage(idx: number) {
@@ -227,6 +242,7 @@ export function Composer({ onSend }: ComposerProps) {
             }}
             onKeyDown={onKeyDown}
             onKeyUp={onKeyUp}
+            onPaste={onPaste}
             onClick={(e) => recomputeMention(e.currentTarget)}
             onBlur={() => setMention(null)}
             rows={1}
@@ -234,7 +250,7 @@ export function Composer({ onSend }: ComposerProps) {
             aria-label="Compose message"
             aria-expanded={mention !== null && mentionItems.length > 0}
             aria-haspopup="listbox"
-            className="max-h-40 min-h-10 w-full resize-none overflow-y-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-1.5 text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+            className="block max-h-40 min-h-10 w-full resize-none overflow-y-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-1.5 text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           />
           {mention && mentionItems.length > 0 && (
             <MentionDropdown items={mentionItems} active={mention.active} onPick={acceptMention} />

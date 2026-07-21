@@ -64,6 +64,9 @@ export const updateMe = (b: any) => req(`/api/me`, { method: "PUT", body: JSON.s
 
 export const getMembers = (roomId: number) => req(`/api/rooms/${roomId}/members`);
 
+export const getInvite = (roomId: number): Promise<{ invite_token: string }> =>
+  req(`/api/rooms/${roomId}/invite`);
+
 export const patchDraft = (roomId: number, draftId: number, patch: any) =>
   req(`/api/rooms/${roomId}/drafts/${draftId}`, { method: "PATCH", body: JSON.stringify(patch) });
 
