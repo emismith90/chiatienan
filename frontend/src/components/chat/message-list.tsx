@@ -17,13 +17,14 @@ interface AttachmentImage {
 }
 
 interface Message {
-  id: number;
+  id: number | string;
   kind?: string;
   body: string;
   attachments?: any;
   created_at?: string | null;
-  author?: { id: number; name?: string; nickname?: string | null } | null;
+  author?: { id: number | null; name?: string; nickname?: string | null } | null;
   pending?: boolean;
+  queued?: boolean;
   error?: boolean;
 }
 
@@ -43,6 +44,11 @@ function HumanMessage({ message }: { message: Message }) {
       >
         {message.error && (
           <p className="mb-1 text-xs font-medium text-white/90">Failed to send.</p>
+        )}
+        {message.queued && !message.error && (
+          <p className="mb-1 flex items-center gap-1 text-xs font-medium text-white/80">
+            <span aria-hidden>⏳</span> Chờ mạng để gửi…
+          </p>
         )}
         {message.body && (
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatImage } from "@/types/chat";
 import { botHandle } from "@/lib/api";
+import { resizeImage } from "@/lib/image";
 import { mentionQuery, spliceMention, MentionDropdown } from "./mention-dropdown";
 
 const MAX_IMAGES = 4;
@@ -18,22 +19,6 @@ interface MentionState {
   active: number;
 }
 
-/** Read a File into `{ data, mimeType, name }`, stripping the
- * `data:<mime>;base64,` prefix so only raw base64 is sent to the API. */
-function fileToImage(file: File): Promise<ChatImage> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      const comma = result.indexOf(",");
-      const data = comma >= 0 ? result.slice(comma + 1) : result;
-      resolve({ data, mimeType: file.type || "image/png", name: file.name });
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 interface ComposerProps {
   onSend: (text: string, images?: ChatImage[]) => Promise<any> | void;
 }
@@ -42,6 +27,8 @@ export function Composer({ onSend }: ComposerProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<ChatImage[]>([]);
   const [sending, setSending] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [notice, setNotice] = useState("");
   const [handles, setHandles] = useState<string[]>(["bot"]);
   const [mention, setMention] = useState<MentionState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,7 +73,7 @@ export function Composer({ onSend }: ComposerProps) {
     return handles.filter((h) => h.toLowerCase().startsWith(q));
   }, [mention, handles]);
 
-  const canSend = (text.trim().length > 0 || images.length > 0) && !sending;
+  const canSend = (text.trim().length > 0 || images.length > 0) && !sending && !processing;
 
   /** Recompute the `@`-mention state from the textarea's current value and
    * caret position; clears it when the caret isn't inside a mention. */
@@ -119,11 +106,23 @@ export function Composer({ onSend }: ComposerProps) {
     // file picker's `accept="image/*"` constraint.
     const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
+    setNotice("");
     const room = MAX_IMAGES - images.length;
     const picked = imageFiles.slice(0, Math.max(0, room));
-    const next = await Promise.all(picked.map(fileToImage));
-    setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
-    if (fileRef.current) fileRef.current.value = "";
+    const dropped = imageFiles.length - picked.length;
+    // Downscale each pick on-device (camera photos are multi-MB) before it ever
+    // hits the wire; keeps bill text legible but well under the server caps.
+    setProcessing(true);
+    try {
+      const next = await Promise.all(picked.map((f) => resizeImage(f)));
+      setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
+      if (dropped > 0) setNotice(`Chỉ đính kèm được tối đa ${MAX_IMAGES} ảnh.`);
+    } catch {
+      setNotice("Không xử lý được ảnh, thử lại nhé.");
+    } finally {
+      setProcessing(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
 
   /** Paste an image straight into the composer (screenshots, copied images),
@@ -181,6 +180,10 @@ export function Composer({ onSend }: ComposerProps) {
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
+      // On touch devices the on-screen keyboard's return key should insert a
+      // newline (multi-line messages are common); sending is the Send button's
+      // job there. On a physical keyboard, Enter still sends.
+      if (window.matchMedia?.("(pointer: coarse)").matches) return;
       e.preventDefault();
       submit();
     }
@@ -205,13 +208,21 @@ export function Composer({ onSend }: ComposerProps) {
                 type="button"
                 onClick={() => removeImage(i)}
                 aria-label="Remove image"
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--text-primary)] text-xs text-[var(--bg-surface)] shadow-sm transition-colors duration-150 hover:bg-[var(--accent-primary)]"
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--text-primary)] text-sm text-[var(--bg-surface)] shadow-sm transition-colors duration-150 hover:bg-[var(--accent-primary)]"
               >
                 ×
               </button>
             </div>
           ))}
         </div>
+      )}
+      {(processing || notice) && (
+        <p
+          role="status"
+          className="mb-2 px-1 text-xs text-[var(--text-secondary)]"
+        >
+          {processing ? "Đang xử lý ảnh…" : notice}
+        </p>
       )}
       <div className="flex items-end gap-2">
         <input
@@ -225,7 +236,7 @@ export function Composer({ onSend }: ComposerProps) {
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          disabled={images.length >= MAX_IMAGES}
+          disabled={images.length >= MAX_IMAGES || processing}
           aria-label="Attach image"
           title={images.length >= MAX_IMAGES ? `Max ${MAX_IMAGES} images` : "Attach image"}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-lg text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-40"
