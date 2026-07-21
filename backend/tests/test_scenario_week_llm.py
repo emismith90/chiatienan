@@ -24,7 +24,7 @@ EXPECTED_TOOL = {
 
 @pytest.mark.asyncio
 async def test_scenario_week_llm(db):
-    from app import drafts, ledger, tools
+    from app import tools
     from app.agent import run_turn
     from app.models import Member, Room
     from tests.golden.scenario_week import MEMBERS, STEPS
@@ -42,9 +42,7 @@ async def test_scenario_week_llm(db):
 
     for step in STEPS:
         if step["kind"] == "confirm_pending":
-            with db.session() as s:  # confirmation is a UI action, not an LLM turn
-                pass
-            continue
+            continue  # confirmation is a UI action, not an LLM turn
         expected = EXPECTED_TOOL.get(step["kind"])
         if not expected or "message" not in step:
             continue

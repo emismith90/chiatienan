@@ -305,6 +305,13 @@ def test_record_payment_tool_errors(db):
     assert tools["record_payment"].execute({"to": m[0], "amount": 10})["ok"] is False  # from==to
 
 
+def test_record_payment_tool_non_numeric_to_rejected(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["record_payment"].execute({"to": "abc", "amount": 10_000})
+    assert res["ok"] is False
+
+
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
     _seed_meal(d, room_id, an, [an, bi], 100000)

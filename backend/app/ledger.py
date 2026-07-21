@@ -165,7 +165,10 @@ def period_balances(
 
     Excludes voided meals. ``from_date=None`` means "from the beginning of the
     ledger". Only members with any activity in the window appear. Scoped to
-    ``room_id`` — other rooms' meals never contribute.
+    ``room_id`` — other rooms' meals never contribute. Also folds in ad-hoc
+    payments in the window: the payer's balance gets ``+amount`` and the
+    payee's gets ``-amount`` (voided payments excluded), so a member who only
+    made/received a payment — with no meals of their own — still appears.
     """
     def _in_window(col):
         conds = [Meal.room_id == room_id, Meal.voided.is_(False), col <= to_date]

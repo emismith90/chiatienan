@@ -219,7 +219,18 @@ export function ExpenseDraftCard({
             Save changes
           </button>
           <button type="button" disabled={busy}
-            onClick={() => { setEditing(false); setError(null); }}
+            onClick={() => {
+              setPayer(att.payer_member_id);
+              setBilled(att.member_participants ?? []);
+              setGuests(att.guests ?? []);
+              setTotal(att.bill_total ?? 0);
+              setAdjustments(att.adjustments ?? []);
+              setDish(att.dish ?? "");
+              setInitiator(att.initiator ?? "");
+              setNote(att.note ?? "");
+              setEditing(false);
+              setError(null);
+            }}
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
             Cancel edit
           </button>

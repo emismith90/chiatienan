@@ -382,21 +382,25 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             return _err("Could not determine who paid.")
         if not to:
             return _err("Missing recipient.")
+        try:
+            frm_id, to_id = int(frm), int(to)
+        except (TypeError, ValueError):
+            return _err("Invalid from/to member id.")
         with db.session() as s:
             try:
                 ledger.record_payment(
-                    s, room_id=ctx.room_id, from_member_id=int(frm),
-                    to_member_id=int(to), amount=amount, logged_by=str(ctx.sender_member_id),
+                    s, room_id=ctx.room_id, from_member_id=frm_id,
+                    to_member_id=to_id, amount=amount, logged_by=str(ctx.sender_member_id),
                 )
             except ledger.LedgerError as exc:
                 return _err(str(exc))
-            names = _names_for(s, ctx.room_id, [int(frm), int(to)])
+            names = _names_for(s, ctx.room_id, [frm_id, to_id])
             balances = drafts.current_balances(s, ctx.room_id)
         return {
             "ok": True,
             "type": "payment",
-            "from": {"id": int(frm), "name": names.get(int(frm), "?")},
-            "to": {"id": int(to), "name": names.get(int(to), "?")},
+            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+            "to": {"id": to_id, "name": names.get(to_id, "?")},
             "amount": amount,
             "balances": balances,
         }
