@@ -45,7 +45,7 @@ def read_watermark(room_id: int) -> int:
         return 0
     try:
         return int(json.loads(path.read_text(encoding="utf-8")).get("summarized_through_id", 0))
-    except (ValueError, TypeError, json.JSONDecodeError):
+    except (ValueError, TypeError, json.JSONDecodeError, AttributeError):
         return 0
 
 

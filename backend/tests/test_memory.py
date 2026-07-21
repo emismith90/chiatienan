@@ -66,3 +66,19 @@ def test_messages_to_summarize_filters(workspace, db):
         rows_old = mem.messages_to_summarize(s, room_id, watermark=wm0,
                                              older_than=now_ict() - timedelta(weeks=10))
         assert [r.id for r in rows_old] == [m1.id, m2.id]
+
+
+def test_read_watermark_handles_non_dict_json(workspace):
+    """Test that read_watermark tolerates non-dict JSON in memory.meta.json."""
+    # Test with array JSON
+    meta_path = mem.room_memory_dir(1) / "memory.meta.json"
+    meta_path.write_text("[]", encoding="utf-8")
+    assert mem.read_watermark(1) == 0
+
+    # Test with bare number JSON
+    meta_path.write_text("5", encoding="utf-8")
+    assert mem.read_watermark(1) == 0
+
+    # Test with null JSON
+    meta_path.write_text("null", encoding="utf-8")
+    assert mem.read_watermark(1) == 0
