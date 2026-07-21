@@ -1,21 +1,46 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as api from "@/lib/api";
 import { useSession } from "@/lib/session";
 
-type Room = { room_id: number; name: string };
+type Member = { display_name: string; nickname: string; claimed: boolean };
+type Room = { room_id: number; name: string; members?: Member[] };
 type Mode = "create" | "login";
 
 const inputClass =
   "w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus-visible:ring-2 ring-[var(--accent-primary)] transition-all duration-150";
+
+function LockClosedIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="h-4 w-4 shrink-0">
+      <path
+        fillRule="evenodd"
+        d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function LockOpenIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="h-4 w-4 shrink-0">
+      <path d="M14.5 1A4.5 4.5 0 0 0 10 5.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-3.5V5.5a3 3 0 1 1 6 0 .75.75 0 0 0 1.5 0A4.5 4.5 0 0 0 14.5 1Z" />
+    </svg>
+  );
+}
 
 export default function Join() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
   const { signIn } = useSession();
   const [room, setRoom] = useState<Room | null>(null);
-  const [mode, setMode] = useState<Mode>("create");
+  // Default to sign-in/claim: rooms are usually created by an admin who has
+  // already added the members, so most people arriving here are claiming an
+  // existing account rather than creating a new one.
+  const [mode, setMode] = useState<Mode>("login");
+  const pinRef = useRef<HTMLInputElement>(null);
   const [f, setF] = useState({
     display_name: "",
     nickname: "",
@@ -38,6 +63,17 @@ export default function Join() {
   function set<K extends keyof typeof f>(key: K, value: string) {
     setF((prev) => ({ ...prev, [key]: value }));
   }
+
+  /** Pick a person from the roster: prefill their nickname and jump to the PIN
+   * field. For an unclaimed account the PIN they enter becomes their PIN. */
+  function selectMember(m: Member) {
+    setErr("");
+    set("nickname", m.nickname);
+    requestAnimationFrame(() => pinRef.current?.focus());
+  }
+
+  const selected = room?.members?.find((m) => m.nickname === f.nickname);
+  const isClaim = mode === "login" && selected != null && !selected.claimed;
 
   async function submit() {
     setErr("");
@@ -109,6 +145,42 @@ export default function Join() {
         </div>
 
         <div className="space-y-3">
+          {mode === "login" && room.members && room.members.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+                People in this room
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {room.members.map((m) => {
+                  const active = f.nickname === m.nickname;
+                  return (
+                    <button
+                      key={m.nickname}
+                      type="button"
+                      onClick={() => selectMember(m)}
+                      aria-label={m.claimed ? `Sign in as ${m.display_name}` : `Claim ${m.display_name}`}
+                      className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors duration-150 focus:outline-none focus-visible:ring-2 ring-[var(--accent-primary)] ${
+                        active
+                          ? "border-[var(--accent-primary)] bg-[var(--bg-base)]"
+                          : "border-[var(--border)] hover:bg-[var(--bg-base)]"
+                      } ${m.claimed ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)]"}`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={m.claimed ? "text-[var(--text-secondary)]" : "text-[var(--accent-text)]"}>
+                          {m.claimed ? <LockClosedIcon /> : <LockOpenIcon />}
+                        </span>
+                        <span className="truncate font-medium">{m.display_name}</span>
+                        <span className="truncate text-[var(--text-secondary)]">@{m.nickname}</span>
+                      </span>
+                      {!m.claimed && (
+                        <span className="shrink-0 text-xs font-medium text-[var(--accent-text)]">claim</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {mode === "create" && (
             <input
               aria-label="Display name"
@@ -126,8 +198,9 @@ export default function Join() {
             className={inputClass}
           />
           <input
+            ref={pinRef}
             aria-label="PIN"
-            placeholder="PIN"
+            placeholder={isClaim ? "Set a PIN to claim this account" : "PIN"}
             type="password"
             inputMode="numeric"
             value={f.pin}
@@ -173,7 +246,13 @@ export default function Join() {
           disabled={loading}
           className="w-full rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white py-2 transition-all duration-150 disabled:opacity-50"
         >
-          {loading ? "Processing…" : mode === "create" ? "Create & join" : "Sign in"}
+          {loading
+            ? "Processing…"
+            : mode === "create"
+              ? "Create & join"
+              : isClaim
+                ? "Claim & sign in"
+                : "Sign in"}
         </button>
       </div>
     </main>

@@ -2,6 +2,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BalanceTable } from "./balance-table";
+import { ZoomableImage } from "./zoomable-image";
 import { fmt } from "@/lib/format";
 
 interface Transfer {
@@ -52,13 +53,15 @@ function SettlementCard({ attachments }: { attachments: any }) {
             </span>
           </div>
           {t.qr_url && (
-            <img
-              src={t.qr_url}
-              alt={`QR to transfer ${fmt(t.amount)} đ to ${t.to_name}`}
-              width={160}
-              height={160}
-              className="h-40 w-40 shrink-0 self-center rounded-lg border border-[var(--border)] bg-white object-contain p-1"
-            />
+            <div className="self-center">
+              <ZoomableImage
+                src={t.qr_url}
+                alt={`QR to transfer ${fmt(t.amount)} đ to ${t.to_name}`}
+                width={160}
+                height={160}
+                className="h-40 w-40 rounded-lg border border-[var(--border)] bg-white object-contain p-1"
+              />
+            </div>
           )}
         </div>
       ))}

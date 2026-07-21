@@ -22,7 +22,7 @@ from app.bridge_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member, RoomMessage
+from app.models import Member, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
 
@@ -98,7 +98,17 @@ async def room_info(invite_token: str):
         r = rooms.room_by_invite(s, invite_token)
         if not r:
             raise HTTPException(404, "room not found")
-        return {"room_id": r.id, "name": r.name, "bot_handle": settings.bot_handle}
+        # Roster is public to invite-link holders so the join screen can show
+        # who's here and which accounts are still unclaimed (pin is None) and
+        # thus claimable on first sign-in. Never expose the pin or banking.
+        members = [
+            {"display_name": m.display_name, "nickname": m.nickname, "claimed": m.pin is not None}
+            for m in roster.list_members(s, r.id)
+        ]
+        return {
+            "room_id": r.id, "name": r.name, "bot_handle": settings.bot_handle,
+            "members": members,
+        }
 
 
 @app.post("/api/rooms/{invite_token}/accounts")
@@ -162,9 +172,37 @@ async def members(room_id: int, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
     with get_db().session() as s:
         return [
-            {"id": m.id, "display_name": m.display_name, "nickname": m.nickname}
+            {
+                "id": m.id,
+                "display_name": m.display_name,
+                "nickname": m.nickname,
+                "claimed": m.pin is not None,
+                "has_bank": m.has_bank_details(),
+                # Bank details are shared within the room so members can transfer
+                # to each other (the settlement QR already encodes them).
+                "bank_code": m.bank_code,
+                "account_number": m.account_number,
+                "account_holder": m.account_holder,
+            }
             for m in roster.list_members(s, room_id)
         ]
+
+
+@app.get("/api/rooms/{room_id}/invite")
+async def room_invite(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    """Return the room's invite token so a member can share a join link.
+
+    Any authenticated member of the room may fetch it — inviting others is the
+    whole point. The client builds the URL from its own origin
+    (``<origin>/join/<token>``) so it's correct in both dev and prod without
+    depending on ``CADDY_DOMAIN``.
+    """
+    _check_room(ctx, room_id)
+    with get_db().session() as s:
+        r = s.get(Room, room_id)
+        if not r:
+            raise HTTPException(404, "room not found")
+        return {"invite_token": r.invite_token}
 
 
 @app.get("/api/rooms/{room_id}/messages")

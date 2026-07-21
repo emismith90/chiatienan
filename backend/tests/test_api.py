@@ -94,7 +94,7 @@ def test_sse_catchup_since_returns_only_newer(client):
     assert "first" not in text
 
 
-def test_members_endpoint_has_no_banking(client):
+def test_members_endpoint_includes_status_and_bank_details(client):
     token = _room(client)
     sess, room_id = _join(client, token, "an", bank_code="VCB",
                           account_number="0123", account_holder="NGUYEN AN")
@@ -102,8 +102,43 @@ def test_members_endpoint_has_no_banking(client):
     members = client.get(f"/api/rooms/{room_id}/members", headers=h).json()
     assert isinstance(members, list) and members
     m = members[0]
-    assert set(m.keys()) == {"id", "display_name", "nickname"}
-    assert "account_number" not in m and "bank_code" not in m
+    assert m["claimed"] is True and m["has_bank"] is True
+    # Bank details are shared within the room so members can transfer to each other.
+    assert (m["bank_code"], m["account_number"], m["account_holder"]) == ("VCB", "0123", "NGUYEN AN")
+    assert "pin" not in m  # never expose the PIN
+
+
+def test_members_endpoint_omits_bank_when_unset(client):
+    token = _room(client)
+    sess, room_id = _join(client, token, "an")  # no bank fields
+    h = {"Authorization": f"Bearer {sess}"}
+    m = client.get(f"/api/rooms/{room_id}/members", headers=h).json()[0]
+    assert m["has_bank"] is False
+    assert m["bank_code"] is None and m["account_number"] is None
+
+
+def test_invite_returns_room_token_for_member(client):
+    token = _room(client)
+    sess, room_id = _join(client, token, "an")
+    h = {"Authorization": f"Bearer {sess}"}
+    r = client.get(f"/api/rooms/{room_id}/invite", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"invite_token": token}
+
+
+def test_invite_requires_session(client):
+    token = _room(client)
+    _sess, room_id = _join(client, token, "an")
+    assert client.get(f"/api/rooms/{room_id}/invite").status_code == 401
+
+
+def test_invite_cross_room_is_403(client):
+    token_a = _room(client)
+    sess_a, _room_a = _join(client, token_a, "an")
+    token_b = _room(client)
+    _sess_b, room_b = _join(client, token_b, "an")
+    ha = {"Authorization": f"Bearer {sess_a}"}
+    assert client.get(f"/api/rooms/{room_b}/invite", headers=ha).status_code == 403
 
 
 def test_room_info_exposes_bot_handle(client):
@@ -111,6 +146,24 @@ def test_room_info_exposes_bot_handle(client):
     r = client.get(f"/api/rooms/{token}")
     assert r.status_code == 200
     assert "bot_handle" in r.json()
+
+
+def test_room_info_lists_members_with_claim_status(client):
+    token = _room(client)
+    _sess, _room_id = _join(client, token, "an")  # claimed (joined with a PIN)
+
+    from app import accounts, rooms
+    from app.db import get_db
+    with get_db().session() as s:  # unclaimed (agent-added, no PIN)
+        r = rooms.room_by_invite(s, token)
+        accounts.add_unclaimed(s, r, display_name="Bui Trang", nickname="trang")
+
+    info = client.get(f"/api/rooms/{token}").json()
+    members = {m["nickname"]: m for m in info["members"]}
+    assert members["an"]["claimed"] is True
+    assert members["trang"]["claimed"] is False
+    # public roster must never leak the pin or banking fields
+    assert all(set(m.keys()) == {"display_name", "nickname", "claimed"} for m in info["members"])
 
 
 def _seed_draft(room_id, a, b, **overrides):
