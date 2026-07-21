@@ -169,6 +169,16 @@ _DELETE_MEMBER_SCHEMA = {
     "required": ["target"],
 }
 
+_PAYMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "from": {"type": "integer", "description": "member id who paid; blank = the sender."},
+        "to": {"type": "integer", "description": "member id who received the money."},
+        "amount": {"type": "integer", "description": "Amount, integer VND (125k → 125000)."},
+    },
+    "required": ["to", "amount"],
+}
+
 _SETTLE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -360,6 +370,37 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "display_name": m.display_name,
             }
 
+    def record_payment(args, _tool_ctx=None) -> dict:
+        from app import drafts  # lazy: avoid import cycle at module load
+        args = args or {}
+        amount = args.get("amount")
+        if not isinstance(amount, int):
+            return _err("Missing amount (integer VND).")
+        to = args.get("to")
+        frm = args.get("from") or ctx.sender_member_id
+        if not frm:
+            return _err("Could not determine who paid.")
+        if not to:
+            return _err("Missing recipient.")
+        with db.session() as s:
+            try:
+                ledger.record_payment(
+                    s, room_id=ctx.room_id, from_member_id=int(frm),
+                    to_member_id=int(to), amount=amount, logged_by=str(ctx.sender_member_id),
+                )
+            except ledger.LedgerError as exc:
+                return _err(str(exc))
+            names = _names_for(s, ctx.room_id, [int(frm), int(to)])
+            balances = drafts.current_balances(s, ctx.room_id)
+        return {
+            "ok": True,
+            "type": "payment",
+            "from": {"id": int(frm), "name": names.get(int(frm), "?")},
+            "to": {"id": int(to), "name": names.get(int(to), "?")},
+            "amount": amount,
+            "balances": balances,
+        }
+
     def settle_period(args, _tool_ctx=None) -> dict:
         """Composite, server-side end-to-end: balances → net → QR → payload."""
         args = args or {}
@@ -478,5 +519,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=delete_member,
             description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
             input_schema=_DELETE_MEMBER_SCHEMA,
+        ),
+        "record_payment": CustomTool(
+            execute=record_payment,
+            description="Record a cash payment one member made to another (e.g. 'A đưa B 100k', 'tôi nhận 125k từ C'). Adjusts balances; not a meal.",
+            input_schema=_PAYMENT_SCHEMA,
         ),
     }

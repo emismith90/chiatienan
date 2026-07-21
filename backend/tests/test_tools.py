@@ -277,6 +277,34 @@ def test_settle_still_names_a_deleted_member(db):
     assert "M2" in names               # b's display name is present
 
 
+def test_record_payment_tool_happy(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[1])
+    tools = build_tools(ctx)
+    res = tools["record_payment"].execute({"from": m[1], "to": m[0], "amount": 125_000})
+    assert res["ok"] is True
+    assert res["type"] == "payment"
+    assert res["amount"] == 125_000
+    assert res["from"]["id"] == m[1] and res["to"]["id"] == m[0]
+    assert isinstance(res["balances"], list)
+
+
+def test_record_payment_tool_defaults_from_to_sender(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["record_payment"].execute({"to": m[1], "amount": 10_000})
+    assert res["ok"] is True and res["from"]["id"] == m[0]
+
+
+def test_record_payment_tool_errors(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    tools = build_tools(ctx)
+    assert tools["record_payment"].execute({"to": m[1]})["ok"] is False       # no amount
+    assert tools["record_payment"].execute({"amount": 10})["ok"] is False     # no recipient
+    assert tools["record_payment"].execute({"to": m[0], "amount": 10})["ok"] is False  # from==to
+
+
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
     _seed_meal(d, room_id, an, [an, bi], 100000)
