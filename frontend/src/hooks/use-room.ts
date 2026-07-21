@@ -4,6 +4,9 @@ import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { ChatImage } from "@/types/chat";
+import { defaultStore, flushOutbox, newRecord, type OutboxStore, type OutboxRecord } from "@/lib/outbox";
+
+const isOnline = () => (typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
 export type TimelineStep = { kind: "text" | "tool"; name?: string; status?: string; text?: string; callId?: string };
 export type RoomState = {
@@ -93,16 +96,67 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
   return s;
 }
 
+/** Optimistic bubble for a not-yet-acknowledged outgoing message. `pending` so
+ * mergeEvent's dedupe reconciles it when the real message arrives; `queued`
+ * marks it as waiting for connectivity (vs in-flight). */
+function pendingBubble(id: number | string, body: string, images: ChatImage[] | undefined,
+                       memberId: number | null, queued: boolean) {
+  return {
+    id, kind: "text", body,
+    attachments: images && images.length ? { images } : undefined,
+    author: { id: memberId }, pending: true, queued,
+  };
+}
+
 export function useRoom(roomId: number) {
   const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {}, activeTurn: null });
   const { signOut, memberId } = useSession();
   const lastId = useRef(0);
+  const storeRef = useRef<OutboxStore | null>(null);
+  if (!storeRef.current) storeRef.current = defaultStore();
 
   useEffect(() => {
     const ac = new AbortController();
     let stop = false;
     lastId.current = 0;
     setState({ messages: [], typing: false, timelines: {}, activeTurn: null });
+    const store = storeRef.current!;
+
+    // A queued message the server ultimately rejects (e.g. 4xx) must not retry
+    // forever — flag its bubble and let the drain drop it. Network failures
+    // (no ApiError) rethrow so the record stays queued for the next attempt.
+    const postRecord = async (rec: OutboxRecord) => {
+      try {
+        await api.postMessage(rec.roomId, rec.body, rec.images);
+      } catch (e) {
+        if (e instanceof ApiError) {
+          setState((prev) => ({
+            ...prev,
+            messages: prev.messages.map((m) =>
+              m.pending && m.body === rec.body ? { ...m, error: true, queued: false } : m),
+          }));
+          return;
+        }
+        throw e;
+      }
+    };
+    // Single-flight: the backend has no idempotency key, so two overlapping
+    // drains (e.g. an `online` event firing mid-drain) could double-POST the
+    // same queued record. A guard keeps only one drain in flight at a time.
+    let flushing = false;
+    const flush = async () => {
+      if (flushing) return;
+      flushing = true;
+      try {
+        await flushOutbox(store, roomId, postRecord);
+      } catch {
+        /* leave records queued for the next attempt */
+      } finally {
+        flushing = false;
+      }
+    };
+    const onOnline = () => { flush(); };
+    if (typeof window !== "undefined") window.addEventListener("online", onOnline);
 
     (async () => {
       try {
@@ -115,6 +169,24 @@ export function useRoom(roomId: number) {
           return;
         }
       }
+
+      // Re-surface messages queued in a previous (offline) session, then try to
+      // drain them now that we're mounted.
+      try {
+        const queued = await store.list(roomId);
+        if (queued.length) {
+          setState((prev) => ({
+            ...prev,
+            messages: [
+              ...prev.messages,
+              ...queued.map((r) => pendingBubble(r.id, r.body, r.images, memberId, true)),
+            ],
+          }));
+        }
+      } catch {
+        /* store unavailable — ignore */
+      }
+      flush();
 
       while (!stop) {
         try {
@@ -150,29 +222,48 @@ export function useRoom(roomId: number) {
     return () => {
       stop = true;
       ac.abort();
+      if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   const send = (text: string, images?: ChatImage[]) => {
     // Optimistic echo: show the user's own message immediately instead of
-    // waiting for the POST -> SSE round-trip. Reconciled (or marked errored)
-    // once the real event arrives or the request fails; see mergeEvent's
-    // "message" branch above for the pending-bubble dedupe.
+    // waiting for the POST -> SSE round-trip. Reconciled (or marked
+    // errored/queued) once the real event arrives or the request settles; see
+    // mergeEvent's "message" branch above for the pending-bubble dedupe.
+    const store = storeRef.current!;
     const tempId = -Date.now();
+    const online = isOnline();
     setState((prev) => ({
       ...prev,
-      messages: [
-        ...prev.messages,
-        { id: tempId, kind: "text", body: text, author: { id: memberId }, pending: true },
-      ],
+      messages: [...prev.messages, pendingBubble(tempId, text, images, memberId, !online)],
     }));
+
+    // Offline: persist to the outbox and resolve so the composer clears — the
+    // bubble stays "queued" until the `online` handler (or next mount) drains it.
+    if (!online) {
+      store.add(newRecord(roomId, text, images, Date.now())).catch(() => {});
+      return Promise.resolve();
+    }
+
     return api.postMessage(roomId, text, images).catch((err) => {
+      if (err instanceof ApiError) {
+        // Server reached and rejected it — a real error; keep the composed text
+        // (rethrow) so the user can fix and resend.
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.map((m) => (m.id === tempId ? { ...m, error: true } : m)),
+        }));
+        throw err;
+      }
+      // Network dropped mid-send: queue it and resolve (input clears), so it
+      // flushes on reconnect instead of being lost.
+      store.add(newRecord(roomId, text, images, Date.now())).catch(() => {});
       setState((prev) => ({
         ...prev,
-        messages: prev.messages.map((m) => (m.id === tempId ? { ...m, error: true } : m)),
+        messages: prev.messages.map((m) => (m.id === tempId ? { ...m, queued: true } : m)),
       }));
-      throw err;
     });
   };
 

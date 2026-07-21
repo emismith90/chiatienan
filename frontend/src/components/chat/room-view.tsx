@@ -4,6 +4,8 @@ import * as api from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { ThemeToggle } from "@/lib/theme";
 import { useRoom } from "@/hooks/use-room";
+import { useOnline } from "@/hooks/use-online";
+import { InstallButton } from "@/components/install-button";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
@@ -98,7 +100,7 @@ function MemberChips({
             type="button"
             onClick={() => onSelect(m)}
             title={`${m.display_name} — tap for info`}
-            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
+            className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
               isSelf
                 ? "border-[var(--accent-primary)] text-[var(--text-primary)] ring-1 ring-[var(--accent-primary)]"
                 : "border-[var(--border)] text-[var(--text-secondary)]"
@@ -346,6 +348,7 @@ function ProfileDialog({
 export function RoomView({ roomId }: { roomId: number }) {
   const { messages, typing, timelines, activeTurn, send } = useRoom(roomId);
   const { memberId } = useSession();
+  const online = useOnline();
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -372,10 +375,22 @@ export function RoomView({ roomId }: { roomId: number }) {
       <header className="pt-safe border-b border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-base font-semibold text-[var(--text-primary)]">
-              chiatienan
-            </h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="text-base font-semibold text-[var(--text-primary)]">
+                chiatienan
+              </h1>
+              {!online && (
+                <span
+                  role="status"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-base)] px-2 py-0.5 text-xs text-[var(--text-secondary)]"
+                >
+                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--text-secondary)]" />
+                  Offline
+                </span>
+              )}
+            </div>
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <InstallButton />
               <ThemeToggle />
               <InviteButton roomId={roomId} />
             </div>

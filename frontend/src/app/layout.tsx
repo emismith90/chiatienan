@@ -10,7 +10,15 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" }
 
 export const metadata: Metadata = {
   title: "chiatienan",
+  applicationName: "chiatienan",
   manifest: "/manifest.webmanifest",
+  // iOS doesn't read the web manifest for "Add to Home Screen"; these give it a
+  // standalone launch, a titled icon, and a crisp home-screen glyph.
+  appleWebApp: { capable: true, title: "chiatienan", statusBarStyle: "default" },
+  icons: {
+    icon: "/icon-192.png",
+    apple: [{ url: "/icon-192.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
@@ -20,6 +28,9 @@ export const viewport: Viewport = {
   // Content extends under the notch / home indicator; components opt back in
   // to the safe area with the .pt-safe / .pb-safe utilities.
   viewportFit: "cover",
+  // Let the layout viewport shrink when the on-screen keyboard opens, so the
+  // composer stays visible above it instead of being covered.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

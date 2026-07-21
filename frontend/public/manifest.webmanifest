@@ -1,12 +1,19 @@
 {
   "name": "chiatienan",
   "short_name": "chiatienan",
+  "description": "Chia tiền ăn trưa nhóm — nhắn @bot để ghi bữa ăn và chốt tiền.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
+  "lang": "vi",
+  "dir": "ltr",
   "background_color": "#F9F9F8",
   "theme_color": "#CC4E33",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
