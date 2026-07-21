@@ -8,15 +8,15 @@ export function BalanceTable({ rows }: { rows: Row[] }) {
   return (
     <div className="mt-3">
       <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-        Số dư hiện tại
+        Current balances
       </p>
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="text-left text-xs text-[var(--text-secondary)]">
-            <th className="py-1">Người</th>
-            <th className="py-1 text-right">Đã trả</th>
-            <th className="py-1 text-right">Đã ăn</th>
-            <th className="py-1 text-right">Cân đối</th>
+            <th className="py-1">Member</th>
+            <th className="py-1 text-right">Paid</th>
+            <th className="py-1 text-right">Consumed</th>
+            <th className="py-1 text-right">Balance</th>
           </tr>
         </thead>
         <tbody>

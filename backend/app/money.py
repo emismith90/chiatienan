@@ -49,27 +49,27 @@ def split_shares(
     adjustments = dict(adjustments or {})
 
     if total <= 0:
-        raise MoneyError(f"Tổng tiền phải lớn hơn 0 (nhận {total}).")
+        raise MoneyError(f"Total must be greater than 0 (got {total}).")
     if len(participants) < 1:
-        raise MoneyError("Cần ít nhất một người tham gia bữa ăn.")
+        raise MoneyError("At least one meal participant is required.")
 
     # participants must be unique
     if len(set(participants)) != len(participants):
-        raise MoneyError("Danh sách người tham gia bị trùng.")
+        raise MoneyError("Participant list has duplicates.")
 
     part_set = set(participants)
     stray = [m for m in adjustments if m not in part_set]
     if stray:
         raise MoneyError(
-            "Điều chỉnh chỉ áp dụng cho người tham gia; "
-            f"những người này không ăn: {sorted(stray)}."
+            "Adjustments apply only to participants; "
+            f"these are not in the meal: {sorted(stray)}."
         )
 
     n = len(participants)
     sum_adj = sum(adjustments.values())
     if sum_adj > total:
         raise MoneyError(
-            f"Tổng điều chỉnh ({sum_adj}) không được vượt quá tổng tiền ({total})."
+            f"Total adjustments ({sum_adj}) must not exceed the bill total ({total})."
         )
 
     base = (total - sum_adj) // n
@@ -78,7 +78,7 @@ def split_shares(
     negative = [m for m, s in shares.items() if s < 0]
     if negative:
         raise MoneyError(
-            f"Điều chỉnh làm phần của {sorted(negative)} bị âm — vui lòng kiểm tra lại."
+            f"Adjustments make the share of {sorted(negative)} negative — please review."
         )
 
     remainder = total - sum(shares.values())
@@ -142,11 +142,11 @@ def split_with_guests(
     directly if there are no members.
     """
     if len(member_ids) < 1:
-        raise MoneyError("Cần ít nhất một thành viên trong bữa ăn.")
+        raise MoneyError("At least one member is required in the meal.")
     if guest_count < 0:
-        raise MoneyError("Số khách không hợp lệ.")
+        raise MoneyError("Invalid guest count.")
     if any(m < 0 for m in member_ids):
-        raise MoneyError("Member id không được âm (trùng với id khách vãng lai).")
+        raise MoneyError("Member id must not be negative (collides with guest ids).")
 
     # Guest placeholders use negative ids so they never collide with real (positive)
     # member ids; adjustments only ever name members.

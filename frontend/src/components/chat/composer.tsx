@@ -57,6 +57,29 @@ export function Composer({ onSend }: ComposerProps) {
     };
   }, []);
 
+  // Auto-grow the textarea with its content (bounded by the CSS max-h-40 =
+  // 160px), so multi-line messages aren't clipped — most visible on mobile,
+  // where the narrow field wraps sooner. Resets when `text` is cleared on send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    // When empty, clear the inline height so the CSS min-height (min-h-10)
+    // governs. Measuring an empty textarea during mount/hydration can report a
+    // bogus tall scrollHeight (narrow pre-layout width → wrapped placeholder),
+    // which would otherwise pin the box at max-h-40 forever.
+    if (!text) {
+      el.style.height = "";
+      el.style.overflowY = "";
+      return;
+    }
+    el.style.height = "auto";
+    const sh = el.scrollHeight;
+    el.style.height = `${Math.min(sh, 160)}px`;
+    // Only show a scrollbar once content exceeds the max height; below that the
+    // box grows to fit, so a scrollbar would just be visual noise.
+    el.style.overflowY = sh > 160 ? "auto" : "hidden";
+  }, [text]);
+
   const mentionItems = useMemo(() => {
     if (!mention) return [];
     const q = mention.query.toLowerCase();
@@ -166,7 +189,7 @@ export function Composer({ onSend }: ComposerProps) {
               <button
                 type="button"
                 onClick={() => removeImage(i)}
-                aria-label="Xóa ảnh"
+                aria-label="Remove image"
                 className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--text-primary)] text-xs text-[var(--bg-surface)] shadow-sm transition-colors duration-150 hover:bg-[var(--accent-primary)]"
               >
                 ×
@@ -188,8 +211,8 @@ export function Composer({ onSend }: ComposerProps) {
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={images.length >= MAX_IMAGES}
-          aria-label="Đính kèm ảnh"
-          title={images.length >= MAX_IMAGES ? `Tối đa ${MAX_IMAGES} ảnh` : "Đính kèm ảnh"}
+          aria-label="Attach image"
+          title={images.length >= MAX_IMAGES ? `Max ${MAX_IMAGES} images` : "Attach image"}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-lg text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           📎
@@ -207,11 +230,11 @@ export function Composer({ onSend }: ComposerProps) {
             onClick={(e) => recomputeMention(e.currentTarget)}
             onBlur={() => setMention(null)}
             rows={1}
-            placeholder="Nhắn tin… (dùng @bot để gọi bot)"
-            aria-label="Soạn tin nhắn"
+            placeholder="Message… (@bot)"
+            aria-label="Compose message"
             aria-expanded={mention !== null && mentionItems.length > 0}
             aria-haspopup="listbox"
-            className="max-h-40 min-h-10 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-2 text-base text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+            className="max-h-40 min-h-10 w-full resize-none overflow-y-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-base)] px-3 py-1.5 text-base leading-6 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
           />
           {mention && mentionItems.length > 0 && (
             <MentionDropdown items={mentionItems} active={mention.active} onPick={acceptMention} />
@@ -223,7 +246,7 @@ export function Composer({ onSend }: ComposerProps) {
           disabled={!canSend}
           className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-primary)] px-4 text-sm font-medium text-white shadow-sm transition-colors duration-150 hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Gửi
+          Send
         </button>
       </div>
     </div>

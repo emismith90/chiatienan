@@ -29,6 +29,6 @@ describe("BalanceTable", () => {
 
   it("shows the section heading", () => {
     render(<BalanceTable rows={rows} />);
-    expect(screen.getByText("Số dư hiện tại")).toBeInTheDocument();
+    expect(screen.getByText("Current balances")).toBeInTheDocument();
   });
 });

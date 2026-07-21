@@ -127,7 +127,7 @@ async def identify(invite_token: str, body: IdentifyIn):
             raise HTTPException(404, "room not found")
         tok = accounts.identify(s, r, nickname=body.nickname, pin=body.pin)
         if not tok:
-            raise HTTPException(401, "sai biệt danh hoặc PIN")
+            raise HTTPException(401, "wrong nickname or PIN")
         return {"token": tok, "room_id": r.id}
 
 
@@ -203,7 +203,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
                 try:
                     with db.session() as s:
                         err = chat.post_message(
-                            s, room_id, None, "⚠️ Bot gặp lỗi, thử lại sau.", kind="bot",
+                            s, room_id, None, "⚠️ The bot hit an error, please try again later.", kind="bot",
                         )
                         out = chat.message_to_dict(err, None)
                     await hub.publish(room_id, {"type": "message", **out})
@@ -225,7 +225,7 @@ async def patch_draft(room_id: int, draft_id: int, body: DraftPatchIn,
     _check_room(ctx, room_id)
     patch = body.model_dump(exclude_unset=True)
     if patch.get("status") not in (None, "cancelled"):
-        raise HTTPException(400, "status chỉ nhận 'cancelled'")
+        raise HTTPException(400, "status only accepts 'cancelled'")
     db = get_db()
     with db.session() as s:
         try:

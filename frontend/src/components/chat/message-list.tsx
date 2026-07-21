@@ -30,9 +30,9 @@ interface Message {
 function HumanMessage({ message }: { message: Message }) {
   const images: AttachmentImage[] = message.attachments?.images ?? [];
   // The optimistic pending bubble only carries the author id (no display
-  // name yet) — label it "Bạn" (You) rather than falling through to the
+  // name yet) — label it "You" rather than falling through to the
   // "unknown author" copy until the real message reconciles it.
-  const name = message.pending ? "Bạn" : (message.author?.name ?? "Ẩn danh");
+  const name = message.pending ? "You" : (message.author?.name ?? "Anonymous");
   return (
     <div className="flex flex-col items-end">
       <span className="mb-1 px-1 text-xs text-[var(--text-secondary)]">{name}</span>
@@ -42,7 +42,7 @@ function HumanMessage({ message }: { message: Message }) {
         } bg-[var(--accent-primary)] ${message.pending ? "opacity-60" : ""}`}
       >
         {message.error && (
-          <p className="mb-1 text-xs font-medium text-white/90">Gửi thất bại.</p>
+          <p className="mb-1 text-xs font-medium text-white/90">Failed to send.</p>
         )}
         {message.body && (
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
@@ -64,7 +64,7 @@ function HumanMessage({ message }: { message: Message }) {
                   key={i}
                   className="flex h-24 items-center justify-center rounded-md border border-white/20 bg-white/10 text-xs"
                 >
-                  🖼️ {img.name || "ảnh"}
+                  🖼️ {img.name || "image"}
                 </div>
               ),
             )}

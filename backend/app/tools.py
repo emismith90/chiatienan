@@ -73,11 +73,11 @@ _FIND_SCHEMA = {
         "names": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Tên hoặc biệt danh cần tra (vd ['An', 'Bình']).",
+            "description": "Names or nicknames to look up (e.g. ['An', 'Bình']).",
         },
         "all_active": {
             "type": "boolean",
-            "description": "True để lấy toàn bộ thành viên đang hoạt động ('cả nhóm').",
+            "description": "True to fetch all active members ('cả nhóm').",
         },
     },
 }
@@ -85,19 +85,19 @@ _FIND_SCHEMA = {
 _PROPOSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "payer": {"type": "integer", "description": "member id người trả; bỏ trống = người đang nhắn."},
+        "payer": {"type": "integer", "description": "member id of the payer; blank = the sender."},
         "participants": {"type": "array", "items": {"type": "integer"},
-                         "description": "member id những người ăn (chia phần)."},
-        "total": {"type": "integer", "description": "Tổng hoá đơn, VND nguyên (840k → 840000)."},
+                         "description": "member ids of those who ate (split the bill)."},
+        "total": {"type": "integer", "description": "Bill total, integer VND (840k → 840000)."},
         "guests": {"type": "array", "items": {"type": "string"},
-                   "description": "Tên khách vãng lai (không phải thành viên, trả tiền mặt)."},
+                   "description": "Guest names (non-members who pay cash)."},
         "adjustments": {"type": "array", "items": {
             "type": "object",
             "properties": {"member": {"type": "integer"}, "amount": {"type": "integer"}},
             "required": ["member", "amount"]}},
-        "dish": {"type": "string", "description": "Món ăn (nếu người dùng có nói)."},
-        "initiator": {"type": "string", "description": "Ai rủ ăn (nếu có)."},
-        "note": {"type": "string", "description": "Ghi chú tự do (vd 'An đổi ý')."},
+        "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
+        "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
+        "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
     },
     "required": ["participants", "total"],
 }
@@ -115,16 +115,16 @@ _PERIOD_SCHEMA = {
             "type": "string",
             "enum": ["since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"],
         },
-        "from": {"type": "string", "description": "Ngày ISO cho keyword=explicit."},
-        "to": {"type": "string", "description": "Ngày ISO cho keyword=explicit."},
+        "from": {"type": "string", "description": "ISO date for keyword=explicit."},
+        "to": {"type": "string", "description": "ISO date for keyword=explicit."},
     },
 }
 
 _BALANCES_SCHEMA = {
     "type": "object",
     "properties": {
-        "from": {"type": "string", "description": "Ngày ISO (bỏ trống = từ đầu sổ)."},
-        "to": {"type": "string", "description": "Ngày ISO."},
+        "from": {"type": "string", "description": "ISO date (blank = from the start of the ledger)."},
+        "to": {"type": "string", "description": "ISO date."},
     },
     "required": ["to"],
 }
@@ -132,8 +132,8 @@ _BALANCES_SCHEMA = {
 _ADD_MEMBER_SCHEMA = {
     "type": "object",
     "properties": {
-        "display_name": {"type": "string", "description": "Tên hiển thị."},
-        "nickname": {"type": "string", "description": "Biệt danh dùng để đăng nhập, duy nhất trong phòng."},
+        "display_name": {"type": "string", "description": "Display name."},
+        "nickname": {"type": "string", "description": "Nickname used to sign in, unique within the room."},
         "bank_code": {"type": "string"},
         "account_number": {"type": "string"},
         "account_holder": {"type": "string"},
@@ -150,7 +150,7 @@ _SETTLE_SCHEMA = {
         },
         "from": {"type": "string"},
         "to": {"type": "string"},
-        "commit": {"type": "boolean", "description": "True để CHỐT kỳ (chỉ khi người dùng nói 'chốt')."},
+        "commit": {"type": "boolean", "description": "True to CLOSE the period (only when the user says 'chốt')."},
     },
 }
 
@@ -177,22 +177,22 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         try:
             participants = [int(p) for p in (args.get("participants") or [])]
         except (TypeError, ValueError):
-            return _err("Danh sách người tham gia không hợp lệ.")
+            return _err("Invalid participant list.")
         total = args.get("total")
         if not isinstance(total, int):
-            return _err("Thiếu tổng tiền (total) dạng số nguyên VND.")
+            return _err("Missing total (integer VND).")
         if not participants:
-            return _err("Chưa có người tham gia (participants).")
+            return _err("No participants provided.")
         guests = [str(g) for g in (args.get("guests") or [])]
         adjustments = {}
         for adj in args.get("adjustments") or []:
             try:
                 adjustments[int(adj["member"])] = int(adj["amount"])
             except (KeyError, TypeError, ValueError):
-                return _err("Điều chỉnh (adjustments) phải có {member, amount} là số.")
+                return _err("Each adjustment must have numeric {member, amount}.")
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
-            return _err("Không xác định được người trả tiền (payer).")
+            return _err("Could not determine the payer.")
         try:
             preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
         except MoneyError as exc:
@@ -215,7 +215,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         args = args or {}
         meal_id = args.get("meal_id")
         if not isinstance(meal_id, int):
-            return _err("Thiếu meal_id.")
+            return _err("Missing meal_id.")
         with db.session() as s:
             try:
                 return {
@@ -252,9 +252,9 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             from_date = _parse_iso(args.get("from"))
             to_date = _parse_iso(args.get("to"))
         except ValueError:
-            return _err("Ngày không hợp lệ, cần dạng YYYY-MM-DD.")
+            return _err("Invalid date; expected YYYY-MM-DD.")
         if to_date is None:
-            return _err("Thiếu ngày kết thúc (to).")
+            return _err("Missing end date (to).")
         with db.session() as s:
             balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
             names = _names_for(s, ctx.room_id, balances.keys())
@@ -275,7 +275,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         with db.session() as s:
             room = rooms.room_by_id(s, ctx.room_id)
             if room is None:
-                return _err("Không tìm thấy phòng.")
+                return _err("Room not found.")
             try:
                 m = accounts.add_unclaimed(
                     s,
@@ -365,37 +365,37 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     return {
         "find_members": CustomTool(
             execute=find_members,
-            description="Tra cứu member id từ tên/biệt danh, hoặc toàn nhóm (all_active).",
+            description="Look up member ids by name/nickname, or the whole group (all_active).",
             input_schema=_FIND_SCHEMA,
         ),
         "propose_meal": CustomTool(
             execute=propose_meal,
-            description="Đề xuất một bữa ăn (KHÔNG ghi sổ) để người dùng xác nhận. CÔNG CỤ CUỐI khi ghi bữa ăn.",
+            description="Propose a meal (does NOT record it) for the user to confirm. FINAL TOOL when logging a meal.",
             input_schema=_PROPOSE_SCHEMA,
         ),
         "void_meal": CustomTool(
             execute=void_meal,
-            description="Xoá (void) một bữa ăn theo meal_id để sửa sai.",
+            description="Void a meal by meal_id to correct a mistake.",
             input_schema=_VOID_SCHEMA,
         ),
         "resolve_period": CustomTool(
             execute=resolve_period_tool,
-            description="Đổi keyword thời gian (since_last/this_week/...) thành khoảng ngày cụ thể (ICT).",
+            description="Turn a time keyword (since_last/this_week/...) into a concrete date range (ICT).",
             input_schema=_PERIOD_SCHEMA,
         ),
         "get_period_balances": CustomTool(
             execute=get_period_balances,
-            description="Số dư paid/consumed/balance mỗi người trong khoảng (chỉ để hiển thị).",
+            description="Per-person paid/consumed/balance over a range (display only).",
             input_schema=_BALANCES_SCHEMA,
         ),
         "settle_period": CustomTool(
             execute=settle_period,
-            description="Tính ai trả ai + tạo mã QR VietQR cho cả kỳ. commit:true để CHỐT.",
+            description="Compute who pays whom + build VietQR codes for the period. commit:true to CLOSE it.",
             input_schema=_SETTLE_SCHEMA,
         ),
         "add_member": CustomTool(
             execute=add_member,
-            description="Thêm thành viên mới vào phòng (chưa đặt PIN); họ sẽ tự đặt PIN khi vào.",
+            description="Add a new member to the room (no PIN yet); they set their PIN on first sign-in.",
             input_schema=_ADD_MEMBER_SCHEMA,
         ),
     }

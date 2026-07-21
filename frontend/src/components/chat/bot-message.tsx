@@ -30,12 +30,12 @@ function SettlementCard({ attachments }: { attachments: any }) {
     <div className="mt-3 space-y-3">
       {(period.from || period.to) && (
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-          {period.from ? `Kỳ ${period.from} → ${period.to}` : `Kỳ đến ${period.to}`}
+          {period.from ? `Period ${period.from} → ${period.to}` : `Period up to ${period.to}`}
         </p>
       )}
       {transfers.length === 0 && (
         <p className="text-sm text-[var(--text-secondary)]">
-          {attachments.message || "Không có gì để chốt."}
+          {attachments.message || "Nothing to settle."}
         </p>
       )}
       {transfers.map((t, i) => (
@@ -54,7 +54,7 @@ function SettlementCard({ attachments }: { attachments: any }) {
           {t.qr_url && (
             <img
               src={t.qr_url}
-              alt={`QR chuyển ${fmt(t.amount)} đ cho ${t.to_name}`}
+              alt={`QR to transfer ${fmt(t.amount)} đ to ${t.to_name}`}
               width={160}
               height={160}
               className="h-40 w-40 shrink-0 self-center rounded-lg border border-[var(--border)] bg-white object-contain p-1"
@@ -80,7 +80,7 @@ function MealCard({ attachments }: { attachments: any }) {
   return (
     <div className="mt-3 space-y-2">
       <div className="flex flex-wrap items-baseline gap-x-2 text-sm text-[var(--text-primary)]">
-        <span className="text-[var(--text-secondary)]">Người trả:</span>
+        <span className="text-[var(--text-secondary)]">Payer:</span>
         <span className="font-medium">{payer.name ?? "?"}</span>
         <span className="ml-auto font-semibold text-[var(--accent-text)]">
           {fmt(bill)} đ
@@ -88,11 +88,11 @@ function MealCard({ attachments }: { attachments: any }) {
       </div>
       {guests.length > 0 && (
         <p className="text-xs text-[var(--text-secondary)]">
-          gồm {guests.length} khách trả tiền mặt: {guests.join(", ")}
+          incl. {guests.length} guest(s) paying cash: {guests.join(", ")}
         </p>
       )}
       {attachments.dish && (
-        <p className="text-xs text-[var(--text-secondary)]">Món: {attachments.dish}</p>
+        <p className="text-xs text-[var(--text-secondary)]">Dish: {attachments.dish}</p>
       )}
       {shares.length > 0 && (
         <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">

@@ -31,12 +31,14 @@
   --accent-text:#DE6B4C;
   --border:rgba(255,255,255,0.14); --danger:#F87171;
 }
+/* Only font tokens are registered as Tailwind theme tokens. The color tokens
+   that used to live here were removed: nothing referenced them as utility
+   classes (all color styling uses arbitrary `[var(--…)]` values), and mapping
+   `--color-base` made Tailwind generate `.text-base { color: var(--color-base) }`
+   — so every `text-base` element (the header <h1>, the composer) painted its
+   text in the background color and vanished. Without the token, `text-base`
+   reverts to its built-in font-size-only meaning. */
 @theme inline {
-  --color-base:var(--bg-base); --color-surface:var(--bg-surface);
-  --color-primary:var(--text-primary); --color-muted:var(--text-secondary);
-  --color-accent:var(--accent-primary); --color-accent-hover:var(--accent-hover);
-  --color-accent-text:var(--accent-text);
-  --color-border:var(--border);
   --font-sans:var(--font-inter); --font-mono:var(--font-jetbrains);
 }
 html,body{background:var(--bg-base);color:var(--text-primary);

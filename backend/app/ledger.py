@@ -47,7 +47,7 @@ def record_meal(
     guests = list(guests or [])
     payer = session.get(Member, payer_member_id)
     if payer is None or payer.room_id != room_id:
-        raise LedgerError(f"Người trả tiền (id={payer_member_id}) không tồn tại.")
+        raise LedgerError(f"Payer (id={payer_member_id}) does not exist.")
 
     known = {
         m.id
@@ -57,7 +57,7 @@ def record_meal(
     }
     missing = [p for p in participants if p not in known]
     if missing:
-        raise LedgerError(f"Người tham gia không tồn tại: {missing}.")
+        raise LedgerError(f"Participants do not exist: {missing}.")
 
     split = split_with_guests(
         total_amount, participants, len(guests), adjustments, payer_id=payer_member_id
@@ -98,7 +98,7 @@ def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = 
     """Soft-delete a meal for a correction (design 6.1: void, then re-record)."""
     meal = session.get(Meal, meal_id)
     if meal is None or meal.room_id != room_id:
-        raise LedgerError(f"Không tìm thấy bữa ăn #{meal_id}.")
+        raise LedgerError(f"Meal #{meal_id} not found.")
     if meal.voided:
         return {"meal_id": meal_id, "already_voided": True}
     meal.voided = True

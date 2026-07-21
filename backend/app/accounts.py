@@ -38,9 +38,9 @@ def create_account(session: Session, room: Room, *, display_name, nickname, pin,
                     bank_code, account_number, account_holder) -> tuple[Member, str]:
     nickname = (nickname or "").strip()
     if not nickname or not (pin or "").strip():
-        raise AccountError("Cần biệt danh và PIN.")
+        raise AccountError("Nickname and PIN are required.")
     if _member_by_nickname(session, room.id, nickname):
-        raise AccountError(f"Biệt danh '{nickname}' đã có người dùng trong phòng này.")
+        raise AccountError(f"Nickname '{nickname}' is already taken in this room.")
     m = Member(
         room_id=room.id,
         display_name=(display_name or nickname).strip(),
@@ -97,9 +97,9 @@ def add_unclaimed(session: Session, room: Room, *, display_name, nickname,
     """
     nickname = (nickname or "").strip()
     if not nickname:
-        raise AccountError("Cần biệt danh.")
+        raise AccountError("Nickname is required.")
     if _member_by_nickname(session, room.id, nickname):
-        raise AccountError(f"Biệt danh '{nickname}' đã có người dùng trong phòng này.")
+        raise AccountError(f"Nickname '{nickname}' is already taken in this room.")
     m = Member(
         room_id=room.id,
         display_name=(display_name or nickname).strip(),
