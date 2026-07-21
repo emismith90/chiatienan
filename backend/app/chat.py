@@ -35,6 +35,19 @@ def mentions_bot(text: str) -> bool:
     return re.search(rf"(?<![\w.])@(bot|{handle})\b", text or "", re.IGNORECASE) is not None
 
 
+_CLEAR_RE = re.compile(
+    rf"^\s*(?:@(?:bot|{re.escape(settings.bot_handle)})\s+)?/clear\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_clear_command(text: str) -> bool:
+    """True iff the whole message is the ``/clear`` command (optionally preceded
+    by an ``@bot``/``@<handle>`` mention). Exact — ``/cleared``/``/clear now``
+    do not match."""
+    return _CLEAR_RE.match(text or "") is not None
+
+
 def message_to_dict(m: RoomMessage, author: Member | None) -> dict:
     return {
         "id": m.id,
@@ -66,6 +79,40 @@ def list_messages(session: Session, room_id: int, since_id: int = 0, limit: int 
     ).all()
     authors = {m.id: m for m in session.scalars(select(Member).where(Member.room_id == room_id))}
     return [message_to_dict(r, authors.get(r.author_member_id)) for r in rows]
+
+
+def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) -> str:
+    """Render chat rows as ``«Name»: body`` / ``chiatienan: body`` lines,
+    oldest→newest, each body clamped. Empty rows → ``""``."""
+    if not rows:
+        return ""
+    authors = {a.id: a for a in session.scalars(select(Member).where(Member.room_id == room_id))}
+    lines = []
+    for r in rows:
+        body = (r.body or "").strip()
+        if len(body) > clamp:
+            body = body[:clamp] + "…"
+        if r.author_member_id is None:
+            lines.append(f"chiatienan: {body}")
+        else:
+            author = authors.get(r.author_member_id)
+            lines.append(f"«{author.display_name if author else '?'}»: {body}")
+    return "\n".join(lines)
+
+
+def build_history(session: Session, room_id: int, *, watermark: int = 0,
+                  before_id: int | None = None, limit: int = 200) -> str:
+    """Recent conversation fed to the agent: ``watermark < id [< before_id]``,
+    text/bot kinds only, most-recent ``limit`` rows rendered oldest→newest."""
+    q = select(RoomMessage).where(
+        RoomMessage.room_id == room_id,
+        RoomMessage.id > watermark,
+        RoomMessage.kind.in_(("text", "bot")),
+    )
+    if before_id is not None:
+        q = q.where(RoomMessage.id < before_id)
+    rows = session.scalars(q.order_by(RoomMessage.id.desc()).limit(limit)).all()
+    return _render_messages(session, room_id, list(reversed(rows)))
 
 
 def render_bot_attachments(result) -> dict | None:

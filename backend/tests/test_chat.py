@@ -1,8 +1,11 @@
+import pytest
+
 import app.agent as agent_mod
 from app import chat
 from app.agent import ToolInvocation, TurnResult
 from app.db import Database
 from app.models import Room, Member
+from tests.test_ledger import _seed_room
 
 
 def test_mentions_bot():
@@ -263,3 +266,47 @@ async def test_run_bot_turn_publishes_supersede_extras_via_emit(monkeypatch, db)
     assert events[0]["attachments"]["status"] == "committed"
     assert events[1]["attachments"]["type"] == "meal"
     assert second.attachments["status"] == "pending"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("/clear", True),
+    ("  /clear  ", True),
+    ("/CLEAR", True),
+    ("@bot /clear", True),
+    ("@bot   /clear", True),
+    ("/cleared", False),
+    ("/clear now", False),
+    ("clear", False),
+    ("", False),
+    ("please /clear", False),
+])
+def test_is_clear_command(text, expected):
+    assert chat.is_clear_command(text) is expected
+
+
+def test_build_history_renders_window(db):
+    room_id, m = _seed_room(db, 2)  # M1, M2
+    with db.session() as s:
+        a = chat.post_message(s, room_id, m[0], "840k cả nhóm")
+        b = chat.post_message(s, room_id, None, "Đã ghi #1", kind="bot")
+        chat.post_message(s, room_id, None, "reset", kind="context_reset")  # skipped
+        cur = chat.post_message(s, room_id, m[1], "@bot ai trả")            # excluded (before_id)
+        out = chat.build_history(s, room_id, watermark=0, before_id=cur.id, limit=200)
+    assert out == "«M1»: 840k cả nhóm\nchiatienan: Đã ghi #1"
+
+
+def test_build_history_respects_watermark_and_limit(db):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        first = chat.post_message(s, room_id, m[0], "một")
+        chat.post_message(s, room_id, m[0], "hai")
+        chat.post_message(s, room_id, m[0], "ba")
+        # watermark drops "một"; limit keeps the most recent 1 -> "ba"
+        out = chat.build_history(s, room_id, watermark=first.id, before_id=None, limit=1)
+    assert out == "«M1»: ba"
+
+
+def test_build_history_empty_returns_blank(db):
+    room_id, _ = _seed_room(db, 1)
+    with db.session() as s:
+        assert chat.build_history(s, room_id, watermark=0, before_id=None, limit=200) == ""
