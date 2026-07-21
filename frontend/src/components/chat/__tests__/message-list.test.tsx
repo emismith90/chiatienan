@@ -9,8 +9,19 @@ describe("MessageList context_reset divider", () => {
       { id: 2, kind: "context_reset", body: "🧹 Đã xoá ngữ cảnh" },
     ];
     render(<MessageList messages={messages as any} members={[]} roomId={1} />);
-    expect(screen.getByText("🧹 Đã xoá ngữ cảnh")).toBeInTheDocument();
+
+    // the divider body text is present
+    const divider = screen.getByText("🧹 Đã xoá ngữ cảnh");
+    expect(divider).toBeInTheDocument();
+
+    // the divider is rendered in a centered container (not as a right-aligned human bubble)
+    expect(divider.closest(".justify-center")).toBeInTheDocument();
+
     // the human message still renders
-    expect(screen.getByText("hello")).toBeInTheDocument();
+    const humanMessage = screen.getByText("hello");
+    expect(humanMessage).toBeInTheDocument();
+
+    // the human message is NOT in the centered divider container (it's right-aligned)
+    expect(humanMessage.closest(".justify-center")).not.toBeInTheDocument();
   });
 });
