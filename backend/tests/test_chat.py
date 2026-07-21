@@ -1,8 +1,12 @@
+from datetime import timedelta
+
 import pytest
 
 import app.agent as agent_mod
 from app import chat
+from app import memory as mem
 from app.agent import ToolInvocation, TurnResult
+from app.clock import now_ict
 from app.db import Database
 from app.models import Room, Member
 from tests.test_ledger import _seed_room
@@ -75,7 +79,7 @@ async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
         m = Member(room_id=r.id, display_name="An", nickname="an", pin="1"); s.add(m); s.flush()
         room_id, member_id = r.id, m.id
 
-    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(final_text="", error="boom")
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
@@ -106,7 +110,7 @@ async def test_run_bot_turn_settlement_body_uses_tool_amounts(monkeypatch, db):
         "committed": False,
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(
             final_text="Đã chốt xong nhé, Bình nợ An 999đ thôi",  # deliberately wrong
             tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
@@ -136,7 +140,7 @@ async def test_run_bot_turn_settlement_body_no_transfers_uses_tool_message(monke
         "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(
             final_text="mọi người xong hết rồi",
             tools=[ToolInvocation(name="settle_period", args={}, result=settle_result)],
@@ -174,7 +178,7 @@ async def test_run_bot_turn_meal_proposal_creates_pending_draft(monkeypatch, db)
         "per_head_preview": 150000,
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(
             final_text="ghi rồi nhé, mỗi người 1đ thôi",  # must be ignored entirely
             tools=[ToolInvocation(name="propose_meal", args={}, result=proposal_result)],
@@ -209,7 +213,7 @@ async def test_run_bot_turn_meal_proposal_carries_turn_id(monkeypatch, db):
         "initiator": None, "note": None, "per_head_preview": 50000,
     }
 
-    async def _fake_run_turn(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(
             turn_id="turn-abc123",
             tools=[ToolInvocation(name="propose_meal", args={}, result=proposal_result)],
@@ -242,10 +246,10 @@ async def test_run_bot_turn_publishes_supersede_extras_via_emit(monkeypatch, db)
             "initiator": None, "note": None, "per_head_preview": bill_total // 2,
         }
 
-    async def _fake_run_turn_1(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn_1(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(tools=[ToolInvocation(name="propose_meal", args={}, result=_proposal(100000))])
 
-    async def _fake_run_turn_2(user_text, ctx, images=None, emit=None):
+    async def _fake_run_turn_2(user_text, ctx, images=None, emit=None, memory=None, history=None):
         return TurnResult(tools=[ToolInvocation(name="propose_meal", args={}, result=_proposal(200000))])
 
     events = []
@@ -310,3 +314,94 @@ def test_build_history_empty_returns_blank(db):
     room_id, _ = _seed_room(db, 1)
     with db.session() as s:
         assert chat.build_history(s, room_id, watermark=0, before_id=None, limit=200) == ""
+
+
+# --- clear_context / _maybe_rollover ----------------------------------------- #
+
+
+@pytest.fixture
+def ws(tmp_path, monkeypatch):
+    monkeypatch.setattr(mem, "_base_dir", lambda: tmp_path)
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_clear_context_summarizes_and_resets(db, ws, monkeypatch):
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        chat.post_message(s, room_id, m[0], "840k cả nhóm")
+        chat.post_message(s, room_id, None, "Đã ghi #1", kind="bot")
+        clear_line = chat.post_message(s, room_id, m[1], "/clear")
+        clear_id = clear_line.id
+
+    seen = {}
+
+    async def fake_summarize(rendered, *, kind="clear"):
+        seen["rendered"] = rendered
+        seen["kind"] = kind
+        return "- An trả 840k cho cả nhóm"
+
+    monkeypatch.setattr("app.chat.summarize_messages", fake_summarize, raising=False)
+
+    div = await chat.clear_context(db, room_id, up_to_id=clear_id)
+
+    assert div.kind == "context_reset"
+    assert seen["kind"] == "clear"
+    # the /clear line itself is excluded from the summarized text
+    assert "840k cả nhóm" in seen["rendered"] and "/clear" not in seen["rendered"]
+    assert "An trả 840k" in mem.load_memory(room_id)
+    assert mem.read_watermark(room_id) == clear_id
+
+
+@pytest.mark.asyncio
+async def test_clear_context_posts_divider_even_when_summary_blank(db, ws, monkeypatch):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        chat.post_message(s, room_id, m[0], "một")
+        clear_line = chat.post_message(s, room_id, m[0], "/clear")
+        clear_id = clear_line.id
+
+    async def blank_summarize(rendered, *, kind="clear"):
+        return ""
+
+    monkeypatch.setattr("app.chat.summarize_messages", blank_summarize, raising=False)
+
+    div = await chat.clear_context(db, room_id, up_to_id=clear_id)
+    assert div.kind == "context_reset"
+    assert mem.load_memory(room_id) == ""          # nothing appended
+    assert mem.read_watermark(room_id) == clear_id  # but window still reset
+
+
+@pytest.mark.asyncio
+async def test_maybe_rollover_folds_aged_messages(db, ws, monkeypatch):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        old1 = chat.post_message(s, room_id, m[0], "cũ 1")
+        old2 = chat.post_message(s, room_id, m[0], "cũ 2")
+        recent = chat.post_message(s, room_id, m[0], "mới")
+        old1.created_at = now_ict() - timedelta(weeks=20)
+        old2.created_at = now_ict() - timedelta(weeks=20)
+        s.flush()
+        aged_id = old2.id
+        recent_id = recent.id
+
+    calls = {}
+
+    async def fake_summarize(rendered, *, kind="clear"):
+        calls["kind"] = kind
+        calls["rendered"] = rendered
+        return "- tóm tắt cũ"
+
+    monkeypatch.setattr("app.chat.summarize_messages", fake_summarize, raising=False)
+
+    await chat._maybe_rollover(db, room_id)
+
+    assert calls["kind"] == "rollover"
+    assert "cũ 1" in calls["rendered"] and "mới" not in calls["rendered"]
+    assert mem.read_watermark(room_id) == aged_id
+    assert "tóm tắt cũ" in mem.load_memory(room_id)
+    # the recent message survives in the window
+    with db.session() as s:
+        hist = chat.build_history(s, room_id, watermark=mem.read_watermark(room_id),
+                                  before_id=None, limit=200)
+    assert "mới" in hist and "cũ 1" not in hist
