@@ -229,6 +229,54 @@ def test_add_member_tool_creates_unclaimed_member_and_rejects_duplicate_nickname
     assert dup["ok"] is False and "error" in dup
 
 
+def test_update_member_tool_edits_renames_and_handles_errors(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    tools = build_tools(ctx)
+
+    ok = tools["update_member"].execute({"target": "m2", "display_name": "Bob", "nickname": "bob"})
+    assert ok["ok"] is True and ok["nickname"] == "bob" and ok["display_name"] == "Bob"
+    with db.session() as s:
+        assert s.get(Member, b).display_name == "Bob"
+
+    # rename onto an existing nickname is rejected
+    clash = tools["update_member"].execute({"target": "bob", "nickname": "m1"})
+    assert clash["ok"] is False and "error" in clash
+    # unknown target
+    missing = tools["update_member"].execute({"target": "nobody"})
+    assert missing["ok"] is False and "error" in missing
+
+
+def test_delete_member_tool_soft_deletes_out_of_roster_but_reversible(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    tools = build_tools(ctx)
+
+    out = tools["delete_member"].execute({"target": b})
+    assert out["ok"] is True and out["member_id"] == b
+    with db.session() as s:
+        assert s.get(Member, b).active is False
+    # removed from selection/roster
+    assert {m["id"] for m in tools["find_members"].execute({"all_active": True})["matched"]} == {a}
+    # restore via update_member(active=True)
+    tools["update_member"].execute({"target": b, "active": True})
+    assert {m["id"] for m in tools["find_members"].execute({"all_active": True})["matched"]} == {a, b}
+
+
+def test_settle_still_names_a_deleted_member(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    _seed_meal(db, room_id, a, [a, b], 100_000)  # b owes a 50k
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    tools = build_tools(ctx)
+
+    tools["delete_member"].execute({"target": b})  # b removed after incurring a debt
+    out = tools["settle_period"].execute({"keyword": "since_last"})
+    assert out["ok"] is True
+    names = {row["from_name"] for row in out["transfers"]} | {row["to_name"] for row in out["transfers"]}
+    assert "?" not in names            # deleted member's name still resolves
+    assert "M2" in names               # b's display name is present
+
+
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
     _seed_meal(d, room_id, an, [an, bi], 100000)

@@ -13,14 +13,18 @@ from sqlalchemy.orm import Session
 from app.models import Member
 
 
-def list_members(session: Session, room_id: int) -> list[Member]:
-    """Active members of ``room_id``, ordered by display name."""
-    stmt = (
-        select(Member)
-        .where(Member.room_id == room_id, Member.active.is_(True))
-        .order_by(Member.display_name)
-    )
-    return list(session.scalars(stmt))
+def list_members(session: Session, room_id: int, *, include_inactive: bool = False) -> list[Member]:
+    """Members of ``room_id``, ordered by display name.
+
+    Excludes soft-deleted (``active=False``) members by default so they drop out
+    of the roster, mentions, and new-meal selection. Pass
+    ``include_inactive=True`` for name-resolution over historical data (past
+    balances/settlements can still reference a since-removed member).
+    """
+    stmt = select(Member).where(Member.room_id == room_id)
+    if not include_inactive:
+        stmt = stmt.where(Member.active.is_(True))
+    return list(session.scalars(stmt.order_by(Member.display_name)))
 
 
 def _norm(s: str) -> str:

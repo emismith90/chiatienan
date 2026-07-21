@@ -60,7 +60,12 @@ def _parse_iso(value) -> date | None:
 
 
 def _names_for(session, room_id, ids) -> dict[int, str]:
-    return {m.id: m.display_name for m in roster.list_members(session, room_id) if m.id in set(ids)}
+    # include_inactive: a balance/settlement can reference a since-removed member.
+    return {
+        m.id: m.display_name
+        for m in roster.list_members(session, room_id, include_inactive=True)
+        if m.id in set(ids)
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -139,6 +144,29 @@ _ADD_MEMBER_SCHEMA = {
         "account_holder": {"type": "string"},
     },
     "required": ["display_name", "nickname"],
+}
+
+_UPDATE_MEMBER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "target": {"type": ["string", "integer"], "description": "Member to update: nickname or numeric id."},
+        "display_name": {"type": "string"},
+        "nickname": {"type": "string", "description": "New nickname; must be unique in the room."},
+        "bank_code": {"type": "string"},
+        "account_number": {"type": "string"},
+        "account_holder": {"type": "string"},
+        "aliases": {"type": "array", "items": {"type": "string"}},
+        "active": {"type": "boolean", "description": "Set true to restore a previously removed member."},
+    },
+    "required": ["target"],
+}
+
+_DELETE_MEMBER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "target": {"type": ["string", "integer"], "description": "Member to remove: nickname or numeric id."},
+    },
+    "required": ["target"],
 }
 
 _SETTLE_SCHEMA = {
@@ -290,6 +318,48 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 return _err(str(exc))
             return {"ok": True, "member_id": m.id, "nickname": m.nickname}
 
+    def update_member(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        target = args.get("target")
+        if target in (None, ""):
+            return _err("Missing target (nickname or id).")
+        with db.session() as s:
+            m = accounts.find_member(s, ctx.room_id, target)
+            if m is None:
+                return _err(f"No member found for '{target}'.")
+            try:
+                accounts.update_member(
+                    s, m,
+                    display_name=args.get("display_name"),
+                    nickname=args.get("nickname"),
+                    bank_code=args.get("bank_code"),
+                    account_number=args.get("account_number"),
+                    account_holder=args.get("account_holder"),
+                    aliases=args.get("aliases"),
+                    active=args.get("active"),
+                )
+            except accounts.AccountError as exc:
+                return _err(str(exc))
+            return {
+                "ok": True, "member_id": m.id, "nickname": m.nickname,
+                "display_name": m.display_name, "active": m.active,
+            }
+
+    def delete_member(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        target = args.get("target")
+        if target in (None, ""):
+            return _err("Missing target (nickname or id).")
+        with db.session() as s:
+            m = accounts.find_member(s, ctx.room_id, target)
+            if m is None:
+                return _err(f"No member found for '{target}'.")
+            accounts.soft_delete_member(s, m)
+            return {
+                "ok": True, "member_id": m.id, "nickname": m.nickname,
+                "display_name": m.display_name,
+            }
+
     def settle_period(args, _tool_ctx=None) -> dict:
         """Composite, server-side end-to-end: balances → net → QR → payload."""
         args = args or {}
@@ -319,7 +389,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 }
 
             transfers = net_transfers({mid: v["balance"] for mid, v in balances.items()})
-            members = {m.id: m for m in roster.list_members(s, ctx.room_id)}
+            # include_inactive: a transfer may involve a since-removed member.
+            members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
             note = f"Chia tien an {to_date.isoformat()}"
 
             rows: list[dict] = []
@@ -397,5 +468,15 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=add_member,
             description="Add a new member to the room (no PIN yet); they set their PIN on first sign-in.",
             input_schema=_ADD_MEMBER_SCHEMA,
+        ),
+        "update_member": CustomTool(
+            execute=update_member,
+            description="Update a member's details (display_name, nickname, bank, aliases) or restore a removed one (active:true).",
+            input_schema=_UPDATE_MEMBER_SCHEMA,
+        ),
+        "delete_member": CustomTool(
+            execute=delete_member,
+            description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
+            input_schema=_DELETE_MEMBER_SCHEMA,
         ),
     }
