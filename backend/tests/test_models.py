@@ -25,3 +25,20 @@ def test_room_member_message_roundtrip():
         msgs = s.query(RoomMessage).order_by(RoomMessage.id).all()
         assert [x.kind for x in msgs] == ["text", "bot"]
         assert msgs[1].author_member_id is None
+
+
+def test_payment_model_persists():
+    from datetime import date
+    from app.models import Payment
+    d = _db()
+    with d.session() as s:
+        room = Room(name="R", invite_token="tp")
+        s.add(room); s.flush()
+        a = Member(room_id=room.id, display_name="A", nickname="a", pin="1")
+        b = Member(room_id=room.id, display_name="B", nickname="b", pin="2")
+        s.add_all([a, b]); s.flush()
+        p = Payment(room_id=room.id, from_member_id=a.id, to_member_id=b.id,
+                    amount=125_000, occurred_on=date(2026, 7, 21))
+        s.add(p); s.flush()
+        assert p.id > 0
+        assert p.voided is False

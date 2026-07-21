@@ -169,6 +169,16 @@ _DELETE_MEMBER_SCHEMA = {
     "required": ["target"],
 }
 
+_PAYMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "from": {"type": "integer", "description": "member id who paid; blank = the sender."},
+        "to": {"type": "integer", "description": "member id who received the money."},
+        "amount": {"type": "integer", "description": "Amount, integer VND (125k → 125000)."},
+    },
+    "required": ["to", "amount"],
+}
+
 _SETTLE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -360,11 +370,66 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "display_name": m.display_name,
             }
 
+    def record_payment(args, _tool_ctx=None) -> dict:
+        from app import drafts  # lazy: avoid import cycle at module load
+        args = args or {}
+        amount = args.get("amount")
+        if not isinstance(amount, int):
+            return _err("Missing amount (integer VND).")
+        to = args.get("to")
+        frm = args.get("from") or ctx.sender_member_id
+        if not frm:
+            return _err("Could not determine who paid.")
+        if not to:
+            return _err("Missing recipient.")
+        try:
+            frm_id, to_id = int(frm), int(to)
+        except (TypeError, ValueError):
+            return _err("Invalid from/to member id.")
+        with db.session() as s:
+            try:
+                ledger.record_payment(
+                    s, room_id=ctx.room_id, from_member_id=frm_id,
+                    to_member_id=to_id, amount=amount, logged_by=str(ctx.sender_member_id),
+                )
+            except ledger.LedgerError as exc:
+                return _err(str(exc))
+            names = _names_for(s, ctx.room_id, [frm_id, to_id])
+            balances = drafts.current_balances(s, ctx.room_id)
+        return {
+            "ok": True,
+            "type": "payment",
+            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+            "to": {"id": to_id, "name": names.get(to_id, "?")},
+            "amount": amount,
+            "balances": balances,
+        }
+
     def settle_period(args, _tool_ctx=None) -> dict:
         """Composite, server-side end-to-end: balances → net → QR → payload."""
         args = args or {}
         commit = bool(args.get("commit"))
         with db.session() as s:
+            from app import drafts  # lazy: avoid import cycle at module load
+            pending = drafts.list_pending_drafts(s, ctx.room_id)
+            if pending:
+                summaries = []
+                for d in pending:
+                    att = d.attachments or {}
+                    names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
+                    summaries.append({
+                        "draft_id": d.id,
+                        "payer_name": names.get(att.get("payer_member_id"), "?"),
+                        "bill_total": att.get("bill_total", 0),
+                        "participant_count": len(att.get("member_participants") or []),
+                    })
+                return {
+                    "ok": True,
+                    "type": "settle_blocked",
+                    "pending": summaries,
+                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+                }
+
             last = ledger.last_settlement(s, ctx.room_id)
             try:
                 period = resolve_period(
@@ -478,5 +543,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=delete_member,
             description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
             input_schema=_DELETE_MEMBER_SCHEMA,
+        ),
+        "record_payment": CustomTool(
+            execute=record_payment,
+            description="Record a cash payment one member made to another (e.g. 'A đưa B 100k', 'tôi nhận 125k từ C'). Adjusts balances; not a meal.",
+            input_schema=_PAYMENT_SCHEMA,
         ),
     }

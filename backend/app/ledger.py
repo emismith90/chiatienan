@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import now_ict, today_ict
-from app.models import Meal, MealShare, Member, Settlement
+from app.models import Meal, MealShare, Member, Payment, Settlement
 from app.money import split_with_guests
 
 
@@ -94,6 +94,56 @@ def record_meal(
     }
 
 
+def record_payment(
+    session: Session,
+    *,
+    room_id: int,
+    from_member_id: int,
+    to_member_id: int,
+    amount: int,
+    occurred_on: date | None = None,
+    note: str | None = None,
+    source: str = "web",
+    logged_by: str | None = None,
+) -> dict:
+    """Record a cash payment from one member to another (adjusts balances)."""
+    if amount <= 0:
+        raise LedgerError("Payment amount must be greater than 0.")
+    if from_member_id == to_member_id:
+        raise LedgerError("A payment must be between two different members.")
+    found = {
+        m.id
+        for m in session.scalars(
+            select(Member).where(
+                Member.id.in_([from_member_id, to_member_id]), Member.room_id == room_id
+            )
+        )
+    }
+    for mid in (from_member_id, to_member_id):
+        if mid not in found:
+            raise LedgerError(f"Member (id={mid}) does not exist.")
+
+    pay = Payment(
+        room_id=room_id,
+        from_member_id=from_member_id,
+        to_member_id=to_member_id,
+        amount=amount,
+        occurred_on=occurred_on or today_ict(),
+        note=note,
+        source=source,
+        logged_by=logged_by,
+    )
+    session.add(pay)
+    session.flush()
+    return {
+        "payment_id": pay.id,
+        "from_member_id": from_member_id,
+        "to_member_id": to_member_id,
+        "amount": amount,
+        "occurred_on": pay.occurred_on.isoformat(),
+    }
+
+
 def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = None) -> dict:
     """Soft-delete a meal for a correction (design 6.1: void, then re-record)."""
     meal = session.get(Meal, meal_id)
@@ -115,7 +165,10 @@ def period_balances(
 
     Excludes voided meals. ``from_date=None`` means "from the beginning of the
     ledger". Only members with any activity in the window appear. Scoped to
-    ``room_id`` — other rooms' meals never contribute.
+    ``room_id`` — other rooms' meals never contribute. Also folds in ad-hoc
+    payments in the window: the payer's balance gets ``+amount`` and the
+    payee's gets ``-amount`` (voided payments excluded), so a member who only
+    made/received a payment — with no meals of their own — still appears.
     """
     def _in_window(col):
         conds = [Meal.room_id == room_id, Meal.voided.is_(False), col <= to_date]
@@ -145,6 +198,22 @@ def period_balances(
 
     for row in out.values():
         row["balance"] = row["paid"] - row["consumed"]
+
+    # Fold ad-hoc payments: a payment from X to Y increases X's balance (their
+    # debt shrinks) and decreases Y's. Done after the paid-consumed loop so it
+    # is not overwritten. Voided payments are excluded.
+    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
+    if from_date is not None:
+        pay_conds.append(Payment.occurred_on >= from_date)
+    pay_rows = session.execute(
+        select(Payment.from_member_id, Payment.to_member_id, Payment.amount).where(*pay_conds)
+    ).all()
+    for from_id, to_id, amt in pay_rows:
+        out.setdefault(from_id, {"paid": 0, "consumed": 0, "balance": 0})
+        out.setdefault(to_id, {"paid": 0, "consumed": 0, "balance": 0})
+        out[from_id]["balance"] += amt
+        out[to_id]["balance"] -= amt
+
     return out
 
 

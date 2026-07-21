@@ -403,7 +403,7 @@ export function RoomView({ roomId }: { roomId: number }) {
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
           {messages.length === 0 && !typing && (
             <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">
-              No messages yet. Start by messaging @bot.
+              No messages yet. Tap a suggestion below or message @bot.
             </p>
           )}
           <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines} />

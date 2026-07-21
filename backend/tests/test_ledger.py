@@ -184,6 +184,61 @@ def test_record_meal_with_guest_tracks_members_only(db):
         assert bal[c]["balance"] == -100_000
 
 
+def test_record_payment_shifts_balances(db):
+    from datetime import date
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[0],
+                           participants=[m[0], m[1]], total_amount=200,
+                           occurred_on=date(2026, 7, 20))
+        # m0 +100, m1 -100
+        ledger.record_payment(s, room_id=room_id, from_member_id=m[1],
+                              to_member_id=m[0], amount=40, occurred_on=date(2026, 7, 20))
+        bal = ledger.period_balances(s, room_id, None, date(2999, 1, 1))
+        assert bal[m[0]]["balance"] == 60   # 100 - 40 received
+        assert bal[m[1]]["balance"] == -60  # -100 + 40 paid
+        assert bal[m[0]]["balance"] + bal[m[1]]["balance"] == 0
+
+
+def test_record_payment_payment_only_member_appears(db):
+    from datetime import date
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
+                              to_member_id=m[1], amount=50, occurred_on=date(2026, 7, 20))
+        bal = ledger.period_balances(s, room_id, None, date(2999, 1, 1))
+        assert bal[m[0]]["balance"] == 50
+        assert bal[m[1]]["balance"] == -50
+
+
+def test_record_payment_validation(db):
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        with pytest.raises(ledger.LedgerError):
+            ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
+                                  to_member_id=m[0], amount=10)  # from == to
+        with pytest.raises(ledger.LedgerError):
+            ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
+                                  to_member_id=m[1], amount=0)   # amount <= 0
+        with pytest.raises(ledger.LedgerError):
+            ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
+                                  to_member_id=9999, amount=10)  # unknown member
+
+
+def test_voided_payment_excluded_from_balances(db):
+    from datetime import date
+    from app.models import Payment
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        res = ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
+                                    to_member_id=m[1], amount=50, occurred_on=date(2026, 7, 20))
+        s.get(Payment, res["payment_id"]).voided = True
+        s.flush()
+        bal = ledger.period_balances(s, room_id, None, date(2999, 1, 1))
+        assert bal.get(m[0], {"balance": 0})["balance"] == 0
+        assert bal.get(m[1], {"balance": 0})["balance"] == 0
+
+
 def test_record_meal_stores_metadata(db):
     room_id, (a, b) = _seed_room(db, 2)
     with db.session() as s:

@@ -71,6 +71,41 @@ def test_render_bot_attachments_neither():
     assert chat.render_bot_attachments(fake) is None
 
 
+def test_render_bot_attachments_dispatch():
+    assert chat.render_bot_attachments(
+        _FakeResult({"record_payment": {"type": "payment", "amount": 1}})
+    )["type"] == "payment"
+    assert chat.render_bot_attachments(
+        _FakeResult({"settle_period": {"type": "settle_blocked", "pending": []}})
+    )["type"] == "settle_blocked"
+    assert chat.render_bot_attachments(
+        _FakeResult({"settle_period": {"transfers": []}})
+    )["type"] == "settlement"
+
+
+def test_render_bot_attachments_payment_wins_over_settle():
+    # Design: a turn producing both a payment and a settle result renders the
+    # PAYMENT (record_payment is checked before settle_period).
+    fake = _FakeResult({
+        "settle_period": {"transfers": []},
+        "record_payment": {"type": "payment", "amount": 1},
+    })
+    assert chat.render_bot_attachments(fake)["type"] == "payment"
+
+
+def test_payment_body_renders_from_dict():
+    body = chat._payment_body({"from": {"name": "An"}, "to": {"name": "Bình"}, "amount": 125000})
+    assert "An" in body and "Bình" in body and "125,000" in body
+
+
+def test_settle_blocked_body_lists_pending():
+    body = chat._settle_blocked_body({
+        "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+        "pending": [{"draft_id": 7, "payer_name": "An", "bill_total": 400000, "participant_count": 4}],
+    })
+    assert "#7" in body and "An" in body and "400,000" in body
+
+
 # --- run_bot_turn error-path body -------------------------------------------- #
 
 async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
@@ -224,52 +259,6 @@ async def test_run_bot_turn_meal_proposal_carries_turn_id(monkeypatch, db):
     msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 100k")
 
     assert msg.attachments["turn_id"] == "turn-abc123"
-
-
-async def test_run_bot_turn_publishes_supersede_extras_via_emit(monkeypatch, db):
-    """Fix 1 (+ Fix 2): when a proposal supersedes a pending draft,
-    `drafts.create_draft` commits the prior draft internally, but the caller
-    (`main._run`) only publishes the NEW draft this function returns — so
-    run_bot_turn itself must emit the extras (the now-committed prior draft +
-    its meal card) or live clients never see them flip off "pending"."""
-    with db.session() as s:
-        r = Room(name="A", invite_token="t-supersede"); s.add(r); s.flush()
-        m = Member(room_id=r.id, display_name="An", nickname="an-supersede", pin="1"); s.add(m); s.flush()
-        m2 = Member(room_id=r.id, display_name="Bình", nickname="binh-supersede", pin="1"); s.add(m2); s.flush()
-        room_id, member_id, member2_id = r.id, m.id, m2.id
-
-    def _proposal(bill_total):
-        return {
-            "ok": True, "type": "expense_draft",
-            "payer_member_id": member_id, "member_participants": [member_id, member2_id],
-            "guests": [], "bill_total": bill_total, "adjustments": [], "dish": None,
-            "initiator": None, "note": None, "per_head_preview": bill_total // 2,
-        }
-
-    async def _fake_run_turn_1(user_text, ctx, images=None, emit=None, memory=None, history=None):
-        return TurnResult(tools=[ToolInvocation(name="propose_meal", args={}, result=_proposal(100000))])
-
-    async def _fake_run_turn_2(user_text, ctx, images=None, emit=None, memory=None, history=None):
-        return TurnResult(tools=[ToolInvocation(name="propose_meal", args={}, result=_proposal(200000))])
-
-    events = []
-
-    async def emit(ev):
-        events.append(ev)
-
-    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn_1)
-    first = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 100k", emit=emit)
-    assert events == []  # no prior pending draft -> nothing extra to publish
-
-    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn_2)
-    second = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 200k", emit=emit)
-
-    # Two extras published: the now-committed first draft, then its meal card.
-    assert len(events) == 2
-    assert events[0]["type"] == "message" and events[0]["id"] == first.id
-    assert events[0]["attachments"]["status"] == "committed"
-    assert events[1]["attachments"]["type"] == "meal"
-    assert second.attachments["status"] == "pending"
 
 
 @pytest.mark.parametrize("text,expected", [

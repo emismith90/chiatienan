@@ -25,7 +25,8 @@ export function ExpenseDraftCard({
   message, members, roomId,
 }: { message: any; members: Member[]; roomId: number }) {
   const att = message.attachments as ExpenseDraft;
-  const readonly = att.status !== "pending";
+  const [editing, setEditing] = useState(false);
+  const readonly = att.status !== "pending" && !editing;
   const [payer, setPayer] = useState<number>(att.payer_member_id);
   const [billed, setBilled] = useState<number[]>(att.member_participants ?? []);
   const [guests, setGuests] = useState<string[]>(att.guests ?? []);
@@ -49,7 +50,7 @@ export function ExpenseDraftCard({
       skipFirstRun.current = false;
       return;
     }
-    if (readonly) return;
+    if (att.status !== "pending") return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       api.patchDraft(roomId, message.id, {
@@ -59,7 +60,7 @@ export function ExpenseDraftCard({
       }).catch(() => {});
     }, 600);
     return () => timer.current && clearTimeout(timer.current);
-  }, [payer, billed, guests, total, adjustments, dish, initiator, note, readonly, roomId, message.id]);
+  }, [payer, billed, guests, total, adjustments, dish, initiator, note, att.status, roomId, message.id]);
 
   const toggle = (id: number) =>
     setBilled((b) => (b.includes(id) ? b.filter((x) => x !== id) : [...b, id]));
@@ -120,7 +121,7 @@ export function ExpenseDraftCard({
       )}
 
       <label className="block text-xs text-[var(--text-secondary)]">Bill total (đ)</label>
-      <input type="number" disabled={readonly} value={total} onChange={(e) => setTotal(Number(e.target.value))}
+      <input type="number" aria-label="Bill total" disabled={readonly} value={total} onChange={(e) => setTotal(Number(e.target.value))}
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
 
       <div className="mb-2 grid grid-cols-2 gap-2">
@@ -163,7 +164,7 @@ export function ExpenseDraftCard({
         <p className="mb-2 text-xs text-[var(--danger)]">{error}</p>
       )}
 
-      {!readonly && (
+      {att.status === "pending" && (
         <div className="flex gap-2">
           <button type="button" disabled={busy}
             onClick={() => {
@@ -190,6 +191,48 @@ export function ExpenseDraftCard({
             }}
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
             Cancel
+          </button>
+        </div>
+      )}
+
+      {att.status === "committed" && !editing && (
+        <button type="button" onClick={() => setEditing(true)}
+          className="mt-1 text-xs font-medium text-[var(--accent-text)]">
+          Edit
+        </button>
+      )}
+      {att.status === "committed" && editing && (
+        <div className="mt-1 flex gap-2">
+          <button type="button" disabled={busy}
+            onClick={() => {
+              setBusy(true); setError(null);
+              api.recommitDraft(roomId, message.id, {
+                payer_member_id: payer, member_participants: billed, guests,
+                bill_total: total, adjustments,
+                dish: dish || null, initiator: initiator || null, note: note || null,
+              })
+                .then(() => setEditing(false))
+                .catch((err) => setError(err instanceof ApiError ? err.message : "Couldn't save."))
+                .finally(() => setBusy(false));
+            }}
+            className="flex-1 rounded-lg bg-[var(--accent-primary)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
+            Save changes
+          </button>
+          <button type="button" disabled={busy}
+            onClick={() => {
+              setPayer(att.payer_member_id);
+              setBilled(att.member_participants ?? []);
+              setGuests(att.guests ?? []);
+              setTotal(att.bill_total ?? 0);
+              setAdjustments(att.adjustments ?? []);
+              setDish(att.dish ?? "");
+              setInitiator(att.initiator ?? "");
+              setNote(att.note ?? "");
+              setEditing(false);
+              setError(null);
+            }}
+            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]">
+            Cancel edit
           </button>
         </div>
       )}

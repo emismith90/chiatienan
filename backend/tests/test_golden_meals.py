@@ -46,15 +46,14 @@ def test_golden_meal(db, case):
             assert getattr(meal, k) == v, f'{case["id"]} {k}'
 
 
-def test_golden_G9_supersede_autocommit(db):
+def test_new_draft_does_not_commit_previous(db):
     room_id, ids = _seed_room(db, 4)
-    idx = {i + 1: ids[i] for i in range(4)}
     with db.session() as s:
-        d1, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))  # G1
-        d2, _ = drafts.create_draft(s, room_id, _payload(CASES[1], ids))  # G2 supersedes
-        assert s.get(RoomMessage, d1.id).attachments["status"] == "committed"
+        d1, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))
+        d2, _ = drafts.create_draft(s, room_id, _payload(CASES[1], ids))
+        assert s.get(RoomMessage, d1.id).attachments["status"] == "pending"
         assert s.get(RoomMessage, d2.id).attachments["status"] == "pending"
-        assert s.query(Meal).count() == 1
+        assert s.query(Meal).count() == 0  # nothing auto-committed
 
 
 def test_golden_G10_cancel_writes_nothing(db):
@@ -65,12 +64,12 @@ def test_golden_G10_cancel_writes_nothing(db):
         assert s.query(Meal).count() == 0
 
 
-def test_golden_G11_edit_then_supersede(db):
+def test_list_pending_drafts_returns_all_pending_oldest_first(db):
     room_id, ids = _seed_room(db, 4)
-    idx = {i + 1: ids[i] for i in range(4)}
     with db.session() as s:
-        d, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))         # [1,2,3,4]
-        drafts.update_draft(s, d.id, room_id, {"member_participants": [idx[1], idx[2]]})
-        drafts.create_draft(s, room_id, _payload(CASES[1], ids))              # supersede
-        meal = s.query(Meal).one()
-        assert {sh.member_id for sh in meal.shares} == {idx[1], idx[2]}
+        d1, _ = drafts.create_draft(s, room_id, _payload(CASES[0], ids))
+        d2, _ = drafts.create_draft(s, room_id, _payload(CASES[1], ids))
+        pending = drafts.list_pending_drafts(s, room_id)
+        assert [p.id for p in pending] == [d1.id, d2.id]
+        drafts.commit_draft(s, d1.id, room_id, logged_by="1")
+        assert [p.id for p in drafts.list_pending_drafts(s, room_id)] == [d2.id]

@@ -277,6 +277,41 @@ def test_settle_still_names_a_deleted_member(db):
     assert "M2" in names               # b's display name is present
 
 
+def test_record_payment_tool_happy(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[1])
+    tools = build_tools(ctx)
+    res = tools["record_payment"].execute({"from": m[1], "to": m[0], "amount": 125_000})
+    assert res["ok"] is True
+    assert res["type"] == "payment"
+    assert res["amount"] == 125_000
+    assert res["from"]["id"] == m[1] and res["to"]["id"] == m[0]
+    assert isinstance(res["balances"], list)
+
+
+def test_record_payment_tool_defaults_from_to_sender(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["record_payment"].execute({"to": m[1], "amount": 10_000})
+    assert res["ok"] is True and res["from"]["id"] == m[0]
+
+
+def test_record_payment_tool_errors(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    tools = build_tools(ctx)
+    assert tools["record_payment"].execute({"to": m[1]})["ok"] is False       # no amount
+    assert tools["record_payment"].execute({"amount": 10})["ok"] is False     # no recipient
+    assert tools["record_payment"].execute({"to": m[0], "amount": 10})["ok"] is False  # from==to
+
+
+def test_record_payment_tool_non_numeric_to_rejected(db):
+    room_id, m = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["record_payment"].execute({"to": "abc", "amount": 10_000})
+    assert res["ok"] is False
+
+
 def test_settle_period_tool_commit_uses_sender_as_requested_by():
     d, (room_id, an, bi) = _ctx()
     _seed_meal(d, room_id, an, [an, bi], 100000)
@@ -290,3 +325,35 @@ def test_settle_period_tool_commit_uses_sender_as_requested_by():
         settlement = ledger.last_settlement(s, room_id)
         assert settlement is not None
         assert settlement.requested_by == str(an)
+
+
+def test_settle_period_blocks_when_pending_draft_exists(db):
+    from datetime import date
+    from app.tools import build_tools, ToolContext
+    from app import drafts, ledger
+    room_id, m = _seed_room(db, 3)
+    with db.session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[0],
+                           participants=m, total_amount=300, occurred_on=date(2026, 7, 20))
+        drafts.create_draft(s, room_id, {
+            "payer_member_id": m[0], "member_participants": m, "guests": [],
+            "bill_total": 90, "adjustments": [], "per_head_preview": 30, "raw_input": "x"})
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
+    assert res["type"] == "settle_blocked"
+    assert len(res["pending"]) == 1
+    assert "transfers" not in res
+
+
+def test_settle_period_runs_when_no_pending(db):
+    from datetime import date
+    from app.tools import build_tools, ToolContext
+    from app import ledger
+    room_id, m = _seed_room(db, 3)
+    with db.session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[0],
+                           participants=m, total_amount=300, occurred_on=date(2026, 7, 20))
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
+    assert res.get("type") != "settle_blocked"
+    assert "transfers" in res

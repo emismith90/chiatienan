@@ -4,6 +4,7 @@ import type { ChatImage } from "@/types/chat";
 import { botHandle } from "@/lib/api";
 import { resizeImage } from "@/lib/image";
 import { mentionQuery, spliceMention, MentionDropdown } from "./mention-dropdown";
+import { SuggestionChips } from "./suggestion-chips";
 
 const MAX_IMAGES = 4;
 /** Caret-position keys that only move the cursor (no `onChange`), so the
@@ -85,6 +86,20 @@ export function Composer({ onSend }: ComposerProps) {
       return;
     }
     setMention({ start: caret - query.length - 1, end: caret, query, active: 0 });
+  }
+
+  /** Prefill the composer from a capability chip and focus the input with the
+   * caret at the end, so the user can complete/edit before sending (never
+   * auto-sends). */
+  function pickSuggestion(prefill: string) {
+    setText(prefill);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(prefill.length, prefill.length);
+    });
   }
 
   function acceptMention(handle: string) {
@@ -223,6 +238,13 @@ export function Composer({ onSend }: ComposerProps) {
         >
           {processing ? "Đang xử lý ảnh…" : notice}
         </p>
+      )}
+      {/* Capability hints — shown only while the input is empty, so they guide
+          newcomers without cluttering an active compose. */}
+      {!text.trim() && (
+        <div className="mb-2 px-1">
+          <SuggestionChips onPick={pickSuggestion} />
+        </div>
       )}
       <div className="flex items-end gap-2">
         <input

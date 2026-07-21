@@ -120,8 +120,13 @@ def build_history(session: Session, room_id: int, *, watermark: int = 0,
 
 
 def render_bot_attachments(result) -> dict | None:
+    payment = result.last_result("record_payment")
+    if payment:
+        return dict(payment)  # already {type:"payment", ...}
     settle = result.last_result("settle_period")
     if settle:
+        if settle.get("type") == "settle_blocked":
+            return dict(settle)
         return {"type": "settlement", **settle}
     return None
 
@@ -144,6 +149,30 @@ def _settlement_body(attachments: dict) -> str:
 
     for w in attachments.get("warnings") or []:
         lines.append(f"⚠️ {w}")
+    return "\n".join(lines)
+
+
+def _payment_body(attachments: dict) -> str:
+    """Deterministic Vietnamese summary of a manual payment, straight from the
+    tool-result dict — never from LLM prose (design D3, money-safety)."""
+    frm = attachments.get("from") or {}
+    to = attachments.get("to") or {}
+    return (
+        f"💸 Đã ghi: {frm.get('name', '?')} trả {to.get('name', '?')} "
+        f"{attachments.get('amount', 0):,}đ"
+    )
+
+
+def _settle_blocked_body(attachments: dict) -> str:
+    """Deterministic Vietnamese summary of a blocked settle (pending drafts
+    must be confirmed/cancelled first), straight from the tool-result dict —
+    never from LLM prose (design D3, money-safety)."""
+    lines = [attachments.get("message") or "Có đề xuất chưa xác nhận."]
+    for p in attachments.get("pending") or []:
+        lines.append(
+            f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
+            f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
+        )
     return "\n".join(lines)
 
 
@@ -173,16 +202,13 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     from concurrent turns never interleaves with another. Meal turns never write
     directly — ``propose_meal`` only proposes, and the turn ends with a pending
     ``expense_draft`` for a human to edit/commit. The draft write itself
-    (``drafts.create_draft``, which may supersede/commit or cancel a prior
-    pending draft — a ledger write) runs under the SAME lock as ``run_turn``,
-    so the ledger's single-writer property covers this path too.
+    (``drafts.create_draft``, which persists the new draft independently — it
+    never supersedes a prior pending draft — a ledger write) runs under the
+    SAME lock as ``run_turn``, so the ledger's single-writer property covers
+    this path too.
 
     ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
-    :func:`app.agent.run_turn` for live ``agent.*`` progress. When a proposal
-    supersedes a pending draft, the extra messages that produces (the
-    committed/cancelled prior draft, and its meal card if committed) are
-    published via ``emit`` too — after the lock is released, since publishing
-    isn't a DB write — so live clients see them and not just the new draft.
+    :func:`app.agent.run_turn` for live ``agent.*`` progress.
     """
     from app import drafts
     from app.agent import run_turn
@@ -190,8 +216,6 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
 
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
                        sender_name=member_name, turn_mentions=[])
-
-    extra_payloads: list[dict] = []
 
     async with _agent_lock:
         await _maybe_rollover(db, room_id)
@@ -216,8 +240,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             payload["logged_by"] = str(member_id)
             payload["turn_id"] = result.turn_id
             with db.session() as s:
-                new_msg, extras = drafts.create_draft(s, room_id, payload)
-                extra_payloads = [message_to_dict(m, None) for m in extras]
+                new_msg, _ = drafts.create_draft(s, room_id, payload)
         else:
             attachments = render_bot_attachments(result)
 
@@ -227,17 +250,15 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             # the amounts themselves).
             if attachments and attachments.get("type") == "settlement":
                 body = _settlement_body(attachments)
+            elif attachments and attachments.get("type") == "settle_blocked":
+                body = _settle_blocked_body(attachments)
+            elif attachments and attachments.get("type") == "payment":
+                body = _payment_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 
             with db.session() as s:
                 new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
-
-    # Publish any supersede-commit/cancel extras BEFORE the new draft (which
-    # main._run publishes itself from this function's return value).
-    if emit:
-        for ev in extra_payloads:
-            await emit({"type": "message", **ev})
 
     return new_msg
 

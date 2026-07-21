@@ -1,5 +1,56 @@
-import { describe, expect, it } from "vitest";
-import { perHead } from "../expense-draft-card";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { perHead, ExpenseDraftCard } from "../expense-draft-card";
+
+vi.mock("@/lib/api", () => ({
+  ApiError: class extends Error {},
+  patchDraft: vi.fn(() => Promise.resolve()),
+  commitDraft: vi.fn(() => Promise.resolve()),
+  cancelDraft: vi.fn(() => Promise.resolve()),
+  recommitDraft: vi.fn(() => Promise.resolve({ ok: true, meal_id: 9 })),
+}));
+import * as api from "@/lib/api";
+
+const members = [{ id: 1, display_name: "A" }, { id: 2, display_name: "B" }];
+const committed = {
+  id: 50,
+  attachments: {
+    type: "expense_draft", status: "committed", committed_meal_id: 9,
+    payer_member_id: 1, member_participants: [1, 2], guests: [],
+    bill_total: 300, adjustments: [],
+  },
+};
+
+describe("ExpenseDraftCard edit-when-committed", () => {
+  it("shows an Edit button on a committed card", () => {
+    render(<ExpenseDraftCard message={committed} members={members} roomId={1} />);
+    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+  });
+
+  it("editing re-enables fields and Save calls recommitDraft", () => {
+    render(<ExpenseDraftCard message={committed} members={members} roomId={1} />);
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const total = screen.getByLabelText(/bill total/i) as HTMLInputElement;
+    expect(total.disabled).toBe(false);
+    fireEvent.change(total, { target: { value: "600" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(api.recommitDraft).toHaveBeenCalledWith(1, 50, expect.objectContaining({ bill_total: 600 }));
+  });
+
+  it("Cancel edit reverts field changes back to the original values", () => {
+    render(<ExpenseDraftCard message={committed} members={members} roomId={1} />);
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const total = screen.getByLabelText(/bill total/i) as HTMLInputElement;
+    fireEvent.change(total, { target: { value: "600" } });
+    expect(total.value).toBe("600");
+    fireEvent.click(screen.getByRole("button", { name: /cancel edit/i }));
+
+    // Re-entering Edit should show the original value, not the discarded one.
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    const totalAgain = screen.getByLabelText(/bill total/i) as HTMLInputElement;
+    expect(totalAgain.value).toBe(String(committed.attachments.bill_total));
+  });
+});
 
 describe("perHead", () => {
   it("splits the total evenly across billed members and guests", () => {

@@ -77,6 +77,17 @@ class DraftPatchIn(BaseModel):
     status: str | None = None   # only "cancelled" is accepted
 
 
+class DraftEditIn(BaseModel):
+    payer_member_id: int
+    member_participants: list[int]
+    guests: list[str] = []
+    bill_total: int
+    adjustments: list[dict] = []
+    dish: str | None = None
+    initiator: str | None = None
+    note: str | None = None
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -303,6 +314,27 @@ async def commit_draft_route(room_id: int, draft_id: int,
         with db.session() as s:
             try:
                 meal_msg = drafts.commit_draft(s, draft_id, room_id, logged_by=str(ctx.member_id))
+            except (ledger.LedgerError, MoneyError) as e:
+                raise HTTPException(409, str(e))
+            meal_payload = chat.message_to_dict(meal_msg, None)
+            draft_payload = chat.message_to_dict(s.get(RoomMessage, draft_id), None)
+            meal_id = meal_msg.attachments["meal_id"]
+    await hub.publish(room_id, {"type": "message", **draft_payload})
+    await hub.publish(room_id, {"type": "message", **meal_payload})
+    return {"ok": True, "meal_id": meal_id}
+
+
+@app.post("/api/rooms/{room_id}/drafts/{draft_id}/recommit")
+async def recommit_draft_route(room_id: int, draft_id: int, body: DraftEditIn,
+                               ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    patch = body.model_dump(exclude_unset=True)
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                meal_msg = drafts.recommit_draft(s, draft_id, room_id, patch,
+                                                 logged_by=str(ctx.member_id))
             except (ledger.LedgerError, MoneyError) as e:
                 raise HTTPException(409, str(e))
             meal_payload = chat.message_to_dict(meal_msg, None)

@@ -120,3 +120,26 @@ class Settlement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
     requested_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) who requested the settle
     transfers: Mapped[list] = mapped_column(JSON, default=list, nullable=False)  # snapshot
+
+
+class Payment(Base):
+    """An ad-hoc cash payment between two members (outside meals/settlements).
+
+    Adjusts balances directly (payer's balance += amount, payee's -= amount);
+    carries no shares. Append-only; corrections are a void + new payment.
+    """
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
+    from_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
+    to_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    note: Mapped[str | None] = mapped_column(String(400))
+    source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)
+    logged_by: Mapped[str | None] = mapped_column(String(120))
+    voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    voided_by: Mapped[str | None] = mapped_column(String(120))
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
