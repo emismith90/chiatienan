@@ -71,6 +71,31 @@ def test_render_bot_attachments_neither():
     assert chat.render_bot_attachments(fake) is None
 
 
+def test_render_bot_attachments_dispatch():
+    assert chat.render_bot_attachments(
+        _FakeResult({"record_payment": {"type": "payment", "amount": 1}})
+    )["type"] == "payment"
+    assert chat.render_bot_attachments(
+        _FakeResult({"settle_period": {"type": "settle_blocked", "pending": []}})
+    )["type"] == "settle_blocked"
+    assert chat.render_bot_attachments(
+        _FakeResult({"settle_period": {"transfers": []}})
+    )["type"] == "settlement"
+
+
+def test_payment_body_renders_from_dict():
+    body = chat._payment_body({"from": {"name": "An"}, "to": {"name": "Bình"}, "amount": 125000})
+    assert "An" in body and "Bình" in body and "125,000" in body
+
+
+def test_settle_blocked_body_lists_pending():
+    body = chat._settle_blocked_body({
+        "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+        "pending": [{"draft_id": 7, "payer_name": "An", "bill_total": 400000, "participant_count": 4}],
+    })
+    assert "#7" in body and "An" in body and "400,000" in body
+
+
 # --- run_bot_turn error-path body -------------------------------------------- #
 
 async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
