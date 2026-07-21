@@ -43,3 +43,21 @@ def test_bad_int_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("CURSOR_AGENT_MAX_TOOLS", "notanumber")
     s = Settings.from_env()
     assert s.max_tools == 40
+
+
+def test_memory_settings_defaults(monkeypatch):
+    monkeypatch.delenv("MEMORY_WINDOW_WEEKS", raising=False)
+    monkeypatch.delenv("HISTORY_MAX_MESSAGES", raising=False)
+    from app.config import Settings
+    s = Settings.from_env()
+    assert s.memory_window_weeks == 10
+    assert s.history_max_messages == 200
+
+
+def test_memory_settings_from_env(monkeypatch):
+    monkeypatch.setenv("MEMORY_WINDOW_WEEKS", "6")
+    monkeypatch.setenv("HISTORY_MAX_MESSAGES", "50")
+    from app.config import Settings
+    s = Settings.from_env()
+    assert s.memory_window_weeks == 6
+    assert s.history_max_messages == 50
