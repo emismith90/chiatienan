@@ -124,6 +124,19 @@ def _assistant_text(msg) -> str:
     return "".join(out)
 
 
+def _render_prompt(user_text: str, *, sender_name: str | None = None,
+                   memory: str | None = None, history: str | None = None) -> str:
+    """Assemble the turn preamble. With no memory/history this is byte-identical
+    to the pre-memory assembly (system prompt + user message)."""
+    sections = [build_system_prompt(sender_name=sender_name)]
+    if memory:
+        sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
+    if history:
+        sections.append(f"# Lịch sử hội thoại (gần đây)\n{history.strip()}")
+    sections.append(f"# Tin nhắn người dùng\n{user_text.strip()}")
+    return "\n\n".join(sections)
+
+
 def _ensure_workspace() -> str:
     workspace = settings.cursor_workspace
     Path(workspace).mkdir(parents=True, exist_ok=True)
@@ -156,7 +169,8 @@ def _build_message(text: str, images):
     )
 
 
-async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> TurnResult:
+async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
+                    memory=None, history=None) -> TurnResult:
     """Run one turn to completion and return the assembled :class:`TurnResult`.
 
     ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the
@@ -204,8 +218,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None) -> 
             resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
         )
 
-        prompt = build_system_prompt(sender_name=ctx.sender_name)
-        message_text = f"{prompt}\n\n# Tin nhắn người dùng\n{user_text.strip()}"
+        message_text = _render_prompt(user_text, sender_name=ctx.sender_name,
+                                       memory=memory, history=history)
 
         local = LocalAgentOptions(
             cwd=workspace,
