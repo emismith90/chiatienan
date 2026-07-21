@@ -406,6 +406,26 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         args = args or {}
         commit = bool(args.get("commit"))
         with db.session() as s:
+            from app import drafts  # lazy: avoid import cycle at module load
+            pending = drafts.list_pending_drafts(s, ctx.room_id)
+            if pending:
+                summaries = []
+                for d in pending:
+                    att = d.attachments or {}
+                    names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
+                    summaries.append({
+                        "draft_id": d.id,
+                        "payer_name": names.get(att.get("payer_member_id"), "?"),
+                        "bill_total": att.get("bill_total", 0),
+                        "participant_count": len(att.get("member_participants") or []),
+                    })
+                return {
+                    "ok": True,
+                    "type": "settle_blocked",
+                    "pending": summaries,
+                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+                }
+
             last = ledger.last_settlement(s, ctx.room_id)
             try:
                 period = resolve_period(
