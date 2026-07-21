@@ -106,6 +106,9 @@ Caddy (auto-TLS)
 - Display-only spend: `@bot tháng này tôi tiêu bao nhiêu`
 - Manage members: `@bot thêm thành viên Dũng`, `@bot đổi tên An thành Anh`,
   `@bot xoá thành viên Cường` (soft-delete), `@bot khôi phục Cường`.
+- Reset the bot's conversation memory: `/clear` — summarizes the recent chat into
+  the room's long-term memory and starts a fresh context window (the chat history
+  stays visible; the ledger is untouched).
 
 Bill photos must be **pasted inline** (the composer supports paste-to-attach).
 Edit your own display name and bank details on the profile screen so the

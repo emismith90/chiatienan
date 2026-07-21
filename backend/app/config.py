@@ -29,6 +29,8 @@ class Settings:
     cursor_api_base: str
     max_tools: int
     max_seconds: int
+    memory_window_weeks: int
+    history_max_messages: int
     # Bot
     bot_handle: str
     # Storage
@@ -52,6 +54,8 @@ class Settings:
             cursor_api_base=((os.environ.get("CURSOR_API_BASE") or "").strip() or "https://api.cursor.com").rstrip("/"),
             max_tools=_int_env("CURSOR_AGENT_MAX_TOOLS", 40),
             max_seconds=_int_env("CURSOR_AGENT_MAX_SECONDS", 120),
+            memory_window_weeks=_int_env("MEMORY_WINDOW_WEEKS", 10),
+            history_max_messages=_int_env("HISTORY_MAX_MESSAGES", 200),
             bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "bot",
             database_url=(os.environ.get("DATABASE_URL") or "").strip() or "sqlite:////data/chiatienan.db",
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",

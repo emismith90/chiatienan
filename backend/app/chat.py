@@ -13,13 +13,17 @@ from __future__ import annotations
 
 import asyncio
 import re
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import memory
+from app.clock import now_ict
 from app.config import settings
 from app.db import Database
 from app.models import Member, RoomMessage
+from app.summarize import summarize_messages
 
 # In-process lock: only correct with a single uvicorn worker/process (see
 # Dockerfile CMD). Multiple processes would each get their own lock and could
@@ -33,6 +37,19 @@ def mentions_bot(text: str) -> bool:
     # as a mention — only a `@bot`/`@<handle>` preceded by a non-word, non-dot
     # boundary (e.g. start of string or whitespace) matches.
     return re.search(rf"(?<![\w.])@(bot|{handle})\b", text or "", re.IGNORECASE) is not None
+
+
+_CLEAR_RE = re.compile(
+    rf"^\s*(?:@(?:bot|{re.escape(settings.bot_handle)})\s+)?/clear\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_clear_command(text: str) -> bool:
+    """True iff the whole message is the ``/clear`` command (optionally preceded
+    by an ``@bot``/``@<handle>`` mention). Exact — ``/cleared``/``/clear now``
+    do not match."""
+    return _CLEAR_RE.match(text or "") is not None
 
 
 def message_to_dict(m: RoomMessage, author: Member | None) -> dict:
@@ -66,6 +83,40 @@ def list_messages(session: Session, room_id: int, since_id: int = 0, limit: int 
     ).all()
     authors = {m.id: m for m in session.scalars(select(Member).where(Member.room_id == room_id))}
     return [message_to_dict(r, authors.get(r.author_member_id)) for r in rows]
+
+
+def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) -> str:
+    """Render chat rows as ``«Name»: body`` / ``chiatienan: body`` lines,
+    oldest→newest, each body clamped. Empty rows → ``""``."""
+    if not rows:
+        return ""
+    authors = {a.id: a for a in session.scalars(select(Member).where(Member.room_id == room_id))}
+    lines = []
+    for r in rows:
+        body = (r.body or "").strip()
+        if len(body) > clamp:
+            body = body[:clamp] + "…"
+        if r.author_member_id is None:
+            lines.append(f"chiatienan: {body}")
+        else:
+            author = authors.get(r.author_member_id)
+            lines.append(f"«{author.display_name if author else '?'}»: {body}")
+    return "\n".join(lines)
+
+
+def build_history(session: Session, room_id: int, *, watermark: int = 0,
+                  before_id: int | None = None, limit: int = 200) -> str:
+    """Recent conversation fed to the agent: ``watermark < id [< before_id]``,
+    text/bot kinds only, most-recent ``limit`` rows rendered oldest→newest."""
+    q = select(RoomMessage).where(
+        RoomMessage.room_id == room_id,
+        RoomMessage.id > watermark,
+        RoomMessage.kind.in_(("text", "bot")),
+    )
+    if before_id is not None:
+        q = q.where(RoomMessage.id < before_id)
+    rows = session.scalars(q.order_by(RoomMessage.id.desc()).limit(limit)).all()
+    return _render_messages(session, room_id, list(reversed(rows)))
 
 
 def render_bot_attachments(result) -> dict | None:
@@ -114,7 +165,8 @@ def _meal_body(attachments: dict) -> str:
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
-                        text: str, images=None, emit=None) -> RoomMessage:
+                        text: str, images=None, emit=None,
+                        before_id: int | None = None) -> RoomMessage:
     """Run the agent for one ``@bot`` turn and persist its reply.
 
     Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
@@ -142,7 +194,15 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     extra_payloads: list[dict] = []
 
     async with _agent_lock:
-        result = await run_turn(text, ctx, images=images, emit=emit)
+        await _maybe_rollover(db, room_id)
+        mem_text = memory.load_memory(room_id)
+        with db.session() as s:
+            history = build_history(
+                s, room_id, watermark=memory.read_watermark(room_id),
+                before_id=before_id, limit=settings.history_max_messages,
+            )
+        result = await run_turn(text, ctx, images=images, emit=emit,
+                                memory=mem_text or None, history=history or None)
 
         # A meal turn never writes directly: the LLM only proposes, and the
         # turn ends with an editable draft card for the human to confirm
@@ -180,3 +240,47 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             await emit({"type": "message", **ev})
 
     return new_msg
+
+
+async def _maybe_rollover(db: Database, room_id: int) -> None:
+    """Fold messages older than the recent window into ``memory.md`` and advance
+    the watermark. No-op when nothing has aged out. Caller holds ``_agent_lock``."""
+    cutoff = now_ict() - timedelta(weeks=settings.memory_window_weeks)
+    with db.session() as s:
+        wm = memory.read_watermark(room_id)
+        aged = memory.messages_to_summarize(s, room_id, watermark=wm, older_than=cutoff)
+        if not aged:
+            return
+        through_id = aged[-1].id
+        rendered = _render_messages(s, room_id, aged)
+    summary = await summarize_messages(rendered, kind="rollover")
+    if summary:
+        memory.append_summary(room_id, summary_text=summary, through_id=through_id,
+                              through_at=now_ict().isoformat(), header="Tự động lưu (cũ hơn 10 tuần)")
+    # On a blank/failed summary we leave the watermark untouched so the aged
+    # messages are retried next turn — never silently dropped.
+
+
+async def clear_context(db: Database, room_id: int, *, up_to_id: int, emit=None) -> RoomMessage:
+    """Handle ``/clear``: summarize the live window into ``memory.md``, advance
+    the watermark to ``up_to_id`` (the ``/clear`` line), and post a visible
+    ``context_reset`` divider. Serialized by ``_agent_lock``."""
+    async with _agent_lock:
+        with db.session() as s:
+            wm = memory.read_watermark(room_id)
+            rows = memory.messages_to_summarize(s, room_id, watermark=wm, before_id=up_to_id)
+            rendered = _render_messages(s, room_id, rows)
+        summary = await summarize_messages(rendered, kind="clear") if rendered else ""
+        now_iso = now_ict().isoformat()
+        if summary:
+            memory.append_summary(room_id, summary_text=summary, through_id=up_to_id,
+                                  through_at=now_iso, header="Xoá ngữ cảnh")
+        else:
+            # No summary (empty window or summarizer failure) — still reset the
+            # window; the user explicitly asked to clear.
+            memory.set_watermark(room_id, through_id=up_to_id, through_at=now_iso)
+        with db.session() as s:
+            div = post_message(s, room_id, None,
+                               "🧹 Đã lưu tóm tắt vào bộ nhớ; ngữ cảnh đã xoá.",
+                               kind="context_reset")
+    return div

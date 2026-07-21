@@ -9,11 +9,13 @@ from app import agui
 from app.agent import (
     ToolInvocation,
     TurnResult,
+    _render_prompt,
     _unwrap_tool_args,
     _unwrap_tool_name,
     _unwrap_tool_result,
     run_turn,
 )
+from app.prompt import build_system_prompt
 from app.tools import ToolContext
 from tests.test_ledger import _seed_room
 
@@ -49,6 +51,21 @@ def test_turn_result_last_result_picks_last_ok():
     ]
     assert tr.last_result("settle_period") == {"ok": True, "transfers": []}
     assert tr.last_result("missing") is None
+
+
+def test_render_prompt_baseline_unchanged():
+    # No memory/history → identical to the pre-memory assembly.
+    expected = f"{build_system_prompt(sender_name='An')}\n\n# Tin nhắn người dùng\nxin chào"
+    assert _render_prompt("  xin chào  ", sender_name="An") == expected
+
+
+def test_render_prompt_includes_sections_in_order():
+    out = _render_prompt("ai trả", sender_name="An",
+                         memory="- An hay trả", history="«An»: hôm qua 100k")
+    assert "# Bộ nhớ dài hạn\n- An hay trả" in out
+    assert "# Lịch sử hội thoại (gần đây)\n«An»: hôm qua 100k" in out
+    # order: memory before history before the user message
+    assert out.index("Bộ nhớ dài hạn") < out.index("Lịch sử hội thoại") < out.index("Tin nhắn người dùng")
 
 
 # --- mocked run_turn ------------------------------------------------------- #
