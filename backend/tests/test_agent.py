@@ -53,6 +53,12 @@ def test_turn_result_last_result_picks_last_ok():
     assert tr.last_result("missing") is None
 
 
+def test_system_prompt_mentions_payment_and_reset():
+    p = build_system_prompt()
+    assert "record_payment" in p
+    assert "reset" in p.lower()
+
+
 def test_render_prompt_baseline_unchanged():
     # No memory/history → identical to the pre-memory assembly.
     expected = f"{build_system_prompt(sender_name='An')}\n\n# Tin nhắn người dùng\nxin chào"
