@@ -223,6 +223,25 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         payload = chat.message_to_dict(m, s.get(Member, ctx.member_id))
     await hub.publish(room_id, {"type": "message", **payload})
 
+    if chat.is_clear_command(body.body):
+        await hub.publish(room_id, {"type": "bot.typing"})
+
+        async def _run_clear():
+            async def emit(ev):
+                await hub.publish(room_id, ev)
+            try:
+                div = await chat.clear_context(db, room_id, up_to_id=payload["id"], emit=emit)
+                await hub.publish(room_id, {"type": "message", **chat.message_to_dict(div, None)})
+            except Exception:  # noqa: BLE001
+                log.exception("clear_context failed in room %s", room_id)
+            finally:
+                await hub.publish(room_id, {"type": "bot.done"})
+
+        t = asyncio.create_task(_run_clear())
+        _BG.add(t)
+        t.add_done_callback(_BG.discard)
+        return {"ok": True, "id": payload["id"]}
+
     if chat.mentions_bot(body.body):
         await hub.publish(room_id, {"type": "bot.typing"})
 
@@ -233,7 +252,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
             try:
                 bot_msg = await chat.run_bot_turn(
                     db, room_id, ctx.member_id, ctx.display_name, body.body,
-                    images=clean, emit=emit,
+                    images=clean, emit=emit, before_id=payload["id"],
                 )
                 await hub.publish(room_id, {"type": "message", **chat.message_to_dict(bot_msg, None)})
             except Exception:  # noqa: BLE001 — never leave the room stuck
