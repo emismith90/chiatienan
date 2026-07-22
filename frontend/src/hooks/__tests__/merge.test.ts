@@ -99,4 +99,50 @@ describe("mergeEvent", () => {
     expect(s1.messages.length).toBe(1);
     expect(s1.messages[0].attachments.status).toBe("committed");
   });
+
+  it("replaces a payment_draft message in place when its status changes (commit)", () => {
+    // The backend re-publishes the SAME payment-draft id with status flipped to
+    // committed after Confirm; the merge must replace it in place or the card
+    // stays "pending" forever and its Confirm button never goes away.
+    const s0: RoomState = {
+      messages: [
+        {
+          id: 7,
+          kind: "payment_draft",
+          body: "",
+          attachments: { status: "pending", transfers: [{ from_member_id: 1, to_member_id: 2, amount: 61_000 }] },
+        },
+      ],
+      typing: false,
+      timelines: {},
+      activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, {
+      type: "message",
+      id: 7,
+      kind: "payment_draft",
+      body: "",
+      attachments: { status: "committed", transfers: [{ from_member_id: 1, to_member_id: 2, amount: 61_000 }] },
+    });
+    expect(s1.messages.length).toBe(1);
+    expect(s1.messages[0].attachments.status).toBe("committed");
+  });
+
+  it("replaces a payment_draft message in place when it is cancelled", () => {
+    const s0: RoomState = {
+      messages: [{ id: 7, kind: "payment_draft", body: "", attachments: { status: "pending" } }],
+      typing: false,
+      timelines: {},
+      activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, {
+      type: "message",
+      id: 7,
+      kind: "payment_draft",
+      body: "",
+      attachments: { status: "cancelled" },
+    });
+    expect(s1.messages.length).toBe(1);
+    expect(s1.messages[0].attachments.status).toBe("cancelled");
+  });
 });

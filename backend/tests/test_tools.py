@@ -355,3 +355,23 @@ def test_settle_period_attributes_debt_to_the_actual_payer(db):
         (m[3], m[2], 61000),   # Dung -> Linh (whole 61k)
         (m[2], m[5], 14000),   # Linh -> Giang (net of the two meals)
     }
+
+
+def test_settle_note_names_the_meals_per_transfer(db):
+    # Each QR note lists the debtor + the meals the payee fronted that the debtor
+    # shared in, in date order, ASCII-folded to Vietnamese weekday labels.
+    from datetime import date
+    from app.tools import build_tools, ToolContext
+    from app import ledger
+    room_id, m = _seed_room(db, 2, token="notes")
+    with db.session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[1],
+                           participants=[m[0], m[1]], total_amount=200000,
+                           occurred_on=date(2024, 1, 1), dish="bún chả")  # Monday
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[1],
+                           participants=[m[0], m[1]], total_amount=100000,
+                           occurred_on=date(2024, 1, 2), dish="nem")       # Tuesday
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
+    notes = {(t["from_id"], t["to_id"]): t["note"] for t in res["transfers"]}
+    assert notes[(m[0], m[1])] == "M1: T2 bun cha, T3 nem"
