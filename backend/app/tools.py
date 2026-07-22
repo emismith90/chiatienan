@@ -241,6 +241,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
             return _err("Could not determine the payer.")
+        occurred_on = args.get("occurred_on")
+        if occurred_on is not None:
+            try:
+                _parse_iso(occurred_on)
+            except ValueError:
+                return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
         try:
             preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
         except MoneyError as exc:
@@ -257,7 +263,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "initiator": args.get("initiator"),
             "note": args.get("note"),
             "per_head_preview": preview["per_head"],
-            "occurred_on": args.get("occurred_on"),
+            "occurred_on": occurred_on,
         }
 
     def resolve_date_tool(args, _tool_ctx=None) -> dict:

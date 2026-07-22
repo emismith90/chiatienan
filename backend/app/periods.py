@@ -97,7 +97,7 @@ def resolve_date(word: str, *, today: date) -> date:
     (a group logs *past* lunches). Raises ``ValueError`` if unparseable.
     """
     raw = (word or "").strip().lower()
-    w = _strip_accents(raw).replace("thu ", "thu ").strip()
+    w = _strip_accents(raw).strip()
     if w in ("hom nay", "today", "nay"):
         return today
     if w in ("hom qua", "yesterday", "qua"):
