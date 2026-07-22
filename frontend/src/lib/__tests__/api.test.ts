@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as api from "../api";
+import { upsertRoom } from "../rooms-store";
 
 beforeEach(() => {
   localStorage.clear();
   vi.restoreAllMocks();
 });
 
+/** Seed a stored room so getToken() (which reads the active room) returns t. */
+const seedToken = (t: string) => upsertRoom({ roomId: 1, roomName: "R", token: t });
+
 it("attaches bearer token and posts a message", async () => {
-  api.setToken("t123");
+  seedToken("t123");
   const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ ok: true, id: 9 }), { status: 200 })
   );
@@ -18,25 +22,9 @@ it("attaches bearer token and posts a message", async () => {
   expect((init.headers as any).Authorization).toBe("Bearer t123");
 });
 
-describe("session storage helpers", () => {
-  it("round-trips token and room id, and clears both", () => {
-    expect(api.getToken()).toBeNull();
-    expect(api.getRoomId()).toBeNull();
-
-    api.setToken("abc");
-    api.setRoomId(42);
-    expect(api.getToken()).toBe("abc");
-    expect(api.getRoomId()).toBe(42);
-
-    api.clearSession();
-    expect(api.getToken()).toBeNull();
-    expect(api.getRoomId()).toBeNull();
-  });
-});
-
 describe("ApiError", () => {
   it("throws ApiError with status and detail on non-2xx response", async () => {
-    api.setToken("t123");
+    seedToken("t123");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ detail: "sai biệt danh hoặc PIN" }), { status: 401 })
     );
@@ -64,7 +52,7 @@ describe("requests without a token", () => {
 
 describe("getMembers", () => {
   it("fetches room members", async () => {
-    api.setToken("t123");
+    seedToken("t123");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify([{ id: 1, display_name: "A", nickname: "a" }]), { status: 200 })
     );
@@ -90,7 +78,7 @@ describe("streamRoom", () => {
   });
 
   it("throws ApiError when the response is not ok (so the caller can reconnect)", async () => {
-    api.setToken("t123");
+    seedToken("t123");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("nope", { status: 500 })
     );
@@ -103,7 +91,7 @@ describe("streamRoom", () => {
   });
 
   it("parses SSE events from the stream body via parseSSE and calls onEvent", async () => {
-    api.setToken("t123");
+    seedToken("t123");
     const chunks = [
       'data: {"type":"message","id":1}\n\n',
       'data: {"type":"message","id":2}\n\n',
@@ -131,5 +119,25 @@ describe("streamRoom", () => {
       { type: "message", id: 1 },
       { type: "message", id: 2 },
     ]);
+  });
+});
+
+describe("createRoom", () => {
+  it("POSTs to /api/rooms/create without auth", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ token: "t", room_id: 5, room_name: "A", member_id: 1, invite_token: "iv" }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await api.createRoom({
+      room_name: "A", display_name: "An", nickname: "an", pin: "1234",
+    });
+    expect(res.room_id).toBe(5);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/rooms/create");
+    expect(init.method).toBe("POST");
+    expect((init.headers as any).Authorization).toBeUndefined();
   });
 });

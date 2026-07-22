@@ -1,24 +1,8 @@
 import { parseSSE } from "./sse";
+import { activeRoom } from "./rooms-store";
 
-const TOKEN = "chiatienan.token";
-const ROOM = "chiatienan.room_id";
-
-export const getToken = (): string | null =>
-  typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN) : null;
-
-export const setToken = (t: string): void => localStorage.setItem(TOKEN, t);
-
-export const getRoomId = (): number | null =>
-  typeof localStorage !== "undefined"
-    ? Number(localStorage.getItem(ROOM) || 0) || null
-    : null;
-
-export const setRoomId = (id: number): void => localStorage.setItem(ROOM, String(id));
-
-export const clearSession = (): void => {
-  localStorage.removeItem(TOKEN);
-  localStorage.removeItem(ROOM);
-};
+/** Token for the active (most recently accessed) room — see rooms-store. */
+export const getToken = (): string | null => activeRoom()?.token ?? null;
 
 export class ApiError extends Error {
   constructor(
@@ -57,6 +41,22 @@ export const createAccount = (t: string, b: any) =>
 
 export const identify = (t: string, b: any) =>
   req(`/api/rooms/${t}/identify`, { method: "POST", body: JSON.stringify(b) });
+
+export const createRoom = (b: {
+  room_name: string;
+  display_name: string;
+  nickname: string;
+  pin: string;
+  bank_code?: string;
+  account_number?: string;
+  account_holder?: string;
+}): Promise<{
+  token: string;
+  room_id: number;
+  room_name: string;
+  member_id: number;
+  invite_token: string;
+}> => req(`/api/rooms/create`, { method: "POST", body: JSON.stringify(b) });
 
 export const getMe = () => req(`/api/me`);
 
