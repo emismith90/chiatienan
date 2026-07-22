@@ -352,12 +352,12 @@ async def commit_draft_route(room_id: int, draft_id: int,
     async with chat._agent_lock:
         with db.session() as s:
             try:
-                meal_msg = drafts.commit_draft(s, draft_id, room_id, logged_by=str(ctx.member_id))
+                meal_msg = drafts.commit_any(s, draft_id, room_id, logged_by=str(ctx.member_id))
             except (ledger.LedgerError, MoneyError) as e:
                 raise HTTPException(409, str(e))
             meal_payload = chat.message_to_dict(meal_msg, None)
             draft_payload = chat.message_to_dict(s.get(RoomMessage, draft_id), None)
-            meal_id = meal_msg.attachments["meal_id"]
+            meal_id = (meal_msg.attachments or {}).get("meal_id")
     await hub.publish(room_id, {"type": "message", **draft_payload})
     await hub.publish(room_id, {"type": "message", **meal_payload})
     return {"ok": True, "meal_id": meal_id}

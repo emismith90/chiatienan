@@ -17,6 +17,8 @@ from app.clock import today_ict
 from app.models import Meal, Member, RoomMessage
 from app.periods import resolve_period
 
+DRAFT_KINDS = ("expense_draft", "payment_draft")
+
 _EDITABLE = {
     "payer_member_id", "member_participants", "guests", "bill_total",
     "adjustments", "dish", "initiator", "note",
@@ -38,7 +40,7 @@ def list_pending_drafts(session: Session, room_id: int) -> list[RoomMessage]:
     """All pending expense drafts in the room, oldest first."""
     rows = session.scalars(
         select(RoomMessage)
-        .where(RoomMessage.room_id == room_id, RoomMessage.kind == "expense_draft")
+        .where(RoomMessage.room_id == room_id, RoomMessage.kind.in_(DRAFT_KINDS))
         .order_by(RoomMessage.id)
     ).all()
     return [m for m in rows if (m.attachments or {}).get("status") == "pending"]
@@ -46,7 +48,7 @@ def list_pending_drafts(session: Session, room_id: int) -> list[RoomMessage]:
 
 def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> RoomMessage:
     m = session.get(RoomMessage, draft_id)
-    if m is None or m.room_id != room_id or m.kind != "expense_draft":
+    if m is None or m.room_id != room_id or m.kind not in DRAFT_KINDS:
         raise ledger.LedgerError(f"Draft #{draft_id} not found.")
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
@@ -182,3 +184,59 @@ def current_balances(session: Session, room_id: int) -> list[dict]:
     names = _all_member_names(session, room_id)
     rows = [{"id": mid, "name": names.get(mid, "?"), **vals} for mid, vals in balances.items()]
     return sorted(rows, key=lambda r: r["balance"], reverse=True)
+
+
+def create_payment_draft(session: Session, room_id: int, payload: dict) -> RoomMessage:
+    att = {"type": "payment_draft", "status": "pending", **payload}
+    att.pop("logged_by", None)
+    return chat.post_message(session, room_id, None, body="", attachments=att, kind="payment_draft")
+
+
+def commit_payment_draft(session: Session, draft_id: int, room_id: int,
+                         logged_by: str | None) -> RoomMessage:
+    m = session.get(RoomMessage, draft_id)
+    if m is None or m.room_id != room_id or m.kind != "payment_draft":
+        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
+    att = dict(m.attachments or {})
+    if att.get("status") != "pending":
+        raise ledger.LedgerError("This draft has already been processed.")
+    transfers = att.get("transfers") or []
+    if not transfers:
+        raise ledger.LedgerError("The draft has no transfers to record.")
+    for t in transfers:
+        if t.get("from_member_id") is None or t.get("to_member_id") is None or not t.get("amount"):
+            raise ledger.LedgerError("A transfer is missing required fields.")
+    for t in transfers:
+        ledger.record_payment(
+            session, room_id=room_id,
+            from_member_id=int(t["from_member_id"]), to_member_id=int(t["to_member_id"]),
+            amount=int(t["amount"]), note=t.get("note"), logged_by=logged_by,
+        )
+    names = _all_member_names(session, room_id)
+    pay_att = {
+        "type": "payment",
+        "transfers": [
+            {"from": {"id": t["from_member_id"], "name": names.get(t["from_member_id"], "?")},
+             "to": {"id": t["to_member_id"], "name": names.get(t["to_member_id"], "?")},
+             "amount": t["amount"]}
+            for t in transfers
+        ],
+        "balances": current_balances(session, room_id),
+    }
+    card = chat.post_message(session, room_id, None, chat._payment_body(pay_att),
+                            attachments=pay_att, kind="bot")
+    att["status"] = "committed"
+    m.attachments = att
+    session.flush()
+    return card
+
+
+def commit_any(session: Session, draft_id: int, room_id: int,
+               logged_by: str | None) -> RoomMessage:
+    """Commit a draft, dispatching by kind (meal vs payment)."""
+    m = session.get(RoomMessage, draft_id)
+    if m is None or m.room_id != room_id:
+        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
+    if m.kind == "payment_draft":
+        return commit_payment_draft(session, draft_id, room_id, logged_by)
+    return commit_draft(session, draft_id, room_id, logged_by)

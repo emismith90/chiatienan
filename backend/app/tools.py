@@ -169,14 +169,18 @@ _DELETE_MEMBER_SCHEMA = {
     "required": ["target"],
 }
 
-_PAYMENT_SCHEMA = {
+_PROPOSE_PAYMENT_SCHEMA = {
     "type": "object",
     "properties": {
         "from": {"type": "integer", "description": "member id who paid; blank = the sender."},
         "to": {"type": "integer", "description": "member id who received the money."},
-        "amount": {"type": "integer", "description": "Amount, integer VND (125k → 125000)."},
+        "amount": {
+            "type": "integer",
+            "description": "Integer VND (125k → 125000). OMIT to pay off exactly what `from` currently owes `to`.",
+        },
+        "note": {"type": "string"},
     },
-    "required": ["to", "amount"],
+    "required": ["to"],
 }
 
 _SETTLE_SCHEMA = {
@@ -370,39 +374,63 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "display_name": m.display_name,
             }
 
-    def record_payment(args, _tool_ctx=None) -> dict:
-        from app import drafts  # lazy: avoid import cycle at module load
+    def propose_payment(args, _tool_ctx=None) -> dict:
         args = args or {}
-        amount = args.get("amount")
-        if not isinstance(amount, int):
-            return _err("Missing amount (integer VND).")
         to = args.get("to")
         frm = args.get("from") or ctx.sender_member_id
         if not frm:
-            return _err("Could not determine who paid.")
+            return _err("Không xác định được người trả.")
         if not to:
-            return _err("Missing recipient.")
+            return _err("Thiếu người nhận.")
         try:
             frm_id, to_id = int(frm), int(to)
         except (TypeError, ValueError):
-            return _err("Invalid from/to member id.")
+            return _err("from/to không hợp lệ.")
+        if frm_id == to_id:
+            return _err("Người trả và người nhận phải khác nhau.")
+        amount = args.get("amount")
+        if amount is not None and not isinstance(amount, int):
+            return _err("amount phải là số nguyên VND.")
         with db.session() as s:
-            try:
-                ledger.record_payment(
-                    s, room_id=ctx.room_id, from_member_id=frm_id,
-                    to_member_id=to_id, amount=amount, logged_by=str(ctx.sender_member_id),
-                )
-            except ledger.LedgerError as exc:
-                return _err(str(exc))
             names = _names_for(s, ctx.room_id, [frm_id, to_id])
-            balances = drafts.current_balances(s, ctx.room_id)
+            # _names_for returns only the ids that are real room members, so a
+            # hallucinated from/to would be missing here — reject it before the
+            # pay-off path can falsely report payment_settled.
+            if frm_id not in names or to_id not in names:
+                return _err("Không tìm thấy thành viên trong nhóm.")
+            if amount is None:
+                # Pay-off: amount = the current settle transfer frm -> to over the
+                # open (since_last) period. No such transfer => nothing owed.
+                last = ledger.last_settlement(s, ctx.room_id)
+                period = resolve_period(
+                    "since_last", today=today_ict(),
+                    last_settlement_to=last.period_to if last else None,
+                )
+                balances = ledger.period_balances(s, ctx.room_id, period["from"], period["to"])
+                transfers = net_transfers({mid: v["balance"] for mid, v in balances.items()})
+                match = next(
+                    (t for t in transfers if t.from_member == frm_id and t.to_member == to_id),
+                    None,
+                )
+                if match is None:
+                    return {
+                        "ok": True,
+                        "type": "payment_settled",
+                        "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                        "to": {"id": to_id, "name": names.get(to_id, "?")},
+                    }
+                amount = match.amount
+            if amount <= 0:
+                return _err("Số tiền phải lớn hơn 0.")
         return {
             "ok": True,
-            "type": "payment",
-            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
-            "to": {"id": to_id, "name": names.get(to_id, "?")},
+            "type": "payment_draft",
+            "from_member_id": frm_id,
+            "to_member_id": to_id,
             "amount": amount,
-            "balances": balances,
+            "note": args.get("note"),
+            "from_name": names.get(frm_id, "?"),
+            "to_name": names.get(to_id, "?"),
         }
 
     def settle_period(args, _tool_ctx=None) -> dict:
@@ -416,13 +444,25 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 summaries = []
                 for d in pending:
                     att = d.attachments or {}
-                    names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
-                    summaries.append({
-                        "draft_id": d.id,
-                        "payer_name": names.get(att.get("payer_member_id"), "?"),
-                        "bill_total": att.get("bill_total", 0),
-                        "participant_count": len(att.get("member_participants") or []),
-                    })
+                    if att.get("type") == "payment_draft":
+                        tf = att.get("transfers") or []
+                        ids = [x for t in tf for x in (t.get("from_member_id"), t.get("to_member_id"))]
+                        names = _names_for(s, ctx.room_id, ids)
+                        summaries.append({
+                            "draft_id": d.id, "kind": "payment",
+                            "transfers": [
+                                {"from_name": names.get(t.get("from_member_id"), "?"),
+                                 "to_name": names.get(t.get("to_member_id"), "?"),
+                                 "amount": t.get("amount", 0)} for t in tf],
+                        })
+                    else:
+                        names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
+                        summaries.append({
+                            "draft_id": d.id, "kind": "meal",
+                            "payer_name": names.get(att.get("payer_member_id"), "?"),
+                            "bill_total": att.get("bill_total", 0),
+                            "participant_count": len(att.get("member_participants") or []),
+                        })
                 return {
                     "ok": True,
                     "type": "settle_blocked",
@@ -544,9 +584,13 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
             input_schema=_DELETE_MEMBER_SCHEMA,
         ),
-        "record_payment": CustomTool(
-            execute=record_payment,
-            description="Record a cash payment one member made to another (e.g. 'A đưa B 100k', 'tôi nhận 125k từ C'). Adjusts balances; not a meal.",
-            input_schema=_PAYMENT_SCHEMA,
+        "propose_payment": CustomTool(
+            execute=propose_payment,
+            description=(
+                "Propose a cash payment one member made to another for the user to confirm "
+                "(e.g. 'A trả B 100k', 'A đã trả B'). Does NOT write the ledger. FINAL TOOL for a "
+                "payment. Omit `amount` to pay off exactly what `from` owes `to`."
+            ),
+            input_schema=_PROPOSE_PAYMENT_SCHEMA,
         ),
     }

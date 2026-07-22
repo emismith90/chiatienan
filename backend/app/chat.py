@@ -120,9 +120,6 @@ def build_history(session: Session, room_id: int, *, watermark: int = 0,
 
 
 def render_bot_attachments(result) -> dict | None:
-    payment = result.last_result("record_payment")
-    if payment:
-        return dict(payment)  # already {type:"payment", ...}
     settle = result.last_result("settle_period")
     if settle:
         if settle.get("type") == "settle_blocked":
@@ -153,14 +150,13 @@ def _settlement_body(attachments: dict) -> str:
 
 
 def _payment_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a manual payment, straight from the
-    tool-result dict — never from LLM prose (design D3, money-safety)."""
-    frm = attachments.get("from") or {}
-    to = attachments.get("to") or {}
-    return (
-        f"💸 Đã ghi: {frm.get('name', '?')} trả {to.get('name', '?')} "
-        f"{attachments.get('amount', 0):,}đ"
-    )
+    """Deterministic Vietnamese summary of recorded payment(s), from the tool/commit
+    dict — never LLM prose (money-safety)."""
+    transfers = attachments.get("transfers") or []
+    if not transfers:
+        return "💸 Đã ghi thanh toán."
+    lines = [f"{t['from']['name']} trả {t['to']['name']} {t['amount']:,}đ" for t in transfers]
+    return "💸 " + lines[0] if len(lines) == 1 else "💸 Đã ghi:\n" + "\n".join(lines)
 
 
 def _settle_blocked_body(attachments: dict) -> str:
@@ -169,10 +165,16 @@ def _settle_blocked_body(attachments: dict) -> str:
     never from LLM prose (design D3, money-safety)."""
     lines = [attachments.get("message") or "Có đề xuất chưa xác nhận."]
     for p in attachments.get("pending") or []:
-        lines.append(
-            f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
-            f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
-        )
+        if p.get("kind") == "payment":
+            parts = ", ".join(
+                f"{t['from_name']}→{t['to_name']} {t['amount']:,}đ" for t in (p.get("transfers") or [])
+            )
+            lines.append(f"• #{p['draft_id']}: {parts}")
+        else:
+            lines.append(
+                f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
+                f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
+            )
     return "\n".join(lines)
 
 
@@ -232,6 +234,16 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         # turn ends with an editable draft card for the human to confirm
         # (design D3, money-safety).
         proposal = result.last_result("propose_meal")
+        # Collapse multiple proposals for the SAME (from,to) pair to the LAST
+        # one (a model self-correction "100k… actually 150k"), preserving order.
+        # Distinct pairs (real multi-payer) are untouched.
+        _by_pair: dict[tuple[int, int], dict] = {}
+        for p in result.all_results("propose_payment"):
+            if p.get("type") == "payment_draft":
+                _by_pair[(p["from_member_id"], p["to_member_id"])] = {
+                    "from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
+                    "amount": p["amount"], "note": p.get("note")}
+        payment_transfers = list(_by_pair.values())
         if proposal:
             payload = {k: proposal[k] for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
@@ -241,6 +253,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             payload["turn_id"] = result.turn_id
             with db.session() as s:
                 new_msg, _ = drafts.create_draft(s, room_id, payload)
+        elif payment_transfers:
+            payload = {"transfers": payment_transfers, "turn_id": result.turn_id}
+            with db.session() as s:
+                new_msg = drafts.create_payment_draft(s, room_id, payload)
         else:
             attachments = render_bot_attachments(result)
 
@@ -252,8 +268,6 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 body = _settlement_body(attachments)
             elif attachments and attachments.get("type") == "settle_blocked":
                 body = _settle_blocked_body(attachments)
-            elif attachments and attachments.get("type") == "payment":
-                body = _payment_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 

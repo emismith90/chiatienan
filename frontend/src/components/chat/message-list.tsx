@@ -1,6 +1,7 @@
 "use client";
 import { BotMessage } from "./bot-message";
 import { ExpenseDraftCard } from "./expense-draft-card";
+import { PaymentDraftCard } from "./payment-draft-card";
 import { AgentTimeline } from "./agent-timeline";
 import type { TimelineStep } from "@/hooks/use-room";
 
@@ -99,7 +100,7 @@ export function MessageList({
   return (
     <div className="flex flex-col gap-4">
       {messages.map((m) => {
-        const turnId = m.kind === "expense_draft" ? m.attachments?.turn_id : undefined;
+        const turnId = (m.kind === "expense_draft" || m.kind === "payment_draft") ? m.attachments?.turn_id : undefined;
         const turnSteps = turnId ? timelines?.[turnId] : undefined;
         return m.kind === "context_reset" ? (
           <div key={m.id} className="flex justify-center py-1">
@@ -114,6 +115,14 @@ export function MessageList({
             </span>
             {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
             <ExpenseDraftCard message={m} members={members} roomId={roomId} />
+          </div>
+        ) : m.kind === "payment_draft" ? (
+          <div key={m.id} className="flex flex-col items-start">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
+              Bot
+            </span>
+            {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
+            <PaymentDraftCard message={m} members={members} roomId={roomId} />
           </div>
         ) : m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">

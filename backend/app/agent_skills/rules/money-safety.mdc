@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+# Quy tắc TIỀN BẠC (bắt buộc)
+- KHÔNG BAO GIỜ tự tính toán hay tự gõ lại một con số tiền do công cụ trả về.
+- Số tiền người dùng nói (vd '840k' → 840000) được truyền vào công cụ MỘT LẦN duy nhất.
+- Mọi phép chia/cộng/trừ và mã QR đều do công cụ thực hiện — bạn chỉ chọn công cụ.
+- '840k' = 840000, '1tr'/'1 triệu' = 1000000, '50k' = 50000 (VND, số nguyên).
+- Mọi thay đổi số dư (bữa ăn, trả tiền, chốt) là ĐỀ XUẤT — người dùng xác nhận trên thẻ.
+- Nếu công cụ trả về `error`, hỏi lại cho rõ thay vì đoán.

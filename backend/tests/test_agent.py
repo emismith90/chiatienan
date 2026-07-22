@@ -53,10 +53,29 @@ def test_turn_result_last_result_picks_last_ok():
     assert tr.last_result("missing") is None
 
 
-def test_system_prompt_mentions_payment_and_reset():
+def test_turn_result_all_results_returns_ok_in_order():
+    tr = TurnResult()
+    tr.tools = [
+        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 100}),
+        ToolInvocation("propose_payment", {}, {"ok": False, "error": "x"}),
+        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 200}),
+    ]
+    assert tr.all_results("propose_payment") == [
+        {"ok": True, "amount": 100},
+        {"ok": True, "amount": 200},
+    ]
+    assert tr.all_results("missing") == []
+
+
+def test_system_prompt_keeps_money_invariant_and_points_to_skills():
     p = build_system_prompt()
-    assert "record_payment" in p
-    assert "reset" in p.lower()
+    # Money-safety invariant stays in the always-sent prompt itself.
+    assert "KHÔNG BAO GIỜ tự tính toán" in p
+    # Detailed procedures moved to workspace skills; the slim prompt points at them.
+    assert "record-payment" in p
+    assert "settle-period" in p
+    # The removed monolithic guidance (old record_payment tool name) is gone.
+    assert "record_payment" not in p
 
 
 def test_render_prompt_baseline_unchanged():

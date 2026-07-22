@@ -429,3 +429,21 @@ def test_public_create_room_is_isolated_from_other_rooms(client):
         "room_name": "B", "display_name": "Binh", "nickname": "binh", "pin": "2"}).json()
     ha = {"Authorization": f"Bearer {a['token']}"}
     assert client.get(f"/api/rooms/{b['room_id']}/messages", headers=ha).status_code == 403
+
+
+def test_commit_payment_draft_via_endpoint(client):
+    from app import drafts
+    from app.db import get_db
+    token = _room(client)
+    sess, room_id = _join(client, token, "alice")
+    _join(client, token, "bob")
+    h = {"Authorization": f"Bearer {sess}"}
+    me = client.get("/api/me", headers=h).json()
+    members = client.get(f"/api/rooms/{room_id}/members", headers=h).json()
+    bob_id = next(m["id"] for m in members if m["nickname"] == "bob")
+    with get_db().session() as s:
+        d = drafts.create_payment_draft(s, room_id, {"transfers": [
+            {"from_member_id": me["id"], "to_member_id": bob_id, "amount": 25000, "note": None}]})
+        draft_id = d.id
+    r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=h)
+    assert r.status_code == 200, r.text
