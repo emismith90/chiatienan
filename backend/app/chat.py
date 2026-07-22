@@ -234,12 +234,16 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         # turn ends with an editable draft card for the human to confirm
         # (design D3, money-safety).
         proposal = result.last_result("propose_meal")
-        payment_transfers = [
-            {"from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
-             "amount": p["amount"], "note": p.get("note")}
-            for p in result.all_results("propose_payment")
-            if p.get("type") == "payment_draft"
-        ]
+        # Collapse multiple proposals for the SAME (from,to) pair to the LAST
+        # one (a model self-correction "100k… actually 150k"), preserving order.
+        # Distinct pairs (real multi-payer) are untouched.
+        _by_pair: dict[tuple[int, int], dict] = {}
+        for p in result.all_results("propose_payment"):
+            if p.get("type") == "payment_draft":
+                _by_pair[(p["from_member_id"], p["to_member_id"])] = {
+                    "from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
+                    "amount": p["amount"], "note": p.get("note")}
+        payment_transfers = list(_by_pair.values())
         if proposal:
             payload = {k: proposal[k] for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",

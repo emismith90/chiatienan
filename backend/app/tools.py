@@ -393,6 +393,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             return _err("amount phải là số nguyên VND.")
         with db.session() as s:
             names = _names_for(s, ctx.room_id, [frm_id, to_id])
+            # _names_for returns only the ids that are real room members, so a
+            # hallucinated from/to would be missing here — reject it before the
+            # pay-off path can falsely report payment_settled.
+            if frm_id not in names or to_id not in names:
+                return _err("Không tìm thấy thành viên trong nhóm.")
             if amount is None:
                 # Pay-off: amount = the current settle transfer frm -> to over the
                 # open (since_last) period. No such transfer => nothing owed.

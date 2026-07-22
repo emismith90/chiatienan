@@ -62,3 +62,25 @@ def test_multi_payer_proposals_create_one_payment_draft(room, monkeypatch):
     assert msg.kind == "payment_draft"
     transfers = (msg.attachments or {})["transfers"]
     assert len(transfers) == 2
+
+
+def test_same_pair_proposals_collapse_to_last(room, monkeypatch):
+    db, ids = room
+    # Model self-correction: "100k… actually 150k" for the SAME (from,to) pair.
+    payments = [
+        {"type": "payment_draft", "from_member_id": ids["alice"],
+         "to_member_id": ids["bob"], "amount": 100000, "note": None},
+        {"type": "payment_draft", "from_member_id": ids["alice"],
+         "to_member_id": ids["bob"], "amount": 150000, "note": None},
+    ]
+
+    async def fake_run_turn(*a, **k):
+        return _FakeResult(payments)
+
+    monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
+    msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice",
+                                        "@bot alice trả bob 100k à nhầm 150k"))
+    assert msg.kind == "payment_draft"
+    transfers = (msg.attachments or {})["transfers"]
+    assert len(transfers) == 1
+    assert transfers[0]["amount"] == 150000

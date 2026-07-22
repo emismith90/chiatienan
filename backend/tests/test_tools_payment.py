@@ -50,3 +50,13 @@ def test_propose_payment_rejects_same_member(room):
     t = _tools(db, ids)["propose_payment"]
     out = t.execute({"from": ids["alice"], "to": ids["alice"], "amount": 1000})
     assert out["ok"] is False
+
+
+def test_propose_payment_rejects_unknown_member(room):
+    db, ids = room
+    t = _tools(db, ids)["propose_payment"]
+    # `to` id 999999 is not a member of the room → error, and must NOT fall
+    # through the pay-off path and report payment_settled.
+    out = t.execute({"from": ids["alice"], "to": 999999})
+    assert out["ok"] is False
+    assert out.get("type") != "payment_settled"
