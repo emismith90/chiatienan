@@ -323,3 +323,35 @@ def test_settle_period_runs_when_no_pending(db):
     res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
     assert res.get("type") != "settle_blocked"
     assert "transfers" in res
+
+
+def test_settle_period_attributes_debt_to_the_actual_payer(db):
+    # Regression for the prod bug: two meals with overlapping-but-different
+    # rosters. Each debtor must repay the member who fronted the meal they ate,
+    # NOT a globally-minimised creditor.
+    #   m0=Emi m1=Trang m2=Linh m3=Dung m4=TrangDinh m5=Giang
+    from datetime import date
+    from app.tools import build_tools, ToolContext
+    from app import ledger
+    room_id, m = _seed_room(db, 6)
+    with db.session() as s:
+        # meal #2 — Linh paid 305k, no Trang
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[2],
+                           participants=[m[0], m[2], m[3], m[4], m[5]],
+                           total_amount=305000, occurred_on=date(2026, 7, 22))
+        # meal #3 — Giang paid 375k, no Dung
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m[5],
+                           participants=[m[0], m[1], m[2], m[4], m[5]],
+                           total_amount=375000, occurred_on=date(2026, 7, 22))
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0])
+    res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
+    got = {(t["from_id"], t["to_id"], t["amount"]) for t in res["transfers"]}
+    assert got == {
+        (m[0], m[2], 61000),   # Emi -> Linh
+        (m[0], m[5], 75000),   # Emi -> Giang
+        (m[4], m[2], 61000),   # TrangDinh -> Linh
+        (m[4], m[5], 75000),   # TrangDinh -> Giang
+        (m[1], m[5], 75000),   # Trang -> Giang
+        (m[3], m[2], 61000),   # Dung -> Linh (whole 61k)
+        (m[2], m[5], 14000),   # Linh -> Giang (net of the two meals)
+    }

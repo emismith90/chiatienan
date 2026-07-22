@@ -23,7 +23,7 @@ from cursor_sdk import CustomTool
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
-from app.money import MoneyError, net_transfers, split_with_guests
+from app.money import MoneyError, per_payer_transfers, split_with_guests
 from app.periods import resolve_period
 from app.qr import QRError, make_qr_url
 
@@ -406,8 +406,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     "since_last", today=today_ict(),
                     last_settlement_to=last.period_to if last else None,
                 )
-                balances = ledger.period_balances(s, ctx.room_id, period["from"], period["to"])
-                transfers = net_transfers({mid: v["balance"] for mid, v in balances.items()})
+                meals, payments = ledger.period_transfer_inputs(
+                    s, ctx.room_id, period["from"], period["to"]
+                )
+                transfers = per_payer_transfers(meals, payments)
                 match = next(
                     (t for t in transfers if t.from_member == frm_id and t.to_member == to_id),
                     None,
@@ -493,7 +495,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
                 }
 
-            transfers = net_transfers({mid: v["balance"] for mid, v in balances.items()})
+            meals, payments = ledger.period_transfer_inputs(s, ctx.room_id, from_date, to_date)
+            transfers = per_payer_transfers(meals, payments)
             # include_inactive: a transfer may involve a since-removed member.
             members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
             note = f"Chia tien an {to_date.isoformat()}"
