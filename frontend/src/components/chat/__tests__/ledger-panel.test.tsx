@@ -41,4 +41,17 @@ describe("LedgerPanel", () => {
     fireEvent.click(pay);
     expect(api.quickPay).toHaveBeenCalledWith(3, 6, 2);
   });
+
+  it("does not throw on 'Của tôi' when the ledger has no `me` field", async () => {
+    vi.spyOn(api, "getLedger").mockResolvedValue({
+      period: data.period,
+      balances: data.balances,
+      timeline: data.timeline,
+    } as any);
+    render(<LedgerPanel roomId={3} selfId={9} version={0} />);
+    await waitFor(() => expect(screen.getByText("Giang")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Của tôi/ }));
+    // The "Số dư" section must still render without throwing on the missing `me`.
+    expect(screen.getByText("Số dư")).toBeInTheDocument();
+  });
 });

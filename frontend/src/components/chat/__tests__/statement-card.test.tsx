@@ -27,4 +27,14 @@ describe("StatementCard via BotMessage", () => {
     expect(spy).toHaveBeenCalledWith(3, 6, 2);
     await waitFor(() => expect(screen.getByText(/đã trả/)).toBeInTheDocument());
   });
+
+  it("shows an error hint and leaves the row unpaid when Đã trả fails", async () => {
+    vi.spyOn(api, "quickPay").mockRejectedValue(new Error("network"));
+    render(<BotMessage body="" attachments={att} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: /Đã trả/ }));
+    await waitFor(() => expect(screen.getByText(/Lỗi/)).toBeInTheDocument());
+    // Row stays unpaid: button still present, no "đã trả" flip.
+    expect(screen.getByRole("button", { name: /Đã trả/ })).toBeInTheDocument();
+    expect(screen.queryByText(/đã trả/)).not.toBeInTheDocument();
+  });
 });

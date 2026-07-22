@@ -11,16 +11,19 @@ interface Row {
 function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => void }) {
   const [paid, setPaid] = useState(r.status === "paid");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
   const creditorId = r.creditor_id ?? r.other_id!;
   async function pay() {
     if (busy || paid) return;
     setBusy(true);
+    setErr(false);
     try {
       await api.quickPay(roomId, creditorId, r.meal_id);
       setPaid(true);
       onPaid?.();
     } catch {
       /* leave as unpaid so the user can retry */
+      setErr(true);
     } finally {
       setBusy(false);
     }
@@ -36,6 +39,7 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
       </span>
       <span className="flex shrink-0 items-center gap-2">
         <span className="font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+        {err && <span className="text-xs font-medium text-[var(--danger)]">Lỗi — thử lại</span>}
         {onPaid && !paid && (
           <button type="button" onClick={pay} disabled={busy}
                   className="rounded-full border border-[var(--accent-primary)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">

@@ -37,7 +37,7 @@ export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfI
             <BalanceBars rows={(data?.balances ?? []).filter((b) => b.id === selfId)} selfId={selfId} />
           </section>
           <StatementSections
-            owe={data?.me.owe ?? []} owed={data?.me.owed ?? []} net={data?.me.net ?? 0}
+            owe={data?.me?.owe ?? []} owed={data?.me?.owed ?? []} net={data?.me?.net ?? 0}
             roomId={roomId} onPaid={() => {}}
           />
         </>
