@@ -10,6 +10,7 @@ import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
 import { RoomSwitcher } from "./room-switcher";
+import { saveProfile } from "@/lib/rooms-store";
 
 interface Member {
   id: number;
@@ -211,7 +212,7 @@ const dialogInputClass =
 /** Editable "you" popup — the merged Profile. Tapping your own chip opens this;
  * edit your display name + bank details, save, or sign out. Seeded from the
  * roster data already in hand (no extra fetch). */
-function ProfileDialog({
+export function ProfileDialog({
   member,
   onClose,
   onSaved,
@@ -248,6 +249,15 @@ function ProfileDialog({
     setSaving(true);
     try {
       await api.updateMe(f);
+      // Save-back (design 2026-07-22): the local profile mirrors the latest
+      // values so joining the NEXT room prefills them. No fan-out to other
+      // rooms' servers — their member records may drift; that's accepted.
+      saveProfile({
+        display_name: f.display_name,
+        bank_code: f.bank_code,
+        account_number: f.account_number,
+        account_holder: f.account_holder,
+      });
       setSaved(true);
       onSaved();
     } catch (e) {
