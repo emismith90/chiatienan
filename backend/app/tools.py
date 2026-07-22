@@ -178,6 +178,11 @@ _PROPOSE_PAYMENT_SCHEMA = {
             "type": "integer",
             "description": "Integer VND (125k → 125000). OMIT to pay off exactly what `from` currently owes `to`.",
         },
+        "mode": {
+            "type": "string",
+            "enum": ["gross", "offset"],
+            "description": "For a two-way pair only: 'gross' = pay the full amount `from` owes `to`; 'offset' = settle the net difference. Omit otherwise.",
+        },
         "note": {"type": "string"},
     },
     "required": ["to"],
@@ -399,29 +404,57 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             if frm_id not in names or to_id not in names:
                 return _err("Không tìm thấy thành viên trong nhóm.")
             if amount is None:
-                # Pay-off: amount = the current settle transfer frm -> to over the
-                # open (since_last) period. No such transfer => nothing owed.
+                # Gross directional pay-off over the open (since_last) period. We
+                # do NOT net A<->B: a real cash payment settles what `from` owes
+                # `to`, per meal. Netting is only for settle_period's QR.
                 last = ledger.last_settlement(s, ctx.room_id)
                 period = resolve_period(
                     "since_last", today=today_ict(),
                     last_settlement_to=last.period_to if last else None,
                 )
-                meals, payments = ledger.period_transfer_inputs(
-                    s, ctx.room_id, period["from"], period["to"]
-                )
-                transfers = per_payer_transfers(meals, payments)
-                match = next(
-                    (t for t in transfers if t.from_member == frm_id and t.to_member == to_id),
-                    None,
-                )
-                if match is None:
+                edges = ledger.debt_breakdown(s, ctx.room_id, period["from"], period["to"])
+                gross_ft = sum(e.outstanding for e in edges
+                               if e.debtor == frm_id and e.creditor == to_id)
+                gross_tf = sum(e.outstanding for e in edges
+                               if e.debtor == to_id and e.creditor == frm_id)
+                mode = args.get("mode")
+
+                if gross_ft <= 0 and gross_tf <= 0:
+                    return {"ok": True, "type": "payment_settled",
+                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                            "to": {"id": to_id, "name": names.get(to_id, "?")}}
+                if gross_ft > 0 and gross_tf <= 0:
+                    amount = gross_ft
+                elif gross_ft <= 0 and gross_tf > 0:
+                    return {"ok": True, "type": "nothing_owed",
+                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                            "to": {"id": to_id, "name": names.get(to_id, "?")},
+                            "reverse_amount": gross_tf}
+                elif mode == "gross":
+                    amount = gross_ft
+                elif mode == "offset":
+                    net = gross_ft - gross_tf
+                    if net == 0:
+                        return {"ok": True, "type": "payment_settled",
+                                "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                                "to": {"id": to_id, "name": names.get(to_id, "?")}}
+                    if net > 0:
+                        amount = net
+                    else:  # net direction flips: to -> frm
+                        frm_id, to_id = to_id, frm_id
+                        amount = -net
+                else:
                     return {
-                        "ok": True,
-                        "type": "payment_settled",
+                        "ok": True, "type": "payment_ambiguous",
                         "from": {"id": frm_id, "name": names.get(frm_id, "?")},
                         "to": {"id": to_id, "name": names.get(to_id, "?")},
+                        "gross": {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft},
+                        "offset": (
+                            {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft - gross_tf}
+                            if gross_ft >= gross_tf else
+                            {"from_member_id": to_id, "to_member_id": frm_id, "amount": gross_tf - gross_ft}
+                        ),
                     }
-                amount = match.amount
             if amount <= 0:
                 return _err("Số tiền phải lớn hơn 0.")
         return {
