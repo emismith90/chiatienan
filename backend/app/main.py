@@ -18,6 +18,8 @@ from pydantic import BaseModel
 
 from app import accounts, chat, drafts, ledger, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
+from app.clock import today_ict
+from app.periods import resolve_period
 from app.bridge_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
@@ -264,6 +266,33 @@ async def get_messages(room_id: int, since: int = 0, days: int | None = None,
             msgs, has_more = chat.list_messages_page(s, room_id, days=days, before_id=before_id)
             return {"messages": msgs, "has_more": has_more}
         return {"messages": chat.list_messages(s, room_id, since_id=since)}
+
+
+@app.get("/api/rooms/{room_id}/ledger")
+async def get_ledger(room_id: int, period: str = "since_last",
+                     ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    with get_db().session() as s:
+        last = ledger.last_settlement(s, room_id)
+        p = resolve_period(period, today=today_ict(),
+                           last_settlement_to=last.period_to if last else None)
+        balances = ledger.period_balances(s, room_id, p["from"], p["to"])
+        timeline = ledger.period_timeline(s, room_id, p["from"], p["to"])
+        names = {mm.id: mm.display_name
+                 for mm in roster.list_members(s, room_id, include_inactive=True)}
+    for e in timeline:
+        if e["kind"] == "meal":
+            e["payer_name"] = names.get(e["payer_id"], "?")
+        else:
+            e["from_name"] = names.get(e["from_id"], "?")
+            e["to_name"] = names.get(e["to_id"], "?")
+    return {
+        "period": {"from": p["from"].isoformat() if p["from"] else None,
+                   "to": p["to"].isoformat(), "keyword": p["keyword"]},
+        "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
+                     for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
+        "timeline": timeline,
+    }
 
 
 @app.post("/api/rooms/{room_id}/messages")
