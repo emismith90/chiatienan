@@ -28,3 +28,22 @@ export interface ExpenseDraft {
    * MessageList / RoomView. */
   turn_id?: string;
 }
+
+/** A single money movement inside a `payment_draft`. One draft can hold
+ * multiple transfers (multi-payer, e.g. "Dũng và Giang đã trả Linh"). */
+export interface PaymentTransfer {
+  from_member_id: number;
+  to_member_id: number;
+  amount: number;
+  note: string | null;
+}
+
+/** The interactive `payment_draft` message attachment. The draft_id is the
+ * carrying message's `id`. Amounts are authoritative (server-computed for
+ * pay-off). Confirm/cancel act on the whole draft (all transfers) at once. */
+export interface PaymentDraft {
+  type: "payment_draft";
+  status: "pending" | "committed" | "cancelled";
+  transfers: PaymentTransfer[];
+  turn_id?: string;
+}
