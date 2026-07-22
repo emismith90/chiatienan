@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { BalanceTable } from "./balance-table";
 import { ZoomableImage } from "./zoomable-image";
 import { StatementCard } from "./statement-card";
+import { SummaryCard } from "./summary-card";
 import { fmt } from "@/lib/format";
 
 interface Transfer {
@@ -129,6 +130,7 @@ export function BotMessage({ body, attachments, roomId }: BotMessageProps) {
       {type === "settlement" && <SettlementCard attachments={attachments} />}
       {type === "meal" && <MealCard attachments={attachments} />}
       {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
+      {type === "summary" && <SummaryCard attachments={attachments} />}
     </div>
   );
 }
