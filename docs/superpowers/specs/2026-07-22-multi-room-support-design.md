@@ -60,10 +60,12 @@ untouched.
 ### 3. Active room + switcher
 
 - The home page `/` renders whichever entry has the newest `lastAccessAt`.
-- A room switcher (small dropdown in the room header) renders **only when the
-  list has more than one room**. Switching bumps `lastAccessAt` and
+- A room menu button in the room header shows the active room's name (in
+  place of the static "chiatienan" title) and always renders — it hosts the
+  create/remove actions. The **room list inside the menu appears only when
+  the list has more than one room**. Switching bumps `lastAccessAt` and
   re-renders `RoomView`.
-- The switcher menu also holds:
+- The menu also holds:
   - **Create a room** → create flow (section 4).
   - **Remove from this device** → deletes the local entry + best-effort
     server sign-out; the server-side member is untouched.
