@@ -64,6 +64,40 @@ export const updateMe = (b: any) => req(`/api/me`, { method: "PUT", body: JSON.s
 
 export const getMembers = (roomId: number) => req(`/api/rooms/${roomId}/members`);
 
+export type BalanceRow = { id: number; name: string; balance: number };
+
+export type TimelineEvent =
+  | {
+      kind: "meal"; meal_id: number; payer_id: number; payer_name: string;
+      dish: string | null; occurred_on: string; total: number;
+      participant_ids: number[]; created_at: string;
+    }
+  | {
+      kind: "payment"; payment_id: number; from_id: number; to_id: number;
+      from_name: string; to_name: string; amount: number;
+      occurred_on: string; created_at: string;
+    };
+
+export type StatementRow = {
+  other_id: number; name: string; meal_id: number; dish: string | null;
+  occurred_on: string; amount: number; status: string;
+};
+
+export type LedgerData = {
+  period: { from: string | null; to: string; keyword: string };
+  balances: BalanceRow[];
+  timeline: TimelineEvent[];
+  me: { owe: StatementRow[]; owed: StatementRow[]; net: number };
+};
+
+export const getLedger = (roomId: number, period = "since_last"): Promise<LedgerData> =>
+  req(`/api/rooms/${roomId}/ledger?period=${period}`);
+
+/** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
+ * computes the amount from {to, meal_id}; client sends no money value). */
+export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>
+  req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
+
 export const getInvite = (roomId: number): Promise<{ invite_token: string }> =>
   req(`/api/rooms/${roomId}/invite`);
 
