@@ -1,11 +1,11 @@
 """Deterministic money math — the arithmetic the LLM is never trusted with.
 
-Two pure functions, no I/O, no SDK imports:
+Pure functions, no I/O, no SDK imports:
 
 * :func:`split_shares` — turn a meal (total, participants, per-person
   adjustments) into an exact per-person share map whose values sum to ``total``.
-* :func:`net_transfers` — net a balance map into the greedy minimal set of
-  debtor→creditor transfers.
+* :func:`per_payer_transfers` — settle a set of meals by repaying whoever
+  fronted each meal (per-pair netted), never reassigning creditors.
 
 All amounts are integer VND. Every validation failure raises :class:`MoneyError`
 with a human-readable (Vietnamese-friendly) message; the tool layer turns that
@@ -90,32 +90,49 @@ def split_shares(
     return shares
 
 
-def net_transfers(balances: dict[int, int]) -> list[Transfer]:
-    """Greedy netting: repeatedly settle the biggest debtor against the biggest
-    creditor. Fewest transfers in practice (truly-minimal is NP-hard).
+def per_payer_transfers(
+    meals: list[dict],
+    payments: list[dict] | None = None,
+) -> list[Transfer]:
+    """Attribute each debt to the member who actually fronted the meal.
 
-    ``balances`` maps member id → signed VND (``paid - consumed``): positive is a
-    creditor (owed money), negative is a debtor (owes). Ties break by member id so
-    the output is deterministic. Members with a zero balance produce no transfer.
+    Repays whoever paid rather than minimising transfer *count* by reassigning
+    creditors: for every meal, each participant other than the payer owes the
+    payer their own share. Opposing debts within the same pair are netted into a
+    single directed transfer, and ad-hoc ``payments``
+    (``{"from", "to", "amount"}``) pay a debt down.
+
+    ``meals`` items are ``{"payer_id": int, "shares": {member_id: amount}}``
+    (the payer's own share carries no transfer). Ties break by member id so the
+    output is deterministic. Members who come out even produce no transfer.
     """
-    debtors = {m: -b for m, b in balances.items() if b < 0}
-    creditors = {m: b for m, b in balances.items() if b > 0}
+    # owed[(debtor, creditor)] accumulates gross before per-pair netting.
+    owed: dict[tuple[int, int], int] = {}
+
+    for meal in meals:
+        payer = meal["payer_id"]
+        for member, share in meal["shares"].items():
+            if member == payer or share == 0:
+                continue
+            owed[(member, payer)] = owed.get((member, payer), 0) + share
+
+    for p in payments or []:
+        frm, to, amount = p["from"], p["to"], p["amount"]
+        # A cash payment frm -> to settles that much of what frm owes to.
+        owed[(frm, to)] = owed.get((frm, to), 0) - amount
 
     transfers: list[Transfer] = []
-    while debtors and creditors:
-        # max debtor / max creditor, ties broken by member id (deterministic)
-        d = max(debtors, key=lambda m: (debtors[m], -m))
-        c = max(creditors, key=lambda m: (creditors[m], -m))
-        amount = min(debtors[d], creditors[c])
-
-        transfers.append(Transfer(from_member=d, to_member=c, amount=amount))
-
-        debtors[d] -= amount
-        creditors[c] -= amount
-        if debtors[d] == 0:
-            del debtors[d]
-        if creditors[c] == 0:
-            del creditors[c]
+    seen: set[tuple[int, int]] = set()
+    for a, b in sorted(owed):
+        if (a, b) in seen:
+            continue
+        seen.add((a, b))
+        seen.add((b, a))
+        net = owed.get((a, b), 0) - owed.get((b, a), 0)
+        if net > 0:
+            transfers.append(Transfer(from_member=a, to_member=b, amount=net))
+        elif net < 0:
+            transfers.append(Transfer(from_member=b, to_member=a, amount=-net))
 
     return transfers
 

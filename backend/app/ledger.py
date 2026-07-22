@@ -217,6 +217,48 @@ def period_balances(
     return out
 
 
+def period_transfer_inputs(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> tuple[list[dict], list[dict]]:
+    """Per-meal shares + ad-hoc payments in the window, shaped for
+    :func:`app.money.per_payer_transfers`.
+
+    Returns ``(meals, payments)`` where each meal is
+    ``{"payer_id", "shares": {member_id: amount}}`` and each payment is
+    ``{"from", "to", "amount"}``. Excludes voided meals and voided payments;
+    ``from_date=None`` means "from the beginning of the ledger". Same window
+    semantics as :func:`period_balances`, so the two always agree.
+    """
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
+    if from_date is not None:
+        meal_conds.append(Meal.occurred_on >= from_date)
+
+    meal_rows = session.execute(
+        select(Meal.id, Meal.payer_member_id).where(*meal_conds)
+    ).all()
+    by_id = {mid: {"payer_id": payer, "shares": {}} for mid, payer in meal_rows}
+
+    if by_id:
+        share_rows = session.execute(
+            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
+            .where(MealShare.meal_id.in_(by_id.keys()))
+        ).all()
+        for meal_id, member_id, amt in share_rows:
+            by_id[meal_id]["shares"][member_id] = amt
+
+    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
+    if from_date is not None:
+        pay_conds.append(Payment.occurred_on >= from_date)
+    payments = [
+        {"from": frm, "to": to, "amount": amt}
+        for frm, to, amt in session.execute(
+            select(Payment.from_member_id, Payment.to_member_id, Payment.amount).where(*pay_conds)
+        ).all()
+    ]
+
+    return list(by_id.values()), payments
+
+
 def last_settlement(session: Session, room_id: int) -> Settlement | None:
     return session.scalars(
         select(Settlement)

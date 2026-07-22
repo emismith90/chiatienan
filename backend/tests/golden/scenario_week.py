@@ -54,9 +54,13 @@ STEPS = [
 
     {"id": "s5", "day": WED, "actor": "a3", "kind": "settle",
      "message": "@bot tôi phải trả bao nhiêu",
-     "expect": {"transfers": [{"from": "a3", "to": "a2", "amount": 225_000},
-                              {"from": "a4", "to": "a1", "amount": 100_000},
-                              {"from": "a4", "to": "a2", "amount": 75_000}],
+     # Per-payer attribution: each debtor repays whoever fronted the meal they
+     # ate (a1 fronted s1+s2, a2 fronted s4), not a minimised creditor.
+     "expect": {"transfers": [{"from": "a1", "to": "a2", "amount": 100_000},
+                              {"from": "a3", "to": "a1", "amount": 125_000},
+                              {"from": "a3", "to": "a2", "amount": 100_000},
+                              {"from": "a4", "to": "a1", "amount": 75_000},
+                              {"from": "a4", "to": "a2", "amount": 100_000}],
                 "qr_payees": ["a1", "a2"]}},
 
     {"id": "s6", "day": THU, "actor": "a4", "kind": "add_member",
@@ -78,10 +82,14 @@ STEPS = [
     {"id": "s10a", "day": FRI, "actor": "a5", "kind": "confirm_pending", "ref": "s9b"},
     {"id": "s10b", "day": FRI, "actor": "a5", "kind": "settle",
      "message": "@bot tính tiền",
-     "expect": {"transfers": [{"from": "a3", "to": "a1", "amount": 240_000},
-                              {"from": "a5", "to": "a2", "amount": 160_000},
-                              {"from": "a3", "to": "a2", "amount": 80_000},
-                              {"from": "a3", "to": "a4", "amount": 65_000}],
+     "expect": {"transfers": [{"from": "a1", "to": "a2", "amount": 40_000},
+                              {"from": "a4", "to": "a1", "amount": 35_000},
+                              {"from": "a3", "to": "a1", "amount": 185_000},
+                              {"from": "a3", "to": "a2", "amount": 100_000},
+                              {"from": "a3", "to": "a4", "amount": 100_000},
+                              {"from": "a4", "to": "a2", "amount": 100_000},
+                              {"from": "a5", "to": "a1", "amount": 60_000},
+                              {"from": "a5", "to": "a4", "amount": 100_000}],
                 "qr_payees": ["a1", "a2", "a4"]}},
 
     {"id": "s11", "day": FRI, "actor": "a1", "kind": "settle_commit",
