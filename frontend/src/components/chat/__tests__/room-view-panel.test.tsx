@@ -38,8 +38,11 @@ describe("RoomView ledger panel", () => {
   it("has a Sổ toggle button that opens the drawer", () => {
     render(<RoomView roomId={3} />);
     const btn = screen.getByRole("button", { name: /Sổ/ });
+    // Drawer is closed before the click (desktop LedgerPanel column is not
+    // the drawer dialog, so scoping by role+name proves the toggle works).
+    expect(screen.queryByRole("dialog", { name: "Sổ nhóm" })).toBeNull();
     fireEvent.click(btn);
-    // drawer renders a second 'Sổ nhóm' heading
-    expect(screen.getAllByText(/Sổ nhóm/).length).toBeGreaterThan(0);
+    // Clicking the Sổ button opens the slide-over drawer dialog.
+    expect(screen.getByRole("dialog", { name: "Sổ nhóm" })).toBeInTheDocument();
   });
 });
