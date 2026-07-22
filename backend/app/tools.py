@@ -440,13 +440,15 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 for d in pending:
                     att = d.attachments or {}
                     if att.get("type") == "payment_draft":
-                        names = _names_for(s, ctx.room_id,
-                                           [att.get("from_member_id"), att.get("to_member_id")])
+                        tf = att.get("transfers") or []
+                        ids = [x for t in tf for x in (t.get("from_member_id"), t.get("to_member_id"))]
+                        names = _names_for(s, ctx.room_id, ids)
                         summaries.append({
                             "draft_id": d.id, "kind": "payment",
-                            "from_name": names.get(att.get("from_member_id"), "?"),
-                            "to_name": names.get(att.get("to_member_id"), "?"),
-                            "amount": att.get("amount", 0),
+                            "transfers": [
+                                {"from_name": names.get(t.get("from_member_id"), "?"),
+                                 "to_name": names.get(t.get("to_member_id"), "?"),
+                                 "amount": t.get("amount", 0)} for t in tf],
                         })
                     else:
                         names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])

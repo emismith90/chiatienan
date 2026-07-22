@@ -150,14 +150,13 @@ def _settlement_body(attachments: dict) -> str:
 
 
 def _payment_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a manual payment, straight from the
-    tool-result dict — never from LLM prose (design D3, money-safety)."""
-    frm = attachments.get("from") or {}
-    to = attachments.get("to") or {}
-    return (
-        f"💸 Đã ghi: {frm.get('name', '?')} trả {to.get('name', '?')} "
-        f"{attachments.get('amount', 0):,}đ"
-    )
+    """Deterministic Vietnamese summary of recorded payment(s), from the tool/commit
+    dict — never LLM prose (money-safety)."""
+    transfers = attachments.get("transfers") or []
+    if not transfers:
+        return "💸 Đã ghi thanh toán."
+    lines = [f"{t['from']['name']} trả {t['to']['name']} {t['amount']:,}đ" for t in transfers]
+    return "💸 " + lines[0] if len(lines) == 1 else "💸 Đã ghi:\n" + "\n".join(lines)
 
 
 def _settle_blocked_body(attachments: dict) -> str:
@@ -167,10 +166,10 @@ def _settle_blocked_body(attachments: dict) -> str:
     lines = [attachments.get("message") or "Có đề xuất chưa xác nhận."]
     for p in attachments.get("pending") or []:
         if p.get("kind") == "payment":
-            lines.append(
-                f"• #{p['draft_id']}: {p.get('from_name', '?')} → {p.get('to_name', '?')} "
-                f"{p.get('amount', 0):,}đ"
+            parts = ", ".join(
+                f"{t['from_name']}→{t['to_name']} {t['amount']:,}đ" for t in (p.get("transfers") or [])
             )
+            lines.append(f"• #{p['draft_id']}: {parts}")
         else:
             lines.append(
                 f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
@@ -235,7 +234,12 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         # turn ends with an editable draft card for the human to confirm
         # (design D3, money-safety).
         proposal = result.last_result("propose_meal")
-        payment_proposal = result.last_result("propose_payment")
+        payment_transfers = [
+            {"from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
+             "amount": p["amount"], "note": p.get("note")}
+            for p in result.all_results("propose_payment")
+            if p.get("type") == "payment_draft"
+        ]
         if proposal:
             payload = {k: proposal[k] for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
@@ -245,10 +249,8 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             payload["turn_id"] = result.turn_id
             with db.session() as s:
                 new_msg, _ = drafts.create_draft(s, room_id, payload)
-        elif payment_proposal and payment_proposal.get("type") == "payment_draft":
-            payload = {k: payment_proposal[k] for k in
-                       ("from_member_id", "to_member_id", "amount", "note")}
-            payload["turn_id"] = result.turn_id
+        elif payment_transfers:
+            payload = {"transfers": payment_transfers, "turn_id": result.turn_id}
             with db.session() as s:
                 new_msg = drafts.create_payment_draft(s, room_id, payload)
         else:

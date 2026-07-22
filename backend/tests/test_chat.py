@@ -81,8 +81,17 @@ def test_render_bot_attachments_dispatch():
 
 
 def test_payment_body_renders_from_dict():
-    body = chat._payment_body({"from": {"name": "An"}, "to": {"name": "Bình"}, "amount": 125000})
+    body = chat._payment_body({"transfers": [
+        {"from": {"name": "An"}, "to": {"name": "Bình"}, "amount": 125000}]})
     assert "An" in body and "Bình" in body and "125,000" in body
+
+
+def test_payment_body_renders_multiple_transfers():
+    body = chat._payment_body({"transfers": [
+        {"from": {"name": "An"}, "to": {"name": "Linh"}, "amount": 30000},
+        {"from": {"name": "Bình"}, "to": {"name": "Linh"}, "amount": 20000}]})
+    assert "An" in body and "Bình" in body and "Linh" in body
+    assert "30,000" in body and "20,000" in body
 
 
 def test_settle_blocked_body_lists_pending():

@@ -11,29 +11,54 @@ class _FakeResult:
     final_text = "ok"
     error = None
 
-    def __init__(self, payment):
-        self._payment = payment
+    def __init__(self, payments):
+        self._payments = payments
 
     def last_result(self, name):
-        return self._payment if name == "propose_payment" else None
+        return None
+
+    def all_results(self, name):
+        return self._payments if name == "propose_payment" else []
 
 
 @pytest.fixture
 def room(db):
-    room_id, (a, b) = _seed_room(db, 2)
-    ids = {"room": room_id, "alice": a, "bob": b}
+    room_id, (a, b, c) = _seed_room(db, 3)
+    ids = {"room": room_id, "alice": a, "bob": b, "carol": c}
     return db, ids
 
 
 def test_payment_proposal_creates_payment_draft(room, monkeypatch):
     db, ids = room
-    payment = {"type": "payment_draft", "from_member_id": ids["alice"],
-               "to_member_id": ids["bob"], "amount": 50000, "note": None}
+    payments = [{"type": "payment_draft", "from_member_id": ids["alice"],
+                 "to_member_id": ids["bob"], "amount": 50000, "note": None}]
 
     async def fake_run_turn(*a, **k):
-        return _FakeResult(payment)
+        return _FakeResult(payments)
 
     monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
     msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice", "@bot alice trả bob rồi"))
     assert msg.kind == "payment_draft"
-    assert (msg.attachments or {})["amount"] == 50000
+    transfers = (msg.attachments or {})["transfers"]
+    assert len(transfers) == 1
+    assert transfers[0]["amount"] == 50000
+
+
+def test_multi_payer_proposals_create_one_payment_draft(room, monkeypatch):
+    db, ids = room
+    payments = [
+        {"type": "payment_draft", "from_member_id": ids["alice"],
+         "to_member_id": ids["carol"], "amount": 30000, "note": None},
+        {"type": "payment_draft", "from_member_id": ids["bob"],
+         "to_member_id": ids["carol"], "amount": 20000, "note": None},
+    ]
+
+    async def fake_run_turn(*a, **k):
+        return _FakeResult(payments)
+
+    monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
+    msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice",
+                                        "@bot alice và bob trả carol rồi"))
+    assert msg.kind == "payment_draft"
+    transfers = (msg.attachments or {})["transfers"]
+    assert len(transfers) == 2

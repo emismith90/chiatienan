@@ -442,8 +442,8 @@ def test_commit_payment_draft_via_endpoint(client):
     members = client.get(f"/api/rooms/{room_id}/members", headers=h).json()
     bob_id = next(m["id"] for m in members if m["nickname"] == "bob")
     with get_db().session() as s:
-        d = drafts.create_payment_draft(s, room_id, {
-            "from_member_id": me["id"], "to_member_id": bob_id, "amount": 25000, "note": None})
+        d = drafts.create_payment_draft(s, room_id, {"transfers": [
+            {"from_member_id": me["id"], "to_member_id": bob_id, "amount": 25000, "note": None}]})
         draft_id = d.id
     r = client.post(f"/api/rooms/{room_id}/drafts/{draft_id}/commit", headers=h)
     assert r.status_code == 200, r.text

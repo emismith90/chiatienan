@@ -51,6 +51,11 @@ class TurnResult:
                 return inv.result
         return None
 
+    def all_results(self, name: str) -> list[dict]:
+        """All successful (``ok``) result dicts for a tool name, in call order."""
+        return [inv.result for inv in self.tools
+                if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok")]
+
 
 # --------------------------------------------------------------------------- #
 # Cursor message unwrapping (custom/MCP tools surface under name=='mcp')

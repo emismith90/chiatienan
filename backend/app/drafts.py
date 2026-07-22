@@ -187,7 +187,6 @@ def current_balances(session: Session, room_id: int) -> list[dict]:
 
 
 def create_payment_draft(session: Session, room_id: int, payload: dict) -> RoomMessage:
-    """Persist a new pending payment draft (mirror of create_draft)."""
     att = {"type": "payment_draft", "status": "pending", **payload}
     att.pop("logged_by", None)
     return chat.post_message(session, room_id, None, body="", attachments=att, kind="payment_draft")
@@ -201,21 +200,27 @@ def commit_payment_draft(session: Session, draft_id: int, room_id: int,
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("This draft has already been processed.")
-    if att.get("from_member_id") is None or att.get("to_member_id") is None or not att.get("amount"):
-        raise ledger.LedgerError("The draft is missing required fields to record.")
-
-    ledger.record_payment(
-        session, room_id=room_id,
-        from_member_id=int(att["from_member_id"]),
-        to_member_id=int(att["to_member_id"]),
-        amount=int(att["amount"]), note=att.get("note"), logged_by=logged_by,
-    )
+    transfers = att.get("transfers") or []
+    if not transfers:
+        raise ledger.LedgerError("The draft has no transfers to record.")
+    for t in transfers:
+        if t.get("from_member_id") is None or t.get("to_member_id") is None or not t.get("amount"):
+            raise ledger.LedgerError("A transfer is missing required fields.")
+    for t in transfers:
+        ledger.record_payment(
+            session, room_id=room_id,
+            from_member_id=int(t["from_member_id"]), to_member_id=int(t["to_member_id"]),
+            amount=int(t["amount"]), note=t.get("note"), logged_by=logged_by,
+        )
     names = _all_member_names(session, room_id)
     pay_att = {
         "type": "payment",
-        "from": {"id": att["from_member_id"], "name": names.get(att["from_member_id"], "?")},
-        "to": {"id": att["to_member_id"], "name": names.get(att["to_member_id"], "?")},
-        "amount": att["amount"],
+        "transfers": [
+            {"from": {"id": t["from_member_id"], "name": names.get(t["from_member_id"], "?")},
+             "to": {"id": t["to_member_id"], "name": names.get(t["to_member_id"], "?")},
+             "amount": t["amount"]}
+            for t in transfers
+        ],
         "balances": current_balances(session, room_id),
     }
     card = chat.post_message(session, room_id, None, chat._payment_body(pay_att),

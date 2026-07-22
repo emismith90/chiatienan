@@ -53,6 +53,20 @@ def test_turn_result_last_result_picks_last_ok():
     assert tr.last_result("missing") is None
 
 
+def test_turn_result_all_results_returns_ok_in_order():
+    tr = TurnResult()
+    tr.tools = [
+        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 100}),
+        ToolInvocation("propose_payment", {}, {"ok": False, "error": "x"}),
+        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 200}),
+    ]
+    assert tr.all_results("propose_payment") == [
+        {"ok": True, "amount": 100},
+        {"ok": True, "amount": 200},
+    ]
+    assert tr.all_results("missing") == []
+
+
 def test_system_prompt_mentions_payment_and_reset():
     p = build_system_prompt()
     assert "record_payment" in p
