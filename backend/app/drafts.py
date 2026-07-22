@@ -9,6 +9,8 @@ go through :func:`app.ledger.record_meal` — the LLM never writes.
 """
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -123,6 +125,7 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
         dish=att.get("dish"),
         initiator=att.get("initiator"),
         note=att.get("note"),
+        occurred_on=date.fromisoformat(att["occurred_on"]) if att.get("occurred_on") else None,
         raw_input=att.get("raw_input"),
         logged_by=logged_by,
     )

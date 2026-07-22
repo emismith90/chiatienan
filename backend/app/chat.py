@@ -284,7 +284,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         if proposal:
             payload = {k: proposal[k] for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
-                "adjustments", "dish", "initiator", "note", "per_head_preview")}
+                "adjustments", "dish", "initiator", "note", "per_head_preview", "occurred_on")}
             payload["raw_input"] = text
             payload["logged_by"] = str(member_id)
             payload["turn_id"] = result.turn_id

@@ -24,7 +24,7 @@ from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
 from app.money import MoneyError, per_payer_transfers, split_with_guests
-from app.periods import resolve_period
+from app.periods import resolve_date, resolve_period
 from app.qr import QRError, make_qr_url
 
 logger = logging.getLogger("chiatienan")
@@ -103,6 +103,7 @@ _PROPOSE_SCHEMA = {
         "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
         "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
         "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
+        "occurred_on": {"type": "string", "description": "Meal date, ISO YYYY-MM-DD (from resolve_date when the user names a day). Omit = today."},
     },
     "required": ["participants", "total"],
 }
@@ -256,7 +257,16 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "initiator": args.get("initiator"),
             "note": args.get("note"),
             "per_head_preview": preview["per_head"],
+            "occurred_on": args.get("occurred_on"),
         }
+
+    def resolve_date_tool(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        try:
+            d = resolve_date(str(args.get("word") or ""), today=today_ict())
+        except ValueError as exc:
+            return _err(str(exc))
+        return {"ok": True, "date": d.isoformat()}
 
     def void_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -656,6 +666,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=resolve_period_tool,
             description="Turn a time keyword (since_last/this_week/...) into a concrete date range (ICT).",
             input_schema=_PERIOD_SCHEMA,
+        ),
+        "resolve_date": CustomTool(
+            execute=resolve_date_tool,
+            description="Turn a day word ('thứ 2', 'hôm qua', '20/7') into an ISO date (ICT). Use before propose_meal when the user names a day.",
+            input_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]},
         ),
         "get_period_balances": CustomTool(
             execute=get_period_balances,

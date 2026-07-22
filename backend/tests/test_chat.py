@@ -250,6 +250,7 @@ async def test_run_bot_turn_meal_proposal_creates_pending_draft(monkeypatch, db)
         "initiator": None,
         "note": None,
         "per_head_preview": 150000,
+        "occurred_on": None,
     }
 
     async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
@@ -285,6 +286,7 @@ async def test_run_bot_turn_meal_proposal_carries_turn_id(monkeypatch, db):
         "payer_member_id": member_id, "member_participants": [member_id, member2_id],
         "guests": [], "bill_total": 100000, "adjustments": [], "dish": None,
         "initiator": None, "note": None, "per_head_preview": 50000,
+        "occurred_on": None,
     }
 
     async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
