@@ -34,7 +34,7 @@ export function RoomSwitcher() {
     <div ref={ref} className="relative min-w-0">
       <button
         type="button"
-        aria-label="Room menu"
+        aria-label={`Room menu: ${roomName || "chiatienan"}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

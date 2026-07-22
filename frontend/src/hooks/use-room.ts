@@ -161,11 +161,12 @@ export function useRoom(roomId: number) {
     (async () => {
       try {
         const { messages } = await api.getMessages(roomId, 0);
+        if (stop) return;
         messages.forEach((m: any) => (lastId.current = Math.max(lastId.current, m.id)));
         setState({ messages, typing: false, timelines: {}, activeTurn: null });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
-          signOut();
+          if (!stop) signOut();
           return;
         }
       }
