@@ -35,6 +35,49 @@ def test_post_and_list_since():
         assert rows[0]["author"]["nickname"] == "an"
 
 
+def test_list_messages_page_windows_by_days_and_paginates(db):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        old = chat.post_message(s, room_id, m[0], "old")
+        recent = chat.post_message(s, room_id, m[0], "recent")
+        old.created_at = now_ict() - timedelta(days=10)
+        s.flush()
+        old_id, recent_id = old.id, recent.id
+
+    with db.session() as s:
+        # Initial window: only the last 3 days, but older history still exists.
+        msgs, has_more = chat.list_messages_page(s, room_id, days=3)
+        assert [x["id"] for x in msgs] == [recent_id]
+        assert has_more is True
+
+        # Load earlier: page below the recent window, no time bound.
+        older, has_more2 = chat.list_messages_page(s, room_id, before_id=recent_id)
+        assert [x["id"] for x in older] == [old_id]
+        assert has_more2 is False
+
+
+def test_list_messages_page_limit_reports_has_more(db):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        ids = [chat.post_message(s, room_id, m[0], f"m{i}").id for i in range(5)]
+    with db.session() as s:
+        msgs, has_more = chat.list_messages_page(s, room_id, days=3, limit=2)
+        assert [x["id"] for x in msgs] == ids[-2:]  # most-recent 2, oldest→newest
+        assert has_more is True
+
+
+def test_list_messages_page_empty_window_still_reports_older(db):
+    room_id, m = _seed_room(db, 1)
+    with db.session() as s:
+        old = chat.post_message(s, room_id, m[0], "old")
+        old.created_at = now_ict() - timedelta(days=30)
+        s.flush()
+    with db.session() as s:
+        msgs, has_more = chat.list_messages_page(s, room_id, days=3)
+        assert msgs == []          # nothing in the last 3 days
+        assert has_more is True    # but there is older history to pull in
+
+
 # --- render_bot_attachments precedence -------------------------------------- #
 
 class _FakeResult:

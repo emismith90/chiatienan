@@ -14,7 +14,15 @@ export type RoomState = {
   typing: boolean;
   timelines: Record<string, TimelineStep[]>;
   activeTurn: string | null;
+  /** Whether older messages exist above the loaded window (drives "load
+   * earlier"). Optional so the pure `mergeEvent` reducer — which only ever
+   * carries it through via spread — can be exercised with minimal states. */
+  hasMore?: boolean;
 };
+
+/** Initial scrollback window (days). Only messages this recent are fetched and
+ * rendered on mount; older history loads on demand via `loadEarlier`. */
+export const INITIAL_WINDOW_DAYS = 3;
 
 /**
  * Pure reducer for a single stream event. Kept side-effect free so it can be
@@ -114,19 +122,27 @@ function pendingBubble(id: number | string, body: string, images: ChatImage[] | 
 }
 
 export function useRoom(roomId: number) {
-  const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {}, activeTurn: null });
+  const [state, setState] = useState<RoomState>({ messages: [], typing: false, timelines: {}, activeTurn: null, hasMore: false });
   const { signOut, memberId } = useSession();
   const lastId = useRef(0);
   const storeRef = useRef<OutboxStore | null>(null);
   if (!storeRef.current) storeRef.current = defaultStore();
   // Lets `send` (outside the mount effect) kick the effect's outbox retry.
   const retryRef = useRef<() => void>(() => {});
+  // Mirror of the latest state so `loadEarlier` (defined outside the mount
+  // effect) can read the current messages without re-subscribing.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const loadingEarlierRef = useRef(false);
 
   useEffect(() => {
     const ac = new AbortController();
     let stop = false;
     lastId.current = 0;
-    setState({ messages: [], typing: false, timelines: {}, activeTurn: null });
+    loadingEarlierRef.current = false;
+    setLoadingEarlier(false);
+    setState({ messages: [], typing: false, timelines: {}, activeTurn: null, hasMore: false });
     const store = storeRef.current!;
 
     // A queued message the server ultimately rejects (e.g. 4xx) must not retry
@@ -206,10 +222,11 @@ export function useRoom(roomId: number) {
 
     (async () => {
       try {
-        const { messages } = await api.getMessages(roomId, 0);
+        // Only the last few days on mount — older history loads on demand.
+        const { messages, has_more } = await api.getMessages(roomId, { days: INITIAL_WINDOW_DAYS });
         if (stop) return;
         messages.forEach((m: any) => (lastId.current = Math.max(lastId.current, m.id)));
-        setState({ messages, typing: false, timelines: {}, activeTurn: null });
+        setState({ messages, typing: false, timelines: {}, activeTurn: null, hasMore: !!has_more });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           if (!stop) signOut();
@@ -275,6 +292,35 @@ export function useRoom(roomId: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
+  /** Pull in the next page of older messages (above the current window) and
+   * prepend them, keeping id-ascending order. Single-flight; a no-op once the
+   * server reports no more history. Real message ids are positive; optimistic
+   * pending bubbles use negative ids, so the oldest *real* id is the cursor. */
+  const loadEarlier = async () => {
+    if (loadingEarlierRef.current || !stateRef.current.hasMore) return;
+    const realIds = stateRef.current.messages
+      .map((m) => m.id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    if (!realIds.length) return;
+    const oldest = Math.min(...realIds);
+
+    loadingEarlierRef.current = true;
+    setLoadingEarlier(true);
+    try {
+      const { messages: older, has_more } = await api.getMessages(roomId, { beforeId: oldest });
+      setState((prev) => {
+        const known = new Set(prev.messages.map((m) => m.id));
+        const fresh = (older ?? []).filter((m: any) => !known.has(m.id));
+        return { ...prev, messages: [...fresh, ...prev.messages], hasMore: !!has_more };
+      });
+    } catch {
+      // Leave hasMore as-is so the user can retry; nothing to reconcile.
+    } finally {
+      loadingEarlierRef.current = false;
+      setLoadingEarlier(false);
+    }
+  };
+
   const send = (text: string, images?: ChatImage[]) => {
     // Optimistic echo: show the user's own message immediately instead of
     // waiting for the POST -> SSE round-trip. Reconciled (or marked
@@ -319,5 +365,14 @@ export function useRoom(roomId: number) {
     });
   };
 
-  return { messages: state.messages, typing: state.typing, timelines: state.timelines, activeTurn: state.activeTurn, send };
+  return {
+    messages: state.messages,
+    typing: state.typing,
+    timelines: state.timelines,
+    activeTurn: state.activeTurn,
+    hasMore: state.hasMore,
+    loadingEarlier,
+    loadEarlier,
+    send,
+  };
 }

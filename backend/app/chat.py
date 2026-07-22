@@ -85,6 +85,43 @@ def list_messages(session: Session, room_id: int, since_id: int = 0, limit: int 
     return [message_to_dict(r, authors.get(r.author_member_id)) for r in rows]
 
 
+def list_messages_page(session: Session, room_id: int, *, days: int | None = None,
+                       before_id: int | None = None, limit: int = 100) -> tuple[list[dict], bool]:
+    """A bounded window of messages (oldest→newest) plus whether older ones exist.
+
+    Two access patterns drive the PWA's lazy scrollback:
+      - Initial load — ``days=N``: only messages from the last N days (by
+        ``created_at`` in ICT), so the client renders a small recent slice
+        instead of the whole history.
+      - Load earlier — ``before_id=X``: the page of ``limit`` messages with
+        ``id < X`` (no time bound), for pulling in older history on demand.
+
+    Either way the most-recent ``limit`` matching rows are returned, and
+    ``has_more`` reports whether any message strictly older than the returned
+    window still exists — so the client knows to keep offering "load earlier"
+    (including when the recent window is empty but older history remains).
+    """
+    q = select(RoomMessage).where(RoomMessage.room_id == room_id)
+    if before_id is not None:
+        q = q.where(RoomMessage.id < before_id)
+    if days is not None:
+        q = q.where(RoomMessage.created_at >= now_ict() - timedelta(days=days))
+    rows = list(reversed(
+        session.scalars(q.order_by(RoomMessage.id.desc()).limit(limit)).all()
+    ))
+
+    # Anything older than the oldest returned row (or older than the requested
+    # cursor when the window is empty) means there's more to load.
+    floor = rows[0].id if rows else before_id
+    older_q = select(RoomMessage.id).where(RoomMessage.room_id == room_id)
+    if floor is not None:
+        older_q = older_q.where(RoomMessage.id < floor)
+    has_more = session.scalar(older_q.limit(1)) is not None
+
+    authors = {m.id: m for m in session.scalars(select(Member).where(Member.room_id == room_id))}
+    return [message_to_dict(r, authors.get(r.author_member_id)) for r in rows], has_more
+
+
 def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) -> str:
     """Render chat rows as ``«Name»: body`` / ``chiatienan: body`` lines,
     oldest→newest, each body clamped. Empty rows → ``""``."""

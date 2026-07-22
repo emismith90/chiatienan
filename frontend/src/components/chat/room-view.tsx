@@ -357,7 +357,8 @@ export function ProfileDialog({
 }
 
 export function RoomView({ roomId }: { roomId: number }) {
-  const { messages, typing, timelines, activeTurn, send } = useRoom(roomId);
+  const { messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send } =
+    useRoom(roomId);
   const { memberId } = useSession();
   const online = useOnline();
   const [members, setMembers] = useState<Member[]>([]);
@@ -376,10 +377,24 @@ export function RoomView({ roomId }: { roomId: number }) {
     };
   }, [roomId]);
 
-  // Auto-scroll to the newest message / typing indicator.
+  // Auto-scroll to the newest message / typing indicator. Keyed on the LAST
+  // message id (not the array) so prepending older history via "load earlier"
+  // doesn't yank the viewport to the bottom.
+  const lastId = messages.length ? messages[messages.length - 1].id : null;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, typing]);
+  }, [lastId, typing]);
+
+  // Load older messages while keeping the reader anchored: content is inserted
+  // above, so restore scrollTop by the height the list grew.
+  async function onLoadEarlier() {
+    const el = scrollRef.current;
+    const before = el ? el.scrollHeight : 0;
+    await loadEarlier();
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop += el.scrollHeight - before;
+    });
+  }
 
   return (
     <main className="flex h-dvh flex-col bg-[var(--bg-base)]">
@@ -410,7 +425,19 @@ export function RoomView({ roomId }: { roomId: number }) {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
-          {messages.length === 0 && !typing && (
+          {hasMore && (
+            <div className="mb-4 flex justify-center">
+              <button
+                type="button"
+                onClick={onLoadEarlier}
+                disabled={loadingEarlier}
+                className="rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] disabled:opacity-60"
+              >
+                {loadingEarlier ? "Loading…" : "Load earlier messages"}
+              </button>
+            </div>
+          )}
+          {messages.length === 0 && !hasMore && !typing && (
             <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">
               No messages yet. Tap a suggestion below or message @bot.
             </p>
