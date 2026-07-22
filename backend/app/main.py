@@ -77,6 +77,11 @@ class MessageIn(BaseModel):
     images: list[dict] | None = None
 
 
+class QuickPayIn(BaseModel):
+    to: int
+    meal_id: int
+
+
 class DraftPatchIn(BaseModel):
     payer_member_id: int | None = None
     member_participants: list[int] | None = None
@@ -278,6 +283,7 @@ async def get_ledger(room_id: int, period: str = "since_last",
                            last_settlement_to=last.period_to if last else None)
         balances = ledger.period_balances(s, room_id, p["from"], p["to"])
         timeline = ledger.period_timeline(s, room_id, p["from"], p["to"])
+        me_stmt = ledger.statement_for(s, room_id, ctx.member_id, p["from"], p["to"])
         names = {mm.id: mm.display_name
                  for mm in roster.list_members(s, room_id, include_inactive=True)}
     for e in timeline:
@@ -292,7 +298,43 @@ async def get_ledger(room_id: int, period: str = "since_last",
         "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
                      for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
         "timeline": timeline,
+        "me": {
+            "owe": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owe"]],
+            "owed": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owed"]],
+            "net": me_stmt["net"],
+        },
     }
+
+
+@app.post("/api/rooms/{room_id}/payments/quick")
+async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            last = ledger.last_settlement(s, room_id)
+            p = resolve_period("since_last", today=today_ict(),
+                               last_settlement_to=last.period_to if last else None)
+            edges = ledger.debt_breakdown(s, room_id, p["from"], p["to"])
+            outstanding = sum(e.outstanding for e in edges
+                              if e.debtor == ctx.member_id and e.creditor == body.to
+                              and e.meal_id == body.meal_id)
+            if outstanding <= 0:
+                raise HTTPException(409, "nothing outstanding for that meal")
+            pay = ledger.record_payment(s, room_id=room_id, from_member_id=ctx.member_id,
+                                        to_member_id=body.to, amount=outstanding,
+                                        meal_id=body.meal_id, logged_by=str(ctx.member_id))
+            names = {mm.id: mm.display_name
+                     for mm in roster.list_members(s, room_id, include_inactive=True)}
+            msg = chat.post_message(
+                s, room_id, None,
+                f"💸 {names.get(ctx.member_id, '?')} trả {names.get(body.to, '?')} {outstanding:,}đ",
+                kind="bot",
+            )
+            msg_payload = chat.message_to_dict(msg, None)
+    await hub.publish(room_id, {"type": "message", **msg_payload})
+    await hub.publish(room_id, {"type": "ledger:changed"})
+    return {"ok": True, "payment_id": pay["payment_id"], "amount": outstanding}
 
 
 @app.post("/api/rooms/{room_id}/messages")

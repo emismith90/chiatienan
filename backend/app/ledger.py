@@ -304,6 +304,21 @@ def debt_breakdown(
     return apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)
 
 
+def statement_for(
+    session: Session, room_id: int, member_id: int, from_date: date | None, to_date: date
+) -> dict:
+    """The caller's own owe/owed edges (outstanding > 0) + net. Ids only."""
+    edges = debt_breakdown(session, room_id, from_date, to_date)
+    owe = [{"other_id": e.creditor, "meal_id": e.meal_id, "dish": e.dish,
+            "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+           for e in edges if e.debtor == member_id and e.outstanding > 0]
+    owed = [{"other_id": e.debtor, "meal_id": e.meal_id, "dish": e.dish,
+             "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+            for e in edges if e.creditor == member_id and e.outstanding > 0]
+    net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
+    return {"owe": owe, "owed": owed, "net": net}
+
+
 def period_timeline(
     session: Session, room_id: int, from_date: date | None, to_date: date
 ) -> list[dict]:

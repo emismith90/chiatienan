@@ -343,19 +343,20 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 args.get("keyword"), today=today_ict(),
                 last_settlement_to=last.period_to if last else None,
             )
-            edges = ledger.debt_breakdown(s, ctx.room_id, period["from"], period["to"])
-            ids = {e.debtor for e in edges} | {e.creditor for e in edges} | {member}
+            stmt = ledger.statement_for(s, ctx.room_id, member, period["from"], period["to"])
+            ids = {r["other_id"] for r in stmt["owe"]} | {r["other_id"] for r in stmt["owed"]} \
+                | {member}
             names = _names_for(s, ctx.room_id, ids)
 
-        def _row(e, other_id):
-            return {"creditor_id" if other_id == e.creditor else "debtor_id": other_id,
-                    "name": names.get(other_id, "?"), "meal_id": e.meal_id, "dish": e.dish,
-                    "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding,
-                    "status": e.status}
+        def _row(r, key):
+            other_id = r["other_id"]
+            return {key: other_id, "name": names.get(other_id, "?"),
+                    "meal_id": r["meal_id"], "dish": r["dish"],
+                    "occurred_on": r["occurred_on"], "amount": r["amount"], "status": r["status"]}
 
-        owe = [_row(e, e.creditor) for e in edges if e.debtor == member and e.outstanding > 0]
-        owed = [_row(e, e.debtor) for e in edges if e.creditor == member and e.outstanding > 0]
-        net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
+        owe = [_row(r, "creditor_id") for r in stmt["owe"]]
+        owed = [_row(r, "debtor_id") for r in stmt["owed"]]
+        net = stmt["net"]
         return {
             "ok": True, "type": "statement",
             "member": {"id": member, "name": names.get(member, "?")},
