@@ -120,9 +120,6 @@ def build_history(session: Session, room_id: int, *, watermark: int = 0,
 
 
 def render_bot_attachments(result) -> dict | None:
-    payment = result.last_result("record_payment")
-    if payment:
-        return dict(payment)  # already {type:"payment", ...}
     settle = result.last_result("settle_period")
     if settle:
         if settle.get("type") == "settle_blocked":
@@ -169,10 +166,16 @@ def _settle_blocked_body(attachments: dict) -> str:
     never from LLM prose (design D3, money-safety)."""
     lines = [attachments.get("message") or "Có đề xuất chưa xác nhận."]
     for p in attachments.get("pending") or []:
-        lines.append(
-            f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
-            f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
-        )
+        if p.get("kind") == "payment":
+            lines.append(
+                f"• #{p['draft_id']}: {p.get('from_name', '?')} → {p.get('to_name', '?')} "
+                f"{p.get('amount', 0):,}đ"
+            )
+        else:
+            lines.append(
+                f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
+                f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
+            )
     return "\n".join(lines)
 
 
@@ -232,6 +235,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         # turn ends with an editable draft card for the human to confirm
         # (design D3, money-safety).
         proposal = result.last_result("propose_meal")
+        payment_proposal = result.last_result("propose_payment")
         if proposal:
             payload = {k: proposal[k] for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
@@ -241,6 +245,12 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             payload["turn_id"] = result.turn_id
             with db.session() as s:
                 new_msg, _ = drafts.create_draft(s, room_id, payload)
+        elif payment_proposal and payment_proposal.get("type") == "payment_draft":
+            payload = {k: payment_proposal[k] for k in
+                       ("from_member_id", "to_member_id", "amount", "note")}
+            payload["turn_id"] = result.turn_id
+            with db.session() as s:
+                new_msg = drafts.create_payment_draft(s, room_id, payload)
         else:
             attachments = render_bot_attachments(result)
 
@@ -252,8 +262,6 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 body = _settlement_body(attachments)
             elif attachments and attachments.get("type") == "settle_blocked":
                 body = _settle_blocked_body(attachments)
-            elif attachments and attachments.get("type") == "payment":
-                body = _payment_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 

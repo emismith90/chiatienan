@@ -73,24 +73,11 @@ def test_render_bot_attachments_neither():
 
 def test_render_bot_attachments_dispatch():
     assert chat.render_bot_attachments(
-        _FakeResult({"record_payment": {"type": "payment", "amount": 1}})
-    )["type"] == "payment"
-    assert chat.render_bot_attachments(
         _FakeResult({"settle_period": {"type": "settle_blocked", "pending": []}})
     )["type"] == "settle_blocked"
     assert chat.render_bot_attachments(
         _FakeResult({"settle_period": {"transfers": []}})
     )["type"] == "settlement"
-
-
-def test_render_bot_attachments_payment_wins_over_settle():
-    # Design: a turn producing both a payment and a settle result renders the
-    # PAYMENT (record_payment is checked before settle_period).
-    fake = _FakeResult({
-        "settle_period": {"transfers": []},
-        "record_payment": {"type": "payment", "amount": 1},
-    })
-    assert chat.render_bot_attachments(fake)["type"] == "payment"
 
 
 def test_payment_body_renders_from_dict():

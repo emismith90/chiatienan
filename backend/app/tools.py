@@ -439,13 +439,23 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 summaries = []
                 for d in pending:
                     att = d.attachments or {}
-                    names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
-                    summaries.append({
-                        "draft_id": d.id,
-                        "payer_name": names.get(att.get("payer_member_id"), "?"),
-                        "bill_total": att.get("bill_total", 0),
-                        "participant_count": len(att.get("member_participants") or []),
-                    })
+                    if att.get("type") == "payment_draft":
+                        names = _names_for(s, ctx.room_id,
+                                           [att.get("from_member_id"), att.get("to_member_id")])
+                        summaries.append({
+                            "draft_id": d.id, "kind": "payment",
+                            "from_name": names.get(att.get("from_member_id"), "?"),
+                            "to_name": names.get(att.get("to_member_id"), "?"),
+                            "amount": att.get("amount", 0),
+                        })
+                    else:
+                        names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
+                        summaries.append({
+                            "draft_id": d.id, "kind": "meal",
+                            "payer_name": names.get(att.get("payer_member_id"), "?"),
+                            "bill_total": att.get("bill_total", 0),
+                            "participant_count": len(att.get("member_participants") or []),
+                        })
                 return {
                     "ok": True,
                     "type": "settle_blocked",
