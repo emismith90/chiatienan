@@ -163,10 +163,10 @@ def render_bot_attachments(result) -> dict | None:
             return dict(settle)
         return {"type": "settlement", **settle}
     statement = result.last_result("member_statement")
-    if statement:
+    if statement and statement.get("type") == "statement":
         return {"type": "statement", **statement}
     summary = result.last_result("get_period_summary")
-    if summary:
+    if summary and summary.get("type") == "summary":
         return {"type": "summary", **summary}
     return None
 

@@ -67,3 +67,13 @@ def test_explicit_amount_never_netted(setup):
     d, room, m = setup
     res = _tools(d, room, m["Giang"])["propose_payment"].execute({"to": m["Linh"], "amount": 61000})
     assert res["type"] == "payment_draft" and res["amount"] == 61000
+
+
+def test_mode_offset_flips_direction(setup):
+    d, room, m = setup
+    # Giang owes Linh 61k; Linh owes Giang 75k. Net: Linh pays Giang 14k.
+    res = _tools(d, room, m["Giang"])["propose_payment"].execute({"to": m["Linh"], "mode": "offset"})
+    assert res["type"] == "payment_draft"
+    assert res["from_member_id"] == m["Linh"]
+    assert res["to_member_id"] == m["Giang"]
+    assert res["amount"] == 14000

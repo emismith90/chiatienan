@@ -27,7 +27,7 @@ def test_quick_pay_records_meal_outstanding(api_client_room):
     r = client.post(f"/api/rooms/{room_id}/payments/quick",
                     json={"to": m["Linh"], "meal_id": meal_id}, headers=headers)
     assert r.status_code == 200 and r.json()["amount"] == 61000
-    # ledger now shows that edge paid
+    # ledger now shows the paid meal is gone from the caller's owe list
     led = client.get(f"/api/rooms/{room_id}/ledger", headers=headers).json()
-    assert all(row["status"] == "paid" or row["amount"] == 0
-               for row in led["me"]["owe"] if row["meal_id"] == meal_id) or led["me"]["owe"] == []
+    assert all(row["meal_id"] != meal_id for row in led["me"]["owe"])
+    assert led["me"]["owe"] == []  # the fixture's single debt is fully cleared

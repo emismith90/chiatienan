@@ -31,3 +31,9 @@ def test_statement_defaults_to_sender_and_splits_directions(setup):
     assert res["owe"][0]["dish"] == "bun bo"
     assert res["owed"] == []
     assert res["net"] == -61000
+
+
+def test_non_numeric_member_returns_err_not_raise(setup):
+    d, room, m = setup
+    res = build_tools(ToolContext(db=d, room_id=room, sender_member_id=m["Giang"]))["member_statement"].execute({"member": "abc"})
+    assert res["ok"] is False

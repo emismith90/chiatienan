@@ -336,7 +336,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         member = args.get("member") or ctx.sender_member_id
         if not member:
             return _err("Không xác định được thành viên.")
-        member = int(member)
+        try:
+            member = int(member)
+        except (TypeError, ValueError):
+            return _err("Không xác định được thành viên.")
         with db.session() as s:
             last = ledger.last_settlement(s, ctx.room_id)
             period = resolve_period(

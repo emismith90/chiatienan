@@ -27,3 +27,14 @@ def test_render_summary_attachment():
     att = render_bot_attachments(res)
     assert att["type"] == "summary"
     assert "bun bo" in _summary_body(att)
+
+
+def test_err_statement_result_not_wrapped():
+    # An _err (ok:False) from member_statement must NOT render as a balanced card.
+    res = _Fake("member_statement", {"ok": False, "error": "x"})
+    assert render_bot_attachments(res) is None
+
+
+def test_err_summary_result_not_wrapped():
+    res = _Fake("get_period_summary", {"ok": False, "error": "x"})
+    assert render_bot_attachments(res) is None
