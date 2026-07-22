@@ -83,7 +83,7 @@ export default function Join() {
         mode === "create"
           ? await api.createAccount(token, f)
           : await api.identify(token, { nickname: f.nickname, pin: f.pin });
-      signIn(res.token, res.room_id);
+      signIn(res.token, res.room_id, room?.name ?? "");
       router.push("/");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Something went wrong, please try again.");
