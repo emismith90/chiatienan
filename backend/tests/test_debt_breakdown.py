@@ -46,3 +46,56 @@ def test_meal_targeted_payment_marks_that_meal_not_oldest():
     out = apply_payments_fifo(edges, [{"from": 9, "to": 6, "amount": 40000, "meal_id": 5}])
     by = {e.meal_id: e for e in out}
     assert by[5].status == "paid" and by[2].status == "unpaid"   # targeted beats FIFO
+
+
+import pytest
+from app.db import Database
+from app import ledger, roster
+
+
+@pytest.fixture
+def db(tmp_path):
+    d = Database(f"sqlite:///{tmp_path}/t.db")
+    d.create_all()
+    return d
+
+
+def _mk_room_members(s):
+    from app.models import Room, Member
+    r = Room(name="t", invite_token="tok")
+    s.add(r); s.flush()
+    ms = {}
+    for name in ("Linh", "Giang", "Dung"):
+        m = Member(room_id=r.id, display_name=name, nickname=name)
+        s.add(m); s.flush(); ms[name] = m.id
+    return r.id, ms
+
+
+def test_debt_breakdown_two_way(db):
+    with db.session() as s:
+        room, m = _mk_room_members(s)
+        # Linh pays 122k split Linh+Giang -> Giang owes Linh 61k
+        ledger.record_meal(s, room_id=room, payer_member_id=m["Linh"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=122000,
+                           dish="bun bo", occurred_on=date(2026, 7, 21))
+        # Giang pays 150k split Linh+Giang -> Linh owes Giang 75k
+        ledger.record_meal(s, room_id=room, payer_member_id=m["Giang"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=150000,
+                           dish="nem", occurred_on=date(2026, 7, 22))
+        edges = ledger.debt_breakdown(s, room, None, date(2026, 7, 22))
+        owe = {(e.debtor, e.creditor): e.outstanding for e in edges}
+        assert owe[(m["Giang"], m["Linh"])] == 61000   # gross, NOT netted
+        assert owe[(m["Linh"], m["Giang"])] == 75000
+
+
+def test_period_timeline_orders_by_date_then_created(db):
+    with db.session() as s:
+        room, m = _mk_room_members(s)
+        ledger.record_meal(s, room_id=room, payer_member_id=m["Linh"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=122000,
+                           dish="bun bo", occurred_on=date(2026, 7, 21))
+        ledger.record_payment(s, room_id=room, from_member_id=m["Giang"],
+                              to_member_id=m["Linh"], amount=61000, occurred_on=date(2026, 7, 22))
+        tl = ledger.period_timeline(s, room, None, date(2026, 7, 22))
+        assert [e["kind"] for e in tl] == ["meal", "payment"]
+        assert tl[0]["dish"] == "bun bo" and tl[1]["amount"] == 61000
