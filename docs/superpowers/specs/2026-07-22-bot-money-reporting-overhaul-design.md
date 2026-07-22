@@ -113,7 +113,8 @@ Extend `render_bot_attachments` to map:
 ### 4.6 REST endpoint + SSE (⑥ — panel data)
 The always-on panel must **not** go through the bot. Add a read-only route:
 - `GET /api/rooms/{id}/ledger?period=since_last` → `{ period, balances:[{id,name,balance}], timeline:[…events…] }`, assembled from `period_balances` + `period_timeline` (the same helpers the summary tool uses — one code path, one truth). Auth = the existing room-session guard.
-- **Live refresh:** every ledger write (`record_meal`, `record_payment`, `record_settlement`) publishes a lightweight `ledger:changed` event on the existing in-process `RoomHub`; the client refetches `/ledger` on receipt (the SSE stream already exists via `useRoom`). No payload diffing — a full refetch of a tiny JSON is simplest and always correct.
+- **Same period reset as chat (required):** the endpoint resolves its window with the identical `resolve_period("since_last", last_settlement_to=last_settlement.period_to)` logic the tools use — so the panel always shows the **open period since the last `chốt`**, not all-time. When a settlement commits (or the group resets), the closed meals/payments drop out and the panel shows a fresh, balanced period exactly like the bot would. `from`/`to` overrides are accepted for parity with the tools but the default is `since_last`.
+- **Live refresh:** every ledger write (`record_meal`, `record_payment`, `record_settlement`) publishes a lightweight `ledger:changed` event on the existing in-process `RoomHub`; the client refetches `/ledger` on receipt (the SSE stream already exists via `useRoom`). Because a committed `record_settlement` also fires the event, the panel resets the instant a period closes. No payload diffing — a full refetch of a tiny JSON is simplest and always correct.
 
 ## 5. Frontend design
 
