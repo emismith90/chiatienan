@@ -14,6 +14,7 @@ into a clarifying-question result rather than writing a bad ledger row.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 class MoneyError(ValueError):
@@ -183,3 +184,79 @@ def split_with_guests(
         "guest_total": total - tracked_total,
         "headcount": n,
     }
+
+
+@dataclass(frozen=True)
+class DebtEdge:
+    """One participant's gross debt to a meal's payer, for a single meal.
+
+    ``paid`` is the portion covered by ad-hoc payments (attributed oldest-first
+    by :func:`apply_payments_fifo`); ``outstanding`` never goes negative.
+    """
+    debtor: int
+    creditor: int
+    meal_id: int
+    dish: str | None
+    occurred_on: date
+    amount: int
+    paid: int = 0
+
+    @property
+    def outstanding(self) -> int:
+        return self.amount - self.paid
+
+    @property
+    def status(self) -> str:
+        if self.paid <= 0:
+            return "unpaid"
+        return "paid" if self.paid >= self.amount else "partial"
+
+
+def build_debt_edges(meals: list[dict]) -> list[DebtEdge]:
+    """One :class:`DebtEdge` per (participant≠payer, meal), gross, ``paid=0``."""
+    edges: list[DebtEdge] = []
+    for m in meals:
+        payer = m["payer_id"]
+        for member, share in m["shares"].items():
+            if member == payer or share == 0:
+                continue
+            edges.append(DebtEdge(
+                debtor=member, creditor=payer, meal_id=m["meal_id"],
+                dish=m.get("dish"), occurred_on=m["occurred_on"], amount=share,
+            ))
+    return edges
+
+
+def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> list[DebtEdge]:
+    """Attribute payments to edges. A payment with ``meal_id`` settles that exact
+    edge first (⑦ quick action); the rest apply to the pair oldest-meal-first.
+
+    Returns new edges with ``paid`` set. Payment beyond an edge/pair total is
+    ignored (never makes ``outstanding`` negative). Deterministic:
+    ``(occurred_on, meal_id)`` order.
+    """
+    targeted: dict[tuple[int, int, int], int] = {}
+    pool: dict[tuple[int, int], int] = {}
+    for p in payments or []:
+        mid = p.get("meal_id")
+        if mid is not None:
+            targeted[(p["from"], p["to"], mid)] = targeted.get((p["from"], p["to"], mid), 0) + p["amount"]
+        else:
+            pool[(p["from"], p["to"])] = pool.get((p["from"], p["to"]), 0) + p["amount"]
+    out: list[DebtEdge] = []
+    for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id)):
+        paid = 0
+        tk = (e.debtor, e.creditor, e.meal_id)
+        if targeted.get(tk):
+            take = min(targeted[tk], e.amount)
+            targeted[tk] -= take
+            paid += take
+        remaining = e.amount - paid
+        if remaining > 0:
+            avail = pool.get((e.debtor, e.creditor), 0)
+            take = min(avail, remaining)
+            if take:
+                pool[(e.debtor, e.creditor)] = avail - take
+                paid += take
+        out.append(DebtEdge(e.debtor, e.creditor, e.meal_id, e.dish, e.occurred_on, e.amount, paid))
+    return out
