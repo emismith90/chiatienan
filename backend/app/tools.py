@@ -348,6 +348,35 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "owe": owe, "owed": owed, "net": net,
         }
 
+    def get_period_summary(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        with db.session() as s:
+            last = ledger.last_settlement(s, ctx.room_id)
+            period = resolve_period(
+                args.get("keyword"), today=today_ict(),
+                last_settlement_to=last.period_to if last else None,
+            )
+            timeline = ledger.period_timeline(s, ctx.room_id, period["from"], period["to"])
+            balances = ledger.period_balances(s, ctx.room_id, period["from"], period["to"])
+            ids = set(balances) | {e.get("payer_id") for e in timeline} \
+                | {e.get("from_id") for e in timeline} | {e.get("to_id") for e in timeline}
+            ids.discard(None)
+            names = _names_for(s, ctx.room_id, ids)
+        for e in timeline:
+            if e["kind"] == "meal":
+                e["payer_name"] = names.get(e["payer_id"], "?")
+            else:
+                e["from_name"] = names.get(e["from_id"], "?")
+                e["to_name"] = names.get(e["to_id"], "?")
+        return {
+            "ok": True, "type": "summary",
+            "period": {"from": period["from"].isoformat() if period["from"] else None,
+                       "to": period["to"].isoformat()},
+            "timeline": timeline,
+            "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
+                         for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
+        }
+
     def add_member(args, _tool_ctx=None) -> dict:
         args = args or {}
         display_name = args.get("display_name")
@@ -640,6 +669,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "member": {"type": "integer", "description": "member id; blank = the sender."},
                 "keyword": _PERIOD_SCHEMA["properties"]["keyword"],
             }},
+        ),
+        "get_period_summary": CustomTool(
+            execute=get_period_summary,
+            description="Group summary: chronological timeline of meals + payments and per-person net balances (display only). Use for 'summary'/'current state'/'tổng kết'.",
+            input_schema={"type": "object", "properties": {"keyword": _PERIOD_SCHEMA["properties"]["keyword"]}},
         ),
         "settle_period": CustomTool(
             execute=settle_period,
