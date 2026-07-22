@@ -9,6 +9,7 @@ import { InstallButton } from "@/components/install-button";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
+import { RoomSwitcher } from "./room-switcher";
 
 interface Member {
   id: number;
@@ -376,9 +377,7 @@ export function RoomView({ roomId }: { roomId: number }) {
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <h1 className="text-base font-semibold text-[var(--text-primary)]">
-                chiatienan
-              </h1>
+              <RoomSwitcher />
               {!online && (
                 <span
                   role="status"
