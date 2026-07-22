@@ -16,7 +16,7 @@ def test_defaults_when_env_absent(monkeypatch):
     for k in _REQUIRED_UNSET:
         monkeypatch.delenv(k, raising=False)
     s = Settings.from_env()
-    assert s.cursor_model == "composer-2.5"
+    assert s.cursor_model == "grok-4.5-fast"
     assert s.max_tools == 40
     assert s.max_seconds == 120
     assert s.bot_handle == "bot"

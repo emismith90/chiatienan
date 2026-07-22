@@ -48,7 +48,7 @@ class Settings:
     def from_env(cls) -> "Settings":
         return cls(
             cursor_api_key=(os.environ.get("CURSOR_API_KEY") or "").strip(),
-            cursor_model=(os.environ.get("CURSOR_SDK_MODEL") or "").strip() or "composer-2.5",
+            cursor_model=(os.environ.get("CURSOR_SDK_MODEL") or "").strip() or "grok-4.5-fast",
             cursor_workspace=(os.environ.get("CURSOR_SDK_WORKSPACE") or "").strip()
             or "/data/cursor-agent",
             cursor_api_base=((os.environ.get("CURSOR_API_BASE") or "").strip() or "https://api.cursor.com").rstrip("/"),
