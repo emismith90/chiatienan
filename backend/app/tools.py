@@ -24,6 +24,7 @@ from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
 from app.money import MoneyError, per_payer_transfers, split_with_guests
+from app.notes import build_qr_note
 from app.periods import resolve_period
 from app.qr import QRError, make_qr_url
 
@@ -499,13 +500,28 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             transfers = per_payer_transfers(meals, payments)
             # include_inactive: a transfer may involve a since-removed member.
             members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
-            note = f"Chia tien an {to_date.isoformat()}"
+            # Meal-level detail (date/dish) so each QR note names the meals it
+            # settles; per_payer_transfers nets these away, so we re-fetch them.
+            meal_details = ledger.period_meal_details(s, ctx.room_id, from_date, to_date)
+            fallback_note = f"Chia tien an {to_date.day}/{to_date.month}"
 
             rows: list[dict] = []
             warnings: list[str] = []
             for t in transfers:
                 payee = members.get(t.to_member)
                 payer = members.get(t.from_member)
+                # Meals the payee (creditor) fronted that this debtor took part in
+                # — the "what you're repaying" list for this transfer.
+                pair_meals = [
+                    {"date": md["occurred_on"], "dish": md["dish"]}
+                    for md in meal_details
+                    if md["payer_id"] == t.to_member and md["shares"].get(t.from_member, 0) > 0
+                ]
+                note = build_qr_note(
+                    payer.display_name if payer else "",
+                    pair_meals,
+                    fallback=fallback_note,
+                )
                 row = {
                     "from_id": t.from_member,
                     "from_name": payer.display_name if payer else "?",
