@@ -162,6 +162,12 @@ def render_bot_attachments(result) -> dict | None:
         if settle.get("type") == "settle_blocked":
             return dict(settle)
         return {"type": "settlement", **settle}
+    statement = result.last_result("member_statement")
+    if statement:
+        return {"type": "statement", **statement}
+    summary = result.last_result("get_period_summary")
+    if summary:
+        return {"type": "summary", **summary}
     return None
 
 
@@ -230,6 +236,42 @@ def _meal_body(attachments: dict) -> str:
         f"Đã ghi #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} trả "
         f"tổng {bill:,}đ{guest_str} • {shares_str}"
     )
+
+
+def _statement_body(att: dict) -> str:
+    """Deterministic VN text for a personal statement — numbers from the tool dict."""
+    name = (att.get("member") or {}).get("name", "?")
+    lines = [f"Số dư của {name}:"]
+    owe = att.get("owe") or []
+    owed = att.get("owed") or []
+    if owe:
+        lines.append("Bạn nợ:")
+        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'bữa ăn'}"
+                  f"{' – đã trả' if r['status'] == 'paid' else ''})" for r in owe]
+    if owed:
+        lines.append("Được nợ:")
+        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'bữa ăn'})" for r in owed]
+    if not owe and not owed:
+        lines.append("Bạn đã cân bằng — không nợ ai, không ai nợ bạn.")
+    else:
+        lines.append(f"Ròng: {att.get('net', 0):,}đ")
+    return "\n".join(lines)
+
+
+def _summary_body(att: dict) -> str:
+    """Deterministic VN text for the group summary — numbers from the tool dict."""
+    period = att.get("period") or {}
+    lines = [f"Tóm tắt đến {period.get('to')}:"]
+    for e in att.get("timeline") or []:
+        if e["kind"] == "meal":
+            lines.append(f"• {e.get('occurred_on')} 🍜 {e.get('dish') or 'bữa ăn'} — "
+                         f"{e.get('payer_name', '?')} trả {e.get('total', 0):,}đ")
+        else:
+            lines.append(f"• {e.get('occurred_on')} 💸 {e.get('from_name', '?')} → "
+                         f"{e.get('to_name', '?')} {e.get('amount', 0):,}đ")
+    if len(lines) == 1:
+        lines.append("Chưa có giao dịch nào trong kỳ.")
+    return "\n".join(lines)
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
@@ -305,6 +347,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 body = _settlement_body(attachments)
             elif attachments and attachments.get("type") == "settle_blocked":
                 body = _settle_blocked_body(attachments)
+            elif attachments and attachments.get("type") == "statement":
+                body = _statement_body(attachments)
+            elif attachments and attachments.get("type") == "summary":
+                body = _summary_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
 
