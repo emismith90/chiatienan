@@ -109,6 +109,7 @@ def record_payment(
     note: str | None = None,
     source: str = "web",
     logged_by: str | None = None,
+    meal_id: int | None = None,
 ) -> dict:
     """Record a cash payment from one member to another (adjusts balances)."""
     if amount <= 0:
@@ -136,6 +137,7 @@ def record_payment(
         note=note,
         source=source,
         logged_by=logged_by,
+        meal_id=meal_id,
     )
     session.add(pay)
     session.flush()
@@ -293,9 +295,10 @@ def debt_breakdown(
     if from_date is not None:
         pay_conds.append(Payment.occurred_on >= from_date)
     payments = [
-        {"from": f, "to": t, "amount": a}
-        for f, t, a in session.execute(
-            select(Payment.from_member_id, Payment.to_member_id, Payment.amount).where(*pay_conds)
+        {"from": f, "to": t, "amount": a, "meal_id": mid}
+        for f, t, a, mid in session.execute(
+            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id)
+            .where(*pay_conds)
         ).all()
     ]
     return apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)

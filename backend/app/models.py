@@ -136,6 +136,7 @@ class Payment(Base):
     to_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
     occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    meal_id: Mapped[int | None] = mapped_column(ForeignKey("meals.id"), nullable=True, default=None)
     note: Mapped[str | None] = mapped_column(String(400))
     source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)
     logged_by: Mapped[str | None] = mapped_column(String(120))
