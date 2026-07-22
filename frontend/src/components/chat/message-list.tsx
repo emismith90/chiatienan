@@ -129,7 +129,7 @@ export function MessageList({
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
             </span>
-            <BotMessage body={m.body} attachments={m.attachments} />
+            <BotMessage body={m.body} attachments={m.attachments} roomId={roomId} />
           </div>
         ) : (
           <HumanMessage key={m.id} message={m} />
