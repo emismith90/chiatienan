@@ -52,3 +52,30 @@ def api_client_room(db, monkeypatch):
     members = client.get(f"/api/rooms/{room_id}/members", headers=headers).json()
     by_name = {m["display_name"]: m["id"] for m in members}
     return client, headers, room_id, by_name
+
+
+def _make_meal_draft(client, headers, room_id, m):
+    """Insert a pending ``expense_draft`` directly via ``drafts.create_draft``
+    (the bot-less path) and return its draft/message id, so a test can then
+    hit the ``/commit`` route. Uses the same default DB the routes see.
+    """
+    from app import drafts
+    from app.db import get_db
+
+    ids = list(m.values())
+    a, b = ids[0], ids[1]
+    payload = {
+        "payer_member_id": a,
+        "member_participants": [a, b],
+        "guests": [],
+        "bill_total": 300_000,
+        "adjustments": [],
+        "dish": None,
+        "initiator": None,
+        "note": None,
+        "per_head_preview": 150_000,
+        "raw_input": "@bot test",
+    }
+    with get_db().session() as s:
+        d, _extras = drafts.create_draft(s, room_id, payload)
+        return d.id

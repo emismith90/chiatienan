@@ -397,6 +397,7 @@ async def commit_draft_route(room_id: int, draft_id: int,
             meal_id = (meal_msg.attachments or {}).get("meal_id")
     await hub.publish(room_id, {"type": "message", **draft_payload})
     await hub.publish(room_id, {"type": "message", **meal_payload})
+    await hub.publish(room_id, {"type": "ledger:changed"})
     return {"ok": True, "meal_id": meal_id}
 
 
@@ -418,6 +419,7 @@ async def recommit_draft_route(room_id: int, draft_id: int, body: DraftEditIn,
             meal_id = meal_msg.attachments["meal_id"]
     await hub.publish(room_id, {"type": "message", **draft_payload})
     await hub.publish(room_id, {"type": "message", **meal_payload})
+    await hub.publish(room_id, {"type": "ledger:changed"})
     return {"ok": True, "meal_id": meal_id}
 
 

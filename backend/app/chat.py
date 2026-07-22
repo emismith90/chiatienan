@@ -357,6 +357,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             with db.session() as s:
                 new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
 
+            settle = result.last_result("settle_period")
+            if emit and settle and settle.get("committed"):
+                await emit({"type": "ledger:changed"})
+
     return new_msg
 
 
