@@ -14,7 +14,7 @@
 
 - **Money-safety (D3):** tools own every number. The model passes a user-stated amount in at most once; it never computes or transcribes a tool-produced amount. The ② clarify loop re-calls with a `mode` token, never a transcribed amount.
 - **Amounts** are integer VND throughout. **Dates** are `datetime.date` in ICT (`app.clock.today_ict()`); period windows are inclusive, `from=None` means "since the beginning of the ledger".
-- **No schema change.** `meals.occurred_on`, `meals.dish`, `meals.created_at`, `payments.*` all already exist.
+- **One additive schema change only:** a nullable `payments.meal_id` (Task 11, for ⑦). Everything else derives from existing columns (`meals.occurred_on`, `meals.dish`, `meals.created_at`, `payments.*` already exist). No other columns, no drops, no type changes.
 - **Ledger single-writer:** writes are serialized by `chat._agent_lock` / the draft-commit routes. Read tools open their own short-lived session (`db.session()`); never widen a write's transaction.
 - **Tests:** TDD — write the failing test first, watch it fail, implement minimally, watch it pass, commit. Run backend tests from `backend/` with the venv active: `cd backend && source .venv/bin/activate`.
 
