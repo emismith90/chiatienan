@@ -34,17 +34,18 @@ Every balance question (`how much do I owe`, `current balances`, `show current s
 - A **chronological summary card** (timeline of meals + payments) with tool-computed balance bars (④).
 - **Capture the real meal date** when the user names a day ("thứ 2", "hôm qua", "20/7"), and use it in the timeline and in the settle QR note (⑤).
 - An **always-on ledger panel** (balances + transactions) beside the chat, live over SSE, so the group always sees the current truth without asking the bot (⑥).
+- A one-tap **"Đã trả" quick action** on each unpaid meal-debt row (statement card + panel), recording that meal's payment directly (⑦).
 - Keep every displayed number tool-owned; stop the reasoning leaks on money turns.
 
 **Non-goals**
-- No change to the `settle_period` netting math or the draft-confirm lifecycle (the QR *note* text gains real dates; the amounts/netting are untouched).
-- No DB schema change (everything derives from existing `meals` / `meal_shares` / `payments`; `meals.occurred_on` already exists).
+- No change to the `settle_period` netting math or the draft-confirm lifecycle for *meals* (the QR *note* text gains real dates; the amounts/netting are untouched).
+- One small additive schema change only: a nullable `payments.meal_id` (for exact per-meal "paid" attribution, ⑦). No other columns; everything else derives from existing `meals`/`meal_shares`/`payments`.
 
 ## 3. Core concept — one primitive under all four
 
 Everything rests on a **gross directional debt breakdown, per meal**, room-scoped over the open period:
 
-> For each meal, every participant other than the payer owes the payer their share. That's a directed edge `debtor → creditor` tagged with `(meal_id, dish, occurred_on, amount)`. Recorded `payments` reduce a pair's outstanding, applied **oldest-meal-first (FIFO)** to derive per-meal paid / partial / unpaid status.
+> For each meal, every participant other than the payer owes the payer their share. That's a directed edge `debtor → creditor` tagged with `(meal_id, dish, occurred_on, amount)`. Recorded `payments` reduce a pair's outstanding: a payment carrying a `meal_id` (from the ⑦ quick action) settles **that exact edge first**; any remaining/untargeted payment is applied **oldest-meal-first (FIFO)** — together deriving per-meal paid / partial / unpaid status.
 
 This deliberately does **not** net `A→B` against `B→A`. Netting is only for `settle_period` (minimal QR transfers). The gross-per-direction view is what a human means by "what do I owe Linh" and is exactly the "hint" the agent needs to clarify ② instead of silently cancelling debts.
 
@@ -112,16 +113,22 @@ Extend `render_bot_attachments` to map:
 
 ### 4.6 REST endpoint + SSE (⑥ — panel data)
 The always-on panel must **not** go through the bot. Add a read-only route:
-- `GET /api/rooms/{id}/ledger?period=since_last` → `{ period, balances:[{id,name,balance}], timeline:[…events…] }`, assembled from `period_balances` + `period_timeline` (the same helpers the summary tool uses — one code path, one truth). Auth = the existing room-session guard.
+- `GET /api/rooms/{id}/ledger?period=since_last` → `{ period, balances:[{id,name,balance}], timeline:[…events…], me:{owe,owed,net} }`, assembled from `period_balances` + `period_timeline` + a shared `statement_for(caller)` helper (the same code the summary + `member_statement` tools use — one truth). `me` powers the panel's "Của tôi" rows (with the ⑦ button) without a second call. Auth = the existing room-session guard.
 - **Same period reset as chat (required):** the endpoint resolves its window with the identical `resolve_period("since_last", last_settlement_to=last_settlement.period_to)` logic the tools use — so the panel always shows the **open period since the last `chốt`**, not all-time. When a settlement commits (or the group resets), the closed meals/payments drop out and the panel shows a fresh, balanced period exactly like the bot would. `from`/`to` overrides are accepted for parity with the tools but the default is `since_last`.
 - **Live refresh:** every ledger write (`record_meal`, `record_payment`, `record_settlement`) publishes a lightweight `ledger:changed` event on the existing in-process `RoomHub`; the client refetches `/ledger` on receipt (the SSE stream already exists via `useRoom`). Because a committed `record_settlement` also fires the event, the panel resets the instant a period closes. No payload diffing — a full refetch of a tiny JSON is simplest and always correct.
+
+### 4.7 Quick "Đã trả" action (⑦)
+- Schema: add nullable `Payment.meal_id` (FK `meals.id`). `ledger.record_payment` accepts an optional `meal_id`. `money.apply_payments_fifo` settles a `meal_id`-tagged payment against its exact edge first, then FIFO-distributes the rest within the pair — so the tapped row shows `paid`, not some older meal.
+- Endpoint: `POST /api/rooms/{id}/payments/quick` body `{to:int, meal_id:int}` (from = the session member). The server looks up **that edge's outstanding** via `debt_breakdown` (client sends no amount — money-safety), then `record_payment(from, to, amount=outstanding, meal_id)` directly (no draft; the tap *is* the confirmation). Rejects if the caller isn't a participant/debtor of that meal, or nothing is outstanding. Posts a `bot` payment message (deterministic `_payment_body`) and publishes `ledger:changed`.
+- Voidable: `Payment.voided` already exists; a payment can be reversed later (a void UI is out of scope here).
+- Netting untouched: `settle_period` / `period_balances` read payments at pair level and ignore `meal_id`; it is provenance only.
 
 ## 5. Frontend design
 
 ### 5.1 Chat cards
 `BotMessage` dispatches on `attachments.type`; add two components alongside `SettlementCard`/`MealCard`, reusing `fmt()` and the existing `BalanceTable`:
 
-- **`StatementCard`** (`type:"statement"`) — two sections **Bạn nợ** / **Được nợ**, each row: person · meal (dish + day) · amount · a `paid`/`unpaid` pill; footer shows the net. (Matches the approved mockup, left panel.)
+- **`StatementCard`** (`type:"statement"`) — two sections **Bạn nợ** / **Được nợ**, each row: person · meal (dish + day) · amount · a `paid`/`unpaid` pill; footer shows the net. Each **unpaid "Bạn nợ" row** carries a one-tap **"Đã trả" button (⑦)** → `POST /payments/quick {to, meal_id}`, optimistic flip to `paid`. (Matches the approved mockup, left panel.)
 - **`SummaryCard`** (`type:"summary"`) — a vertical **timeline** (meal 🍜 / payment 💸 rows, each dated) plus a compact **net-balance bar** row per member (bars widths from tool-computed `balances`; center line = zero, green right / red left). (Approved mockup, option C.)
 
 Both are theme-aware (existing `--accent`/`--border`/`--bg-*` vars) and mobile-first. New tests mirror `expense-draft-card.test.tsx` / `balance-table.test.tsx`.
@@ -133,15 +140,16 @@ Layout in `RoomView` (§ `room-view.tsx`):
 - **≥ tablet:** the chat's `max-w-3xl` column and the panel sit in a flex row; the panel is a fixed-width right column (`~260px`), independently scrollable.
 - **Phone:** chat stays full-width; a **"Sổ" button** in the header opens `LedgerPanel` as a slide-over **drawer** (right, ~80% width, backdrop, Esc/tap-out to close — same dialog pattern as `MemberInfoDialog`).
 
-The panel and the `SummaryCard`/`StatementCard` render the same shapes, so the bar + timeline sub-views are shared presentational components used by both. `Của tôi` reuses the statement shape (client filters the already-fetched ledger by the session member — no extra call).
+The panel and the `SummaryCard`/`StatementCard` render the same shapes, so the bar + timeline sub-views are shared presentational components used by both. **`Của tôi`** renders the caller's statement rows from the `me` field of `GET /ledger` (no extra call) — including the one-tap **"Đã trả" button (⑦)** on each unpaid row, sharing the same statement-row component as `StatementCard`.
 
 ## 6. Money-safety analysis
 - All displayed amounts come from tool dicts; bodies are server-assembled (§4.4). No hand-built tables.
 - The ② clarify loop passes a **mode token**, not an amount, so the recorded figure is tool-derived (D3 "once" preserved).
 - Bars are widths derived from `period_balances` on the client for *layout only*; the printed number is the tool's integer.
+- The ⑦ "Đã trả" button posts only `{to, meal_id}` — the server recomputes the outstanding and records it, so no client-side amount ever becomes a ledger write.
 
 ## 7. Data / migration
-None — no schema change. **Live fix for Giang:** after deploy, the fixed flow lets Giang re-send *"tôi trả hết cho anh Linh"* → confirm the 61k gross → payment recorded (Linh then correctly owes Giang 75k). Preferred over a manual row insert; if the group has already moved on, insert one `payments` row (Giang→Linh 61k) directly.
+One additive column: nullable `payments.meal_id`. On prod (no Alembic; SQLAlchemy `create_all`), apply it **non-destructively** — `ALTER TABLE payments ADD COLUMN meal_id INTEGER;` on the mounted SQLite DB before deploy — do **not** wipe the live ledger. A fresh DB gets it from `create_all`. **Live fix for Giang:** after deploy, the fixed flow lets Giang re-send *"tôi trả hết cho anh Linh"* → confirm the 61k gross → payment recorded (Linh then correctly owes Giang 75k). Preferred over a manual row insert; if the group has already moved on, insert one `payments` row (Giang→Linh 61k) directly.
 
 ## 8. Testing
 - **money.py:** `gross_debts` (no netting), `apply_payments_fifo` (oldest-first, partial, over-payment) — pure unit tests.
@@ -159,8 +167,9 @@ Single spec; independently shippable increments in order:
 3. **①③** `member_statement` + `StatementCard` + sender-default routing.
 4. **④** `get_period_summary` + `SummaryCard`.
 5. **⑤** `resolve_date` + `occurred_on` capture + QR-note dates.
-6. **⑥** `GET /ledger` + `ledger:changed` SSE + `LedgerPanel` (desktop column + phone drawer).
-7. Prompt/leak polish.
+6. **⑥** `GET /ledger` (incl. `me`) + `ledger:changed` SSE + `LedgerPanel` (desktop column + phone drawer).
+7. **⑦** `payments.meal_id` + meal-targeted FIFO + `POST /payments/quick` + "Đã trả" buttons on statement card & panel.
+8. Prompt/leak polish.
 
 ## 10. Known limitations / open
 - FIFO payment→meal attribution is a display heuristic; the authoritative figure is per-pair gross − payments. Documented in-code.

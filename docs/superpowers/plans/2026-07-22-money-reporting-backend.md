@@ -43,7 +43,7 @@
 - Produces:
   - `DebtEdge(debtor:int, creditor:int, meal_id:int, dish:str|None, occurred_on:date, amount:int, paid:int=0)` with `.outstanding:int` and `.status:str` (`"unpaid"|"partial"|"paid"`).
   - `build_debt_edges(meals: list[dict]) -> list[DebtEdge]` — `meals` items are `{"meal_id", "payer_id", "dish", "occurred_on", "shares": {member_id: amount}}`.
-  - `apply_payments_fifo(edges: list[DebtEdge], payments: list[dict]) -> list[DebtEdge]` — `payments` items `{"from","to","amount"}`; sets each edge's `paid` oldest-first per `(debtor,creditor)`.
+  - `apply_payments_fifo(edges: list[DebtEdge], payments: list[dict]) -> list[DebtEdge]` — `payments` items `{"from","to","amount", "meal_id"?}`; a payment carrying `meal_id` settles that exact edge first, the rest apply oldest-first per `(debtor,creditor)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -88,6 +88,16 @@ def test_fifo_overpayment_floors_at_zero():
     edges = build_debt_edges([_meal(2, 6, {9: 61000}, 21)])
     out = apply_payments_fifo(edges, [{"from": 9, "to": 6, "amount": 90000}])
     assert out[0].paid == 61000 and out[0].outstanding == 0   # leftover ignored, never negative
+
+
+def test_meal_targeted_payment_marks_that_meal_not_oldest():
+    edges = build_debt_edges([
+        _meal(2, 6, {9: 61000}, 21),   # older
+        _meal(5, 6, {9: 40000}, 24),   # newer
+    ])
+    out = apply_payments_fifo(edges, [{"from": 9, "to": 6, "amount": 40000, "meal_id": 5}])
+    by = {e.meal_id: e for e in out}
+    assert by[5].status == "paid" and by[2].status == "unpaid"   # targeted beats FIFO
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -142,21 +152,36 @@ def build_debt_edges(meals: list[dict]) -> list[DebtEdge]:
 
 
 def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> list[DebtEdge]:
-    """Attribute each ``(from,to)`` payment to that pair's edges oldest-meal-first.
+    """Attribute payments to edges. A payment with ``meal_id`` settles that exact
+    edge first (⑦ quick action); the rest apply to the pair oldest-meal-first.
 
-    Returns new edges with ``paid`` set. Payment beyond a pair's total meal debt
-    is ignored (never makes ``outstanding`` negative). Deterministic:
+    Returns new edges with ``paid`` set. Payment beyond an edge/pair total is
+    ignored (never makes ``outstanding`` negative). Deterministic:
     ``(occurred_on, meal_id)`` order.
     """
+    targeted: dict[tuple[int, int, int], int] = {}
     pool: dict[tuple[int, int], int] = {}
     for p in payments or []:
-        pool[(p["from"], p["to"])] = pool.get((p["from"], p["to"]), 0) + p["amount"]
+        mid = p.get("meal_id")
+        if mid is not None:
+            targeted[(p["from"], p["to"], mid)] = targeted.get((p["from"], p["to"], mid), 0) + p["amount"]
+        else:
+            pool[(p["from"], p["to"])] = pool.get((p["from"], p["to"]), 0) + p["amount"]
     out: list[DebtEdge] = []
     for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id)):
-        avail = pool.get((e.debtor, e.creditor), 0)
-        paid = min(avail, e.amount)
-        if paid:
-            pool[(e.debtor, e.creditor)] = avail - paid
+        paid = 0
+        tk = (e.debtor, e.creditor, e.meal_id)
+        if targeted.get(tk):
+            take = min(targeted[tk], e.amount)
+            targeted[tk] -= take
+            paid += take
+        remaining = e.amount - paid
+        if remaining > 0:
+            avail = pool.get((e.debtor, e.creditor), 0)
+            take = min(avail, remaining)
+            if take:
+                pool[(e.debtor, e.creditor)] = avail - take
+                paid += take
         out.append(DebtEdge(e.debtor, e.creditor, e.meal_id, e.dish, e.occurred_on, e.amount, paid))
     return out
 ```
@@ -1361,6 +1386,250 @@ git commit -m "feat(be): publish ledger:changed on meal/payment/settlement commi
 
 ---
 
+### Task 11: `payments.meal_id` column + meal-linked `record_payment` + `debt_breakdown` wiring (⑦)
+
+**Files:**
+- Modify: `backend/app/models.py` (`Payment`), `backend/app/ledger.py` (`record_payment`, `debt_breakdown`)
+- Test: `backend/tests/test_meal_linked_payment.py` (new)
+
+**Interfaces:**
+- Produces: `Payment.meal_id: int | None`; `ledger.record_payment(..., meal_id: int | None = None)`; `debt_breakdown` payment dicts now carry `meal_id`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `backend/tests/test_meal_linked_payment.py`:
+
+```python
+from datetime import date
+import pytest
+from app.db import Database
+from app import ledger
+
+
+@pytest.fixture
+def db(tmp_path):
+    d = Database(f"sqlite:///{tmp_path}/t.db"); d.create_all(); return d
+
+
+def test_meal_linked_payment_marks_that_meal(db):
+    from app.models import Room, Member
+    with db.session() as s:
+        r = Room(name="t", invite_token="tok"); s.add(r); s.flush()
+        linh = Member(room_id=r.id, display_name="Linh", nickname="Linh"); s.add(linh); s.flush()
+        giang = Member(room_id=r.id, display_name="Giang", nickname="Giang"); s.add(giang); s.flush()
+        m2 = ledger.record_meal(s, room_id=r.id, payer_member_id=linh.id,
+                                participants=[linh.id, giang.id], total_amount=122000,
+                                dish="older", occurred_on=date(2026, 7, 21))["meal_id"]
+        m5 = ledger.record_meal(s, room_id=r.id, payer_member_id=linh.id,
+                                participants=[linh.id, giang.id], total_amount=80000,
+                                dish="newer", occurred_on=date(2026, 7, 24))["meal_id"]
+        # Giang pays off the NEWER meal specifically
+        ledger.record_payment(s, room_id=r.id, from_member_id=giang.id, to_member_id=linh.id,
+                              amount=40000, occurred_on=date(2026, 7, 24), meal_id=m5)
+        edges = {e.meal_id: e for e in ledger.debt_breakdown(s, r.id, None, date(2026, 7, 24))
+                 if e.debtor == giang.id}
+        assert edges[m5].status == "paid" and edges[m2].status == "unpaid"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && source .venv/bin/activate && pytest tests/test_meal_linked_payment.py -v`
+Expected: FAIL — `record_payment() got an unexpected keyword argument 'meal_id'` (and/or no such column).
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `backend/app/models.py`, add to the `Payment` model (mirroring an existing nullable int column's style, e.g. a `Mapped[int | None]`):
+
+```python
+    meal_id: Mapped[int | None] = mapped_column(ForeignKey("meals.id"), nullable=True, default=None)
+```
+
+(Confirm `ForeignKey` and `Mapped`/`mapped_column` are already imported in `models.py`; they are used by other models there.)
+
+In `backend/app/ledger.py`, `record_payment` — add the param and pass it to the `Payment(...)` constructor:
+
+```python
+def record_payment(
+    session: Session, *, room_id: int, from_member_id: int, to_member_id: int,
+    amount: int, occurred_on: date | None = None, note: str | None = None,
+    source: str = "web", logged_by: str | None = None, meal_id: int | None = None,
+) -> dict:
+```
+
+```python
+    pay = Payment(
+        room_id=room_id, from_member_id=from_member_id, to_member_id=to_member_id,
+        amount=amount, occurred_on=occurred_on or today_ict(), note=note,
+        source=source, logged_by=logged_by, meal_id=meal_id,
+    )
+```
+
+In `backend/app/ledger.py`, `debt_breakdown` — include `meal_id` in the payments query:
+
+```python
+    payments = [
+        {"from": f, "to": t, "amount": a, "meal_id": mid}
+        for f, t, a, mid in session.execute(
+            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id)
+            .where(*pay_conds)
+        ).all()
+    ]
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && source .venv/bin/activate && pytest tests/test_meal_linked_payment.py -v`
+Expected: PASS. (`Database.create_all()` builds the column on the fresh test DB.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/models.py backend/app/ledger.py backend/tests/test_meal_linked_payment.py
+git commit -m "feat(be): nullable payments.meal_id + meal-linked record_payment/debt_breakdown (⑦)"
+```
+
+---
+
+### Task 12: `statement_for` helper + `/ledger` `me` + `POST /payments/quick` (⑦)
+
+**Files:**
+- Modify: `backend/app/ledger.py` (`statement_for`), `backend/app/tools.py` (`member_statement` uses it), `backend/app/main.py` (`/ledger` `me`, new quick-pay route)
+- Test: `backend/tests/test_quick_pay.py` (new)
+
+**Interfaces:**
+- Consumes: `debt_breakdown`, `record_payment`, `_payment_body`, `hub.publish`.
+- Produces:
+  - `ledger.statement_for(session, room_id, member_id, from_date, to_date) -> {"owe":[{other_id,meal_id,dish,occurred_on,amount,status}], "owed":[…], "net":int}` (ids only; caller resolves names).
+  - `GET /ledger` response gains `me` (the caller's statement, names resolved).
+  - `POST /api/rooms/{id}/payments/quick` body `{to:int, meal_id:int}` → records the caller's outstanding for that meal → `{ok, payment_id, amount}`.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `backend/tests/test_quick_pay.py`:
+
+```python
+from datetime import date
+
+
+def test_quick_pay_records_meal_outstanding(api_client_room):
+    client, headers, room_id, m = api_client_room     # m keyed by display name
+    from app.db import get_db
+    from app import ledger
+    with get_db().session() as s:
+        meal_id = ledger.record_meal(s, room_id=room_id, payer_member_id=m["Linh"],
+                                     participants=[m["Linh"], m["Giang"]], total_amount=122000,
+                                     dish="bun bo", occurred_on=date(2026, 7, 21))["meal_id"]
+    # caller (session member) is Giang -> owes Linh 61k for this meal
+    r = client.post(f"/api/rooms/{room_id}/payments/quick",
+                    json={"to": m["Linh"], "meal_id": meal_id}, headers=headers)
+    assert r.status_code == 200 and r.json()["amount"] == 61000
+    # ledger now shows that edge paid
+    led = client.get(f"/api/rooms/{room_id}/ledger", headers=headers).json()
+    assert all(row["status"] == "paid" or row["amount"] == 0
+               for row in led["me"]["owe"] if row["meal_id"] == meal_id) or led["me"]["owe"] == []
+```
+
+> `api_client_room` must sign in as **Giang** (the debtor) so `ctx.member_id == Giang`. If the shared fixture signs in as the room creator, add a variant/fixture that returns Giang's headers, or create the room with Giang as the first member.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && source .venv/bin/activate && pytest tests/test_quick_pay.py -v`
+Expected: FAIL — 404 (route missing).
+
+- [ ] **Step 3: Write minimal implementation**
+
+In `backend/app/ledger.py`, add:
+
+```python
+def statement_for(
+    session: Session, room_id: int, member_id: int, from_date: date | None, to_date: date
+) -> dict:
+    """The caller's own owe/owed edges (outstanding > 0) + net. Ids only."""
+    edges = debt_breakdown(session, room_id, from_date, to_date)
+    owe = [{"other_id": e.creditor, "meal_id": e.meal_id, "dish": e.dish,
+            "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+           for e in edges if e.debtor == member_id and e.outstanding > 0]
+    owed = [{"other_id": e.debtor, "meal_id": e.meal_id, "dish": e.dish,
+             "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+            for e in edges if e.creditor == member_id and e.outstanding > 0]
+    net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
+    return {"owe": owe, "owed": owed, "net": net}
+```
+
+Refactor `member_statement` (Task 4) to build `owe`/`owed` from `statement_for` (map `other_id` → `creditor_id`/`debtor_id` + `name`), keeping its existing result shape. This removes the duplicated edge-filtering.
+
+In `backend/app/main.py` `get_ledger`, after building `names`, add the caller's statement to the response. Inside the `with get_db().session() as s:` block add:
+
+```python
+        me_stmt = ledger.statement_for(s, room_id, ctx.member_id, p["from"], p["to"])
+```
+
+and add to the returned dict:
+
+```python
+        "me": {
+            "owe": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owe"]],
+            "owed": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owed"]],
+            "net": me_stmt["net"],
+        },
+```
+
+Add the quick-pay route to `backend/app/main.py`:
+
+```python
+class QuickPayIn(BaseModel):
+    to: int
+    meal_id: int
+
+
+@app.post("/api/rooms/{room_id}/payments/quick")
+async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            last = ledger.last_settlement(s, room_id)
+            p = resolve_period("since_last", today=today_ict(),
+                               last_settlement_to=last.period_to if last else None)
+            edges = ledger.debt_breakdown(s, room_id, p["from"], p["to"])
+            outstanding = sum(e.outstanding for e in edges
+                              if e.debtor == ctx.member_id and e.creditor == body.to
+                              and e.meal_id == body.meal_id)
+            if outstanding <= 0:
+                raise HTTPException(409, "nothing outstanding for that meal")
+            pay = ledger.record_payment(s, room_id=room_id, from_member_id=ctx.member_id,
+                                        to_member_id=body.to, amount=outstanding,
+                                        meal_id=body.meal_id, logged_by=str(ctx.member_id))
+            names = {mm.id: mm.display_name
+                     for mm in roster.list_members(s, room_id, include_inactive=True)}
+            msg = chat.post_message(
+                s, room_id, None,
+                f"💸 {names.get(ctx.member_id,'?')} trả {names.get(body.to,'?')} {outstanding:,}đ",
+                kind="bot",
+            )
+            msg_payload = chat.message_to_dict(msg, None)
+    await hub.publish(room_id, {"type": "message", **msg_payload})
+    await hub.publish(room_id, {"type": "ledger:changed"})
+    return {"ok": True, "payment_id": pay["payment_id"], "amount": outstanding}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && source .venv/bin/activate && pytest tests/test_quick_pay.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Full suite + commit**
+
+Run: `cd backend && source .venv/bin/activate && pytest -q`
+Expected: all green.
+
+```bash
+git add backend/app/ledger.py backend/app/tools.py backend/app/main.py backend/tests/test_quick_pay.py
+git commit -m "feat(be): statement_for helper, /ledger me, POST /payments/quick (⑦)"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
@@ -1370,6 +1639,7 @@ git commit -m "feat(be): publish ledger:changed on meal/payment/settlement commi
 - ④ chronological summary → Task 5 + Task 7 + Task 2 (`period_timeline`). ✓
 - ⑤ meal dates → Task 6. ✓
 - ⑥ panel data (endpoint + SSE) → Task 9 + Task 10. (Panel UI is the frontend plan.) ✓
+- ⑦ quick "Đã trả" (meal-linked payment + endpoint) → Task 1 (fifo meal-target) + Task 11 (column/wiring) + Task 12 (`statement_for`, `/ledger` `me`, `POST /payments/quick`). (Buttons are the frontend plan.) ✓
 - Shared primitive → Task 1 + Task 2. ✓
 - Money-safety (server bodies, mode token) → Task 3 (mode), Task 7 (bodies). ✓
 - Same period reset as chat → Task 9 (`resolve_period("since_last", …)`) + Task 10 (settle fires event). ✓
@@ -1378,4 +1648,4 @@ git commit -m "feat(be): publish ledger:changed on meal/payment/settlement commi
 
 **Type consistency:** `DebtEdge` fields/`.outstanding`/`.status` consistent across Tasks 1–5. Tool result `type` strings (`payment_ambiguous`, `nothing_owed`, `statement`, `summary`) match between Tasks 3–5, Task 7 rendering, and Task 8 skills. `member_statement` row keys (`amount`, `status`, `dish`, `name`) match the body builder in Task 7. Timeline event keys (`kind`, `payer_name`, `from_name`, `to_name`, `amount`, `total`, `occurred_on`) match across Tasks 2, 5, 7, 9.
 
-**Frontend interface handed off (plan 2):** attachment shapes `{type:"statement"|"summary", …}` (Task 7) and `GET /ledger` response (Task 9) — the frontend plan consumes exactly these.
+**Frontend interface handed off (plan 2):** attachment shapes `{type:"statement"|"summary", …}` (Task 7), the `GET /ledger` response incl. `me:{owe,owed,net}` (Tasks 9, 12), and `POST /payments/quick {to, meal_id}` (Task 12) — the frontend plan consumes exactly these. Statement/`me` owe rows carry `meal_id`, so the "Đã trả" button has the id it needs.

@@ -27,10 +27,11 @@
 - `frontend/src/hooks/use-ledger.ts` — **create**: `useLedger(roomId, version)`.
 - `frontend/src/components/chat/balance-bars.tsx` — **create**: shared bar chart.
 - `frontend/src/components/chat/transaction-timeline.tsx` — **create**: shared timeline list.
-- `frontend/src/components/chat/statement-card.tsx` — **create**.
+- `frontend/src/components/chat/statement-card.tsx` — **create**: `StatementCard` + exported shared `StatementSections` (with the ⑦ "Đã trả" button).
 - `frontend/src/components/chat/summary-card.tsx` — **create**.
 - `frontend/src/components/chat/ledger-panel.tsx` — **create**.
-- `frontend/src/components/chat/bot-message.tsx` — **modify**: dispatch `statement`/`summary`.
+- `frontend/src/components/chat/bot-message.tsx` — **modify**: add `roomId` prop; dispatch `statement`/`summary`.
+- `frontend/src/components/chat/message-list.tsx` — **modify**: pass `roomId` to `BotMessage`.
 - `frontend/src/components/chat/room-view.tsx` — **modify**: desktop column + phone drawer.
 - `frontend/src/components/chat/__tests__/` — **create** matching tests.
 
@@ -46,8 +47,10 @@
 - Produces:
   - `type BalanceRow = { id: number; name: string; balance: number }`
   - `type TimelineEvent = { kind: "meal"; meal_id: number; payer_id: number; payer_name: string; dish: string | null; occurred_on: string; total: number; participant_ids: number[]; created_at: string } | { kind: "payment"; payment_id: number; from_id: number; to_id: number; from_name: string; to_name: string; amount: number; occurred_on: string; created_at: string }`
-  - `type LedgerData = { period: { from: string | null; to: string; keyword: string }; balances: BalanceRow[]; timeline: TimelineEvent[] }`
+  - `type StatementRow = { other_id: number; name: string; meal_id: number; dish: string | null; occurred_on: string; amount: number; status: string }`
+  - `type LedgerData = { period: {from: string|null; to: string; keyword: string}; balances: BalanceRow[]; timeline: TimelineEvent[]; me: { owe: StatementRow[]; owed: StatementRow[]; net: number } }`
   - `getLedger(roomId: number, period?: string) => Promise<LedgerData>`
+  - `quickPay(roomId: number, to: number, mealId: number) => Promise<{ok, payment_id, amount}>`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -96,14 +99,25 @@ export type TimelineEvent =
       occurred_on: string; created_at: string;
     };
 
+export type StatementRow = {
+  other_id: number; name: string; meal_id: number; dish: string | null;
+  occurred_on: string; amount: number; status: string;
+};
+
 export type LedgerData = {
   period: { from: string | null; to: string; keyword: string };
   balances: BalanceRow[];
   timeline: TimelineEvent[];
+  me: { owe: StatementRow[]; owed: StatementRow[]; net: number };
 };
 
 export const getLedger = (roomId: number, period = "since_last"): Promise<LedgerData> =>
   req(`/api/rooms/${roomId}/ledger?period=${period}`);
+
+/** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
+ * computes the amount from {to, meal_id}; client sends no money value). */
+export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>
+  req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -409,16 +423,19 @@ git commit -m "feat(fe): shared BalanceBars + TransactionTimeline"
 - Test: `frontend/src/components/chat/__tests__/statement-card.test.tsx`
 
 **Interfaces:**
-- Consumes: `fmt`; attachment `{type:"statement", member, period, owe:[{name,dish,amount,status,...}], owed:[…], net}`.
-- Produces: `StatementCard({ attachments }: { attachments: any })`; `BotMessage` renders it when `type === "statement"`.
+- Consumes: `fmt`, `api.quickPay`; attachment `{type:"statement", member, period, owe:[{creditor_id,name,meal_id,dish,amount,status,...}], owed:[…], net}`.
+- Produces:
+  - Shared `StatementSections({ owe, owed, net, roomId, onPaid })` exported from `statement-card.tsx` (reused by the panel in Task 6). `onPaid` optional → shows the ⑦ button on unpaid `owe` rows.
+  - `StatementCard({ attachments, roomId }: { attachments: any; roomId: number })`; `BotMessage` gains a `roomId` prop and renders it when `type === "statement"`; `MessageList` passes its `roomId` to `BotMessage`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `frontend/src/components/chat/__tests__/statement-card.test.tsx`:
 
 ```tsx
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as api from "@/lib/api";
 import { BotMessage } from "../bot-message";
 
 const att = {
@@ -428,13 +445,22 @@ const att = {
   owed: [], net: -61000,
 };
 
+beforeEach(() => vi.restoreAllMocks());
+
 describe("StatementCard via BotMessage", () => {
   it("shows what you owe, the meal, and the net", () => {
-    render(<BotMessage body="" attachments={att} />);
+    render(<BotMessage body="" attachments={att} roomId={3} />);
     expect(screen.getByText("Linh")).toBeInTheDocument();
     expect(screen.getByText(/bun bo/)).toBeInTheDocument();
-    expect(screen.getByText(/61.000/)).toBeInTheDocument();
     expect(screen.getByText(/-61.000/)).toBeInTheDocument(); // net
+  });
+
+  it("Đã trả records the meal and flips the row", async () => {
+    const spy = vi.spyOn(api, "quickPay").mockResolvedValue({ ok: true, payment_id: 1, amount: 61000 });
+    render(<BotMessage body="" attachments={att} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: /Đã trả/ }));
+    expect(spy).toHaveBeenCalledWith(3, 6, 2);
+    await waitFor(() => expect(screen.getByText(/đã trả/)).toBeInTheDocument());
   });
 });
 ```
@@ -450,40 +476,89 @@ Create `frontend/src/components/chat/statement-card.tsx`:
 
 ```tsx
 "use client";
+import { useState } from "react";
 import { fmt } from "@/lib/format";
+import * as api from "@/lib/api";
 
-interface Row { name: string; dish: string | null; amount: number; status: string; }
+interface Row {
+  other_id?: number; creditor_id?: number; debtor_id?: number;
+  name: string; meal_id: number; dish: string | null; amount: number; status: string;
+}
 
-function Section({ label, rows }: { label: string; rows: Row[] }) {
-  if (!rows.length) return null;
+function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => void }) {
+  const [paid, setPaid] = useState(r.status === "paid");
+  const [busy, setBusy] = useState(false);
+  const creditorId = r.creditor_id ?? r.other_id!;
+  async function pay() {
+    if (busy || paid) return;
+    setBusy(true);
+    try {
+      await api.quickPay(roomId, creditorId, r.meal_id);
+      setPaid(true);
+      onPaid?.();
+    } catch {
+      /* leave as unpaid so the user can retry */
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <div className="mt-2">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{label}</p>
-      <ul className="mt-1 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
-        {rows.map((r, i) => (
-          <li key={i} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-            <span className="min-w-0">
-              <span className="text-[var(--text-primary)]">{r.name}</span>
-              <span className="ml-2 text-xs text-[var(--text-secondary)]">
-                {r.dish || "bữa ăn"}
-                {r.status === "paid" && " · đã trả"}
-                {r.status === "partial" && " · trả một phần"}
-              </span>
-            </span>
-            <span className="shrink-0 font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <li className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+      <span className="min-w-0">
+        <span className="text-[var(--text-primary)]">{r.name}</span>
+        <span className="ml-2 text-xs text-[var(--text-secondary)]">
+          {r.dish || "bữa ăn"}{(paid || r.status === "paid") && " · đã trả"}
+          {!paid && r.status === "partial" && " · trả một phần"}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <span className="font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+        {onPaid && !paid && (
+          <button type="button" onClick={pay} disabled={busy}
+                  className="rounded-full border border-[var(--accent-primary)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
+            {busy ? "…" : "Đã trả"}
+          </button>
+        )}
+      </span>
+    </li>
   );
 }
 
-export function StatementCard({ attachments }: { attachments: any }) {
-  const net: number = attachments.net ?? 0;
+function OwedRow({ r }: { r: Row }) {
   return (
-    <div className="mt-3">
-      <Section label="Bạn nợ" rows={attachments.owe ?? []} />
-      <Section label="Được nợ" rows={attachments.owed ?? []} />
+    <li className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+      <span className="min-w-0">
+        <span className="text-[var(--text-primary)]">{r.name}</span>
+        <span className="ml-2 text-xs text-[var(--text-secondary)]">{r.dish || "bữa ăn"}</span>
+      </span>
+      <span className="shrink-0 font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+    </li>
+  );
+}
+
+/** Shared owe/owed sections + net. Pass `onPaid` (+ roomId) to enable the ⑦
+ * "Đã trả" button on unpaid owe rows. Used by StatementCard and LedgerPanel. */
+export function StatementSections({ owe, owed, net, roomId, onPaid }: {
+  owe: Row[]; owed: Row[]; net: number; roomId: number; onPaid?: () => void;
+}) {
+  return (
+    <div>
+      {owe.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Bạn nợ</p>
+          <ul className="mt-1 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
+            {owe.map((r) => <OweRow key={`o${r.meal_id}`} r={r} roomId={roomId} onPaid={onPaid} />)}
+          </ul>
+        </div>
+      )}
+      {owed.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Được nợ</p>
+          <ul className="mt-1 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
+            {owed.map((r) => <OwedRow key={`d${r.meal_id}`} r={r} />)}
+          </ul>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between border-t border-dashed border-[var(--border)] pt-2 text-sm">
         <span className="font-medium text-[var(--text-primary)]">Ròng</span>
         <span className={`font-semibold ${net < 0 ? "text-[#c0492e]" : net > 0 ? "text-[#2e7d46]" : "text-[var(--text-secondary)]"}`}>
@@ -493,19 +568,30 @@ export function StatementCard({ attachments }: { attachments: any }) {
     </div>
   );
 }
+
+export function StatementCard({ attachments, roomId }: { attachments: any; roomId: number }) {
+  return (
+    <div className="mt-3">
+      <StatementSections
+        owe={attachments.owe ?? []} owed={attachments.owed ?? []} net={attachments.net ?? 0}
+        roomId={roomId} onPaid={() => {}}
+      />
+    </div>
+  );
+}
 ```
 
-In `frontend/src/components/chat/bot-message.tsx`, import and dispatch:
+In `frontend/src/components/chat/bot-message.tsx`, add a `roomId` prop and dispatch. Change `interface BotMessageProps` to include `roomId: number`, thread it into the component signature, import, and render:
 
 ```tsx
 import { StatementCard } from "./statement-card";
 ```
 
-Add to the render (after the `meal` line):
-
 ```tsx
-      {type === "statement" && <StatementCard attachments={attachments} />}
+      {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
 ```
+
+In `frontend/src/components/chat/message-list.tsx`, where it renders `<BotMessage body=... attachments=... />`, pass `roomId={roomId}` (the component already receives `roomId` as a prop — see its use in `room-view.tsx`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -620,8 +706,8 @@ git commit -m "feat(fe): SummaryCard (timeline + balance bars) wired into BotMes
 - Test: `frontend/src/components/chat/__tests__/ledger-panel.test.tsx`
 
 **Interfaces:**
-- Consumes: `useLedger`, `BalanceBars`, `TransactionTimeline`, `BalanceRow`/`TimelineEvent`.
-- Produces: `LedgerPanel({ roomId, selfId, version }: { roomId: number; selfId: number | null; version: number })`. Group view = all balances + full timeline; "Của tôi" = self balance + timeline filtered to events involving `selfId` (meal where self is payer or in `participant_ids`; payment where self is `from_id`/`to_id`).
+- Consumes: `useLedger`, `BalanceBars`, `TransactionTimeline`, `StatementSections` (Task 4), `BalanceRow`.
+- Produces: `LedgerPanel({ roomId, selfId, version }: { roomId: number; selfId: number | null; version: number })`. Group view = all balances + full timeline; "Của tôi" = self balance bar + the caller's statement (`data.me`) rendered via `StatementSections` **with the ⑦ "Đã trả" button** on unpaid owe rows.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -636,34 +722,40 @@ import { LedgerPanel } from "../ledger-panel";
 const data = {
   period: { from: null, to: "2026-07-22", keyword: "since_last" },
   balances: [
-    { id: 9, name: "Giang", balance: 89000 },
-    { id: 5, name: "Trang", balance: -75000 },
+    { id: 9, name: "Giang", balance: -61000 },
+    { id: 6, name: "Linh", balance: 61000 },
   ],
   timeline: [
     { kind: "meal", meal_id: 2, payer_id: 6, payer_name: "Linh", dish: "bun bo",
-      occurred_on: "2026-07-21", total: 305000, participant_ids: [9], created_at: "a" },
-    { kind: "payment", payment_id: 1, from_id: 5, to_id: 6, from_name: "Trang",
-      to_name: "Linh", amount: 75000, occurred_on: "2026-07-22", created_at: "b" },
+      occurred_on: "2026-07-21", total: 122000, participant_ids: [9], created_at: "a" },
   ],
+  me: {
+    owe: [{ other_id: 6, name: "Linh", meal_id: 2, dish: "bun bo",
+            occurred_on: "2026-07-21", amount: 61000, status: "unpaid" }],
+    owed: [], net: -61000,
+  },
 };
 
-beforeEach(() => vi.spyOn(api, "getLedger").mockResolvedValue(data as any));
+beforeEach(() => {
+  vi.spyOn(api, "getLedger").mockResolvedValue(data as any);
+  vi.spyOn(api, "quickPay").mockResolvedValue({ ok: true, payment_id: 1, amount: 61000 });
+});
 
 describe("LedgerPanel", () => {
   it("shows group balances and timeline", async () => {
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText("Giang")).toBeInTheDocument());
     expect(screen.getByText(/bun bo/)).toBeInTheDocument();
-    expect(screen.getByText("Trang")).toBeInTheDocument();
+    expect(screen.getByText("Linh")).toBeInTheDocument();
   });
 
-  it("filters to self on 'Của tôi'", async () => {
+  it("shows the caller's statement with an 'Đã trả' button on 'Của tôi'", async () => {
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText(/bun bo/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Của tôi/ }));
-    // Giang(9) is in the meal's participants but not in the Trang->Linh payment
-    expect(screen.getByText(/bun bo/)).toBeInTheDocument();
-    expect(screen.queryByText(/Trang →/)).not.toBeInTheDocument();
+    const pay = screen.getByRole("button", { name: /Đã trả/ });
+    fireEvent.click(pay);
+    expect(api.quickPay).toHaveBeenCalledWith(3, 6, 2);
   });
 });
 ```
@@ -683,21 +775,12 @@ import { useState } from "react";
 import { useLedger } from "@/hooks/use-ledger";
 import { BalanceBars } from "./balance-bars";
 import { TransactionTimeline } from "./transaction-timeline";
-import type { TimelineEvent } from "@/lib/api";
-
-function involvesSelf(e: TimelineEvent, selfId: number): boolean {
-  if (e.kind === "meal") return e.payer_id === selfId || e.participant_ids.includes(selfId);
-  return e.from_id === selfId || e.to_id === selfId;
-}
+import { StatementSections } from "./statement-card";
 
 export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfId: number | null; version: number }) {
   const { data, loading } = useLedger(roomId, version);
   const [mine, setMine] = useState(false);
-
-  const balances = data?.balances ?? [];
-  const timeline = data?.timeline ?? [];
-  const shownBalances = mine && selfId != null ? balances.filter((b) => b.id === selfId) : balances;
-  const shownTimeline = mine && selfId != null ? timeline.filter((e) => involvesSelf(e, selfId)) : timeline;
+  const showMine = mine && selfId != null;
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto p-4">
@@ -719,15 +802,26 @@ export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfI
 
       {loading && !data ? (
         <p className="text-xs text-[var(--text-secondary)]">Đang tải…</p>
+      ) : showMine ? (
+        <>
+          <section>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Số dư</p>
+            <BalanceBars rows={(data?.balances ?? []).filter((b) => b.id === selfId)} selfId={selfId} />
+          </section>
+          <StatementSections
+            owe={data?.me.owe ?? []} owed={data?.me.owed ?? []} net={data?.me.net ?? 0}
+            roomId={roomId} onPaid={() => {}}
+          />
+        </>
       ) : (
         <>
           <section>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Số dư</p>
-            <BalanceBars rows={shownBalances} selfId={selfId} />
+            <BalanceBars rows={data?.balances ?? []} selfId={selfId} />
           </section>
           <section>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Giao dịch</p>
-            <TransactionTimeline events={shownTimeline} />
+            <TransactionTimeline events={data?.timeline ?? []} />
           </section>
         </>
       )}
@@ -735,6 +829,8 @@ export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfI
   );
 }
 ```
+
+(The ⑦ button triggers `api.quickPay`, whose endpoint publishes `ledger:changed`; the SSE bumps `version`, so `useLedger` refetches and reconciles the optimistic flip. `onPaid` can stay a no-op.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -782,7 +878,8 @@ import { RoomView } from "../room-view";
 beforeEach(() => {
   vi.spyOn(api, "getMembers").mockResolvedValue([] as any);
   vi.spyOn(api, "getLedger").mockResolvedValue(
-    { period: { from: null, to: "2026-07-22", keyword: "since_last" }, balances: [], timeline: [] } as any,
+    { period: { from: null, to: "2026-07-22", keyword: "since_last" }, balances: [], timeline: [],
+      me: { owe: [], owed: [], net: 0 } } as any,
   );
 });
 
@@ -912,10 +1009,11 @@ git commit -m "feat(fe): mount LedgerPanel — desktop column + phone drawer, li
 - ③ sender-scoped panel view → Task 6 ("Của tôi" filter, "you" highlight). ✓
 - ④ chronological summary UI → Task 5 (`SummaryCard`) + Task 3 (`TransactionTimeline`). ✓
 - ⑥ always-on panel (option A: desktop column + phone drawer, live) → Tasks 2, 6, 7. ✓
-- Same period reset as chat → the panel calls `getLedger` (defaults `since_last`) and refetches on `ledger:changed`, which the backend fires on a committed settle. ✓
+- ⑦ one-tap "Đã trả" (per meal, direct) → Task 1 (`quickPay` + `me` type), Task 4 (`StatementSections` button on the chat card), Task 6 (same button in the panel's "Của tôi"). ✓
+- Same period reset as chat → the panel calls `getLedger` (defaults `since_last`) and refetches on `ledger:changed`, which the backend fires on a committed settle **and on a quick-pay**. ✓
 
 **Placeholder scan:** none — every component and test has complete code. The only prose instruction is the JSX-restructuring note in Task 7, which shows the exact opening/closing tags to add.
 
-**Type consistency:** `LedgerData`/`TimelineEvent`/`BalanceRow` (Task 1) are consumed unchanged by `useLedger` (Task 2), `BalanceBars`/`TransactionTimeline` (Task 3), and `LedgerPanel` (Task 6). Attachment prop shapes in Tasks 4–5 match the backend `render_bot_attachments` output (statement: `owe/owed/net`; summary: `timeline/balances`). `ledgerVersion` returned by `useRoom` (Task 2) is the `version` prop threaded into `LedgerPanel` (Tasks 6–7). Event `kind` discriminants (`"meal"`/`"payment"`) and field names (`payer_name`, `from_name`, `to_name`, `participant_ids`) match the backend timeline (backend Tasks 2, 5, 9).
+**Type consistency:** `LedgerData`/`TimelineEvent`/`BalanceRow`/`StatementRow` (Task 1) are consumed unchanged by `useLedger` (Task 2), `BalanceBars`/`TransactionTimeline` (Task 3), `StatementSections` (Task 4), and `LedgerPanel` (Task 6). Attachment prop shapes in Tasks 4–5 match the backend `render_bot_attachments` output (statement: `owe/owed/net`, owe rows carry `creditor_id`+`meal_id`; summary: `timeline/balances`). `data.me` shape (Task 1) matches backend `statement_for`/`/ledger` (`owe/owed` rows use `other_id`+`meal_id`) — `StatementSections` reads `creditor_id ?? other_id`, so both the chat card (`creditor_id`) and the panel (`other_id`) work. `quickPay(roomId, to, mealId)` (Task 1) matches `POST /payments/quick {to, meal_id}` (backend Task 12). `ledgerVersion` (Task 2) is the `version` prop into `LedgerPanel` (Tasks 6–7).
 
-**Dependency on backend:** Tasks 4–5 need backend Task 7 (attachment mapping); Task 6–7 need backend Tasks 9–10 (endpoint + `ledger:changed`). Land the backend plan first (or at least its Tasks 7, 9, 10) before frontend Tasks 4–7.
+**Dependency on backend:** Tasks 4–5 need backend Task 7 (attachment mapping); Task 6–7 need backend Tasks 9, 10, 12 (endpoint incl. `me`, `ledger:changed`, quick-pay); the ⑦ buttons need backend Tasks 11–12. Land the backend plan first (through Task 12) before frontend Tasks 4–7.
