@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.prompt import build_system_prompt
+from app.skills import materialize
 from app.tools import ToolContext, build_tools
 
 logger = logging.getLogger("chiatienan")
@@ -218,6 +219,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         await _emit(agui.start(turn_id))
 
         workspace = _ensure_workspace()
+        materialize(workspace)
         api_key = resolve_cursor_api_key()
         selection = await asyncio.to_thread(
             resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
@@ -229,6 +231,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         local = LocalAgentOptions(
             cwd=workspace,
             custom_tools=build_tools(ctx),
+            setting_sources=["project"],
             store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
         )
         options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
