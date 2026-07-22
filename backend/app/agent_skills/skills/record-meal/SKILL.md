@@ -12,3 +12,4 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
    - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
 - Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
 - Có ảnh hoá đơn: đọc tổng tiền từ ảnh, dùng làm `total`. Chỉ nhận ảnh dán trực tiếp.
+- Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), gọi `resolve_date` rồi truyền kết quả vào `occurred_on`. Không nói ngày → bỏ trống (mặc định hôm nay).
