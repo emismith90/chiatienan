@@ -94,6 +94,40 @@ def test_sse_catchup_since_returns_only_newer(client):
     assert "first" not in text
 
 
+def test_sse_resyncs_indicator_on_connect(client):
+    # On (re)connect the stream must re-assert the room's typing indicator after
+    # catch-up, so a client that missed the terminal bot.done across a reconnect
+    # gap doesn't show a stuck "Bot is working…" forever. Idle room -> bot.done.
+    token = _room(client)
+    sess, room_id = _join(client, token, "an")
+    h = {"Authorization": f"Bearer {sess}"}
+    client.post(f"/api/rooms/{room_id}/messages", headers=h, json={"body": "hi"})
+    me = client.get("/api/me", headers=h).json()
+    ctx = AuthCtx(member_id=me["id"], room_id=room_id, display_name="An", nickname="an")
+
+    async def consume(mark_busy: bool) -> str:
+        if mark_busy:
+            main.hub.mark_busy(room_id)
+        resp = await main.stream(room_id, since=0, ctx=ctx)
+        it = resp.body_iterator
+        out = ""
+        try:
+            # Drain catch-up messages until the resync indicator lands.
+            for _ in range(10):
+                chunk = await anext(it)
+                out += chunk if isinstance(chunk, str) else chunk.decode()
+                if "bot.done" in out or "bot.typing" in out:
+                    break
+        finally:
+            await it.aclose()
+            if mark_busy:
+                main.hub.mark_idle(room_id)
+        return out
+
+    assert "bot.done" in asyncio.run(consume(mark_busy=False))
+    assert "bot.typing" in asyncio.run(consume(mark_busy=True))
+
+
 def test_members_endpoint_includes_status_and_bank_details(client):
     token = _room(client)
     sess, room_id = _join(client, token, "an", bank_code="VCB",

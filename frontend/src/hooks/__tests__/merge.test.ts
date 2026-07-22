@@ -16,6 +16,27 @@ describe("mergeEvent", () => {
     expect(s.messages.length).toBe(2);
   });
 
+  it("clears a stuck live turn on bot.done (terminal events can be missed across a reconnect)", () => {
+    // A turn started; then the SSE stream dropped and the client missed
+    // agent.run.finished. On reconnect the backend re-emits bot.done, which
+    // must clear BOTH the typing indicator and the stuck live timeline.
+    let s: RoomState = {
+      messages: [], typing: true, timelines: { t1: [{ kind: "text", text: "…" }] }, activeTurn: "t1",
+    };
+    s = mergeEvent(s, { type: "bot.done" });
+    expect(s.typing).toBe(false);
+    expect(s.activeTurn).toBe(null);
+    // The turn's timeline is retained so it can still render collapsed on its message.
+    expect(s.timelines.t1).toBeTruthy();
+  });
+
+  it("bot.typing keeps an in-progress live turn (does not clear activeTurn)", () => {
+    let s: RoomState = { messages: [], typing: false, timelines: { t1: [] }, activeTurn: "t1" };
+    s = mergeEvent(s, { type: "bot.typing" });
+    expect(s.typing).toBe(true);
+    expect(s.activeTurn).toBe("t1");
+  });
+
   it("strips the event type from the stored message", () => {
     const s = mergeEvent({ messages: [], typing: false, timelines: {}, activeTurn: null }, {
       type: "message",

@@ -270,6 +270,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
     await hub.publish(room_id, {"type": "message", **payload})
 
     if chat.is_clear_command(body.body):
+        hub.mark_busy(room_id)
         await hub.publish(room_id, {"type": "bot.typing"})
 
         async def _run_clear():
@@ -281,6 +282,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
             except Exception:  # noqa: BLE001
                 log.exception("clear_context failed in room %s", room_id)
             finally:
+                hub.mark_idle(room_id)
                 await hub.publish(room_id, {"type": "bot.done"})
 
         t = asyncio.create_task(_run_clear())
@@ -289,6 +291,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         return {"ok": True, "id": payload["id"]}
 
     if chat.mentions_bot(body.body):
+        hub.mark_busy(room_id)
         await hub.publish(room_id, {"type": "bot.typing"})
 
         async def _run():
@@ -313,6 +316,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
                 except Exception:  # noqa: BLE001
                     log.exception("failed to post bot error message in room %s", room_id)
             finally:
+                hub.mark_idle(room_id)
                 await hub.publish(room_id, {"type": "bot.done"})
 
         t = asyncio.create_task(_run())
@@ -394,6 +398,14 @@ async def stream(room_id: int, since: int = 0, ctx: AuthCtx = Depends(require_se
             with get_db().session() as s:  # catch-up
                 for msg in chat.list_messages(s, room_id, since_id=since):
                     yield f"data: {json.dumps({'type': 'message', **msg})}\n\n"
+            # Resync the ephemeral typing / "bot is working" indicator on every
+            # (re)connect. A client that dropped the stream while a turn was
+            # finishing would have missed the terminal bot.done / agent.run.*
+            # events (they aren't persisted, so catch-up can't replay them) and
+            # would otherwise show a stuck indicator forever. Re-asserting the
+            # room's current busy state here self-heals that.
+            resync = "bot.typing" if hub.is_busy(room_id) else "bot.done"
+            yield f"data: {json.dumps({'type': resync})}\n\n"
             while True:
                 try:
                     event = await asyncio.wait_for(q.get(), timeout=25)

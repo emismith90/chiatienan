@@ -14,6 +14,21 @@ async def test_publish_fans_out_to_room_only():
     h.unsubscribe(1, a)
 
 
+def test_busy_tracking_counts_overlapping_turns():
+    h = RoomHub()
+    assert h.is_busy(1) is False
+    h.mark_busy(1)
+    assert h.is_busy(1) is True
+    h.mark_busy(1)  # a second overlapping turn
+    h.mark_idle(1)
+    assert h.is_busy(1) is True  # still one in flight
+    h.mark_idle(1)
+    assert h.is_busy(1) is False
+    # Over-decrementing must not go negative / flip busy back on.
+    h.mark_idle(1)
+    assert h.is_busy(1) is False
+
+
 @pytest.mark.asyncio
 async def test_publish_overflow_unsubscribes_and_closes_slow_client():
     h = RoomHub()

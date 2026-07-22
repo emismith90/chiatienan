@@ -27,7 +27,12 @@ export type RoomState = {
  */
 export function mergeEvent(s: RoomState, e: any): RoomState {
   if (e.type === "bot.typing") return { ...s, typing: true };
-  if (e.type === "bot.done") return { ...s, typing: false };
+  // `bot.done` is terminal: clear the typing indicator AND any live turn. The
+  // per-turn `agent.run.finished` that normally clears `activeTurn` is
+  // ephemeral and can be missed across an SSE reconnect gap; the backend
+  // re-emits `bot.done` on (re)connect when the room is idle, so treating it as
+  // the turn terminator here self-heals a stuck "Bot is working…" timeline.
+  if (e.type === "bot.done") return { ...s, typing: false, activeTurn: null };
   if (e.type === "agent.run.started") {
     return { ...s, timelines: { ...s.timelines, [e.turn_id]: [] }, activeTurn: e.turn_id };
   }
