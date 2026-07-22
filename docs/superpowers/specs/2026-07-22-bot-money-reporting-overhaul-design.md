@@ -32,12 +32,13 @@ Every balance question (`how much do I owe`, `current balances`, `show current s
 - Record a stated cash payment against the **gross directional** debt, not the netted pair balance; when a pair owes both ways, **ask** instead of guessing (②).
 - Route first-person balance questions to the personal view; keep group/settle explicit (③).
 - A **chronological summary card** (timeline of meals + payments) with tool-computed balance bars (④).
+- **Capture the real meal date** when the user names a day ("thứ 2", "hôm qua", "20/7"), and use it in the timeline and in the settle QR note (⑤).
+- An **always-on ledger panel** (balances + transactions) beside the chat, live over SSE, so the group always sees the current truth without asking the bot (⑥).
 - Keep every displayed number tool-owned; stop the reasoning leaks on money turns.
 
 **Non-goals**
-- No change to the meal-recording flow, the `settle_period` QR/netting math, or the draft-confirm lifecycle.
-- No DB schema change (everything derives from existing `meals` / `meal_shares` / `payments`).
-- No historical back-computation of meal *dates* from weekday words ("thứ 3") — out of scope; timeline orders by recorded time. (Noted as a known limitation, §10.)
+- No change to the `settle_period` netting math or the draft-confirm lifecycle (the QR *note* text gains real dates; the amounts/netting are untouched).
+- No DB schema change (everything derives from existing `meals` / `meal_shares` / `payments`; `meals.occurred_on` already exists).
 
 ## 3. Core concept — one primitive under all four
 
@@ -88,7 +89,11 @@ Add pure functions operating on the same `(meals, payments)` shapes `per_payer_t
 
 **Money-safety for the clarify round-trip:** `propose_payment` gains a `mode: "gross"|"offset"` arg. The agent re-calls with the chosen *mode*, not a transcribed number — the tool recomputes the amount server-side, so the ledger figure is never carried through the model. The numbers in the agent's *question* are non-authoritative prose.
 
-`settle_period`, `propose_meal`, `find_members`, member CRUD: unchanged. `get_period_balances` is retained (used internally by the summary) but no longer the display path.
+**New — `resolve_date`** (⑤). Keyword/weekday/relative word → concrete ISO date in ICT (`hôm nay`, `hôm qua`, `thứ 2..7`/`Monday..`, `20/7`). Deterministic sibling of `resolve_period`; keeps calendar math out of the model.
+
+**Changed — `propose_meal`/`record_meal`** (⑤). Add optional `occurred_on` (ISO date). The `balances`/`record-meal` skill has the agent call `resolve_date` when the user names a day and pass the result as `occurred_on`; default stays *today* (ICT) when no day is stated. `meals.occurred_on` already exists, so `period_balances`, `debt_breakdown`, and `period_timeline` (all keyed on `occurred_on`) immediately reflect the real date, as does the per-transfer **QR note** built at settle time. Today's prompt injects `hôm nay là <date>, <thứ>` so the agent has the anchor.
+
+`settle_period`, `find_members`, member CRUD: otherwise unchanged. `get_period_balances` is retained (used internally by the summary + the panel endpoint) but no longer the chat display path.
 
 ### 4.4 `chat.py` — rendering (deterministic bodies)
 Extend `render_bot_attachments` to map:
@@ -102,15 +107,32 @@ Extend `render_bot_attachments` to map:
   - Group summary / state (*"summary"*, *"current state"*, *"tổng kết cả nhóm"*) → `get_period_summary`. *(④)*
   - Settle / close / QR (*"ai trả tuần này"*, *"tạo QR"*, *"chốt"*) → `settle_period` (unchanged).
 - **`record-payment` skill:** on `payment_ambiguous`, ASK the user (gross vs offset, showing both amounts) then re-call `propose_payment` with the chosen `mode`. On `payment_settled`, report "không còn nợ" **only** when truly zero. Drop the current net-based shortcut.
-- **Prompt:** add a one-liner — answer directly; do **not** narrate skill/tool selection ("mình làm theo skill…"). Fixes the reasoning leak (④).
+- **`record-meal` skill:** when the user names a day, call `resolve_date` and pass `occurred_on`; otherwise omit it (defaults to today). *(⑤)*
+- **Prompt:** inject `hôm nay là <date>, <thứ>` so the agent can anchor `resolve_date`. Add a one-liner — answer directly; do **not** narrate skill/tool selection ("mình làm theo skill…"). Fixes the reasoning leak (④).
+
+### 4.6 REST endpoint + SSE (⑥ — panel data)
+The always-on panel must **not** go through the bot. Add a read-only route:
+- `GET /api/rooms/{id}/ledger?period=since_last` → `{ period, balances:[{id,name,balance}], timeline:[…events…] }`, assembled from `period_balances` + `period_timeline` (the same helpers the summary tool uses — one code path, one truth). Auth = the existing room-session guard.
+- **Live refresh:** every ledger write (`record_meal`, `record_payment`, `record_settlement`) publishes a lightweight `ledger:changed` event on the existing in-process `RoomHub`; the client refetches `/ledger` on receipt (the SSE stream already exists via `useRoom`). No payload diffing — a full refetch of a tiny JSON is simplest and always correct.
 
 ## 5. Frontend design
+
+### 5.1 Chat cards
 `BotMessage` dispatches on `attachments.type`; add two components alongside `SettlementCard`/`MealCard`, reusing `fmt()` and the existing `BalanceTable`:
 
 - **`StatementCard`** (`type:"statement"`) — two sections **Bạn nợ** / **Được nợ**, each row: person · meal (dish + day) · amount · a `paid`/`unpaid` pill; footer shows the net. (Matches the approved mockup, left panel.)
 - **`SummaryCard`** (`type:"summary"`) — a vertical **timeline** (meal 🍜 / payment 💸 rows, each dated) plus a compact **net-balance bar** row per member (bars widths from tool-computed `balances`; center line = zero, green right / red left). (Approved mockup, option C.)
 
 Both are theme-aware (existing `--accent`/`--border`/`--bg-*` vars) and mobile-first. New tests mirror `expense-draft-card.test.tsx` / `balance-table.test.tsx`.
+
+### 5.2 Always-on ledger panel (⑥) — option A
+A new `LedgerPanel` component (balance bars + transaction timeline, "you" highlighted, `Cả nhóm` / `Của tôi` toggle; **defaults to group**) fed by a `useLedger(roomId)` hook that calls `GET /ledger` and refetches on the `ledger:changed` SSE event.
+
+Layout in `RoomView` (§ `room-view.tsx`):
+- **≥ tablet:** the chat's `max-w-3xl` column and the panel sit in a flex row; the panel is a fixed-width right column (`~260px`), independently scrollable.
+- **Phone:** chat stays full-width; a **"Sổ" button** in the header opens `LedgerPanel` as a slide-over **drawer** (right, ~80% width, backdrop, Esc/tap-out to close — same dialog pattern as `MemberInfoDialog`).
+
+The panel and the `SummaryCard`/`StatementCard` render the same shapes, so the bar + timeline sub-views are shared presentational components used by both. `Của tôi` reuses the statement shape (client filters the already-fetched ledger by the session member — no extra call).
 
 ## 6. Money-safety analysis
 - All displayed amounts come from tool dicts; bodies are server-assembled (§4.4). No hand-built tables.
@@ -123,14 +145,22 @@ None — no schema change. **Live fix for Giang:** after deploy, the fixed flow 
 ## 8. Testing
 - **money.py:** `gross_debts` (no netting), `apply_payments_fifo` (oldest-first, partial, over-payment) — pure unit tests.
 - **ledger.py:** `debt_breakdown` (per-meal status incl. the Giang/Linh two-way case), `period_timeline` ordering.
-- **tools.py:** `member_statement` scoping/defaults; `get_period_summary` shape; `propose_payment` all five branches (settled / one-sided auto / reverse / ambiguous / explicit) + `mode` recompute; the exact prod fixtures (bún bò + nem nướng + the 5 payments) as a golden scenario.
+- **tools.py:** `member_statement` scoping/defaults; `get_period_summary` shape; `propose_payment` all five branches (settled / one-sided auto / reverse / ambiguous / explicit) + `mode` recompute; `resolve_date` (weekday/relative/`dd/mm`) and `occurred_on` capture flowing into balances + QR note; the exact prod fixtures (bún bò + nem nướng + the 5 payments) as a golden scenario.
 - **chat.py:** `_statement_body`/`_summary_body` determinism; attachment mapping.
-- **frontend:** `StatementCard`, `SummaryCard` render tests.
+- **api:** `GET /ledger` shape + auth; `ledger:changed` published on each write.
+- **frontend:** `StatementCard`, `SummaryCard`, `LedgerPanel` (group/personal toggle, "you" highlight) render tests; drawer open/close on phone widths.
 - TDD throughout (write the failing test first).
 
 ## 9. Delivery order
-Single spec, but the plan should land ② first (live correctness bug), then the shared primitive (§4.1–4.2), then ①③ statement, then ④ summary, then the prompt/leak polish. Each increment is independently shippable and testable.
+Single spec; independently shippable increments in order:
+1. **②** gross-directional pay-off + clarify (live correctness bug).
+2. Shared primitive — `gross_debts` / `apply_payments_fifo` / `debt_breakdown` / `period_timeline` (§4.1–4.2).
+3. **①③** `member_statement` + `StatementCard` + sender-default routing.
+4. **④** `get_period_summary` + `SummaryCard`.
+5. **⑤** `resolve_date` + `occurred_on` capture + QR-note dates.
+6. **⑥** `GET /ledger` + `ledger:changed` SSE + `LedgerPanel` (desktop column + phone drawer).
+7. Prompt/leak polish.
 
 ## 10. Known limitations / open
-- Meal dates aren't parsed from weekday words ("thứ 3/4"); timeline orders by recorded time. Revisit only if it confuses users.
 - FIFO payment→meal attribution is a display heuristic; the authoritative figure is per-pair gross − payments. Documented in-code.
+- `resolve_date` resolves weekday words to the **most recent** matching past day (a group logging lunches won't mean a future weekday); ambiguous far-past dates still need an explicit `dd/mm`.
