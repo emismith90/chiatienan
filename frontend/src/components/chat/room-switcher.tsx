@@ -76,6 +76,14 @@ export function RoomSwitcher() {
           <button
             type="button"
             role="menuitem"
+            onClick={() => { setOpen(false); router.push("/join"); }}
+            className={itemClass}
+          >
+            Join a room
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             onClick={() => { setOpen(false); router.push("/create"); }}
             className={itemClass}
           >

@@ -57,6 +57,13 @@ describe("RoomSwitcher", () => {
     expect(push).toHaveBeenCalledWith("/create");
   });
 
+  it("navigates to /join from the menu", () => {
+    render(<RoomSwitcher />);
+    fireEvent.click(screen.getByRole("button", { name: /room menu/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /join a room/i }));
+    expect(push).toHaveBeenCalledWith("/join");
+  });
+
   it("removes the current room only after confirmation", () => {
     render(<RoomSwitcher />);
     fireEvent.click(screen.getByRole("button", { name: /room menu/i }));
