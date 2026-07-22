@@ -315,6 +315,39 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             ],
         }
 
+    def member_statement(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        member = args.get("member") or ctx.sender_member_id
+        if not member:
+            return _err("Không xác định được thành viên.")
+        member = int(member)
+        with db.session() as s:
+            last = ledger.last_settlement(s, ctx.room_id)
+            period = resolve_period(
+                args.get("keyword"), today=today_ict(),
+                last_settlement_to=last.period_to if last else None,
+            )
+            edges = ledger.debt_breakdown(s, ctx.room_id, period["from"], period["to"])
+            ids = {e.debtor for e in edges} | {e.creditor for e in edges} | {member}
+            names = _names_for(s, ctx.room_id, ids)
+
+        def _row(e, other_id):
+            return {"creditor_id" if other_id == e.creditor else "debtor_id": other_id,
+                    "name": names.get(other_id, "?"), "meal_id": e.meal_id, "dish": e.dish,
+                    "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding,
+                    "status": e.status}
+
+        owe = [_row(e, e.creditor) for e in edges if e.debtor == member and e.outstanding > 0]
+        owed = [_row(e, e.debtor) for e in edges if e.creditor == member and e.outstanding > 0]
+        net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
+        return {
+            "ok": True, "type": "statement",
+            "member": {"id": member, "name": names.get(member, "?")},
+            "period": {"from": period["from"].isoformat() if period["from"] else None,
+                       "to": period["to"].isoformat()},
+            "owe": owe, "owed": owed, "net": net,
+        }
+
     def add_member(args, _tool_ctx=None) -> dict:
         args = args or {}
         display_name = args.get("display_name")
@@ -599,6 +632,14 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=get_period_balances,
             description="Per-person paid/consumed/balance over a range (display only).",
             input_schema=_BALANCES_SCHEMA,
+        ),
+        "member_statement": CustomTool(
+            execute=member_statement,
+            description="A person's own statement: what they owe + are owed, per meal, with paid/unpaid status. Default member = the sender. Use for first-person balance questions ('tôi nợ ai', 'how much do I owe').",
+            input_schema={"type": "object", "properties": {
+                "member": {"type": "integer", "description": "member id; blank = the sender."},
+                "keyword": _PERIOD_SCHEMA["properties"]["keyword"],
+            }},
         ),
         "settle_period": CustomTool(
             execute=settle_period,
