@@ -62,4 +62,22 @@ describe("SessionProvider", () => {
     act(() => screen.getByText("out").click()); // last room gone → none
     expect(screen.getByTestId("room")).toHaveTextContent("none");
   });
+
+  it("re-reads rooms on a cross-tab storage event (another tab switched room)", async () => {
+    upsertRoom({ roomId: 1, roomName: "A", token: "t1" });
+    setup();
+    expect(await screen.findByTestId("room")).toHaveTextContent("1");
+
+    // Simulate another tab's write WITHOUT the storage event: state must not
+    // change yet — this tab only re-reads on its own actions.
+    act(() => upsertRoom({ roomId: 2, roomName: "B", token: "t2" }));
+    expect(screen.getByTestId("room")).toHaveTextContent("1");
+
+    // Now the browser delivers the storage event the other tab's write fired.
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: "chiatienan.rooms" }));
+    });
+    expect(screen.getByTestId("room")).toHaveTextContent("2");
+    expect(screen.getByTestId("name")).toHaveTextContent("B");
+  });
 });

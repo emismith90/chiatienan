@@ -26,6 +26,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { migrateLegacy(); refresh(); setReady(true); }, []);
 
+  // Cross-tab sync: another tab changing the rooms list (switch/join/remove)
+  // fires a `storage` event here. Re-read so the active room converges across
+  // tabs — otherwise this tab keeps using a token for a room it no longer shows.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      // e.key === null is a localStorage.clear(); also catch our rooms key.
+      if (e.key === null || e.key === "chiatienan.rooms") refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   const active = rooms[0] ?? null;
   const token = active?.token ?? null;
   const roomId = active?.roomId ?? null;
