@@ -45,6 +45,7 @@ function readRooms(): StoredRoom[] {
 }
 
 function writeRooms(rooms: StoredRoom[]): void {
+  if (!hasStorage()) return;
   localStorage.setItem(ROOMS, JSON.stringify(rooms));
 }
 
