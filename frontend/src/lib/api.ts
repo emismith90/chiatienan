@@ -98,8 +98,20 @@ export const cancelDraft = (roomId: number, draftId: number) =>
     body: JSON.stringify({ status: "cancelled" }),
   });
 
-export const getMessages = (roomId: number, since = 0) =>
-  req(`/api/rooms/${roomId}/messages?since=${since}`);
+/** Fetch a bounded window of messages for lazy scrollback.
+ *  - `{ days }` — initial load: only the last N days (small recent slice).
+ *  - `{ beforeId }` — load earlier: the page of older messages before an id.
+ * Both return `{ messages, has_more }`; `has_more` drives the "load earlier" UI. */
+export const getMessages = (
+  roomId: number,
+  opts: { days?: number; beforeId?: number } = {},
+): Promise<{ messages: any[]; has_more?: boolean }> => {
+  const p = new URLSearchParams();
+  if (opts.days != null) p.set("days", String(opts.days));
+  if (opts.beforeId != null) p.set("before_id", String(opts.beforeId));
+  const qs = p.toString();
+  return req(`/api/rooms/${roomId}/messages${qs ? `?${qs}` : ""}`);
+};
 
 export const postMessage = (roomId: number, body: string, images?: any[]) =>
   req(`/api/rooms/${roomId}/messages`, {

@@ -252,9 +252,17 @@ async def room_invite(room_id: int, ctx: AuthCtx = Depends(require_session)):
 
 
 @app.get("/api/rooms/{room_id}/messages")
-async def get_messages(room_id: int, since: int = 0, ctx: AuthCtx = Depends(require_session)):
+async def get_messages(room_id: int, since: int = 0, days: int | None = None,
+                       before_id: int | None = None,
+                       ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
     with get_db().session() as s:
+        # Lazy scrollback: `days` (initial recent window) or `before_id` (older
+        # page) return a bounded slice + `has_more`. Absent both, fall back to
+        # the legacy since-based full list (SSE catch-up shape).
+        if days is not None or before_id is not None:
+            msgs, has_more = chat.list_messages_page(s, room_id, days=days, before_id=before_id)
+            return {"messages": msgs, "has_more": has_more}
         return {"messages": chat.list_messages(s, room_id, since_id=since)}
 
 
