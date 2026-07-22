@@ -39,6 +39,16 @@ class RoomIn(BaseModel):
     name: str = "Lunch"
 
 
+class RoomCreateIn(BaseModel):
+    room_name: str = "Lunch"
+    display_name: str
+    nickname: str
+    pin: str
+    bank_code: str | None = None
+    account_number: str | None = None
+    account_holder: str | None = None
+
+
 class AccountIn(BaseModel):
     display_name: str
     nickname: str
@@ -101,6 +111,31 @@ async def create_room(body: RoomIn, _=Depends(require_admin)):
     if settings.caddy_domain:
         out["invite_link"] = f"https://{settings.caddy_domain}/join/{out['invite_token']}"
     return out
+
+
+@app.post("/api/rooms/create")
+async def create_room_public(body: RoomCreateIn):
+    """Anyone can start a room: creates the room + its first member + a session.
+
+    Public by design (multi-room spec 2026-07-22) — the invite-link join flow
+    is the same trust model, and rooms are cheap. Member-field validation
+    (nickname/PIN required, etc.) lives in accounts.create_account.
+    """
+    with get_db().session() as s:
+        r = rooms.create_room(s, body.room_name)
+        try:
+            m, tok = accounts.create_account(
+                s, r,
+                display_name=body.display_name, nickname=body.nickname, pin=body.pin,
+                bank_code=body.bank_code, account_number=body.account_number,
+                account_holder=body.account_holder,
+            )
+        except accounts.AccountError as e:
+            raise HTTPException(422, str(e))
+        return {
+            "token": tok, "room_id": r.id, "room_name": r.name,
+            "member_id": m.id, "invite_token": r.invite_token,
+        }
 
 
 @app.get("/api/rooms/{invite_token}")

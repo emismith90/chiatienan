@@ -361,3 +361,37 @@ def test_clear_command_with_bot_mention_still_skips_bot(client, monkeypatch):
         time.sleep(0.02)
     assert called["clear"] == 1
     assert called["bot"] == 0
+
+
+def test_public_create_room_creates_room_member_session(client):
+    r = client.post("/api/rooms/create", json={
+        "room_name": "Team A", "display_name": "An", "nickname": "an", "pin": "1234",
+        "bank_code": "VCB", "account_number": "007", "account_holder": "AN NGUYEN",
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["room_name"] == "Team A"
+    assert body["invite_token"]
+    # The returned token is a working session for the new room.
+    h = {"Authorization": f"Bearer {body['token']}"}
+    members = client.get(f"/api/rooms/{body['room_id']}/members", headers=h)
+    assert members.status_code == 200
+    assert members.json()[0]["nickname"] == "an"
+    # The invite token admits a second joiner into the same room.
+    _sess_b, rid = _join(client, body["invite_token"], "binh")
+    assert rid == body["room_id"]
+
+
+def test_public_create_room_rejects_missing_nickname_or_pin(client):
+    r = client.post("/api/rooms/create", json={
+        "room_name": "X", "display_name": "A", "nickname": "", "pin": ""})
+    assert r.status_code == 422
+
+
+def test_public_create_room_is_isolated_from_other_rooms(client):
+    a = client.post("/api/rooms/create", json={
+        "room_name": "A", "display_name": "An", "nickname": "an", "pin": "1"}).json()
+    b = client.post("/api/rooms/create", json={
+        "room_name": "B", "display_name": "Binh", "nickname": "binh", "pin": "2"}).json()
+    ha = {"Authorization": f"Bearer {a['token']}"}
+    assert client.get(f"/api/rooms/{b['room_id']}/messages", headers=ha).status_code == 403

@@ -4,7 +4,7 @@ import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { ChatImage } from "@/types/chat";
-import { defaultStore, flushOutbox, newRecord, type OutboxStore, type OutboxRecord } from "@/lib/outbox";
+import { defaultStore, flushOutbox, newRecord, type FlushResult, type OutboxStore, type OutboxRecord } from "@/lib/outbox";
 
 const isOnline = () => (typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
@@ -114,6 +114,8 @@ export function useRoom(roomId: number) {
   const lastId = useRef(0);
   const storeRef = useRef<OutboxStore | null>(null);
   if (!storeRef.current) storeRef.current = defaultStore();
+  // Lets `send` (outside the mount effect) kick the effect's outbox retry.
+  const retryRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const ac = new AbortController();
@@ -144,28 +146,68 @@ export function useRoom(roomId: number) {
     // drains (e.g. an `online` event firing mid-drain) could double-POST the
     // same queued record. A guard keeps only one drain in flight at a time.
     let flushing = false;
-    const flush = async () => {
-      if (flushing) return;
+    const flush = async (): Promise<FlushResult | null> => {
+      if (flushing) return null;
       flushing = true;
       try {
-        await flushOutbox(store, roomId, postRecord);
+        return await flushOutbox(store, roomId, postRecord);
       } catch {
-        /* leave records queued for the next attempt */
+        return null; // store unavailable; leave records queued for the next attempt
       } finally {
         flushing = false;
       }
     };
-    const onOnline = () => { flush(); };
+    // A send can fail at the network level (fetch rejects) while
+    // `navigator.onLine` stays true — switching Wi-Fi/hotspot, a captive
+    // portal, a transient blip — and NO `online` event follows. Without a
+    // self-driven retry the queued message would sit "waiting for network"
+    // until a reload or room switch. So retry on a capped backoff while the
+    // outbox still has records; `online`/mount reset it to an immediate try.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryDelay = 2000;
+    const clearRetry = () => {
+      if (retryTimer != null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
+    function armRetry() {
+      if (retryTimer != null || stop) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        drain();
+      }, retryDelay);
+    }
+    const drain = async () => {
+      const res = await flush();
+      if (stop || !res) return;
+      if (res.remaining > 0) {
+        retryDelay = Math.min(retryDelay * 2, 15000); // still failing → back off
+        armRetry();
+      } else {
+        retryDelay = 2000; // drained → reset for next time
+      }
+    };
+    // `send` kicks a retry through this ref after it queues a failed message.
+    retryRef.current = () => {
+      retryDelay = 2000;
+      armRetry();
+    };
+    const onOnline = () => {
+      retryDelay = 2000;
+      drain();
+    };
     if (typeof window !== "undefined") window.addEventListener("online", onOnline);
 
     (async () => {
       try {
         const { messages } = await api.getMessages(roomId, 0);
+        if (stop) return;
         messages.forEach((m: any) => (lastId.current = Math.max(lastId.current, m.id)));
         setState({ messages, typing: false, timelines: {}, activeTurn: null });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
-          signOut();
+          if (!stop) signOut();
           return;
         }
       }
@@ -186,7 +228,7 @@ export function useRoom(roomId: number) {
       } catch {
         /* store unavailable — ignore */
       }
-      flush();
+      drain();
 
       while (!stop) {
         try {
@@ -222,6 +264,7 @@ export function useRoom(roomId: number) {
     return () => {
       stop = true;
       ac.abort();
+      clearRetry();
       if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,6 +287,7 @@ export function useRoom(roomId: number) {
     // bubble stays "queued" until the `online` handler (or next mount) drains it.
     if (!online) {
       store.add(newRecord(roomId, text, images, Date.now())).catch(() => {});
+      retryRef.current(); // backstop in case the `online` event never fires
       return Promise.resolve();
     }
 
@@ -258,8 +302,11 @@ export function useRoom(roomId: number) {
         throw err;
       }
       // Network dropped mid-send: queue it and resolve (input clears), so it
-      // flushes on reconnect instead of being lost.
+      // flushes on reconnect instead of being lost. Kick the retry loop —
+      // fetch can reject without navigator.onLine flipping, so we can't rely on
+      // an `online` event arriving to drain it.
       store.add(newRecord(roomId, text, images, Date.now())).catch(() => {});
+      retryRef.current();
       setState((prev) => ({
         ...prev,
         messages: prev.messages.map((m) => (m.id === tempId ? { ...m, queued: true } : m)),

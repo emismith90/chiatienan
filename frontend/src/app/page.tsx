@@ -15,6 +15,12 @@ export default function Home() {
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Open an invite link from the admin to join a room.
           </p>
+          <a
+            href="/create"
+            className="mt-4 inline-block rounded-md bg-[var(--accent-primary)] px-4 py-2 text-sm text-white transition-all duration-150 hover:bg-[var(--accent-hover)]"
+          >
+            Create a room
+          </a>
         </div>
       </main>
     );

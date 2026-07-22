@@ -195,10 +195,8 @@ export function Composer({ onSend }: ComposerProps) {
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
-      // On touch devices the on-screen keyboard's return key should insert a
-      // newline (multi-line messages are common); sending is the Send button's
-      // job there. On a physical keyboard, Enter still sends.
-      if (window.matchMedia?.("(pointer: coarse)").matches) return;
+      // Enter sends on every device; Shift+Enter inserts a newline, so
+      // multi-line editing is still possible (and the box auto-grows/wraps).
       e.preventDefault();
       submit();
     }

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as api from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { getProfile, listRooms, saveProfile } from "@/lib/rooms-store";
 
 type Member = { display_name: string; nickname: string; claimed: boolean };
 type Room = { room_id: number; name: string; members?: Member[] };
@@ -34,7 +35,7 @@ function LockOpenIcon() {
 export default function Join() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const { signIn } = useSession();
+  const { signIn, switchRoom } = useSession();
   const [room, setRoom] = useState<Room | null>(null);
   // Default to sign-in/claim: rooms are usually created by an admin who has
   // already added the members, so most people arriving here are claiming an
@@ -56,9 +57,32 @@ export default function Join() {
   useEffect(() => {
     api
       .roomInfo(token)
-      .then((r: Room) => setRoom(r))
+      .then((r: Room) => {
+        // Already a member on this device? Just make it the active room.
+        if (listRooms().some((s) => s.roomId === r.room_id)) {
+          switchRoom(r.room_id);
+          router.replace("/");
+          return;
+        }
+        setRoom(r);
+      })
       .catch(() => setNotFound(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // Prefill from the client-saved profile so joining another room is one tap.
+  useEffect(() => {
+    const p = getProfile();
+    setF((prev) => ({
+      ...prev,
+      display_name: p.display_name ?? "",
+      nickname: p.nickname ?? "",
+      pin: p.pin ?? "",
+      bank_code: p.bank_code ?? "",
+      account_number: p.account_number ?? "",
+      account_holder: p.account_holder ?? "",
+    }));
+  }, []);
 
   function set<K extends keyof typeof f>(key: K, value: string) {
     setF((prev) => ({ ...prev, [key]: value }));
@@ -83,7 +107,14 @@ export default function Join() {
         mode === "create"
           ? await api.createAccount(token, f)
           : await api.identify(token, { nickname: f.nickname, pin: f.pin });
-      signIn(res.token, res.room_id);
+      // Save-back: the local profile always holds the latest values used.
+      // (f's keys are exactly the SavedProfile fields on this page.)
+      if (mode === "create") {
+        saveProfile(f);
+      } else {
+        saveProfile({ nickname: f.nickname, pin: f.pin });
+      }
+      signIn(res.token, res.room_id, room?.name ?? "");
       router.push("/");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Something went wrong, please try again.");
