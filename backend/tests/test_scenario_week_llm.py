@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 EXPECTED_TOOL = {
     "meal_confirmed": "propose_meal",
     "leave_pending": "propose_meal",
-    "payment": "record_payment",
+    "payment": "propose_payment",
     "add_member": "add_member",
     "settle": "settle_period",
     "settle_commit": "settle_period",
