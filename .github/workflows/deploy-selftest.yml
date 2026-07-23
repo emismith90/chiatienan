@@ -48,5 +48,7 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "echo 'connected as' \$(whoami)@\$(hostname) && \
              echo '--- repo ---' && cd '${DEPLOY_PATH}' && git rev-parse --abbrev-ref HEAD && git log -1 --oneline && \
+             echo '--- memory/swap (M8 OOM check) ---' && free -h && \
+             echo '--- disk ---' && df -h / && \
              echo '--- docker compose ps ---' && docker compose ps"
           echo "== OK: SSH auth, path, git, and docker compose all reachable =="
