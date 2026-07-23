@@ -1,0 +1,27 @@
+name: Health check (temporary)
+
+# Throwaway public smoke test — curls the deployed site over TLS from the
+# runner. No secrets. Lives only on the tmp/health-check branch; delete after.
+
+on:
+  push:
+    branches: [tmp/health-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl public endpoints
+        env:
+          BASE: https://chiatienan.duckdns.org
+        run: |
+          set -uo pipefail
+          echo "== GET ${BASE}/health =="
+          curl -fsS -m 25 -w "\n[HTTP %{http_code}, %{time_total}s]\n" "${BASE}/health"
+          echo
+          echo "== GET ${BASE}/ (frontend root) =="
+          curl -fsS -m 25 -o /dev/null -w "[HTTP %{http_code}, %{time_total}s, %{size_download} bytes]\n" "${BASE}/"
