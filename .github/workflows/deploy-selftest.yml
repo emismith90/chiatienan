@@ -1,0 +1,52 @@
+name: Deploy self-test (temporary)
+
+# TEMPORARY read-only check of the deploy SSH setup. Same secrets as deploy.yml,
+# but it only verifies connectivity — it does NOT pull, build, or restart
+# anything. Remove this file once the deploy secrets are confirmed working.
+
+on:
+  push:
+    branches: [claude/cicd-github-actions-2jwwar]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: SSH connectivity (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for deploy secrets
+        id: check
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -n "$KEY" ] && [ -n "$HOST" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::DEPLOY_SSH_KEY / DEPLOY_HOST not set."
+            exit 1
+          fi
+
+      - name: Connect and inspect (no changes)
+        if: steps.check.outputs.configured == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "== Connecting to ${DEPLOY_USER}@${DEPLOY_HOST} =="
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "echo 'connected as' \$(whoami)@\$(hostname) && \
+             echo '--- repo ---' && cd '${DEPLOY_PATH}' && git rev-parse --abbrev-ref HEAD && git log -1 --oneline && \
+             echo '--- docker compose ps ---' && docker compose ps"
+          echo "== OK: SSH auth, path, git, and docker compose all reachable =="
