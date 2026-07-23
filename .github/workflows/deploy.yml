@@ -19,13 +19,22 @@ name: Deploy
 #     ADMIN_PASSWORD   – admin password guarding POST /api/rooms etc.
 #   Secrets (optional):
 #     DEPLOY_USER      – SSH user (defaults to "root")
-#   Variables:
-#     CADDY_DOMAIN     – your domain (REQUIRED when .env is regenerated; Caddy TLS)
-#     DEPLOY_PATH      – checkout dir on the droplet (default /opt/chiatienan)
-#     CURSOR_SDK_MODEL – default "grok-4.5-fast"
-#     BOT_HANDLE       – default "bot"
-#     QR_TEMPLATE      – default "compact2"
-#     APP_TZ           – default "Asia/Ho_Chi_Minh"
+#   Variables (all optional except CADDY_DOMAIN; each falls back to its
+#   .env.example default when unset):
+#     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
+#     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
+#     CURSOR_SDK_MODEL         – default "grok-4.5-fast"
+#     CURSOR_SDK_WORKSPACE     – default "/data/cursor-agent" (keep it under the
+#                                mounted /data volume so it persists across restarts)
+#     CURSOR_API_BASE          – default "https://api.cursor.com"
+#     CURSOR_AGENT_MAX_TOOLS   – default "40"
+#     CURSOR_AGENT_MAX_SECONDS – default "120"
+#     BOT_HANDLE               – default "bot"
+#     DATABASE_URL             – default "sqlite:////data/chiatienan.db" (keep it
+#                                under /data so the SQLite file persists)
+#     TZ                       – default "Asia/Ho_Chi_Minh"
+#     QR_BASE_URL              – default "https://img.vietqr.io/image"
+#     QR_TEMPLATE              – default "compact2"
 #
 # GHCR auth uses the run's built-in GITHUB_TOKEN (packages: write to push,
 # packages: read on the droplet to pull) — no personal access token needed,
@@ -138,9 +147,17 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
           CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5-fast' }}
+          CURSOR_SDK_WORKSPACE: ${{ vars.CURSOR_SDK_WORKSPACE || '/data/cursor-agent' }}
+          CURSOR_API_BASE: ${{ vars.CURSOR_API_BASE || 'https://api.cursor.com' }}
+          CURSOR_AGENT_MAX_TOOLS: ${{ vars.CURSOR_AGENT_MAX_TOOLS || '40' }}
+          CURSOR_AGENT_MAX_SECONDS: ${{ vars.CURSOR_AGENT_MAX_SECONDS || '120' }}
           BOT_HANDLE: ${{ vars.BOT_HANDLE || 'bot' }}
+          DATABASE_URL: ${{ vars.DATABASE_URL || 'sqlite:////data/chiatienan.db' }}
+          # Sourced from the repo `TZ` variable; kept as APP_TZ on the runner so
+          # it can't shift the runner's own clock/timestamps.
+          APP_TZ: ${{ vars.TZ || 'Asia/Ho_Chi_Minh' }}
+          QR_BASE_URL: ${{ vars.QR_BASE_URL || 'https://img.vietqr.io/image' }}
           QR_TEMPLATE: ${{ vars.QR_TEMPLATE || 'compact2' }}
-          APP_TZ: ${{ vars.APP_TZ || 'Asia/Ho_Chi_Minh' }}
         run: |
           set -euo pipefail
           if [ -z "${CADDY_DOMAIN}" ]; then
@@ -155,15 +172,15 @@ jobs:
           # Managed by .github/workflows/deploy.yml — edits here are overwritten on deploy.
           CURSOR_API_KEY=${CURSOR_API_KEY}
           CURSOR_SDK_MODEL=${CURSOR_SDK_MODEL}
-          CURSOR_SDK_WORKSPACE=/data/cursor-agent
-          CURSOR_API_BASE=https://api.cursor.com
-          CURSOR_AGENT_MAX_TOOLS=40
-          CURSOR_AGENT_MAX_SECONDS=120
+          CURSOR_SDK_WORKSPACE=${CURSOR_SDK_WORKSPACE}
+          CURSOR_API_BASE=${CURSOR_API_BASE}
+          CURSOR_AGENT_MAX_TOOLS=${CURSOR_AGENT_MAX_TOOLS}
+          CURSOR_AGENT_MAX_SECONDS=${CURSOR_AGENT_MAX_SECONDS}
           BOT_HANDLE=${BOT_HANDLE}
-          DATABASE_URL=sqlite:////data/chiatienan.db
+          DATABASE_URL=${DATABASE_URL}
           TZ=${APP_TZ}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
-          QR_BASE_URL=https://img.vietqr.io/image
+          QR_BASE_URL=${QR_BASE_URL}
           QR_TEMPLATE=${QR_TEMPLATE}
           CADDY_DOMAIN=${CADDY_DOMAIN}
           EOF
