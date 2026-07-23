@@ -15,7 +15,7 @@ Two reference docs hold the detail — read the one that matches the task:
 
 ## Must not get wrong (read before touching prod)
 
-- **SSH to the direct IP, not the domain:** `ssh -i ~/.ssh/digitalocean-openclaw root@165.22.246.208`. DuckDNS can resolve the domain to the office egress IP — unreliable for SSH. Ignore the stale `143.198.81.194` in `~/.ssh/config` (old droplet, changed host key).
+- **SSH to the domain, not a hardcoded IP:** `ssh -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org` (currently resolves to `165.22.246.208`). The domain follows the droplet if its IP changes — a hardcoded IP goes stale (that's why a dead `143.198.81.194` lingers in `~/.ssh/config`; ignore it). If SSH to the domain lands somewhere unexpected, DuckDNS auto-detect may have grabbed the office IP — **re-pin the DuckDNS record to the droplet IP**, don't switch to hardcoding it.
 - **The office network blocks outbound SSH** (banner stripped → "timed out during banner exchange"). Use a **phone hotspot**, or the **DigitalOcean web console** (browser terminal, always works).
 - **Schema change on the live DB = `ALTER TABLE … ADD COLUMN`, NEVER `rm` the DB.** SQLAlchemy `create_all()` only builds columns on a *fresh* DB; it will not alter the live one. Wiping erases the group's real ledger. Back up first (see DEBUGGING.md §3).
 - **The droplet has no `sqlite3` binary.** To read the DB, `scp` it off and read locally — and copy **both `chiatienan.db` AND `chiatienan.db-wal`** (WAL mode: recent writes live in `-wal`; the main file is stale until checkpoint). The conversation log is the `room_messages` table.
@@ -24,8 +24,8 @@ Two reference docs hold the detail — read the one that matches the task:
 ## Quick reference
 
 ```bash
-# SSH (direct IP)
-ssh -i ~/.ssh/digitalocean-openclaw root@165.22.246.208
+# SSH (use the domain; currently -> 165.22.246.208)
+ssh -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org
 
 # On the droplet — logs & redeploy
 cd /opt/chiatienan
@@ -33,8 +33,8 @@ docker compose logs --tail=200 backend        # bot/tool errors, tracebacks
 git pull && docker compose up -d --build       # redeploy (frontend needs build-OOM care — see README §5)
 
 # Read the prod chatlog (from your machine — copy .db AND -wal)
-scp -i ~/.ssh/digitalocean-openclaw root@165.22.246.208:/opt/chiatienan/data/chiatienan.db     ./prod.db
-scp -i ~/.ssh/digitalocean-openclaw root@165.22.246.208:/opt/chiatienan/data/chiatienan.db-wal ./prod.db-wal
+scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db     ./prod.db
+scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db-wal ./prod.db-wal
 sqlite3 ./prod.db "SELECT count(*) FROM room_messages;"
 
 # Additive schema change on live DB — ALWAYS back up first, then ALTER (two steps):

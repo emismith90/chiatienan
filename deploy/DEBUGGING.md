@@ -8,13 +8,13 @@ ledger without a backup.**
 ## 0. Reaching the box
 
 - **Droplet:** DigitalOcean, `/opt/chiatienan`, Docker Compose (Caddy + backend + frontend), SQLite on the `./data` volume.
-- **SSH to the direct public IP, not the domain:**
+- **SSH to the domain, not a hardcoded IP:**
   ```bash
-  ssh -i ~/.ssh/digitalocean-openclaw root@165.22.246.208
+  ssh -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org
   ```
-  Use the **raw IP** (`165.22.246.208`), not `chiatienan.duckdns.org` — DuckDNS auto-detect can point the domain at the wrong network (e.g. the office egress IP), so the domain is unreliable for SSH. The domain is only for the browser (HTTPS).
+  The domain currently resolves to `165.22.246.208`, and it **follows the droplet** if the IP ever changes (rebuild/resize) — a hardcoded IP goes stale (that's why a dead `143.198.81.194` lingers in `~/.ssh/config`; ignore it). Confirm what it resolves to with `dig +short chiatienan.duckdns.org`.
+- **If the domain resolves somewhere unexpected**, DuckDNS auto-detect may have grabbed the office egress IP — **re-pin the DuckDNS record to the droplet IP** (`165.22.246.208`). Don't switch to hardcoding the IP; fix the DNS record. As a one-off fallback while the record is wrong, you can SSH the raw IP directly.
 - **Office network blocks outbound SSH** (TCP connects, banner stripped → "timed out during banner exchange"). If SSH hangs, switch to a **phone hotspot**, or use the **DigitalOcean web console** (browser terminal, pure HTTPS — always works).
-- Ignore any stale host in `~/.ssh/config` pointing elsewhere (a previous droplet's IP will have a changed host key — that's the old box, not this one).
 
 ## 1. Logs
 
@@ -41,8 +41,8 @@ files** or you'll see stale/empty data:
 
 ```bash
 # on your machine — copy each file separately (globs can trip the sandbox):
-scp -i ~/.ssh/digitalocean-openclaw root@165.22.246.208:/opt/chiatienan/data/chiatienan.db      ./prod.db
-scp -i ~/.ssh/digitalocean-openclaw root@165.22.246.208:/opt/chiatienan/data/chiatienan.db-wal  ./prod.db-wal
+scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db      ./prod.db
+scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db-wal  ./prod.db-wal
 # -shm is optional (SQLite rebuilds it). Opening prod.db now replays the WAL:
 sqlite3 ./prod.db "SELECT count(*) FROM room_messages;"
 ```
