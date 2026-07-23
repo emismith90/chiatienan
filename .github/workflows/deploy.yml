@@ -204,12 +204,16 @@ jobs:
           # Token is piped via ssh stdin into `docker login --password-stdin`,
           # so it never appears in the remote process arguments. git pull keeps
           # docker-compose.yml / Caddyfile current; IMAGE_TAG pins the exact
-          # images this run built.
+          # images this run built. `caddy reload` applies any Caddyfile change
+          # (docker compose up -d won't recreate the unchanged caddy container,
+          # so its bind-mounted config wouldn't otherwise take effect); it's a
+          # graceful, zero-downtime no-op when the config is unchanged.
           echo "${GHCR_TOKEN}" | ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -e; cd '${DEPLOY_PATH}' && git pull --ff-only && \
              docker login ghcr.io -u '${GHCR_USER}' --password-stdin && \
              export IMAGE_TAG='${IMAGE_TAG}' && \
              docker compose pull && docker compose up -d && \
+             { docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo '::warning::caddy reload failed; previous config still active'; } && \
              { docker logout ghcr.io >/dev/null 2>&1 || true; } && \
              docker image prune -f >/dev/null 2>&1 || true; docker compose ps"
