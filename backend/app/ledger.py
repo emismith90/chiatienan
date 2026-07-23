@@ -358,6 +358,39 @@ def period_timeline(
     return events
 
 
+def period_meal_details(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list[dict]:
+    """Per-meal metadata in the window, for building settlement QR notes.
+
+    Returns ``[{"payer_id", "occurred_on", "dish", "shares": {member_id: amount}}]``
+    — the date/dish that :func:`period_transfer_inputs` drops, plus the shares so a
+    transfer can be attributed to the meals a debtor took part in. Same window and
+    void semantics as :func:`period_transfer_inputs`, so the two agree.
+    """
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
+    if from_date is not None:
+        meal_conds.append(Meal.occurred_on >= from_date)
+
+    meal_rows = session.execute(
+        select(Meal.id, Meal.payer_member_id, Meal.occurred_on, Meal.dish).where(*meal_conds)
+    ).all()
+    by_id = {
+        mid: {"payer_id": payer, "occurred_on": occurred, "dish": dish, "shares": {}}
+        for mid, payer, occurred, dish in meal_rows
+    }
+
+    if by_id:
+        share_rows = session.execute(
+            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
+            .where(MealShare.meal_id.in_(by_id.keys()))
+        ).all()
+        for meal_id, member_id, amt in share_rows:
+            by_id[meal_id]["shares"][member_id] = amt
+
+    return list(by_id.values())
+
+
 def last_settlement(session: Session, room_id: int) -> Settlement | None:
     return session.scalars(
         select(Settlement)
