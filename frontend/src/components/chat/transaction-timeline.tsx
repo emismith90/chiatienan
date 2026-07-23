@@ -4,7 +4,7 @@ import type { TimelineEvent } from "@/lib/api";
 
 export function TransactionTimeline({ events }: { events: TimelineEvent[] }) {
   if (!events || events.length === 0) {
-    return <p className="text-xs text-[var(--text-secondary)]">Chưa có giao dịch nào trong kỳ.</p>;
+    return <p className="text-xs text-[var(--text-secondary)]">No transactions this period.</p>;
   }
   return (
     <ul className="space-y-2">
@@ -15,9 +15,9 @@ export function TransactionTimeline({ events }: { events: TimelineEvent[] }) {
           <span className="min-w-0">
             {e.kind === "meal" ? (
               <>
-                <span className="font-medium text-[var(--text-primary)]">{e.dish || "bữa ăn"}</span>
+                <span className="font-medium text-[var(--text-primary)]">{e.dish || "meal"}</span>
                 <span className="block text-[var(--text-secondary)]">
-                  {e.payer_name} trả {fmt(e.total)} đ
+                  {e.payer_name} paid {fmt(e.total)} đ
                 </span>
               </>
             ) : (

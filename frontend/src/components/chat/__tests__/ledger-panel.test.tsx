@@ -33,16 +33,16 @@ describe("LedgerPanel", () => {
     expect(screen.getByText("Linh")).toBeInTheDocument();
   });
 
-  it("shows the caller's statement with an 'Đã trả' button on 'Của tôi'", async () => {
+  it("shows the caller's statement with a 'Mark paid' button on 'Mine'", async () => {
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText(/bun bo/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Của tôi/ }));
-    const pay = screen.getByRole("button", { name: /Đã trả/ });
+    fireEvent.click(screen.getByRole("button", { name: /Mine/ }));
+    const pay = screen.getByRole("button", { name: /Mark paid/ });
     fireEvent.click(pay);
     expect(api.quickPay).toHaveBeenCalledWith(3, 6, 2);
   });
 
-  it("does not throw on 'Của tôi' when the ledger has no `me` field", async () => {
+  it("does not throw on 'Mine' when the ledger has no `me` field", async () => {
     vi.spyOn(api, "getLedger").mockResolvedValue({
       period: data.period,
       balances: data.balances,
@@ -50,8 +50,8 @@ describe("LedgerPanel", () => {
     } as any);
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText("Giang")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Của tôi/ }));
-    // The "Số dư" section must still render without throwing on the missing `me`.
-    expect(screen.getByText("Số dư")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Mine/ }));
+    // The "Balances" section must still render without throwing on the missing `me`.
+    expect(screen.getByText("Balances")).toBeInTheDocument();
   });
 });

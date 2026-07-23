@@ -19,6 +19,6 @@ describe("TransactionTimeline", () => {
   });
   it("renders an empty note when there are no events", () => {
     render(<TransactionTimeline events={[]} />);
-    expect(screen.getByText(/Chưa có giao dịch/)).toBeInTheDocument();
+    expect(screen.getByText(/No transactions/)).toBeInTheDocument();
   });
 });

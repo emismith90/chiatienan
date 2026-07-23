@@ -20,21 +20,21 @@ describe("StatementCard via BotMessage", () => {
     expect(screen.getByText(/-61.000/)).toBeInTheDocument(); // net
   });
 
-  it("Đã trả records the meal and flips the row", async () => {
+  it("Mark paid records the meal and flips the row", async () => {
     const spy = vi.spyOn(api, "quickPay").mockResolvedValue({ ok: true, payment_id: 1, amount: 61000 });
     render(<BotMessage body="" attachments={att} roomId={3} />);
-    fireEvent.click(screen.getByRole("button", { name: /Đã trả/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Mark paid/ }));
     expect(spy).toHaveBeenCalledWith(3, 6, 2);
-    await waitFor(() => expect(screen.getByText(/đã trả/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/· paid/)).toBeInTheDocument());
   });
 
-  it("shows an error hint and leaves the row unpaid when Đã trả fails", async () => {
+  it("shows an error hint and leaves the row unpaid when Mark paid fails", async () => {
     vi.spyOn(api, "quickPay").mockRejectedValue(new Error("network"));
     render(<BotMessage body="" attachments={att} roomId={3} />);
-    fireEvent.click(screen.getByRole("button", { name: /Đã trả/ }));
-    await waitFor(() => expect(screen.getByText(/Lỗi/)).toBeInTheDocument());
-    // Row stays unpaid: button still present, no "đã trả" flip.
-    expect(screen.getByRole("button", { name: /Đã trả/ })).toBeInTheDocument();
-    expect(screen.queryByText(/đã trả/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Mark paid/ }));
+    await waitFor(() => expect(screen.getByText(/Failed/)).toBeInTheDocument());
+    // Row stays unpaid: button still present, no "· paid" flip.
+    expect(screen.getByRole("button", { name: /Mark paid/ })).toBeInTheDocument();
+    expect(screen.queryByText(/· paid/)).not.toBeInTheDocument();
   });
 });

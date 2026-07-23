@@ -430,10 +430,10 @@ export function RoomView({ roomId }: { roomId: number }) {
               <button
                 type="button"
                 onClick={() => setDrawerOpen(true)}
-                aria-label="Sổ nhóm"
+                aria-label="Ledger"
                 className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] lg:hidden"
               >
-                Sổ
+                Ledger
               </button>
               <InviteButton roomId={roomId} />
             </div>
@@ -499,7 +499,7 @@ export function RoomView({ roomId }: { roomId: number }) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Sổ nhóm"
+          aria-label="Ledger"
           onClick={() => setDrawerOpen(false)}
           className="fixed inset-0 z-50 bg-black/50 lg:hidden"
         >
