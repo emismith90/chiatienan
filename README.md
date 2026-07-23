@@ -1,5 +1,7 @@
 # chiatienan — lunch-splitting PWA
 
+[![CI](https://github.com/emismith90/chiatienan/actions/workflows/ci.yml/badge.svg)](https://github.com/emismith90/chiatienan/actions/workflows/ci.yml)
+
 A self-hosted chat app (installable PWA) for a group of ~6–7 colleagues who eat
 lunch together. Everyone joins a shared **room** and chats in Vietnamese. When
 someone pays, they `@mention` the bot with a short natural-language message
@@ -201,6 +203,16 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
 - **E2E** (manual): deploy, join two devices to a room, run a meal log (inline
   photo) → edit/confirm the draft → a preview → a `chốt`; verify the QR images
   render in the card and the ledger persists across a container restart.
+
+**CI/CD** (GitHub Actions, `.github/workflows/`): `ci.yml` runs on every push
+and PR — backend `pytest` (Python 3.11 + 3.12), frontend `tsc --noEmit` +
+`vitest`, and a build of both production Docker images. `deploy.yml` (on merges
+to `main`) builds both images **on the runner**, pushes them to GHCR, then
+SSHes into the droplet to regenerate `.env` from GitHub secrets and
+`docker compose pull && up -d` — so the 512 MB host never builds and can't OOM
+on deploy. It is a no-op until the `DEPLOY_SSH_KEY` / `DEPLOY_HOST` secrets are
+set (see the workflow header for the full secret/variable list). The opt-in LLM
+eval (`RUN_LLM_EVAL`) is not run in CI.
 
 ## Out of scope (documented follow-ups)
 

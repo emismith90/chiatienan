@@ -15,6 +15,10 @@ services:
       - backend
 
   backend:
+    # Deploys pull this prebuilt image from GHCR (IMAGE_TAG set by CI to the
+    # commit SHA; defaults to :latest for manual/local use). `build:` stays so
+    # local `docker compose build` / `up --build` still works offline.
+    image: ghcr.io/emismith90/chiatienan-backend:${IMAGE_TAG:-latest}
     build: ./backend
     restart: unless-stopped
     env_file: .env
@@ -24,6 +28,7 @@ services:
       - "8000"              # internal only; Caddy terminates TLS and proxies in
 
   frontend:
+    image: ghcr.io/emismith90/chiatienan-frontend:${IMAGE_TAG:-latest}
     build: ./frontend
     restart: unless-stopped
     expose: ["3000"]
