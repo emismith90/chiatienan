@@ -113,6 +113,10 @@ up -d`. Because the image is built off-box, this side-steps M8 entirely — the 
 `.env.bak.<timestamp>`), so GitHub is the source of truth for production config. If the app
 secrets aren't set, the deploy leaves the existing `.env` untouched.
 
+The deploy also runs `caddy reload` after `up -d`, so `Caddyfile` edits take effect without a
+restart (`docker compose up -d` alone won't recreate the unchanged caddy container). Manual
+Caddyfile changes need the same: `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+
 ### Manual (fallback)
 
 ```bash

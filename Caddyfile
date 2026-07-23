@@ -1,9 +1,11 @@
 # Automatic HTTPS (Let's Encrypt) for the droplet's domain.
 # CADDY_DOMAIN is injected from .env via docker-compose.
-# /api/* and /internal/* go to the FastAPI backend (incl. SSE, which Caddy
-# streams unbuffered by default); everything else is the Next.js frontend.
+# /api/*, /internal/* and /health go to the FastAPI backend (incl. SSE, which
+# Caddy streams unbuffered by default); everything else is the Next.js frontend.
+# /health is the backend liveness probe (main.py) — routed here so it's a real
+# public check, not a frontend 404.
 {$CADDY_DOMAIN} {
-	@api path /api/* /internal/*
+	@api path /api/* /internal/* /health
 	reverse_proxy @api backend:8000
 	reverse_proxy frontend:3000
 }
