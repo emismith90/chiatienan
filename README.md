@@ -206,11 +206,13 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
 
 **CI/CD** (GitHub Actions, `.github/workflows/`): `ci.yml` runs on every push
 and PR — backend `pytest` (Python 3.11 + 3.12), frontend `tsc --noEmit` +
-`vitest`, and a build of both production Docker images. `deploy.yml` redeploys
-to the droplet over SSH (`git pull && docker compose up -d --build`) on merges
-to `main`; it is a no-op until the `DEPLOY_SSH_KEY` / `DEPLOY_HOST` secrets are
-set (see the workflow header). The opt-in LLM eval (`RUN_LLM_EVAL`) is not run
-in CI.
+`vitest`, and a build of both production Docker images. `deploy.yml` (on merges
+to `main`) builds both images **on the runner**, pushes them to GHCR, then
+SSHes into the droplet to regenerate `.env` from GitHub secrets and
+`docker compose pull && up -d` — so the 512 MB host never builds and can't OOM
+on deploy. It is a no-op until the `DEPLOY_SSH_KEY` / `DEPLOY_HOST` secrets are
+set (see the workflow header for the full secret/variable list). The opt-in LLM
+eval (`RUN_LLM_EVAL`) is not run in CI.
 
 ## Out of scope (documented follow-ups)
 

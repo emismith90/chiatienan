@@ -101,6 +101,20 @@ reply appears for all members.
 
 ## Redeploy (after code changes)
 
+### Automated (GitHub Actions — preferred)
+
+Merging to `main` runs `.github/workflows/deploy.yml`: it builds both images **on the GitHub
+runner**, pushes them to GHCR, then SSHes in to regenerate `.env` and `docker compose pull &&
+up -d`. Because the image is built off-box, this side-steps M8 entirely — the droplet never runs
+`next build`. See the workflow header for the required repo secrets/variables
+(`DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `CURSOR_API_KEY`, `ADMIN_PASSWORD`, `CADDY_DOMAIN`, …).
+
+`.env` is regenerated from GitHub secrets on each deploy (the previous file is backed up to
+`.env.bak.<timestamp>`), so GitHub is the source of truth for production config. If the app
+secrets aren't set, the deploy leaves the existing `.env` untouched.
+
+### Manual (fallback)
+
 ```bash
 cd /opt/chiatienan && git pull && docker compose up -d --build
 ```
@@ -108,6 +122,8 @@ cd /opt/chiatienan && git pull && docker compose up -d --build
 Backend-only or Caddy-only changes: the command above is fine as-is. If the change touches
 `frontend/`, do **not** run a blanket `--build` on the droplet — see the M8 note in
 section 5 and use Option A (with swap) or Option B (build-elsewhere + `docker load`) instead.
+To pull the CI-built images by hand instead of building: `docker login ghcr.io` (with a
+`read:packages` token), then `docker compose pull && docker compose up -d`.
 
 ## Backup (optional)
 
