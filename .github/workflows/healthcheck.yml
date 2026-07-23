@@ -1,7 +1,12 @@
 name: Health check (temporary)
 
-# Throwaway public smoke test — curls the deployed site over TLS from the
+# Throwaway public smoke test — hits the deployed site over TLS from the
 # runner. No secrets. Lives only on the tmp/health-check branch; delete after.
+#
+# Caddy routes /api/* and /internal/* to the backend, everything else to the
+# Next.js frontend — so the public liveness checks are:
+#   GET /        -> 200 (frontend serves the app)
+#   GET /api/me  -> 401 (backend reachable; unauthorized without a token)
 
 on:
   push:
@@ -20,8 +25,12 @@ jobs:
           BASE: https://chiatienan.duckdns.org
         run: |
           set -uo pipefail
-          echo "== GET ${BASE}/health =="
-          curl -fsS -m 25 -w "\n[HTTP %{http_code}, %{time_total}s]\n" "${BASE}/health"
-          echo
-          echo "== GET ${BASE}/ (frontend root) =="
-          curl -fsS -m 25 -o /dev/null -w "[HTTP %{http_code}, %{time_total}s, %{size_download} bytes]\n" "${BASE}/"
+          fail=0
+          root=$(curl -sS -m 25 -o /dev/null -w '%{http_code}' "${BASE}/" || echo "ERR")
+          api=$(curl -sS -m 25 -o /dev/null -w '%{http_code}' "${BASE}/api/me" || echo "ERR")
+          echo "GET /       -> ${root}   (expect 200)"
+          echo "GET /api/me -> ${api}   (expect 401)"
+          [ "${root}" = "200" ] || { echo "::error::frontend root did not return 200"; fail=1; }
+          case "${api}" in 401|403|200) ;; *) echo "::error::backend /api/me returned ${api} (expected 401)"; fail=1;; esac
+          if [ "${fail}" = "0" ]; then echo "== OK: frontend + backend both live behind Caddy TLS =="; fi
+          exit "${fail}"
