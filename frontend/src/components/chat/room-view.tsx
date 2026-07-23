@@ -10,6 +10,7 @@ import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
 import { RoomSwitcher } from "./room-switcher";
+import { LedgerPanel } from "./ledger-panel";
 import { saveProfile } from "@/lib/rooms-store";
 
 interface Member {
@@ -357,12 +358,13 @@ export function ProfileDialog({
 }
 
 export function RoomView({ roomId }: { roomId: number }) {
-  const { messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send } =
+  const { messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send, ledgerVersion } =
     useRoom(roomId);
   const { memberId } = useSession();
   const online = useOnline();
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -376,6 +378,14 @@ export function RoomView({ roomId }: { roomId: number }) {
       live = false;
     };
   }, [roomId]);
+
+  // Esc closes the phone/tablet ledger drawer (mirrors MemberInfoDialog).
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
 
   // Auto-scroll to the newest message / typing indicator. Keyed on the LAST
   // message id (not the array) so prepending older history via "load earlier"
@@ -397,7 +407,8 @@ export function RoomView({ roomId }: { roomId: number }) {
   }
 
   return (
-    <main className="flex h-dvh flex-col bg-[var(--bg-base)]">
+    <div className="flex h-dvh">
+      <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg-base)]">
       <header className="pt-safe border-b border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
@@ -416,6 +427,14 @@ export function RoomView({ roomId }: { roomId: number }) {
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <InstallButton />
               <ThemeToggle />
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Ledger"
+                className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)] lg:hidden"
+              >
+                Ledger
+              </button>
               <InviteButton roomId={roomId} />
             </div>
           </div>
@@ -468,6 +487,30 @@ export function RoomView({ roomId }: { roomId: number }) {
           <Composer onSend={send} />
         </div>
       </div>
+      </main>
+
+      {/* Desktop: persistent right column */}
+      <div className="hidden w-[260px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] lg:block">
+        <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion} />
+      </div>
+
+      {/* Phone/tablet: slide-over drawer */}
+      {drawerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ledger"
+          onClick={() => setDrawerOpen(false)}
+          className="fixed inset-0 z-50 bg-black/50 lg:hidden"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-0 top-0 h-full w-[82%] max-w-sm border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-xl"
+          >
+            <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion} />
+          </div>
+        </div>
+      )}
 
       {selectedMember &&
         (selectedMember.id === memberId ? (
@@ -483,6 +526,6 @@ export function RoomView({ roomId }: { roomId: number }) {
             onClose={() => setSelectedMember(null)}
           />
         ))}
-    </main>
+    </div>
   );
 }

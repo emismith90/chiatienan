@@ -76,3 +76,40 @@ def resolve_period(
         "to": explicit_to or today,
         "keyword": kw,
     }
+
+
+_WEEKDAYS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+    "thu 2": 0, "thu 3": 1, "thu 4": 2, "thu 5": 3, "thu 6": 4, "thu 7": 5, "chu nhat": 6,
+    "t2": 0, "t3": 1, "t4": 2, "t5": 3, "t6": 4, "t7": 5, "cn": 6,
+}
+
+
+def _strip_accents(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def resolve_date(word: str, *, today: date) -> date:
+    """A single day from a weekday/relative word or dd/mm[/yyyy] (ICT).
+
+    Weekday words resolve to the most recent matching day at or before ``today``
+    (a group logs *past* lunches). Raises ``ValueError`` if unparseable.
+    """
+    raw = (word or "").strip().lower()
+    w = _strip_accents(raw).strip()
+    if w in ("hom nay", "today", "nay"):
+        return today
+    if w in ("hom qua", "yesterday", "qua"):
+        return today - timedelta(days=1)
+    if w in _WEEKDAYS:
+        target = _WEEKDAYS[w]
+        delta = (today.weekday() - target) % 7
+        return today - timedelta(days=delta)
+    import re
+    md = re.fullmatch(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", w)
+    if md:
+        day, month, year = int(md[1]), int(md[2]), md[3]
+        y = today.year if year is None else (2000 + int(year) if len(year) == 2 else int(year))
+        return date(y, month, day)
+    raise ValueError(f"Không hiểu ngày: {word!r}")

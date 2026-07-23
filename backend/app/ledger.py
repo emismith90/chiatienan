@@ -7,13 +7,17 @@ Every function takes an open :class:`~sqlalchemy.orm.Session`; the caller's
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import now_ict, today_ict
 from app.models import Meal, MealShare, Member, Payment, Settlement
-from app.money import split_with_guests
+from app.money import apply_payments_fifo, build_debt_edges, split_with_guests
+
+if TYPE_CHECKING:
+    from app.money import DebtEdge
 
 
 class LedgerError(ValueError):
@@ -105,6 +109,7 @@ def record_payment(
     note: str | None = None,
     source: str = "web",
     logged_by: str | None = None,
+    meal_id: int | None = None,
 ) -> dict:
     """Record a cash payment from one member to another (adjusts balances)."""
     if amount <= 0:
@@ -132,6 +137,7 @@ def record_payment(
         note=note,
         source=source,
         logged_by=logged_by,
+        meal_id=meal_id,
     )
     session.add(pay)
     session.flush()
@@ -257,6 +263,99 @@ def period_transfer_inputs(
     ]
 
     return list(by_id.values()), payments
+
+
+def debt_breakdown(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list["DebtEdge"]:
+    """Gross per-(debtor, creditor, meal) edges with FIFO-attributed payments.
+
+    Same window semantics as :func:`period_balances`; excludes voided meals and
+    voided payments. Does NOT net opposing debts — that is the whole point (a
+    person's real debt to a creditor, per meal).
+    """
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
+    if from_date is not None:
+        meal_conds.append(Meal.occurred_on >= from_date)
+    meal_rows = session.execute(
+        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on).where(*meal_conds)
+    ).all()
+    by_id = {
+        mid: {"meal_id": mid, "payer_id": payer, "dish": dish, "occurred_on": occ, "shares": {}}
+        for mid, payer, dish, occ in meal_rows
+    }
+    if by_id:
+        for meal_id, member_id, amt in session.execute(
+            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
+            .where(MealShare.meal_id.in_(by_id.keys()))
+        ).all():
+            by_id[meal_id]["shares"][member_id] = amt
+
+    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
+    if from_date is not None:
+        pay_conds.append(Payment.occurred_on >= from_date)
+    payments = [
+        {"from": f, "to": t, "amount": a, "meal_id": mid}
+        for f, t, a, mid in session.execute(
+            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id)
+            .where(*pay_conds)
+        ).all()
+    ]
+    return apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)
+
+
+def statement_for(
+    session: Session, room_id: int, member_id: int, from_date: date | None, to_date: date
+) -> dict:
+    """The caller's own owe/owed edges (outstanding > 0) + net. Ids only."""
+    edges = debt_breakdown(session, room_id, from_date, to_date)
+    owe = [{"other_id": e.creditor, "meal_id": e.meal_id, "dish": e.dish,
+            "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+           for e in edges if e.debtor == member_id and e.outstanding > 0]
+    owed = [{"other_id": e.debtor, "meal_id": e.meal_id, "dish": e.dish,
+             "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
+            for e in edges if e.creditor == member_id and e.outstanding > 0]
+    net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
+    return {"owe": owe, "owed": owed, "net": net}
+
+
+def period_timeline(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list[dict]:
+    """Meals + payments in the window as one list ordered by (occurred_on, created_at)."""
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
+    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
+    if from_date is not None:
+        meal_conds.append(Meal.occurred_on >= from_date)
+        pay_conds.append(Payment.occurred_on >= from_date)
+
+    events: list[dict] = []
+    meal_rows = session.execute(
+        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on,
+               Meal.total_amount, Meal.created_at).where(*meal_conds)
+    ).all()
+    meal_ids = [row[0] for row in meal_rows]
+    participants: dict[int, list[int]] = {mid: [] for mid in meal_ids}
+    if meal_ids:
+        for meal_id, member_id in session.execute(
+            select(MealShare.meal_id, MealShare.member_id)
+            .where(MealShare.meal_id.in_(meal_ids))
+        ).all():
+            participants[meal_id].append(member_id)
+    for mid, payer, dish, occ, total, created in meal_rows:
+        events.append({"kind": "meal", "meal_id": mid, "payer_id": payer, "dish": dish,
+                       "occurred_on": occ.isoformat(), "total": total,
+                       "participant_ids": participants.get(mid, []),
+                       "created_at": created.isoformat() if created else ""})
+    for pid, f, t, amt, occ, created in session.execute(
+        select(Payment.id, Payment.from_member_id, Payment.to_member_id, Payment.amount,
+               Payment.occurred_on, Payment.created_at).where(*pay_conds)
+    ).all():
+        events.append({"kind": "payment", "payment_id": pid, "from_id": f, "to_id": t,
+                       "amount": amt, "occurred_on": occ.isoformat(),
+                       "created_at": created.isoformat() if created else ""})
+    events.sort(key=lambda e: (e["occurred_on"], e["created_at"]))
+    return events
 
 
 def period_meal_details(

@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BalanceTable } from "./balance-table";
 import { ZoomableImage } from "./zoomable-image";
+import { StatementCard } from "./statement-card";
+import { SummaryCard } from "./summary-card";
 import { fmt } from "@/lib/format";
 
 interface Transfer {
@@ -20,6 +22,7 @@ interface Share {
 interface BotMessageProps {
   body: string;
   attachments?: any;
+  roomId: number;
 }
 
 function SettlementCard({ attachments }: { attachments: any }) {
@@ -117,7 +120,7 @@ function MealCard({ attachments }: { attachments: any }) {
   );
 }
 
-export function BotMessage({ body, attachments }: BotMessageProps) {
+export function BotMessage({ body, attachments, roomId }: BotMessageProps) {
   const type = attachments?.type;
   return (
     <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-sm">
@@ -126,6 +129,8 @@ export function BotMessage({ body, attachments }: BotMessageProps) {
       </div>
       {type === "settlement" && <SettlementCard attachments={attachments} />}
       {type === "meal" && <MealCard attachments={attachments} />}
+      {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
+      {type === "summary" && <SummaryCard attachments={attachments} />}
     </div>
   );
 }

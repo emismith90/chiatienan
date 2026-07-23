@@ -73,7 +73,7 @@ def test_system_prompt_keeps_money_invariant_and_points_to_skills():
     assert "KHÔNG BAO GIỜ tự tính toán" in p
     # Detailed procedures moved to workspace skills; the slim prompt points at them.
     assert "record-payment" in p
-    assert "settle-period" in p
+    assert "balances" in p
     # The removed monolithic guidance (old record_payment tool name) is gone.
     assert "record_payment" not in p
 

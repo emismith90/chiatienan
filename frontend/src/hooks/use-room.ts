@@ -18,6 +18,11 @@ export type RoomState = {
    * earlier"). Optional so the pure `mergeEvent` reducer — which only ever
    * carries it through via spread — can be exercised with minimal states. */
   hasMore?: boolean;
+  /** Monotonic counter bumped on each `ledger:changed` stream event. The
+   * always-on money panel keys off this (via `useLedger`) to refetch the ledger
+   * over the existing room SSE — no second connection. Optional for the same
+   * reason as `hasMore`. */
+  ledgerVersion?: number;
 };
 
 /** Initial scrollback window (days). Only messages this recent are fetched and
@@ -34,6 +39,7 @@ export const INITIAL_WINDOW_DAYS = 3;
  * - Everything else (including `__closed__`) is ignored and returns `s` as-is.
  */
 export function mergeEvent(s: RoomState, e: any): RoomState {
+  if (e.type === "ledger:changed") return { ...s, ledgerVersion: (s.ledgerVersion ?? 0) + 1 };
   if (e.type === "bot.typing") return { ...s, typing: true };
   // `bot.done` is terminal: clear the typing indicator AND any live turn. The
   // per-turn `agent.run.finished` that normally clears `activeTurn` is
@@ -371,6 +377,7 @@ export function useRoom(roomId: number) {
     timelines: state.timelines,
     activeTurn: state.activeTurn,
     hasMore: state.hasMore,
+    ledgerVersion: state.ledgerVersion ?? 0,
     loadingEarlier,
     loadEarlier,
     send,

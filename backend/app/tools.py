@@ -25,7 +25,7 @@ from app.clock import today_ict
 from app.db import Database
 from app.money import MoneyError, per_payer_transfers, split_with_guests
 from app.notes import build_qr_note
-from app.periods import resolve_period
+from app.periods import resolve_date, resolve_period
 from app.qr import QRError, make_qr_url
 
 logger = logging.getLogger("chiatienan")
@@ -104,6 +104,7 @@ _PROPOSE_SCHEMA = {
         "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
         "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
         "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
+        "occurred_on": {"type": "string", "description": "Meal date, ISO YYYY-MM-DD (from resolve_date when the user names a day). Omit = today."},
     },
     "required": ["participants", "total"],
 }
@@ -179,6 +180,11 @@ _PROPOSE_PAYMENT_SCHEMA = {
             "type": "integer",
             "description": "Integer VND (125k → 125000). OMIT to pay off exactly what `from` currently owes `to`.",
         },
+        "mode": {
+            "type": "string",
+            "enum": ["gross", "offset"],
+            "description": "For a two-way pair only: 'gross' = pay the full amount `from` owes `to`; 'offset' = settle the net difference. Omit otherwise.",
+        },
         "note": {"type": "string"},
     },
     "required": ["to"],
@@ -236,6 +242,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
             return _err("Could not determine the payer.")
+        occurred_on = args.get("occurred_on")
+        if occurred_on is not None:
+            try:
+                _parse_iso(occurred_on)
+            except ValueError:
+                return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
         try:
             preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
         except MoneyError as exc:
@@ -252,7 +264,16 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "initiator": args.get("initiator"),
             "note": args.get("note"),
             "per_head_preview": preview["per_head"],
+            "occurred_on": occurred_on,
         }
+
+    def resolve_date_tool(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        try:
+            d = resolve_date(str(args.get("word") or ""), today=today_ict())
+        except ValueError as exc:
+            return _err(str(exc))
+        return {"ok": True, "date": d.isoformat()}
 
     def void_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -309,6 +330,72 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 {"id": mid, "name": names.get(mid, "?"), **vals}
                 for mid, vals in sorted(balances.items(), key=lambda kv: kv[1]["balance"])
             ],
+        }
+
+    def member_statement(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        member = args.get("member") or ctx.sender_member_id
+        if not member:
+            return _err("Không xác định được thành viên.")
+        try:
+            member = int(member)
+        except (TypeError, ValueError):
+            return _err("Không xác định được thành viên.")
+        with db.session() as s:
+            last = ledger.last_settlement(s, ctx.room_id)
+            period = resolve_period(
+                args.get("keyword"), today=today_ict(),
+                last_settlement_to=last.period_to if last else None,
+            )
+            stmt = ledger.statement_for(s, ctx.room_id, member, period["from"], period["to"])
+            ids = {r["other_id"] for r in stmt["owe"]} | {r["other_id"] for r in stmt["owed"]} \
+                | {member}
+            names = _names_for(s, ctx.room_id, ids)
+
+        def _row(r, key):
+            other_id = r["other_id"]
+            return {key: other_id, "name": names.get(other_id, "?"),
+                    "meal_id": r["meal_id"], "dish": r["dish"],
+                    "occurred_on": r["occurred_on"], "amount": r["amount"], "status": r["status"]}
+
+        owe = [_row(r, "creditor_id") for r in stmt["owe"]]
+        owed = [_row(r, "debtor_id") for r in stmt["owed"]]
+        net = stmt["net"]
+        return {
+            "ok": True, "type": "statement",
+            "member": {"id": member, "name": names.get(member, "?")},
+            "period": {"from": period["from"].isoformat() if period["from"] else None,
+                       "to": period["to"].isoformat()},
+            "owe": owe, "owed": owed, "net": net,
+        }
+
+    def get_period_summary(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        with db.session() as s:
+            last = ledger.last_settlement(s, ctx.room_id)
+            period = resolve_period(
+                args.get("keyword"), today=today_ict(),
+                last_settlement_to=last.period_to if last else None,
+            )
+            timeline = ledger.period_timeline(s, ctx.room_id, period["from"], period["to"])
+            balances = ledger.period_balances(s, ctx.room_id, period["from"], period["to"])
+            ids = set(balances) | {e.get("payer_id") for e in timeline} \
+                | {e.get("from_id") for e in timeline} | {e.get("to_id") for e in timeline}
+            ids.discard(None)
+            names = _names_for(s, ctx.room_id, ids)
+        for e in timeline:
+            if e["kind"] == "meal":
+                e["payer_name"] = names.get(e["payer_id"], "?")
+            else:
+                e["from_name"] = names.get(e["from_id"], "?")
+                e["to_name"] = names.get(e["to_id"], "?")
+        return {
+            "ok": True, "type": "summary",
+            "period": {"from": period["from"].isoformat() if period["from"] else None,
+                       "to": period["to"].isoformat()},
+            "timeline": timeline,
+            "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
+                         for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
         }
 
     def add_member(args, _tool_ctx=None) -> dict:
@@ -400,29 +487,57 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             if frm_id not in names or to_id not in names:
                 return _err("Không tìm thấy thành viên trong nhóm.")
             if amount is None:
-                # Pay-off: amount = the current settle transfer frm -> to over the
-                # open (since_last) period. No such transfer => nothing owed.
+                # Gross directional pay-off over the open (since_last) period. We
+                # do NOT net A<->B: a real cash payment settles what `from` owes
+                # `to`, per meal. Netting is only for settle_period's QR.
                 last = ledger.last_settlement(s, ctx.room_id)
                 period = resolve_period(
                     "since_last", today=today_ict(),
                     last_settlement_to=last.period_to if last else None,
                 )
-                meals, payments = ledger.period_transfer_inputs(
-                    s, ctx.room_id, period["from"], period["to"]
-                )
-                transfers = per_payer_transfers(meals, payments)
-                match = next(
-                    (t for t in transfers if t.from_member == frm_id and t.to_member == to_id),
-                    None,
-                )
-                if match is None:
+                edges = ledger.debt_breakdown(s, ctx.room_id, period["from"], period["to"])
+                gross_ft = sum(e.outstanding for e in edges
+                               if e.debtor == frm_id and e.creditor == to_id)
+                gross_tf = sum(e.outstanding for e in edges
+                               if e.debtor == to_id and e.creditor == frm_id)
+                mode = args.get("mode")
+
+                if gross_ft <= 0 and gross_tf <= 0:
+                    return {"ok": True, "type": "payment_settled",
+                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                            "to": {"id": to_id, "name": names.get(to_id, "?")}}
+                if gross_ft > 0 and gross_tf <= 0:
+                    amount = gross_ft
+                elif gross_ft <= 0 and gross_tf > 0:
+                    return {"ok": True, "type": "nothing_owed",
+                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                            "to": {"id": to_id, "name": names.get(to_id, "?")},
+                            "reverse_amount": gross_tf}
+                elif mode == "gross":
+                    amount = gross_ft
+                elif mode == "offset":
+                    net = gross_ft - gross_tf
+                    if net == 0:
+                        return {"ok": True, "type": "payment_settled",
+                                "from": {"id": frm_id, "name": names.get(frm_id, "?")},
+                                "to": {"id": to_id, "name": names.get(to_id, "?")}}
+                    if net > 0:
+                        amount = net
+                    else:  # net direction flips: to -> frm
+                        frm_id, to_id = to_id, frm_id
+                        amount = -net
+                else:
                     return {
-                        "ok": True,
-                        "type": "payment_settled",
+                        "ok": True, "type": "payment_ambiguous",
                         "from": {"id": frm_id, "name": names.get(frm_id, "?")},
                         "to": {"id": to_id, "name": names.get(to_id, "?")},
+                        "gross": {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft},
+                        "offset": (
+                            {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft - gross_tf}
+                            if gross_ft >= gross_tf else
+                            {"from_member_id": to_id, "to_member_id": frm_id, "amount": gross_tf - gross_ft}
+                        ),
                     }
-                amount = match.amount
             if amount <= 0:
                 return _err("Số tiền phải lớn hơn 0.")
         return {
@@ -578,10 +693,28 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             description="Turn a time keyword (since_last/this_week/...) into a concrete date range (ICT).",
             input_schema=_PERIOD_SCHEMA,
         ),
+        "resolve_date": CustomTool(
+            execute=resolve_date_tool,
+            description="Turn a day word ('thứ 2', 'hôm qua', '20/7') into an ISO date (ICT). Use before propose_meal when the user names a day.",
+            input_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]},
+        ),
         "get_period_balances": CustomTool(
             execute=get_period_balances,
             description="Per-person paid/consumed/balance over a range (display only).",
             input_schema=_BALANCES_SCHEMA,
+        ),
+        "member_statement": CustomTool(
+            execute=member_statement,
+            description="A person's own statement: what they owe + are owed, per meal, with paid/unpaid status. Default member = the sender. Use for first-person balance questions ('tôi nợ ai', 'how much do I owe').",
+            input_schema={"type": "object", "properties": {
+                "member": {"type": "integer", "description": "member id; blank = the sender."},
+                "keyword": _PERIOD_SCHEMA["properties"]["keyword"],
+            }},
+        ),
+        "get_period_summary": CustomTool(
+            execute=get_period_summary,
+            description="Group summary: chronological timeline of meals + payments and per-person net balances (display only). Use for 'summary'/'current state'/'tổng kết'.",
+            input_schema={"type": "object", "properties": {"keyword": _PERIOD_SCHEMA["properties"]["keyword"]}},
         ),
         "settle_period": CustomTool(
             execute=settle_period,
