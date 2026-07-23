@@ -1,0 +1,67 @@
+name: Deploy
+
+# Continuous deployment to the DigitalOcean droplet, mirroring the manual
+# redeploy in deploy/README.md: `git pull && docker compose up -d --build`.
+#
+# Runs on merges to main and on manual dispatch. It stays a no-op until the
+# deploy secrets below are configured, so merging this workflow never breaks
+# the repo. Configure under Settings → Secrets and variables → Actions:
+#
+#   Secrets:
+#     DEPLOY_SSH_KEY   – private SSH key authorized on the droplet (required)
+#     DEPLOY_HOST      – droplet hostname or IP                    (required)
+#     DEPLOY_USER      – SSH user (optional; defaults to "root")
+#   Variables:
+#     DEPLOY_PATH      – checkout dir on the droplet (optional; default /opt/chiatienan)
+#
+# NOTE (deploy/README.md M8): `docker compose up -d --build` rebuilds the
+# frontend on the droplet. That OOMs on a ≤512 MB host without the 2 GB
+# swapfile from the runbook. Ensure swap is enabled, or switch this to a
+# build-and-ship-image flow, before relying on auto-deploy on a tiny droplet.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Redeploy over SSH
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for deploy secrets
+        id: check
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -n "$KEY" ] && [ -n "$HOST" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DEPLOY_SSH_KEY / DEPLOY_HOST not set — skipping deploy. See deploy.yml header for setup."
+          fi
+
+      - name: Deploy
+        if: steps.check.outputs.configured == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && git pull --ff-only && docker compose up -d --build && docker compose ps"
