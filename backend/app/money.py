@@ -254,6 +254,17 @@ def per_payer_transfers(
     single directed transfer, and ad-hoc ``payments``
     (``{"from", "to", "amount"}``) pay a debt down.
 
+    A payment can only ever settle a debt that is *in this window*, so a pair's
+    balance floors at zero (like :attr:`DebtEdge.outstanding`). Without that
+    floor, a bounded window invents debts: over 2026-07-27 alone, production had
+    one meal Emi paid for and a 107,000đ payment Giang made that day for meals
+    from the 23rd and 24th. The payment drove Giang→Linh to −107,000 and the
+    netting below flipped it, so the room was told "Linh Nguyen → Giang Hoàng:
+    107,000đ" — the exact reverse of what had happened — while the all-time view
+    correctly said Linh owed Giang nothing. A 07-23..07-27 window went further
+    and invented "Giang Hoàng → Tabu: 75,000đ" between two people who had never
+    owed each other in that direction.
+
     ``meals`` items are ``{"payer_id": int, "shares": {member_id: amount}}``
     (the payer's own share carries no transfer). Ties break by member id so the
     output is deterministic. Members who come out even produce no transfer.
@@ -270,8 +281,10 @@ def per_payer_transfers(
 
     for p in payments or []:
         frm, to, amount = p["from"], p["to"], p["amount"]
-        # A cash payment frm -> to settles that much of what frm owes to.
-        owed[(frm, to)] = owed.get((frm, to), 0) - amount
+        # A cash payment frm -> to settles that much of what frm owes to. Never
+        # below zero: the remainder settles debt from outside this window (or is
+        # a genuine overpayment), and neither makes `to` the debtor.
+        owed[(frm, to)] = max(0, owed.get((frm, to), 0) - amount)
 
     transfers: list[Transfer] = []
     seen: set[tuple[int, int]] = set()

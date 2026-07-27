@@ -215,3 +215,73 @@ def test_proportional_stays_the_default():
     items = {1: 100_000, 2: 20_000}
     assert prorate_items(100_000, items) == prorate_items(
         100_000, items, discount_split="proportional")
+
+
+# --- a windowed settle must not invent debts -------------------------------- #
+#
+# Production 2026-07-27 20:03. Linh asked "hôm nay ai trả tiền", the day-scoped
+# settle answered "Linh Nguyen → Giang Hoàng: 107,000đ", and Linh asked three
+# times why he owed Giang anything. He didn't: Giang had PAID him 107,000đ that
+# day, for meals on the 23rd and 24th that fall outside a one-day window.
+
+EMI, NHIM, GIANG, LINH, KUN, TABU = 4, 8, 9, 6, 7, 5
+
+
+def _grab_food_day():
+    """The only meal dated 07-27: Emi paid, six shares."""
+    return [{"payer_id": EMI, "shares": {
+        EMI: 54_500, NHIM: 54_500, GIANG: 79_200, LINH: 54_500, KUN: 54_500, TABU: 27_000}}]
+
+
+def test_a_payment_for_an_older_meal_does_not_reverse_the_debt():
+    from app.money import per_payer_transfers
+
+    payments = [
+        {"from": GIANG, "to": LINH, "amount": 107_000},   # for meals on 07-23/07-24
+        {"from": TABU, "to": EMI, "amount": 27_000},
+        {"from": GIANG, "to": EMI, "amount": 79_200},
+        {"from": LINH, "to": EMI, "amount": 54_500},
+    ]
+    got = {(t.from_member, t.to_member): t.amount
+           for t in per_payer_transfers(_grab_food_day(), payments)}
+    assert (LINH, GIANG) not in got, "invented a debt from an out-of-window payment"
+    assert got == {(NHIM, EMI): 54_500, (KUN, EMI): 54_500}
+
+
+def test_a_payment_between_two_people_with_no_debt_invents_nothing():
+    """A 07-23..07-27 window produced "Giang Hoàng → Tabu: 75,000đ" — Tabu's
+    payment for a 07-22 meal, flipped into a debt the other way."""
+    from app.money import per_payer_transfers
+
+    transfers = per_payer_transfers(
+        _grab_food_day(), [{"from": TABU, "to": GIANG, "amount": 75_000}]
+    )
+    assert all({t.from_member, t.to_member} != {TABU, GIANG} for t in transfers)
+
+
+def test_overpaying_a_real_debt_settles_it_without_a_refund_transfer():
+    from app.money import per_payer_transfers
+
+    meals = [{"payer_id": EMI, "shares": {EMI: 50_000, KUN: 50_000}}]
+    transfers = per_payer_transfers(meals, [{"from": KUN, "to": EMI, "amount": 80_000}])
+    assert transfers == []
+
+
+def test_a_payment_still_pays_a_debt_down_within_the_window():
+    from app.money import per_payer_transfers
+
+    meals = [{"payer_id": EMI, "shares": {EMI: 50_000, KUN: 50_000}}]
+    transfers = per_payer_transfers(meals, [{"from": KUN, "to": EMI, "amount": 20_000}])
+    assert [(t.from_member, t.to_member, t.amount) for t in transfers] == [(KUN, EMI, 30_000)]
+
+
+def test_opposing_debts_from_real_meals_still_net():
+    """The floor is per-pair-per-direction, so genuine two-way debt still nets."""
+    from app.money import per_payer_transfers
+
+    meals = [
+        {"payer_id": LINH, "shares": {LINH: 61_000, GIANG: 61_000}},
+        {"payer_id": GIANG, "shares": {GIANG: 75_000, LINH: 75_000}},
+    ]
+    transfers = per_payer_transfers(meals, [])
+    assert [(t.from_member, t.to_member, t.amount) for t in transfers] == [(LINH, GIANG, 14_000)]
