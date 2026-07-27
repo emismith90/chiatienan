@@ -104,7 +104,8 @@ _PROPOSE_SCHEMA = {
         "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
         "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
         "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
-        "occurred_on": {"type": "string", "description": "Meal date, ISO YYYY-MM-DD (from resolve_date when the user names a day). Omit = today."},
+        "day_word": {"type": "string", "description": "The day EXACTLY as the user said it ('thứ 5', 'hôm qua', '20/7'). The tool resolves it to a date (ICT) — never compute the date yourself. Omit = today."},
+        "occurred_on": {"type": "string", "description": "Deprecated: pre-resolved meal date, ISO YYYY-MM-DD. Prefer `day_word` so the tool does the date math. Ignored when `day_word` is given."},
     },
     "required": ["participants", "total"],
 }
@@ -242,8 +243,17 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
             return _err("Could not determine the payer.")
+        # Date resolution is authoritative here (like money-safety for amounts):
+        # the model passes the user's day *word* and the tool computes the date,
+        # so an LLM-computed occurred_on can never land a day off.
+        day_word = args.get("day_word")
         occurred_on = args.get("occurred_on")
-        if occurred_on is not None:
+        if day_word:
+            try:
+                occurred_on = resolve_date(str(day_word), today=today_ict()).isoformat()
+            except ValueError as exc:
+                return _err(str(exc))
+        elif occurred_on is not None:
             try:
                 _parse_iso(occurred_on)
             except ValueError:
