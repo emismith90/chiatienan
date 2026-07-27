@@ -535,3 +535,49 @@ def test_human_chatter_after_a_bot_question_does_not_wake_it(db):
         chat.post_message(s, room_id, kun, "trưa nay ăn gì mọi người")
         answer = chat.post_message(s, room_id, emi, "bún chả đi")
         assert not chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
+
+
+# --- the money-safety instrument must actually fire ------------------------- #
+
+async def test_unbacked_money_in_a_reply_is_logged(monkeypatch, db, caplog):
+    """app.moneyguard is unit-tested, but a detector wired up wrong stays silent
+    forever — and silence reads exactly like a clean bill of health. This asserts
+    the warning reaches the log through run_bot_turn."""
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-guard"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="An", nickname="an-guard", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        # A balance table typed by the model, with no tool behind it.
+        return TurnResult(final_text="Bùi Trang −75,000đ · Giang Hoàng +89,000đ", turn_id="t-abc")
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    with caplog.at_level("WARNING", logger="chiatienan"):
+        msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot tóm tắt số dư")
+
+    assert "unbacked money in reply" in caplog.text
+    assert "75000" in caplog.text and "89000" in caplog.text
+    assert "t-abc" in caplog.text
+    # Reporting only — the reply is still delivered.
+    assert "75,000đ" in msg.body
+
+
+async def test_a_tool_backed_reply_logs_nothing(monkeypatch, db, caplog):
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-guard2"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="An", nickname="an-guard2", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        tr = TurnResult(final_text="Đã ghi 305,000đ nhé.", turn_id="t-def")
+        tr.tools = [ToolInvocation("propose_meal", {"total": 305_000}, {"ok": True})]
+        return tr
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    with caplog.at_level("WARNING", logger="chiatienan"):
+        await chat.run_bot_turn(db, room_id, member_id, "An", "@bot bún bò 305k")
+
+    assert "unbacked money" not in caplog.text
