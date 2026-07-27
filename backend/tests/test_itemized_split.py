@@ -118,3 +118,67 @@ def test_duplicate_item_rows_are_rejected():
 def test_malformed_item_row_is_rejected():
     with pytest.raises(MoneyError):
         normalize_items([{"member": 1}], [1])
+
+
+def test_propose_meal_accepts_the_equal_discount_split(db):
+    """One tool call for what the room did by hand: Σ items 414,200đ, paid
+    324,200đ, gap split six ways."""
+    from app.tools import ToolContext, build_tools
+    from tests.test_ledger import _seed_room
+
+    room_id, ids = _seed_room(db, 6)
+    prices = [69_500, 69_500, 94_200, 69_500, 69_500, 42_000]
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=ids[0],
+                                   sender_name="Emi", turn_mentions=[]))
+    out = tools["propose_meal"].execute({
+        "payer": ids[0], "participants": list(ids), "total": 324_200,
+        "items": [{"member": m, "amount": p} for m, p in zip(ids, prices)],
+        "discount_split": "equal",
+    })
+
+    assert out["ok"], out
+    assert out["discount_split"] == "equal"
+    shares = {row["member"]: row["amount"] for row in out["shares_preview"]}
+    assert sum(shares.values()) == 324_200
+    assert shares[ids[5]] == 27_000        # 42,000 dish − 15,000 gap share
+    assert shares[ids[2]] == 79_200        # 94,200 dish − 15,000
+
+
+def test_propose_meal_defaults_to_proportional(db):
+    from app.tools import ToolContext, build_tools
+    from tests.test_ledger import _seed_room
+
+    room_id, ids = _seed_room(db, 2)
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=ids[0],
+                                   sender_name="Emi", turn_mentions=[]))
+    out = tools["propose_meal"].execute({
+        "payer": ids[0], "participants": list(ids), "total": 100_000,
+        "items": [{"member": ids[0], "amount": 100_000}, {"member": ids[1], "amount": 20_000}],
+    })
+    assert out["discount_split"] == "proportional"
+    shares = {row["member"]: row["amount"] for row in out["shares_preview"]}
+    assert shares[ids[1]] == 16_667       # scaled, not 10,000
+
+
+def test_editing_an_equal_split_draft_keeps_it_equal(db):
+    """The card patches a fixed field list without discount_split, so _sync_items
+    reads it back off the draft — otherwise a price edit silently re-prorates."""
+    from app import drafts
+    from tests.test_ledger import _seed_room
+
+    room_id, ids = _seed_room(db, 2)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": ids[0], "member_participants": list(ids), "guests": [],
+            "bill_total": 100_000, "adjustments": [], "discount_split": "equal",
+            "items": [{"member": ids[0], "amount": 100_000}, {"member": ids[1], "amount": 20_000}],
+            "dish": None, "initiator": None, "note": None, "per_head_preview": 0,
+            "raw_input": "@bot test",
+        })
+        updated = drafts.update_draft(s, d.id, room_id, {"bill_total": 100_000})
+        by_member = {a["member"]: a["amount"] for a in updated.attachments["adjustments"]}
+        # Shares are stored as offsets from the even split. Equal keeps the
+        # 20,000 gap at 10,000 each (shares 90,000 / 10,000 -> ±40,000);
+        # proportional would have re-derived ±33,333.
+        assert by_member == {ids[0]: 40_000, ids[1]: -40_000}
+        assert updated.attachments["discount_split"] == "equal"

@@ -25,7 +25,7 @@ DRAFT_KINDS = ("expense_draft", "payment_draft")
 
 _EDITABLE = {
     "payer_member_id", "member_participants", "guests", "bill_total",
-    "adjustments", "items", "dish", "initiator", "note",
+    "adjustments", "items", "discount_split", "dish", "initiator", "note",
 }
 
 
@@ -49,8 +49,12 @@ def _sync_items(att: dict) -> dict:
         raise MoneyError("Ghi theo món chưa hỗ trợ khách lẻ — bỏ khách ra hoặc chia đều.")
     participants = [int(x) for x in att.get("member_participants") or []]
     items = normalize_items(items, participants)
+    # The card patches a fixed field list that does not include discount_split,
+    # so it is read back off the draft: editing a price must not silently switch
+    # an equal-delta split to proportional.
     shares = prorate_items(int(att.get("bill_total") or 0),
-                           {i["member"]: i["amount"] for i in items})
+                           {i["member"]: i["amount"] for i in items},
+                           discount_split=att.get("discount_split") or "proportional")
     att["items"] = items
     att["adjustments"] = [{"member": m, "amount": a}
                           for m, a in itemized_adjustments(int(att["bill_total"]), shares).items()]

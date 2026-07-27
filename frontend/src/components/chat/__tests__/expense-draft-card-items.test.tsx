@@ -31,6 +31,34 @@ const itemized = {
   },
 };
 
+describe("prorate equal mode (mirrors money._equal_delta_shares)", () => {
+  it("takes the same amount off everyone, exactly summing to total", () => {
+    // Production: Σ 414,200 paid 324,200 -> 15,000 off each of six.
+    const items = [
+      { member: 4, amount: 69_500 }, { member: 8, amount: 69_500 },
+      { member: 9, amount: 94_200 }, { member: 6, amount: 69_500 },
+      { member: 7, amount: 69_500 }, { member: 5, amount: 42_000 },
+    ];
+    const shares = prorate(324_200, items, "equal");
+    expect(shares.get(5)).toBe(27_000);
+    expect(shares.get(9)).toBe(79_200);
+    expect([...shares.values()].reduce((a, b) => a + b, 0)).toBe(324_200);
+  });
+
+  it("disagrees with proportional, as the server does", () => {
+    const items = [{ member: 1, amount: 100_000 }, { member: 2, amount: 20_000 }];
+    expect(prorate(100_000, items, "equal").get(2)).toBe(10_000);
+    expect(prorate(100_000, items, "proportional").get(2)).toBe(16_667);
+  });
+
+  it("spreads a fee equally too", () => {
+    const items = [{ member: 1, amount: 50_000 }, { member: 2, amount: 40_000 }];
+    const shares = prorate(100_000, items, "equal");
+    expect(shares.get(1)).toBe(55_000);
+    expect(shares.get(2)).toBe(45_000);
+  });
+});
+
 describe("prorate (mirrors money.prorate_items)", () => {
   it("scales the discount across the items and still sums to the bill", () => {
     const shares = prorate(PAID, items);

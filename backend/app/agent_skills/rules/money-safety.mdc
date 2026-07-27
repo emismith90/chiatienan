@@ -10,6 +10,7 @@ alwaysApply: true
 - Nếu công cụ trả về `error`, hỏi lại cho rõ thay vì đoán.
 - Chia KHÔNG đều (mỗi người một món/một số): dùng `items` của `propose_meal`, một lần.
   Σ items khác `total` là chuyện thường (giảm giá / ship / phí) — công cụ tự chia phần
-  chênh theo tỉ lệ. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
+  chênh: `discount_split="proportional"` (mặc định) hoặc `"equal"` khi người dùng muốn mỗi
+  người trừ như nhau. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
   công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền.
 - Thẻ nháp treo: `cancel_draft` huỷ được (không ghi gì). Xác nhận thì bắt buộc bấm nút.

@@ -21,15 +21,38 @@ export function perHead(
   return heads > 0 ? Math.floor((total - adjustmentsTotal) / heads) : 0;
 }
 
-/** Provisional itemized shares — mirrors `money.prorate_items`: scale each
- * item by total/Σitems, then hand the leftover đồng to the largest remainders
- * (ties by member id) so the shares sum to `total` exactly. Display only; the
- * server recomputes authoritatively on patch and on commit. */
-export function prorate(total: number, items: DraftItem[]): Map<number, number> {
+/** Provisional itemized shares — mirrors `money.prorate_items`. "proportional"
+ * scales each item by total/Σitems, then hands the leftover đồng to the largest
+ * remainders (ties by member id); "equal" takes the same amount off everyone,
+ * remainder to the lowest member ids. Either way the shares sum to `total`
+ * exactly. Display only; the server recomputes authoritatively on patch and on
+ * commit — so this must agree with it or the card previews a different split
+ * from the one that gets recorded. */
+export function prorate(
+  total: number,
+  items: DraftItem[],
+  discountSplit: "proportional" | "equal" = "proportional",
+): Map<number, number> {
   const out = new Map<number, number>();
   const gross = items.reduce((sum, i) => sum + Math.max(0, i.amount), 0);
   if (!items.length || gross <= 0 || total <= 0) {
     items.forEach((i) => out.set(i.member, 0));
+    return out;
+  }
+  if (discountSplit === "equal") {
+    // Matches money._equal_delta_shares: floor-divide the gap, remainder to the
+    // lowest member ids. Negative shares are the server's error to raise, so the
+    // preview clamps at 0 rather than showing a debt.
+    const delta = gross - total;
+    const n = items.length;
+    const base = Math.floor(delta / n);
+    const remainder = delta - base * n;
+    [...items]
+      .sort((a, b) => a.member - b.member)
+      .forEach((i, idx) => {
+        const deduction = base + (idx < remainder ? 1 : 0);
+        out.set(i.member, Math.max(0, Math.max(0, i.amount) - deduction));
+      });
     return out;
   }
   items.forEach((i) => out.set(i.member, Math.floor((Math.max(0, i.amount) * total) / gross)));
@@ -117,7 +140,7 @@ export function ExpenseDraftCard({
   const setItemFor = (memberId: number, amount: number) =>
     setItems((prev) => prev.map((i) => (i.member === memberId ? { ...i, amount } : i)));
   const itemsSum = items.reduce((sum, i) => sum + i.amount, 0);
-  const shares = itemized ? prorate(total, items) : null;
+  const shares = itemized ? prorate(total, items, att.discount_split ?? "proportional") : null;
   const itemGap = total - itemsSum;
 
   /** Switch modes. Seeding items at the even-split estimate keeps the draft

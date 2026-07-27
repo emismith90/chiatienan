@@ -127,6 +127,16 @@ _PROPOSE_SCHEMA = {
                 "required": ["member", "amount"],
             },
         },
+        "discount_split": {
+            "type": "string",
+            "enum": ["proportional", "equal"],
+            "description": (
+                "Only with `items`. How to share the gap between Σ items and `total`:"
+                " 'proportional' (default) scales each dish price; 'equal' takes the same"
+                " amount off everyone — use it when the user says so ('chia đều phần giảm',"
+                " 'mỗi người trừ như nhau'). Either way the TOOL does the arithmetic."
+            ),
+        },
         "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
         "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
         "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
@@ -286,6 +296,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
 
         items = args.get("items") or []
+        discount_split = (args.get("discount_split") or "proportional").strip().lower()
         if items:
             if adjustments:
                 return _err(
@@ -299,7 +310,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 )
             try:
                 items = normalize_items(items, participants)
-                shares = prorate_items(total, {i["member"]: i["amount"] for i in items})
+                shares = prorate_items(
+                    total, {i["member"]: i["amount"] for i in items},
+                    discount_split=discount_split,
+                )
                 adjustments = itemized_adjustments(total, shares)
             except MoneyError as exc:
                 return _err(str(exc))
@@ -317,6 +331,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "bill_total": total,
             "adjustments": [{"member": m, "amount": a} for m, a in adjustments.items()],
             "items": items,
+            "discount_split": discount_split if items else None,
             "dish": args.get("dish"),
             "initiator": args.get("initiator"),
             "note": args.get("note"),
@@ -696,7 +711,16 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
             # Meal-level detail (date/dish) so each QR note names the meals it
             # settles; per_payer_transfers nets these away, so we re-fetch them.
-            meal_details = ledger.period_meal_details(s, ctx.room_id, from_date, to_date)
+            #
+            # From debt_breakdown, NOT period_meal_details: the latter lists every
+            # meal the debtor took part in, including ones they have already paid
+            # off. Production sent Giang a 107,000đ QR noted "T4 bun bo hue, T5
+            # bun cha rua xe, T6" when the T4 bún bò huế was settled four days
+            # earlier — he reported the memo as wrong twice and was right. These
+            # edges carry FIFO-attributed payments, so `outstanding > 0` is
+            # exactly "still being repaid".
+            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
+                          if e.outstanding > 0]
             fallback_note = f"Chia tien an {to_date.day}/{to_date.month}"
 
             rows: list[dict] = []
@@ -704,12 +728,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             for t in transfers:
                 payee = members.get(t.to_member)
                 payer = members.get(t.from_member)
-                # Meals the payee (creditor) fronted that this debtor took part in
-                # — the "what you're repaying" list for this transfer.
+                # Meals the payee (creditor) fronted that this debtor still owes
+                # on — the "what you're repaying" list for this transfer.
                 pair_meals = [
-                    {"date": md["occurred_on"], "dish": md["dish"]}
-                    for md in meal_details
-                    if md["payer_id"] == t.to_member and md["shares"].get(t.from_member, 0) > 0
+                    {"date": e.occurred_on, "dish": e.dish}
+                    for e in open_edges
+                    if e.debtor == t.from_member and e.creditor == t.to_member
                 ]
                 note = build_qr_note(
                     payer.display_name if payer else "",

@@ -12,18 +12,21 @@ re-parsed from LLM prose (design D3).
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import memory
+from app import memory, moneyguard
 from app.clock import now_ict
 from app.config import settings
 from app.db import Database
 from app.models import Member, RoomMessage
 from app.summarize import summarize_messages
+
+log = logging.getLogger("chiatienan")
 
 # In-process lock: only correct with a single uvicorn worker/process (see
 # Dockerfile CMD). Multiple processes would each get their own lock and could
@@ -50,6 +53,63 @@ def is_clear_command(text: str) -> bool:
     by an ``@bot``/``@<handle>`` mention). Exact — ``/cleared``/``/clear now``
     do not match."""
     return _CLEAR_RE.match(text or "") is not None
+
+
+#: How long a bot question stays "open" for a bare reply.
+_REPLY_WINDOW_MINUTES = 10
+
+#: A bot message that is waiting on an answer: it asked something, or offered a
+#: numbered choice ("1. Trả trọn … 2. Cấn trừ …").
+_CHOICE_RE = re.compile(r"(?:^|\n)\s*(?:\*\*)?[1-9][.)]\s", re.MULTILINE)
+
+
+def _awaits_an_answer(body: str) -> bool:
+    text = (body or "").strip()
+    return text.endswith("?") or bool(_CHOICE_RE.search(text))
+
+
+def replies_to_bot_question(session: Session, room_id: int, member_id: int,
+                            *, before_id: int) -> bool:
+    """True when a message with no ``@bot`` is plainly answering the bot.
+
+    People answer a question the way they would answer a person — "1", "2", "b",
+    "tôi đã trả tiền Emi" — and every one of those was dropped in production for
+    lacking a mention, then retyped with one seconds later (four times in one
+    conversation).
+
+    Deliberately narrow, because the cost of a false positive is the bot barging
+    into a human conversation. ALL of:
+
+    * the message immediately before this one is the bot's,
+    * that message asked something (``?``) or offered a numbered choice,
+    * it is less than :data:`_REPLY_WINDOW_MINUTES` old,
+    * and *this* sender is the one whose message triggered that bot turn.
+    """
+    previous = session.scalars(
+        select(RoomMessage)
+        .where(RoomMessage.room_id == room_id, RoomMessage.id < before_id)
+        .order_by(RoomMessage.id.desc())
+        .limit(1)
+    ).first()
+    if previous is None or previous.author_member_id is not None or previous.kind != "bot":
+        return False
+    if not _awaits_an_answer(previous.body):
+        return False
+    if previous.created_at is not None and previous.created_at < (
+        now_ict().replace(tzinfo=None) - timedelta(minutes=_REPLY_WINDOW_MINUTES)
+    ):
+        return False
+    asker = session.scalars(
+        select(RoomMessage)
+        .where(
+            RoomMessage.room_id == room_id,
+            RoomMessage.id < previous.id,
+            RoomMessage.author_member_id.is_not(None),
+        )
+        .order_by(RoomMessage.id.desc())
+        .limit(1)
+    ).first()
+    return asker is not None and asker.author_member_id == member_id
 
 
 def message_to_dict(m: RoomMessage, author: Member | None) -> dict:
@@ -221,8 +281,13 @@ def _settlement_body(attachments: dict) -> str:
     transfers = attachments.get("transfers") or []
     lines = [header]
     if transfers:
+        # The memo rides along the QR as the bank's addInfo, and it is the part
+        # people dispute ("sai nội dung chuyển khoản r"). It was only ever in the
+        # attachment, so nobody could see what it said without opening the card.
         lines.extend(
-            f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ" for t in transfers
+            f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ"
+            + (f" · ND: {t['note']}" if t.get("note") else "")
+            for t in transfers
         )
     else:
         lines.append(attachments.get("message") or "Không có gì để chốt.")
@@ -382,7 +447,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         if proposal:
             payload = {k: proposal.get(k) for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
-                "adjustments", "items", "dish", "initiator", "note",
+                "adjustments", "items", "discount_split", "dish", "initiator", "note",
                 "per_head_preview", "occurred_on")}
             payload["raw_input"] = text
             payload["logged_by"] = str(member_id)
@@ -412,6 +477,16 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 body = _summary_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+                # The one path where money reaches the room as LLM prose. Report
+                # it (see app.moneyguard); enforcing comes after the log is quiet.
+                if result.final_text:
+                    stray = moneyguard.unbacked_amounts(body, text, result.tools)
+                    if stray:
+                        log.warning(
+                            "unbacked money in reply: room=%s turn=%s amounts=%s tools=%s",
+                            room_id, result.turn_id, stray,
+                            [inv.name for inv in result.tools],
+                        )
 
             with db.session() as s:
                 new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")

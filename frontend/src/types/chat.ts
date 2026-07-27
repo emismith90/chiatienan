@@ -22,6 +22,9 @@ export interface DraftItem {
 
 export interface ExpenseDraft {
   type: "expense_draft";
+  /** How the gap between Σ items and `bill_total` is shared out in itemized
+   * mode. Absent (or on an equal-split draft) means "proportional". */
+  discount_split?: "proportional" | "equal" | null;
   /** "superseded": a later draft re-proposed the same thing, so this card is
    * retired. Nothing was recorded and nothing blocks a settle. */
   status: "pending" | "committed" | "cancelled" | "superseded";

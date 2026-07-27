@@ -221,14 +221,27 @@ def _assistant_text(msg) -> str:
 
 
 def _render_prompt(user_text: str, *, sender_name: str | None = None,
-                   memory: str | None = None, history: str | None = None) -> str:
-    """Assemble the turn preamble. With no memory/history this is byte-identical
-    to the pre-memory assembly (system prompt + user message)."""
+                   memory: str | None = None, history: str | None = None,
+                   image_count: int = 0) -> str:
+    """Assemble the turn preamble. With no memory/history/images this is
+    byte-identical to the pre-memory assembly (system prompt + user message).
+
+    ``image_count`` is announced in the text because the images themselves ride
+    on the ``UserMessage``, invisible to the prompt: in production the bill was
+    attached and the model still asked for the total that was in it, then read
+    that same total off the image one turn later. The history renders past images
+    as ``[ảnh: N]`` for the same reason — this covers the current turn.
+    """
     sections = [build_system_prompt(sender_name=sender_name)]
     if memory:
         sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
     if history:
         sections.append(f"# Lịch sử hội thoại (gần đây)\n{history.strip()}")
+    if image_count:
+        sections.append(
+            f"# Ảnh kèm theo\nLượt này có {image_count} ảnh (thường là hoá đơn) — "
+            "ĐỌC ảnh trước khi trả lời. Đừng hỏi lại tổng tiền / giá từng món nếu ảnh đã có."
+        )
     sections.append(f"# Tin nhắn người dùng\n{user_text.strip()}")
     return "\n\n".join(sections)
 
@@ -317,7 +330,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         )
 
         message_text = _render_prompt(user_text, sender_name=ctx.sender_name,
-                                       memory=memory, history=history)
+                                       memory=memory, history=history,
+                                       image_count=len(images or []))
 
         local = LocalAgentOptions(
             cwd=workspace,
@@ -376,6 +390,17 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
             result.error = str(exc)
 
     result.final_text = _final_answer(text_parts, answer_from)
+
+    # One line per turn so the log mirror (and /internal/debug/logs) shows where
+    # a 20–80s turn actually went: how many tool round-trips, and which. The
+    # agent.* timeline has this live but never persists it.
+    logger.info(
+        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch%s",
+        turn_id, time.monotonic() - started, completed_tools,
+        ",".join(inv.name for inv in result.tools) or "-",
+        len(images or []), len(result.final_text),
+        f" ERROR={result.error}" if result.error else "",
+    )
 
     await _emit(agui.finish(turn_id, error=result.error))
     result.turn_id = turn_id

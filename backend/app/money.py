@@ -134,21 +134,62 @@ def normalize_items(items, participants: list[int]) -> list[dict]:
     return [by_member[m] for m in participants]
 
 
-def prorate_items(total: int, items: dict[int, int]) -> dict[int, int]:
-    """Itemized split: scale each person's own dish price to sum exactly to ``total``.
+#: How the gap between Σ items and the real total is shared out.
+DISCOUNT_SPLITS = ("proportional", "equal")
+
+
+def _equal_delta_shares(total: int, items: dict[int, int]) -> dict[int, int]:
+    """Itemized split with the promo/fee gap divided EQUALLY, not by dish price.
+
+    The other house rule for "ai ăn nấy trả": a 90,000đ promo off six dishes is
+    15,000đ off each person, whatever they ordered. It is what the room asked for
+    by hand ("chia đều cho 6 người (delta), rồi trừ giá trên ảnh đi giá delta"),
+    and it is a different answer from :func:`prorate_items` — on a 42,000đ dish,
+    equal takes 27,000đ where proportional takes ~32,900đ.
+
+    The per-person deduction is itself Hamilton-rounded (remainder to the lowest
+    member ids), so ``Σ shares == total`` exactly. Raises :class:`MoneyError`
+    rather than inventing a negative share when the gap exceeds someone's dish —
+    the caller should fall back to ``proportional``, which cannot go negative.
+    """
+    gross = sum(items.values())
+    delta = gross - total          # > 0 promo, < 0 delivery/service fee
+    n = len(items)
+    base, remainder = divmod(delta, n)   # remainder is always in [0, n)
+    ordered = sorted(items)
+    deductions = {m: base + (1 if i < remainder else 0) for i, m in enumerate(ordered)}
+
+    shares = {m: items[m] - deductions[m] for m in items}
+    short = sorted(m for m, v in shares.items() if v < 0)
+    if short:
+        raise MoneyError(
+            "Chia đều phần giảm sẽ làm phần của một người âm — "
+            f"món quá nhỏ so với mức giảm: {short}. Dùng chia theo tỉ lệ."
+        )
+
+    assert sum(shares.values()) == total, "itemized split must sum to total"
+    return shares
+
+
+def prorate_items(total: int, items: dict[int, int], *,
+                  discount_split: str = "proportional") -> dict[int, int]:
+    """Itemized split: turn each person's dish price into a share summing to ``total``.
 
     A real bill almost never equals the sum of its line items — a promo makes it
     lower, a delivery/service fee makes it higher. Rather than refusing (or
-    asking a human to do the arithmetic), every share is scaled by
-    ``total / Σ items`` so the discount or fee lands on each person in
-    proportion to what they ordered.
+    asking a human to do the arithmetic), the gap is shared out:
 
-    Rounding uses largest-remainder (Hamilton) so ``Σ shares == total`` exactly
-    with no share off by more than 1đ; ties break by member id, so the result is
-    deterministic. A 0đ item yields a 0đ share (ate nothing).
+    * ``"proportional"`` (default) — every share is scaled by ``total / Σ items``,
+      so the discount or fee lands in proportion to what each person ordered.
+    * ``"equal"`` — the gap is divided evenly per person
+      (:func:`_equal_delta_shares`).
+
+    Proportional rounding uses largest-remainder (Hamilton) so ``Σ shares ==
+    total`` exactly with no share off by more than 1đ; ties break by member id,
+    so the result is deterministic. A 0đ item yields a 0đ share (ate nothing).
 
     Raises :class:`MoneyError` if ``total <= 0``, ``items`` is empty, any item is
-    negative, or the items sum to 0.
+    negative, the items sum to 0, or ``discount_split`` is unknown.
     """
     if total <= 0:
         raise MoneyError(f"Total must be greater than 0 (got {total}).")
@@ -157,10 +198,17 @@ def prorate_items(total: int, items: dict[int, int]) -> dict[int, int]:
     negative = sorted(m for m, v in items.items() if v < 0)
     if negative:
         raise MoneyError(f"Item prices must not be negative: {negative}.")
+    if discount_split not in DISCOUNT_SPLITS:
+        raise MoneyError(
+            f"discount_split phải là một trong {list(DISCOUNT_SPLITS)} (nhận: {discount_split!r})."
+        )
 
     gross = sum(items.values())
     if gross <= 0:
         raise MoneyError("The item prices add up to 0 — nothing to split.")
+
+    if discount_split == "equal":
+        return _equal_delta_shares(total, items)
 
     shares = {m: (v * total) // gross for m, v in items.items()}
     leftover = total - sum(shares.values())

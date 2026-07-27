@@ -76,3 +76,43 @@ def test_build_note_all_fit_no_marker():
     note = build_qr_note("Hung", meals, fallback="x", budget=50)
     assert note == "Hung: T2 pho"
     assert "+" not in note
+
+
+def test_settlement_note_lists_only_meals_still_owed(db):
+    """Production msg#92: Giang's 107,000đ QR was noted "T4 bun bo hue, T5 bun
+    cha rua xe, T6" — but he had already paid the T4 bún bò huế four days
+    earlier. He reported the memo as wrong twice, and he was right."""
+    from datetime import date
+
+    from app import ledger
+    from app.tools import ToolContext, build_tools
+    from tests.test_ledger import _seed_room
+
+    room_id, (giang, linh, other) = _seed_room(db, 3)
+    with db.session() as s:
+        paid_off = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=linh, participants=[giang, linh],
+            total_amount=122_000, adjustments={}, guests=[], dish="bún bò huế",
+            occurred_on=date(2026, 7, 22), logged_by=str(linh),
+        )
+        ledger.record_meal(
+            s, room_id=room_id, payer_member_id=linh, participants=[giang, linh],
+            total_amount=80_000, adjustments={}, guests=[], dish="bún chả rửa xe",
+            occurred_on=date(2026, 7, 23), logged_by=str(linh),
+        )
+        # Giang settles the first meal specifically, exactly as he did in prod.
+        ledger.record_payment(
+            s, room_id=room_id, from_member_id=giang, to_member_id=linh,
+            amount=paid_off["shares"][giang], note="bún bò huế", logged_by=str(giang),
+        )
+
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=giang,
+                                   sender_name="Giang", turn_mentions=[]))
+    out = tools["settle_period"].execute({"keyword": "since_last"})
+
+    assert out["ok"], out
+    rows = [t for t in out["transfers"] if t["from_id"] == giang and t["to_id"] == linh]
+    assert len(rows) == 1
+    note = rows[0]["note"]
+    assert "bun cha rua xe" in note
+    assert "bun bo hue" not in note, f"already-paid meal is still in the memo: {note!r}"
