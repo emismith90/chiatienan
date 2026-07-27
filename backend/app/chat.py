@@ -258,6 +258,14 @@ def _settle_blocked_body(attachments: dict) -> str:
                 f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
                 f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
             )
+    # Production: this listed the blocking draft and stopped there, so people
+    # asked the bot to close it four different ways instead of scrolling up to
+    # the card. Say where the buttons are, and that chat can cancel it.
+    if attachments.get("pending"):
+        lines.append(
+            "Mở thẻ nháp ở trên (theo số #) rồi bấm **Xác nhận** hoặc **Huỷ** — "
+            'hoặc nhắn "huỷ đề xuất #<số>" là mình huỷ hộ.'
+        )
     return "\n".join(lines)
 
 
@@ -323,8 +331,8 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     from concurrent turns never interleaves with another. Meal turns never write
     directly — ``propose_meal`` only proposes, and the turn ends with a pending
     ``expense_draft`` for a human to edit/commit. The draft write itself
-    (``drafts.create_draft``, which persists the new draft independently — it
-    never supersedes a prior pending draft — a ledger write) runs under the
+    (``drafts.create_draft``, which persists the new draft and retires any
+    pending draft it re-proposes, without recording anything) runs under the
     SAME lock as ``run_turn``, so the ledger's single-writer property covers
     this path too.
 
@@ -367,6 +375,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                     "from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
                     "amount": p["amount"], "note": p.get("note")}
         payment_transfers = list(_by_pair.values())
+        # Cards this turn retired by re-proposing them, published below so their
+        # Confirm/Cancel buttons disappear everywhere instead of lingering as a
+        # pending draft that blocks the next settle.
+        superseded_payloads: list[dict] = []
         if proposal:
             payload = {k: proposal.get(k) for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
@@ -376,11 +388,13 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             payload["logged_by"] = str(member_id)
             payload["turn_id"] = result.turn_id
             with db.session() as s:
-                new_msg, _ = drafts.create_draft(s, room_id, payload)
+                new_msg, superseded = drafts.create_draft(s, room_id, payload)
+                superseded_payloads = [message_to_dict(m, None) for m in superseded]
         elif payment_transfers:
             payload = {"transfers": payment_transfers, "turn_id": result.turn_id}
             with db.session() as s:
-                new_msg = drafts.create_payment_draft(s, room_id, payload)
+                new_msg, superseded = drafts.create_payment_draft(s, room_id, payload)
+                superseded_payloads = [message_to_dict(m, None) for m in superseded]
         else:
             attachments = render_bot_attachments(result)
 
@@ -405,6 +419,21 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             settle = result.last_result("settle_period")
             if emit and settle and settle.get("committed"):
                 await emit({"type": "ledger:changed"})
+
+        # A draft the bot cancelled on request is the same situation as a
+        # superseded one: open clients still show its buttons until the card
+        # itself is republished.
+        cancelled_ids = [r.get("draft_id") for r in result.all_results("cancel_draft")]
+        if cancelled_ids:
+            with db.session() as s:
+                for draft_id in cancelled_ids:
+                    card = s.get(RoomMessage, draft_id) if draft_id else None
+                    if card is not None and card.room_id == room_id:
+                        superseded_payloads.append(message_to_dict(card, None))
+
+    if emit:
+        for stale in superseded_payloads:
+            await emit({"type": "message", **stale})
 
     return new_msg
 

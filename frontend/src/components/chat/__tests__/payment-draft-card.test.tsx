@@ -57,4 +57,11 @@ describe("PaymentDraftCard", () => {
     expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Recorded/)).toBeInTheDocument();
   });
+
+  it("explains itself when a later proposal superseded it", () => {
+    // Without a label this card renders inert with no buttons and no reason why.
+    render(<PaymentDraftCard message={msg("superseded")} members={members} roomId={3} />);
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Replaced by a newer proposal/)).toBeInTheDocument();
+  });
 });

@@ -145,6 +145,23 @@ def test_settle_blocked_body_lists_pending():
     assert "#7" in body and "An" in body and "400,000" in body
 
 
+def test_settle_blocked_body_says_how_to_clear_it():
+    """Production: it listed the blocking draft and stopped, so four people asked
+    the bot to close it instead of finding the card."""
+    body = chat._settle_blocked_body({
+        "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+        "pending": [{"draft_id": 101, "payer_name": "Emi", "bill_total": 324000,
+                     "participant_count": 6}],
+    })
+    assert "Xác nhận" in body and "Huỷ" in body
+    assert "huỷ đề xuất" in body
+
+
+def test_settle_blocked_body_omits_the_hint_when_nothing_is_pending():
+    body = chat._settle_blocked_body({"message": "Không có gì để chốt.", "pending": []})
+    assert "huỷ đề xuất" not in body
+
+
 # --- run_bot_turn error-path body -------------------------------------------- #
 
 async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):

@@ -333,6 +333,27 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             return _err(str(exc))
         return {"ok": True, "date": d.isoformat()}
 
+    def cancel_draft(args, _tool_ctx=None) -> dict:
+        """Cancel a pending draft card by id. Writes nothing to the ledger.
+
+        The one draft action the bot may take on the user's word: confirming
+        still requires the button on the card (money-safety D3), but a stale
+        proposal blocks every settle and used to need a human to scroll back and
+        find the card. Cancelling loses nothing — the proposal can be re-made.
+        """
+        from app import drafts
+
+        args = args or {}
+        draft_id = args.get("draft_id")
+        if not isinstance(draft_id, int):
+            return _err("Missing draft_id (the # shown on the card).")
+        with db.session() as s:
+            try:
+                m = drafts.update_draft(s, draft_id, ctx.room_id, {"status": "cancelled"})
+            except (ledger.LedgerError, MoneyError) as exc:
+                return _err(str(exc))
+            return {"ok": True, "type": "draft_cancelled", "draft_id": m.id, "kind": m.kind}
+
     def void_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
         meal_id = args.get("meal_id")
@@ -745,6 +766,20 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=void_meal,
             description="Void a meal by meal_id to correct a mistake.",
             input_schema=_VOID_SCHEMA,
+        ),
+        "cancel_draft": CustomTool(
+            execute=cancel_draft,
+            description=(
+                "Cancel a PENDING draft card by its # (e.g. a stale proposal blocking "
+                "settle_period). Records nothing. Confirming a draft is NOT possible from "
+                "chat — only the Confirm button on the card can do that."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {"draft_id": {"type": "integer",
+                                            "description": "The # shown on the draft card."}},
+                "required": ["draft_id"],
+            },
         ),
         "resolve_period": CustomTool(
             execute=resolve_period_tool,

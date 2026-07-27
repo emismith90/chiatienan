@@ -16,7 +16,7 @@ def room(db):
 def test_create_and_commit_payment_draft(room):
     db, ids = room
     with db.session() as s:
-        d = drafts.create_payment_draft(s, ids["room"], {"transfers": [
+        d, _ = drafts.create_payment_draft(s, ids["room"], {"transfers": [
             {"from_member_id": ids["alice"], "to_member_id": ids["bob"],
              "amount": 50000, "note": None}]})
         draft_id = d.id
@@ -32,7 +32,7 @@ def test_create_and_commit_payment_draft(room):
 def test_commit_multi_transfer_payment_draft(room):
     db, ids = room
     with db.session() as s:
-        d = drafts.create_payment_draft(s, ids["room"], {"transfers": [
+        d, _ = drafts.create_payment_draft(s, ids["room"], {"transfers": [
             {"from_member_id": ids["alice"], "to_member_id": ids["carol"],
              "amount": 30000, "note": None},
             {"from_member_id": ids["bob"], "to_member_id": ids["carol"],
@@ -49,7 +49,7 @@ def test_commit_multi_transfer_payment_draft(room):
 def test_commit_twice_is_rejected(room):
     db, ids = room
     with db.session() as s:
-        d = drafts.create_payment_draft(s, ids["room"], {"transfers": [
+        d, _ = drafts.create_payment_draft(s, ids["room"], {"transfers": [
             {"from_member_id": ids["alice"], "to_member_id": ids["bob"],
              "amount": 1000, "note": None}]})
         draft_id = d.id

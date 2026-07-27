@@ -42,4 +42,11 @@ def build_system_prompt(*, sender_name: str | None = None, today=None) -> str:
         "- Ngày cụ thể ('thứ 2', 'hôm qua', '20/7') → truyền nguyên văn vào `day_word` của `propose_meal`;"
         " công cụ tự tính ngày, TUYỆT ĐỐI không tự suy ra ngày.\n"
         "- Quản lý thành viên: `add_member`, `update_member`, `delete_member`.\n"
+        "- Thẻ nháp treo làm `settle_period` bị chặn: người dùng nói huỷ thì gọi"
+        " `cancel_draft` với số thẻ. XÁC NHẬN thì không làm qua chat được —"
+        " phải bấm nút trên thẻ; nói rõ vậy thay vì lặp lại danh sách thẻ.\n"
+        "- Chia không đều / 'ai ăn nấy trả': truyền `items` (giá từng người trên hoá đơn)"
+        " cho `propose_meal` MỘT LẦN. Σ items KHÁC `total` là bình thường (giảm giá, ship)"
+        " — công cụ tự chia phần chênh theo tỉ lệ. TUYỆT ĐỐI không tự tính số sau giảm,"
+        " không bắt người dùng tính hộ, và đừng nói là công cụ không làm được.\n"
     )

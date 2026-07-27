@@ -8,3 +8,8 @@ alwaysApply: true
 - '840k' = 840000, '1tr'/'1 triệu' = 1000000, '50k' = 50000 (VND, số nguyên).
 - Mọi thay đổi số dư (bữa ăn, trả tiền, chốt) là ĐỀ XUẤT — người dùng xác nhận trên thẻ.
 - Nếu công cụ trả về `error`, hỏi lại cho rõ thay vì đoán.
+- Chia KHÔNG đều (mỗi người một món/một số): dùng `items` của `propose_meal`, một lần.
+  Σ items khác `total` là chuyện thường (giảm giá / ship / phí) — công cụ tự chia phần
+  chênh theo tỉ lệ. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
+  công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền.
+- Thẻ nháp treo: `cancel_draft` huỷ được (không ghi gì). Xác nhận thì bắt buộc bấm nút.

@@ -1,11 +1,12 @@
 """Expense-draft lifecycle: persist, edit, commit, cancel.
 
 A draft is a ``RoomMessage`` (``kind="expense_draft"``) whose ``attachments``
-carry the proposed meal plus a ``status`` (pending|committed|cancelled).
-Multiple drafts may be pending in a room at once — proposals persist as
-independent cards until each is confirmed, edited, or cancelled from its own
-card; creating a new draft never touches an existing one. All ledger writes
-go through :func:`app.ledger.record_meal` — the LLM never writes.
+carry the proposed meal plus a ``status``
+(pending|committed|cancelled|superseded). Multiple drafts may be pending in a
+room at once — proposals persist as independent cards, each confirmed, edited or
+cancelled from its own card — with one exception: re-proposing *the same thing*
+marks the older card ``superseded`` (see :func:`_supersede_duplicates`). All
+ledger writes go through :func:`app.ledger.record_meal` — the LLM never writes.
 """
 from __future__ import annotations
 
@@ -56,15 +57,75 @@ def _sync_items(att: dict) -> dict:
     return att
 
 
+def _int_or_none(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _draft_signature(att: dict) -> tuple:
+    """What a draft proposes, reduced to an identity for spotting a re-proposal.
+
+    The amount is deliberately NOT part of it: a re-proposal is usually a
+    *correction* of the amount (production had 324,000đ re-proposed as
+    324,200đ), so keying on it would miss every case worth catching.
+    """
+    if att.get("type") == "payment_draft":
+        return ("payment", frozenset(
+            (_int_or_none(t.get("from_member_id")), _int_or_none(t.get("to_member_id")))
+            for t in att.get("transfers") or []
+        ))
+    return (
+        "meal",
+        _int_or_none(att.get("payer_member_id")),
+        frozenset(_int_or_none(x) for x in att.get("member_participants") or []),
+        att.get("occurred_on"),
+    )
+
+
+def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list[RoomMessage]:
+    """Mark pending drafts that ``new_att`` re-proposes as ``superseded``.
+
+    WHY — a pending draft blocks ``settle_period``, and nothing used to retire
+    one. In production a 324,000đ proposal was refined into a 324,200đ proposal
+    twenty messages later; confirming the new card left the old one pending, so
+    every "chốt kỳ" for the next four hours answered "#101 chưa xác nhận" while
+    the stale card sat far above the fold. Four people asked the bot to close it
+    and it had no way to.
+
+    This writes NOTHING to the ledger. An earlier version of this module
+    auto-*committed* the superseded draft (recording money nobody confirmed) and
+    was rightly removed in 641ffa7; retiring an unconfirmed card is the safe
+    half. Same payer + same participants + same day counts as the same
+    proposal — two genuinely different meals for that exact group on one day are
+    rare, and the cost of being wrong is a card the user can ask for again.
+    """
+    signature = _draft_signature(new_att)
+    superseded: list[RoomMessage] = []
+    for m in list_pending_drafts(session, room_id):
+        att = dict(m.attachments or {})
+        if _draft_signature(att) != signature:
+            continue
+        att["status"] = "superseded"
+        m.attachments = att   # reassign so SQLAlchemy marks the JSON dirty
+        superseded.append(m)
+    if superseded:
+        session.flush()
+    return superseded
+
+
 def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
-    """Persist a new pending draft. Never commits or supersedes an existing
-    draft — proposals persist as independent cards until each is confirmed,
-    edited, or cancelled from its own card. Returns ``(new_draft, [])``; the
-    empty list preserves the caller signature (there are no supersede extras)."""
+    """Persist a new pending draft, retiring any it re-proposes.
+
+    Returns ``(new_draft, superseded)`` — the caller publishes the superseded
+    cards so their buttons disappear in every open client.
+    """
     att = _sync_items({"type": "expense_draft", "status": "pending", **payload})
     att.pop("logged_by", None)
+    superseded = _supersede_duplicates(session, room_id, att)
     new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind="expense_draft")
-    return new_draft, []
+    return new_draft, superseded
 
 
 def list_pending_drafts(session: Session, room_id: int) -> list[RoomMessage]:
@@ -222,10 +283,19 @@ def current_balances(session: Session, room_id: int) -> list[dict]:
     return sorted(rows, key=lambda r: r["balance"], reverse=True)
 
 
-def create_payment_draft(session: Session, room_id: int, payload: dict) -> RoomMessage:
+def create_payment_draft(session: Session, room_id: int,
+                         payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
+    """Persist a pending payment draft, retiring any it re-proposes.
+
+    Same ``(new_draft, superseded)`` contract as :func:`create_draft`: "tôi đã
+    trả tiền Emi" asked twice in a row leaves one live card, not two, and neither
+    can go on blocking a settle.
+    """
     att = {"type": "payment_draft", "status": "pending", **payload}
     att.pop("logged_by", None)
-    return chat.post_message(session, room_id, None, body="", attachments=att, kind="payment_draft")
+    superseded = _supersede_duplicates(session, room_id, att)
+    new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind="payment_draft")
+    return new_draft, superseded
 
 
 def commit_payment_draft(session: Session, draft_id: int, room_id: int,

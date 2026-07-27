@@ -134,7 +134,10 @@ export function ExpenseDraftCard({
   };
 
   const statusLabel =
-    att.status === "committed" ? "Recorded" : att.status === "cancelled" ? "Cancelled" : null;
+    att.status === "committed" ? "Recorded"
+    : att.status === "cancelled" ? "Cancelled"
+    : att.status === "superseded" ? "Replaced by a newer proposal"
+    : null;
 
   return (
     <div className="mt-1 w-full max-w-[95%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-sm">
