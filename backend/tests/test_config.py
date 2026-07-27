@@ -61,3 +61,38 @@ def test_memory_settings_from_env(monkeypatch):
     s = Settings.from_env()
     assert s.memory_window_weeks == 6
     assert s.history_max_messages == 50
+
+
+def test_workspace_defaults_to_the_mounted_volume(monkeypatch):
+    monkeypatch.delenv("CURSOR_SDK_WORKSPACE", raising=False)
+    from app.config import Settings
+
+    assert Settings.from_env().cursor_workspace == "/data/cursor-agent"
+
+
+def test_ephemeral_workspace_is_warned_about_at_boot(monkeypatch, caplog):
+    """Production ran on CURSOR_SDK_WORKSPACE=/tmp/chiatienan-agent, so the agent
+    workspace and .cursor-store were silently wiped on every deploy."""
+    from dataclasses import replace
+
+    from app import main
+
+    monkeypatch.setattr(
+        main, "settings", replace(main.settings, cursor_workspace="/tmp/chiatienan-agent")
+    )
+    with caplog.at_level("WARNING", logger="chiatienan"):
+        main._warn_if_workspace_is_ephemeral()
+    assert "outside the mounted /data volume" in caplog.text
+
+
+def test_workspace_on_the_volume_is_silent(monkeypatch, caplog):
+    from dataclasses import replace
+
+    from app import main
+
+    monkeypatch.setattr(
+        main, "settings", replace(main.settings, cursor_workspace="/data/cursor-agent")
+    )
+    with caplog.at_level("WARNING", logger="chiatienan"):
+        main._warn_if_workspace_is_ephemeral()
+    assert caplog.text == ""

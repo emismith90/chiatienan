@@ -28,8 +28,12 @@ name: Deploy
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
 #     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
 #     CURSOR_SDK_MODEL         – default "grok-4.5-fast"
-#     CURSOR_SDK_WORKSPACE     – default "/data/cursor-agent" (keep it under the
-#                                mounted /data volume so it persists across restarts)
+#     CURSOR_SDK_WORKSPACE     – default "/data/cursor-agent". MUST stay under the
+#                                mounted /data volume: it is the only writable path
+#                                that survives a container recreate, and every
+#                                deploy recreates the backend. A value outside
+#                                /data (e.g. a leftover "/tmp/…" from the
+#                                reference sample) is overridden with a warning.
 #     CURSOR_API_BASE          – default "https://api.cursor.com"
 #     CURSOR_AGENT_MAX_TOOLS   – default "40"
 #     CURSOR_AGENT_MAX_SECONDS – default "120"
@@ -158,6 +162,7 @@ jobs:
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
           CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5-fast' }}
           CURSOR_SDK_WORKSPACE: ${{ vars.CURSOR_SDK_WORKSPACE || '/data/cursor-agent' }}
+          WORKSPACE_FALLBACK: /data/cursor-agent
           CURSOR_API_BASE: ${{ vars.CURSOR_API_BASE || 'https://api.cursor.com' }}
           CURSOR_AGENT_MAX_TOOLS: ${{ vars.CURSOR_AGENT_MAX_TOOLS || '40' }}
           CURSOR_AGENT_MAX_SECONDS: ${{ vars.CURSOR_AGENT_MAX_SECONDS || '120' }}
@@ -180,6 +185,18 @@ jobs:
           if [ -z "${DEBUG_API_KEY}" ]; then
             echo "::warning::DEBUG_API_KEY secret is unset — writing it empty, so the /internal/debug/* export API stays disabled (404s). Add the secret to enable it."
           fi
+          # /data is the only mounted volume (docker-compose.yml: ./data:/data).
+          # Anywhere else is container-local and every deploy recreates the
+          # backend, so the agent workspace + its .cursor-store would be wiped
+          # on each ship. Refuse to write a non-persistent path.
+          case "${CURSOR_SDK_WORKSPACE}" in
+            /data/*)
+              ;;
+            *)
+              echo "::warning::CURSOR_SDK_WORKSPACE='${CURSOR_SDK_WORKSPACE}' is not under the mounted /data volume, so it would be wiped on every deploy. Using '${WORKSPACE_FALLBACK}' instead — update or delete the repo variable to silence this."
+              CURSOR_SDK_WORKSPACE="${WORKSPACE_FALLBACK}"
+              ;;
+          esac
           umask 077
           # Mirrors .env.example. Secrets + commonly-tuned values come from
           # GitHub; the rest are stable defaults. The unquoted heredoc expands

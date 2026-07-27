@@ -19,6 +19,10 @@ _VN_WEEKDAYS = {0: "T2", 1: "T3", 2: "T4", 3: "T5", 4: "T6", 5: "T7", 6: "CN"}
 
 _DEFAULT_BUDGET = 50
 
+#: Stand-in dish for a meal logged without one, so a note chunk is never a bare
+#: weekday. ASCII, like everything else that reaches the bank's addInfo field.
+_UNNAMED_MEAL = "bua trua"
+
 
 def _ascii_fold(s: str) -> str:
     """Strip Vietnamese diacritics to plain ASCII (``"bún chả" -> "bun cha"``).
@@ -39,10 +43,17 @@ def _weekday_label(d: date) -> str:
 
 
 def _meal_chunk(meal: dict) -> str:
-    """One meal as ``"<weekday> <dish>"`` (weekday alone if the dish is blank)."""
+    """One meal as ``"<weekday> <dish>"``.
+
+    A meal logged without a dish name ("@bot I paid 335k, dũng giang, hưng, và
+    khanh") used to contribute a bare weekday, so a two-meal note read
+    ``"Giang Hoang: T5 bun cha rua xe, T6"`` — the payer sees a dangling day and
+    reads the whole memo as wrong. :data:`_UNNAMED_MEAL` keeps every chunk
+    self-describing.
+    """
     label = _weekday_label(meal["date"])
     dish = _ascii_fold((meal.get("dish") or "").strip())
-    return f"{label} {dish}" if dish else label
+    return f"{label} {dish or _UNNAMED_MEAL}"
 
 
 def build_qr_note(

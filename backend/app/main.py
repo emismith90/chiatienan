@@ -67,7 +67,26 @@ def _mirror_logs_to_file() -> None:
         log.warning("could not open log mirror at %s: %s", settings.log_file, exc)
 
 
+def _warn_if_workspace_is_ephemeral() -> None:
+    """Say so at boot when the agent workspace won't survive a restart.
+
+    ``/data`` is the only mounted volume in docker-compose.yml, so a workspace
+    outside it (production ran on ``/tmp/chiatienan-agent`` for weeks) loses the
+    materialized skills and the ``.cursor-store`` conversation state on every
+    deploy — silently, because nothing errors. Local runs point elsewhere on
+    purpose, so this stays a warning and never a failure.
+    """
+    workspace = settings.cursor_workspace
+    if not workspace.startswith("/data"):
+        log.warning(
+            "CURSOR_SDK_WORKSPACE=%s is outside the mounted /data volume — the agent "
+            "workspace and .cursor-store will be lost on restart",
+            workspace,
+        )
+
+
 _mirror_logs_to_file()
+_warn_if_workspace_is_ephemeral()
 
 app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)

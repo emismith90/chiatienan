@@ -41,14 +41,16 @@ def test_build_note_sorts_by_date():
     assert note == "Hung: T2 pho, T3 nem"
 
 
-def test_build_note_missing_dish_shows_weekday_only():
+def test_build_note_missing_dish_still_names_the_meal():
+    """Production: meal #5 was logged with no dish, so Giang's memo read
+    "Giang Hoang: T5 bun cha rua xe, T6" and he reported it as wrong twice."""
     note = build_qr_note(
         "Hung",
         [{"date": date(2024, 1, 1), "dish": None},
          {"date": date(2024, 1, 2), "dish": "nem"}],
         fallback="x",
     )
-    assert note == "Hung: T2, T3 nem"
+    assert note == "Hung: T2 bua trua, T3 nem"
 
 
 def test_build_note_empty_meals_returns_fallback():

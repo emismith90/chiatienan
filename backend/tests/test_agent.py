@@ -255,10 +255,60 @@ def test_pre_tool_narration_is_dropped_from_the_reply():
     assert out == "Được — ghi theo từng người."
 
 
-def test_blocks_are_separated_not_concatenated():
-    """'…bữa ăn.Được — ghi theo…' — two messages run together with no space."""
-    out = agent_mod._final_answer(["Xong rồi nhé.", "Cần sửa gì thì nhắn mình."], 0)
-    assert out == "Xong rồi nhé.\n\nCần sửa gì thì nhắn mình."
+def test_token_fragments_concatenate_without_separators():
+    """Production 17:29: the reply reached the room as
+    'V  ẫn  không  được  đâu  Kun' because every streamed token was joined with
+    a blank line. Fragments are a stream, not messages — they concatenate."""
+    tokens = ["Không", " —", " hiện", " không", " hỗ", " trợ", " xác", " nhận"]
+    assert agent_mod._final_answer(tokens, 0) == "Không — hiện không hỗ trợ xác nhận"
+
+
+def test_fragment_join_preserves_the_models_own_paragraph_breaks():
+    parts = ["Đã ghi xong nhé.", "\n\n", "Cần sửa gì thì nhắn mình."]
+    assert agent_mod._final_answer(parts, 0) == "Đã ghi xong nhé.\n\nCần sửa gì thì nhắn mình."
+
+
+def test_glued_narration_is_dropped_when_it_arrives_in_one_fragment():
+    """Production 17:23 stored one fragment holding both the scaffolding and the
+    answer: '…mình đọc skill phù hợp rồi xử lý.Mình **không xác nhận qua chat**…'
+    — answer_from cannot split that, so the seam is where we cut."""
+    glued = (
+        "Emi muốn xác nhận đề xuất đang treo — mình đọc skill phù hợp rồi xử lý."
+        "Mình **không xác nhận qua chat** được — đề xuất #101 cần Emi bấm "
+        "**Xác nhận** (hoặc Huỷ) trên thẻ nháp."
+    )
+    assert agent_mod._final_answer([glued], 0) == (
+        "Mình **không xác nhận qua chat** được — đề xuất #101 cần Emi bấm "
+        "**Xác nhận** (hoặc Huỷ) trên thẻ nháp."
+    )
+
+
+def test_several_stacked_narrations_are_all_dropped():
+    """Production 13:20: three plan sentences stacked ahead of the answer."""
+    glued = (
+        "Mình sẽ đọc quy trình ghi bữa và lấy giá từng món từ ảnh hoá đơn."
+        "Đã thấy lần trước đọc hoá đơn — mình lấy lại ảnh và schema để ghi theo món."
+        "Mình dùng giá món đã đọc từ hoá đơn Grab và đề xuất bữa theo từng người."
+        "Giá món trên ảnh mình đọc được:"
+    )
+    assert agent_mod._final_answer([glued], 0) == "Giá món trên ảnh mình đọc được:"
+
+
+def test_an_answer_that_mentions_the_tools_is_not_mistaken_for_narration():
+    """'công cụ' and 'quy tắc' show up in real answers — only skill/process
+    reading phrasings are scaffolding."""
+    real = (
+        "Cộng các món = **414.200đ**, trong khi Emi trả **324.200đ** (có giảm/ship) "
+        "— công cụ không cho ghi thẳng giá món vì vượt tổng."
+    )
+    assert agent_mod._final_answer([real], 0) == real
+
+
+def test_a_seam_between_two_real_sentences_only_gains_a_space():
+    glued = "Đã ghi #6 — Grab Food.Cần sửa gì thì nhắn mình."
+    assert agent_mod._final_answer([glued], 0) == (
+        "Đã ghi #6 — Grab Food. Cần sửa gì thì nhắn mình."
+    )
 
 
 def test_narration_survives_when_it_is_the_only_text():
