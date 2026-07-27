@@ -87,10 +87,13 @@ export function MessageList({
   members,
   roomId,
   timelines,
+  onOpenLedger,
 }: {
   messages: Message[];
   members: Member[];
   roomId: number;
+  /** Opens the ledger panel scoped to a date range (from a history answer). */
+  onOpenLedger?: (range: { from: string; to: string }) => void;
   /** Per-turn agent timelines (turn_id -> steps), keyed the same as
    * useRoom's `timelines`. A finished turn's timeline attaches, collapsed,
    * above the draft message it produced — see room-view.tsx for the
@@ -129,7 +132,8 @@ export function MessageList({
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
               Bot
             </span>
-            <BotMessage body={m.body} attachments={m.attachments} roomId={roomId} />
+            <BotMessage body={m.body} attachments={m.attachments} roomId={roomId}
+                        onOpenLedger={onOpenLedger} />
           </div>
         ) : (
           <HumanMessage key={m.id} message={m} />

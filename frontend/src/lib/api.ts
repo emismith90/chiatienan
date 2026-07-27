@@ -90,8 +90,18 @@ export type LedgerData = {
   me: { owe: StatementRow[]; owed: StatementRow[]; net: number };
 };
 
-export const getLedger = (roomId: number, period = "since_last"): Promise<LedgerData> =>
-  req(`/api/rooms/${roomId}/ledger?period=${period}`);
+/** `range` scopes the ledger to explicit dates, so a "last week, day by day"
+ * question can open the panel on exactly the range that was asked about. */
+export const getLedger = (
+  roomId: number,
+  period = "since_last",
+  range?: { from: string; to: string } | null,
+): Promise<LedgerData> =>
+  req(
+    range
+      ? `/api/rooms/${roomId}/ledger?from=${range.from}&to=${range.to}`
+      : `/api/rooms/${roomId}/ledger?period=${period}`,
+  );
 
 /** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
  * computes the amount from {to, meal_id}; client sends no money value). */

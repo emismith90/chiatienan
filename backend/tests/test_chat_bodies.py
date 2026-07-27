@@ -26,7 +26,33 @@ def test_render_summary_attachment():
                 "balances": [{"id": 6, "name": "Linh", "balance": 61000}]})
     att = render_bot_attachments(res)
     assert att["type"] == "summary"
-    assert "bun bo" in _summary_body(att)
+    # The body is a headline; the rows live in the card (grouped by day) and in
+    # the ledger panel it can open. Printing all of them made a fifteen-row
+    # paragraph that a "format it as bullets please" request could not change.
+    body = _summary_body(att)
+    assert body == "Tóm tắt đến 2026-07-22: 1 bữa trong 1 ngày — chi tiết ở dưới."
+    # The detail is still carried, just not in the prose.
+    assert att["timeline"][0]["dish"] == "bun bo"
+
+
+def test_summary_body_counts_meals_payments_and_days():
+    """Production: 15 rows over 3 days, asked for twice, printed identically."""
+    body = _summary_body({
+        "period": {"from": "2026-07-20", "to": "2026-07-26"},
+        "timeline": [
+            {"kind": "meal", "occurred_on": "2026-07-22", "total": 1},
+            {"kind": "meal", "occurred_on": "2026-07-22", "total": 1},
+            {"kind": "payment", "occurred_on": "2026-07-23", "amount": 1},
+            {"kind": "payment", "occurred_on": "2026-07-24", "amount": 1},
+        ],
+    })
+    assert body == ("Tóm tắt 2026-07-20 → 2026-07-26: 2 bữa, 2 lượt trả tiền "
+                    "trong 3 ngày — chi tiết ở dưới.")
+
+
+def test_summary_body_when_the_period_is_empty():
+    body = _summary_body({"period": {"from": None, "to": "2026-07-26"}, "timeline": []})
+    assert body == "Tóm tắt đến 2026-07-26: chưa có giao dịch nào trong kỳ."
 
 
 def test_err_statement_result_not_wrapped():

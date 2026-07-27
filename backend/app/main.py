@@ -14,7 +14,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -83,6 +83,12 @@ def _warn_if_workspace_is_ephemeral() -> None:
             "workspace and .cursor-store will be lost on restart",
             workspace,
         )
+
+
+def _parse_iso_or_none(value: str | None):
+    """``"2026-07-20"`` -> date; blank -> None; anything else raises ValueError."""
+    from datetime import date as _date
+    return _date.fromisoformat(value) if value else None
 
 
 _mirror_logs_to_file()
@@ -329,18 +335,31 @@ async def get_messages(room_id: int, since: int = 0, days: int | None = None,
         # the legacy since-based full list (SSE catch-up shape).
         if days is not None or before_id is not None:
             msgs, has_more = chat.list_messages_page(s, room_id, days=days, before_id=before_id)
-            return {"messages": msgs, "has_more": has_more}
-        return {"messages": chat.list_messages(s, room_id, since_id=since)}
+            return {"messages": chat.annotate_settled_transfers(s, room_id, msgs),
+                    "has_more": has_more}
+        return {"messages": chat.annotate_settled_transfers(
+            s, room_id, chat.list_messages(s, room_id, since_id=since))}
 
 
 @app.get("/api/rooms/{room_id}/ledger")
 async def get_ledger(room_id: int, period: str = "since_last",
+                     from_: str | None = Query(None, alias="from"),
+                     to: str | None = Query(None, alias="to"),
                      ctx: AuthCtx = Depends(require_session)):
+    """The ledger for a period. ``from``/``to`` (ISO dates) scope it to an
+    explicit range, so a "last week, day by day" question can open the panel on
+    exactly the range that was asked about instead of the default window."""
     _check_room(ctx, room_id)
+    try:
+        explicit_from, explicit_to = _parse_iso_or_none(from_), _parse_iso_or_none(to)
+    except ValueError:
+        raise HTTPException(400, "from/to must be ISO dates (YYYY-MM-DD)") from None
     with get_db().session() as s:
         last = ledger.last_settlement(s, room_id)
-        p = resolve_period(period, today=today_ict(),
-                           last_settlement_to=last.period_to if last else None)
+        p = resolve_period(period if not (explicit_from or explicit_to) else "explicit",
+                           today=today_ict(),
+                           last_settlement_to=last.period_to if last else None,
+                           explicit_from=explicit_from, explicit_to=explicit_to)
         balances = ledger.period_balances(s, room_id, p["from"], p["to"])
         timeline = ledger.period_timeline(s, room_id, p["from"], p["to"])
         me_stmt = ledger.statement_for(s, room_id, ctx.member_id, p["from"], p["to"])
@@ -386,11 +405,21 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
                                         meal_id=body.meal_id, logged_by=str(ctx.member_id))
             names = {mm.id: mm.display_name
                      for mm in roster.list_members(s, room_id, include_inactive=True)}
-            msg = chat.post_message(
-                s, room_id, None,
-                f"💸 {names.get(ctx.member_id, '?')} trả {names.get(body.to, '?')} {outstanding:,}đ",
-                kind="bot",
-            )
+            # Same attachment shape as a confirmed payment draft, so this path
+            # leaves the same audit trail (amounts + a balances snapshot) instead
+            # of a bare line of text that nothing can reconstruct later.
+            pay_att = {
+                "type": "payment",
+                "transfers": [{
+                    "from": {"id": ctx.member_id, "name": names.get(ctx.member_id, "?")},
+                    "to": {"id": body.to, "name": names.get(body.to, "?")},
+                    "amount": outstanding,
+                }],
+                "meal_id": body.meal_id,
+                "balances": drafts.current_balances(s, room_id),
+            }
+            msg = chat.post_message(s, room_id, None, chat._payment_body(pay_att),
+                                    attachments=pay_att, kind="bot")
             msg_payload = chat.message_to_dict(msg, None)
     await hub.publish(room_id, {"type": "message", **msg_payload})
     await hub.publish(room_id, {"type": "ledger:changed"})

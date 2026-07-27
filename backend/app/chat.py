@@ -125,6 +125,51 @@ def message_to_dict(m: RoomMessage, author: Member | None) -> dict:
     }
 
 
+def annotate_settled_transfers(session: Session, room_id: int, payloads: list[dict]) -> list[dict]:
+    """Mark transfers on old settlement cards that are no longer owed.
+
+    A settlement card carries a live VietQR, and it stays in the thread forever.
+    Once the debt is paid the QR is still scannable — production history holds 34
+    such links, two of which are for a transfer that was never owed at all (the
+    windowing bug, since fixed). Scroll back far enough, tap one, and you pay
+    money you do not owe.
+
+    Annotating at read time rather than storing it means the whole backlog is
+    corrected at once and stays correct as people pay. The stored attachment is
+    never modified — the room's history stays exactly what was said at the time,
+    which is also why the amount is left alone and only ``settled`` is added.
+    """
+    def _is_settlement(payload: dict) -> bool:
+        att = payload.get("attachments")
+        return isinstance(att, dict) and att.get("type") == "settlement"
+
+    if not any(_is_settlement(p) for p in payloads):
+        return payloads
+
+    from app import ledger  # lazy: ledger imports chat for post_message
+
+    outstanding: dict[tuple[int, int], int] = {}
+    for t in ledger.period_transfers(session, room_id, None, now_ict().date()):
+        outstanding[(t.from_member, t.to_member)] = t.amount
+
+    for payload in payloads:
+        if not _is_settlement(payload):
+            continue
+        att = payload["attachments"]
+        # Rebuild rather than assign into it: message_to_dict hands back the ORM
+        # object's JSON by reference, so annotating in place would write `settled`
+        # into the stored row on the next flush and rewrite the room's history.
+        payload["attachments"] = {
+            **att,
+            "transfers": [
+                {**t, "settled": t.get("amount", 0)
+                 > outstanding.get((t.get("from_id"), t.get("to_id")), 0)}
+                for t in (att.get("transfers") or [])
+            ],
+        }
+    return payloads
+
+
 def post_message(session: Session, room_id: int, author_member_id: int | None,
                   body: str, attachments: dict | None = None, kind: str = "text") -> RoomMessage:
     m = RoomMessage(room_id=room_id, author_member_id=author_member_id, kind=kind,
@@ -375,19 +420,30 @@ def _statement_body(att: dict) -> str:
 
 
 def _summary_body(att: dict) -> str:
-    """Deterministic VN text for the group summary — numbers from the tool dict."""
+    """One-line headline for a group summary — numbers from the tool dict.
+
+    This used to print every row. Fifteen transactions arrived as one unbroken
+    paragraph, and when someone asked for it "day by day, as bullet points" they
+    got the identical blob back, because the body is rendered server-side and
+    cannot honour a formatting request. The detail belongs in the card below it
+    (grouped by day) and in the ledger panel the card can open — a chat bubble is
+    the wrong surface for a table.
+    """
     period = att.get("period") or {}
-    lines = [f"Tóm tắt đến {period.get('to')}:"]
-    for e in att.get("timeline") or []:
-        if e["kind"] == "meal":
-            lines.append(f"• {e.get('occurred_on')} 🍜 {e.get('dish') or 'bữa ăn'} — "
-                         f"{e.get('payer_name', '?')} trả {e.get('total', 0):,}đ")
-        else:
-            lines.append(f"• {e.get('occurred_on')} 💸 {e.get('from_name', '?')} → "
-                         f"{e.get('to_name', '?')} {e.get('amount', 0):,}đ")
-    if len(lines) == 1:
-        lines.append("Chưa có giao dịch nào trong kỳ.")
-    return "\n".join(lines)
+    timeline = att.get("timeline") or []
+    meals = sum(1 for e in timeline if e["kind"] == "meal")
+    payments = len(timeline) - meals
+    window = (f"{period.get('from')} → {period.get('to')}" if period.get("from")
+              else f"đến {period.get('to')}")
+    if not timeline:
+        return f"Tóm tắt {window}: chưa có giao dịch nào trong kỳ."
+    parts = []
+    if meals:
+        parts.append(f"{meals} bữa")
+    if payments:
+        parts.append(f"{payments} lượt trả tiền")
+    days = len({e.get("occurred_on") for e in timeline})
+    return f"Tóm tắt {window}: {', '.join(parts)} trong {days} ngày — chi tiết ở dưới."
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,

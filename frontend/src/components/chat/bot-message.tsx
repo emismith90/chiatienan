@@ -12,6 +12,10 @@ interface Transfer {
   to_name: string;
   amount: number;
   qr_url?: string | null;
+  /** Server-annotated at read time: this transfer is no longer outstanding, so
+   * the QR must not be payable. Settlement cards live in the thread forever and
+   * their QR stays scannable — production history holds 34 such links. */
+  settled?: boolean;
 }
 
 interface Share {
@@ -23,6 +27,7 @@ interface BotMessageProps {
   body: string;
   attachments?: any;
   roomId: number;
+  onOpenLedger?: (range: { from: string; to: string }) => void;
 }
 
 function SettlementCard({ attachments }: { attachments: any }) {
@@ -55,7 +60,7 @@ function SettlementCard({ attachments }: { attachments: any }) {
               {fmt(t.amount)} đ
             </span>
           </div>
-          {t.qr_url && (
+          {t.qr_url && !t.settled && (
             <div className="self-center">
               <ZoomableImage
                 src={t.qr_url}
@@ -65,6 +70,11 @@ function SettlementCard({ attachments }: { attachments: any }) {
                 className="h-40 w-40 rounded-lg border border-[var(--border)] bg-white object-contain p-1"
               />
             </div>
+          )}
+          {t.qr_url && t.settled && (
+            <p className="self-center text-xs font-medium text-[var(--text-secondary)]">
+              ✓ Đã xong — không cần trả nữa
+            </p>
           )}
         </div>
       ))}
@@ -120,7 +130,7 @@ function MealCard({ attachments }: { attachments: any }) {
   );
 }
 
-export function BotMessage({ body, attachments, roomId }: BotMessageProps) {
+export function BotMessage({ body, attachments, roomId, onOpenLedger }: BotMessageProps) {
   const type = attachments?.type;
   return (
     <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-sm">
@@ -130,7 +140,7 @@ export function BotMessage({ body, attachments, roomId }: BotMessageProps) {
       {type === "settlement" && <SettlementCard attachments={attachments} />}
       {type === "meal" && <MealCard attachments={attachments} />}
       {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
-      {type === "summary" && <SummaryCard attachments={attachments} />}
+      {type === "summary" && <SummaryCard attachments={attachments} onOpenLedger={onOpenLedger} />}
     </div>
   );
 }
