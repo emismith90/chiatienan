@@ -145,3 +145,71 @@ def test_recommit_blocked_when_meal_is_settled(db):
                                  period_to=occurred, requested_by="1", transfers=[])
         with pytest.raises(ledger.LedgerError):
             drafts.recommit_draft(s, d.id, room_id, {"bill_total": 600}, logged_by="1")
+
+
+# --- superseding a re-proposal (production #101 deadlock) ------------------- #
+
+def test_reproposing_the_same_meal_retires_the_older_card(db):
+    """Production: a 324,000đ proposal was refined into 324,200đ twenty messages
+    later. Confirming the new card left the old one pending, so every settle for
+    the next four hours answered "#101 chưa xác nhận"."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        first, _ = drafts.create_draft(s, room_id, _payload(a, b, c, total=324_000))
+        second, superseded = drafts.create_draft(s, room_id, _payload(a, b, c, total=324_200))
+
+        assert [m.id for m in superseded] == [first.id]
+        assert s.get(RoomMessage, first.id).attachments["status"] == "superseded"
+        assert second.attachments["status"] == "pending"
+        assert [m.id for m in drafts.list_pending_drafts(s, room_id)] == [second.id]
+
+
+def test_superseding_records_nothing(db):
+    """An earlier version auto-committed the loser (641ffa7). Retiring a card
+    the humans never confirmed must not touch the ledger."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        drafts.create_draft(s, room_id, _payload(a, b, c, total=324_000))
+        drafts.create_draft(s, room_id, _payload(a, b, c, total=324_200))
+        assert s.query(Meal).count() == 0
+
+
+def test_a_different_meal_is_left_alone(db):
+    """Different participants means a real second meal, not a re-proposal."""
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        first, _ = drafts.create_draft(s, room_id, _payload(a, b, c))
+        other = dict(_payload(a, b, c), member_participants=[a, b])
+        _second, superseded = drafts.create_draft(s, room_id, other)
+        assert superseded == []
+        assert len(drafts.list_pending_drafts(s, room_id)) == 2
+        assert s.get(RoomMessage, first.id).attachments["status"] == "pending"
+
+
+def test_a_committed_card_is_never_superseded(db):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        first, _ = drafts.create_draft(s, room_id, _payload(a, b, c))
+        drafts.commit_draft(s, first.id, room_id, logged_by=str(a))
+        _second, superseded = drafts.create_draft(s, room_id, _payload(a, b, c))
+        assert superseded == []
+        assert s.get(RoomMessage, first.id).attachments["status"] == "committed"
+
+
+def test_repeated_payment_draft_retires_the_older_one(db):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        transfers = [{"from_member_id": a, "to_member_id": b, "amount": 27_000, "note": None}]
+        first, _ = drafts.create_payment_draft(s, room_id, {"transfers": transfers})
+        _second, superseded = drafts.create_payment_draft(s, room_id, {"transfers": transfers})
+        assert [m.id for m in superseded] == [first.id]
+        assert s.get(RoomMessage, first.id).attachments["status"] == "superseded"
+
+
+def test_a_superseded_card_no_longer_blocks_a_settle(db):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        drafts.create_draft(s, room_id, _payload(a, b, c, total=324_000))
+        second, _ = drafts.create_draft(s, room_id, _payload(a, b, c, total=324_200))
+        drafts.commit_draft(s, second.id, room_id, logged_by=str(a))
+        assert drafts.list_pending_drafts(s, room_id) == []

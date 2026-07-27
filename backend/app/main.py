@@ -67,7 +67,26 @@ def _mirror_logs_to_file() -> None:
         log.warning("could not open log mirror at %s: %s", settings.log_file, exc)
 
 
+def _warn_if_workspace_is_ephemeral() -> None:
+    """Say so at boot when the agent workspace won't survive a restart.
+
+    ``/data`` is the only mounted volume in docker-compose.yml, so a workspace
+    outside it (production ran on ``/tmp/chiatienan-agent`` for weeks) loses the
+    materialized skills and the ``.cursor-store`` conversation state on every
+    deploy — silently, because nothing errors. Local runs point elsewhere on
+    purpose, so this stays a warning and never a failure.
+    """
+    workspace = settings.cursor_workspace
+    if not workspace.startswith("/data"):
+        log.warning(
+            "CURSOR_SDK_WORKSPACE=%s is outside the mounted /data volume — the agent "
+            "workspace and .cursor-store will be lost on restart",
+            workspace,
+        )
+
+
 _mirror_logs_to_file()
+_warn_if_workspace_is_ephemeral()
 
 app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)
@@ -387,6 +406,12 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         attachments = {"images": clean} if clean else None
         m = chat.post_message(s, room_id, ctx.member_id, body.body, attachments=attachments)
         payload = chat.message_to_dict(m, s.get(Member, ctx.member_id))
+        # An answer to the bot's own question counts as addressed to it, mention
+        # or not — "1" / "2" / "tôi đã trả tiền Emi" were all dropped in
+        # production and retyped with @bot seconds later.
+        answers_bot = not chat.mentions_bot(body.body) and chat.replies_to_bot_question(
+            s, room_id, ctx.member_id, before_id=m.id,
+        )
     await hub.publish(room_id, {"type": "message", **payload})
 
     if chat.is_clear_command(body.body):
@@ -410,7 +435,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         t.add_done_callback(_BG.discard)
         return {"ok": True, "id": payload["id"]}
 
-    if chat.mentions_bot(body.body):
+    if chat.mentions_bot(body.body) or answers_bot:
         hub.mark_busy(room_id)
         await hub.publish(room_id, {"type": "bot.typing"})
 

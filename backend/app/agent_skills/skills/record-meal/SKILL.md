@@ -23,8 +23,11 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 - Mỗi participant đúng MỘT dòng `{member, amount, label}`; `amount` là **giá trên hoá đơn**.
 - Một dòng "2x cơm tấm 138.000đ" cho Linh và Kun → mỗi người 69.000đ.
 - **Σ items không cần bằng `total`.** Giảm giá / phí ship / phí dịch vụ là chuyện bình thường —
-  công cụ tự chia phần chênh lệch theo tỉ lệ món. ĐỪNG tự tính "số sau giảm", đừng bắt người
+  công cụ tự chia phần chênh lệch. ĐỪNG tự tính "số sau giảm", đừng bắt người
   dùng tính hộ, và đừng bỏ cuộc vì Σ items > total.
+- Phần chênh chia thế nào: `discount_split="proportional"` (mặc định, theo tỉ lệ giá món) hoặc
+  `discount_split="equal"` (mỗi người trừ/cộng như nhau). Người dùng nói "chia đều phần giảm",
+  "mỗi người trừ như nhau", "chia đều delta" → dùng `equal`. Công cụ tính, không phải bạn.
 - `total` luôn là số tiền **thực trả** (người dùng nói, hoặc dòng tổng cuối hoá đơn).
 - Chưa hỗ trợ ghi theo món khi có khách lẻ (guests) — khi đó chia đều.
 

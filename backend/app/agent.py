@@ -116,25 +116,94 @@ def _flatten_envelope(result):
     return None
 
 
-def _final_answer(text_parts: list[str], answer_from: int) -> str:
-    """Assemble the user-visible reply from the turn's assistant text blocks.
+# Sentence-final punctuation, then the next sentence with NO whitespace between
+# them: "…rồi xử lý.Mình **không xác nhận…". The model never types that — it is
+# the seam where two separate assistant fragments were concatenated, so it is a
+# reliable place to look for a narration prefix (and a missing space).
+_SENTENCE_END = ".!?…:"
 
-    Two things go wrong if every block is concatenated:
+# Scaffolding openers — the model announcing what it is about to do. Matched at
+# the START of a seam-delimited segment only.
+_NARRATION_OPENERS = (
+    "mình sẽ",
+    "mình đọc",
+    "mình đang",
+    "mình lấy",
+    "mình dùng",
+    "mình kiểm tra",
+    "đang kiểm tra",
+    "đang đọc",
+    "đã thấy",
+    "đã tìm thấy",
+    "tin nhắn",
+)
 
-    * The model narrates its plan before each tool call ("Mình đọc quy trình ghi
-      bữa rồi xử lý…"). That is scaffolding, not an answer — once tools have run
-      the block after the last one *is* the reply, so earlier blocks are dropped.
-    * Blocks are separate messages, not a continuing sentence; gluing them with
-      ``""`` produced run-ons like "…ghi bữa ăn.Được — ghi theo…". Whatever
-      survives is joined with a blank line.
+# Scaffolding phrases that give it away anywhere in the segment. Deliberately
+# specific: bare "công cụ"/"quy trình" appear in real answers ("công cụ không
+# cho ghi thẳng giá món vì vượt tổng"), so only skill/process-reading phrasings
+# count.
+_NARRATION_PHRASES = (
+    "đọc skill",
+    "xem skill",
+    "theo skill",
+    "skill phù hợp",
+    "đọc quy trình",
+    "xem quy trình",
+    "theo quy trình",
+    "lấy schema",
+    "và schema",
+)
 
-    ``answer_from`` is the block count at the last completed tool call. With no
-    tool calls, or no text after the last one, every block is kept — better a
-    little narration than an empty reply.
+
+def _split_at_seams(text: str) -> list[str]:
+    """Split ``text`` where a sentence ends and the next starts with no space."""
+    cuts = [
+        i for i in range(1, len(text))
+        if text[i - 1] in _SENTENCE_END and text[i].isupper()
+    ]
+    bounds = [0, *cuts, len(text)]
+    return [text[a:b] for a, b in zip(bounds, bounds[1:]) if text[a:b]]
+
+
+def _is_narration(segment: str) -> bool:
+    s = segment.strip().lower()
+    if not s:
+        return False
+    return s.startswith(_NARRATION_OPENERS) or any(p in s for p in _NARRATION_PHRASES)
+
+
+def _strip_narration(text: str) -> str:
+    """Drop leading scaffolding segments, and space out any remaining seam.
+
+    The prompt already forbids narration ("KHÔNG thuật lại việc bạn đang chọn
+    skill/công cụ nào") and the model does it anyway, gluing it onto the answer.
+    Only *leading* segments are dropped and never the last one — a reply that is
+    all narration still beats an empty bubble.
     """
-    tail = [p for p in text_parts[answer_from:] if p.strip()]
-    kept = tail or [p for p in text_parts if p.strip()]
-    return "\n\n".join(p.strip() for p in kept).strip()
+    segments = _split_at_seams(text)
+    while len(segments) > 1 and _is_narration(segments[0]):
+        segments.pop(0)
+    return " ".join(s.strip() for s in segments).strip()
+
+
+def _final_answer(text_parts: list[str], answer_from: int) -> str:
+    """Assemble the user-visible reply from the turn's assistant text fragments.
+
+    ``text_parts`` are **stream fragments**, not messages. Depending on the
+    transport the SDK hands us one entry per token ("Không", "—", "hiện", …) or
+    one per paragraph, so they concatenate with ``""`` — exactly what the SDK's
+    own ``run.iter_text()`` does. Joining them with a separator instead put a
+    blank line between every token and shredded Vietnamese diacritics into
+    "V ẫn không được đâu Kun" in production.
+
+    ``answer_from`` is the fragment count at the last completed tool call: once
+    tools have run, what follows is the answer and the plan-narration before it
+    is dropped. With no tool calls, or nothing after the last one, everything is
+    kept and :func:`_strip_narration` takes a second pass at the scaffolding.
+    """
+    tail = "".join(text_parts[answer_from:])
+    answer = tail if tail.strip() else "".join(text_parts)
+    return _strip_narration(answer.strip())
 
 
 def _assistant_text(msg) -> str:
@@ -152,14 +221,27 @@ def _assistant_text(msg) -> str:
 
 
 def _render_prompt(user_text: str, *, sender_name: str | None = None,
-                   memory: str | None = None, history: str | None = None) -> str:
-    """Assemble the turn preamble. With no memory/history this is byte-identical
-    to the pre-memory assembly (system prompt + user message)."""
+                   memory: str | None = None, history: str | None = None,
+                   image_count: int = 0) -> str:
+    """Assemble the turn preamble. With no memory/history/images this is
+    byte-identical to the pre-memory assembly (system prompt + user message).
+
+    ``image_count`` is announced in the text because the images themselves ride
+    on the ``UserMessage``, invisible to the prompt: in production the bill was
+    attached and the model still asked for the total that was in it, then read
+    that same total off the image one turn later. The history renders past images
+    as ``[ảnh: N]`` for the same reason — this covers the current turn.
+    """
     sections = [build_system_prompt(sender_name=sender_name)]
     if memory:
         sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
     if history:
         sections.append(f"# Lịch sử hội thoại (gần đây)\n{history.strip()}")
+    if image_count:
+        sections.append(
+            f"# Ảnh kèm theo\nLượt này có {image_count} ảnh (thường là hoá đơn) — "
+            "ĐỌC ảnh trước khi trả lời. Đừng hỏi lại tổng tiền / giá từng món nếu ảnh đã có."
+        )
     sections.append(f"# Tin nhắn người dùng\n{user_text.strip()}")
     return "\n\n".join(sections)
 
@@ -248,7 +330,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         )
 
         message_text = _render_prompt(user_text, sender_name=ctx.sender_name,
-                                       memory=memory, history=history)
+                                       memory=memory, history=history,
+                                       image_count=len(images or []))
 
         local = LocalAgentOptions(
             cwd=workspace,
@@ -307,6 +390,17 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
             result.error = str(exc)
 
     result.final_text = _final_answer(text_parts, answer_from)
+
+    # One line per turn so the log mirror (and /internal/debug/logs) shows where
+    # a 20–80s turn actually went: how many tool round-trips, and which. The
+    # agent.* timeline has this live but never persists it.
+    logger.info(
+        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch%s",
+        turn_id, time.monotonic() - started, completed_tools,
+        ",".join(inv.name for inv in result.tools) or "-",
+        len(images or []), len(result.final_text),
+        f" ERROR={result.error}" if result.error else "",
+    )
 
     await _emit(agui.finish(turn_id, error=result.error))
     result.turn_id = turn_id

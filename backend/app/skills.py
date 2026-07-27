@@ -4,7 +4,9 @@ Cursor's headless bridge loads workspace guidance from ``.cursor/`` when
 ``LocalAgentOptions.setting_sources`` includes ``"project"``:
   - ``.cursor/rules/<name>.mdc`` with ``alwaysApply: true`` → loaded every turn.
   - ``.cursor/skills/<name>/SKILL.md`` → on-demand, description-triggered.
-Source files live in ``app/agent_skills/`` and are copied idempotently before a turn.
+Source files live in ``app/agent_skills/`` and are copied idempotently before a
+turn, then anything stale is pruned — the workspace is on the persistent volume,
+so a file left behind by an older build would keep being loaded indefinitely.
 """
 from __future__ import annotations
 
@@ -32,12 +34,32 @@ def _write(path: Path, data: str) -> None:
     path.write_text(data, encoding="utf-8")
 
 
+def _prune(root: Path, keep: set[Path]) -> None:
+    """Delete files under ``root`` that this build no longer ships.
+
+    Now that the workspace lives on the mounted volume it outlives the
+    container, so a renamed or deleted skill would otherwise keep being loaded
+    forever — silently contradicting the one that replaced it. Empty
+    directories go too, so a removed skill leaves no husk behind.
+    """
+    if not root.is_dir():
+        return
+    for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_file() and path not in keep:
+            path.unlink()
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+
+
 def materialize(workspace: str) -> None:
     cursor = Path(workspace) / ".cursor"
     rules_src, skills_src = _SRC / "rules", _SRC / "skills"
+    written: set[Path] = set()
     if rules_src.is_dir():
         for src in rules_src.glob("*.mdc"):
-            _write(cursor / "rules" / src.name, _force_always_apply(src.read_text(encoding="utf-8")))
+            dest = cursor / "rules" / src.name
+            _write(dest, _force_always_apply(src.read_text(encoding="utf-8")))
+            written.add(dest)
     if skills_src.is_dir():
         for skill_dir in skills_src.iterdir():
             if not skill_dir.is_dir():
@@ -45,4 +67,8 @@ def materialize(workspace: str) -> None:
             for f in skill_dir.rglob("*"):
                 if f.is_file():
                     rel = f.relative_to(skills_src)
-                    _write(cursor / "skills" / rel, f.read_text(encoding="utf-8"))
+                    dest = cursor / "skills" / rel
+                    _write(dest, f.read_text(encoding="utf-8"))
+                    written.add(dest)
+    _prune(cursor / "rules", written)
+    _prune(cursor / "skills", written)

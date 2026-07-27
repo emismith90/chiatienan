@@ -4,11 +4,17 @@ import tempfile
 import pytest
 
 # Point the module-level Settings at writable temp paths BEFORE any app import
-# (config.settings is frozen at import time). Real env, if present, wins.
+# (config.settings is frozen at import time).
+#
+# These are ASSIGNED, not setdefault-ed. Letting the ambient environment win
+# means a shell that has the real .env exported runs the suite against the
+# production values: a live DATABASE_URL would have these tests writing to the
+# actual ledger, and a real ADMIN_PASSWORD fails every admin-authed test with
+# "admin only" (which is exactly what happened on a droplet-configured shell).
 _TMP = tempfile.mkdtemp(prefix="chiatienan-test-")
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{_TMP}/default.db")
-os.environ.setdefault("ADMIN_PASSWORD", "test-admin-pw")
-os.environ.setdefault("CURSOR_SDK_WORKSPACE", f"{_TMP}/ws")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/default.db"
+os.environ["ADMIN_PASSWORD"] = "test-admin-pw"
+os.environ["CURSOR_SDK_WORKSPACE"] = f"{_TMP}/ws"
 
 from app.db import Database  # noqa: E402
 

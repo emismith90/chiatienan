@@ -145,6 +145,43 @@ def test_settle_blocked_body_lists_pending():
     assert "#7" in body and "An" in body and "400,000" in body
 
 
+def test_settlement_body_shows_the_transfer_memo():
+    """The memo is the bank's addInfo and the thing people dispute ("sai nội dung
+    chuyển khoản r"); it used to live only in the attachment."""
+    body = chat._settlement_body({
+        "period": {"from": None, "to": "2026-07-27"},
+        "transfers": [{"from_name": "Giang Hoàng", "to_name": "Linh Nguyen",
+                       "amount": 107000, "note": "Giang Hoang: T5 bun cha rua xe"}],
+    })
+    assert "107,000đ" in body
+    assert "ND: Giang Hoang: T5 bun cha rua xe" in body
+
+
+def test_settlement_body_without_a_memo_is_unchanged():
+    body = chat._settlement_body({
+        "period": {"from": None, "to": "2026-07-27"},
+        "transfers": [{"from_name": "A", "to_name": "B", "amount": 1000, "note": None}],
+    })
+    assert body.endswith("A → B: 1,000đ")
+
+
+def test_settle_blocked_body_says_how_to_clear_it():
+    """Production: it listed the blocking draft and stopped, so four people asked
+    the bot to close it instead of finding the card."""
+    body = chat._settle_blocked_body({
+        "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+        "pending": [{"draft_id": 101, "payer_name": "Emi", "bill_total": 324000,
+                     "participant_count": 6}],
+    })
+    assert "Xác nhận" in body and "Huỷ" in body
+    assert "huỷ đề xuất" in body
+
+
+def test_settle_blocked_body_omits_the_hint_when_nothing_is_pending():
+    body = chat._settle_blocked_body({"message": "Không có gì để chốt.", "pending": []})
+    assert "huỷ đề xuất" not in body
+
+
 # --- run_bot_turn error-path body -------------------------------------------- #
 
 async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
@@ -435,3 +472,66 @@ async def test_maybe_rollover_folds_aged_messages(db, ws, monkeypatch):
         hist = chat.build_history(s, room_id, watermark=mem.read_watermark(room_id),
                                   before_id=None, limit=200)
     assert "mới" in hist and "cũ 1" not in hist
+
+
+# --- bare replies to the bot's own question --------------------------------- #
+
+def _room_with_two(db):
+    with db.session() as s:
+        r = Room(name="A", invite_token="tok-reply"); s.add(r); s.flush()
+        emi = Member(room_id=r.id, display_name="Emi", nickname="emi", pin="1")
+        kun = Member(room_id=r.id, display_name="Kun", nickname="kun", pin="2")
+        s.add_all([emi, kun]); s.flush()
+        return r.id, emi.id, kun.id
+
+
+def test_bare_reply_to_a_bot_question_reaches_the_bot(db):
+    """Production: "1", "2", "b" and "tôi đã trả tiền Emi" were all dropped for
+    lacking @bot, then retyped with one seconds later."""
+    room_id, emi, _kun = _room_with_two(db)
+    with db.session() as s:
+        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
+        answer = chat.post_message(s, room_id, emi, "1")
+        assert chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
+
+
+def test_a_numbered_choice_counts_as_a_question(db):
+    room_id, emi, _kun = _room_with_two(db)
+    with db.session() as s:
+        chat.post_message(s, room_id, emi, "@bot ghi theo món")
+        chat.post_message(s, room_id, None, "Chọn cách ghi:\n1. Chia đều\n2. Theo món",
+                          kind="bot")
+        answer = chat.post_message(s, room_id, emi, "2")
+        assert chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
+
+
+def test_someone_else_answering_does_not_wake_the_bot(db):
+    """The bot asked Emi. Kun talking is Kun talking."""
+    room_id, emi, kun = _room_with_two(db)
+    with db.session() as s:
+        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
+        answer = chat.post_message(s, room_id, kun, "1")
+        assert not chat.replies_to_bot_question(s, room_id, kun, before_id=answer.id)
+
+
+def test_a_statement_is_not_an_open_question(db):
+    room_id, emi, _kun = _room_with_two(db)
+    with db.session() as s:
+        chat.post_message(s, room_id, emi, "@bot số dư")
+        chat.post_message(s, room_id, None, "💸 Đã ghi: Emi trả Linh 61,000đ", kind="bot")
+        answer = chat.post_message(s, room_id, emi, "ok cảm ơn")
+        assert not chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
+
+
+def test_human_chatter_after_a_bot_question_does_not_wake_it(db):
+    """Only the message *immediately* before counts — otherwise the bot joins a
+    conversation that moved on without it."""
+    room_id, emi, kun = _room_with_two(db)
+    with db.session() as s:
+        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
+        chat.post_message(s, room_id, kun, "trưa nay ăn gì mọi người")
+        answer = chat.post_message(s, room_id, emi, "bún chả đi")
+        assert not chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)

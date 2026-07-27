@@ -434,3 +434,72 @@ def test_settle_note_weekdays_match_the_day_words(db, monkeypatch):
     note = {(t["from_id"], t["to_id"]): t["note"] for t in res["transfers"]}[(a, b)]
     assert "T5 pho" in note and "T6 bun" in note
     assert "T4" not in note
+
+
+# --- cancel_draft ----------------------------------------------------------- #
+
+def test_cancel_draft_closes_a_pending_card_without_writing(db):
+    """Production: four people asked the bot to close a stale proposal and it had
+    no tool to do it, so it repeated the same blocked message instead."""
+    from app import drafts
+    from app.models import Meal, RoomMessage
+
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": a, "member_participants": [a, b, c], "guests": [],
+            "bill_total": 324_000, "adjustments": [], "dish": None, "initiator": None,
+            "note": None, "per_head_preview": 108_000, "raw_input": "@bot test",
+        })
+        draft_id = d.id
+
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a,
+                                   sender_name="Emi", turn_mentions=[]))
+    out = tools["cancel_draft"].execute({"draft_id": draft_id})
+
+    assert out["ok"] and out["draft_id"] == draft_id
+    with db.session() as s:
+        assert s.get(RoomMessage, draft_id).attachments["status"] == "cancelled"
+        assert drafts.list_pending_drafts(s, room_id) == []
+        assert s.query(Meal).count() == 0
+
+
+def test_cancel_draft_rejects_an_already_processed_card(db):
+    from app import drafts
+
+    room_id, (a, b, c) = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": a, "member_participants": [a, b, c], "guests": [],
+            "bill_total": 300_000, "adjustments": [], "dish": None, "initiator": None,
+            "note": None, "per_head_preview": 100_000, "raw_input": "@bot test",
+        })
+        drafts.commit_draft(s, d.id, room_id, logged_by=str(a))
+        draft_id = d.id
+
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a,
+                                   sender_name="Emi", turn_mentions=[]))
+    out = tools["cancel_draft"].execute({"draft_id": draft_id})
+    assert not out.get("ok")
+
+
+def test_cancel_draft_cannot_reach_another_room(db):
+    from app import drafts
+
+    room_a, (a1, a2, a3) = _seed_room(db, 3)
+    room_b, (b1, _b2, _b3) = _seed_room(db, 3, token="tok-b")
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_a, {
+            "payer_member_id": a1, "member_participants": [a1, a2, a3], "guests": [],
+            "bill_total": 300_000, "adjustments": [], "dish": None, "initiator": None,
+            "note": None, "per_head_preview": 100_000, "raw_input": "@bot test",
+        })
+        draft_id = d.id
+
+    tools = build_tools(ToolContext(db=db, room_id=room_b, sender_member_id=b1,
+                                   sender_name="Kun", turn_mentions=[]))
+    out = tools["cancel_draft"].execute({"draft_id": draft_id})
+    assert not out.get("ok")
+    with db.session() as s:
+        from app.models import RoomMessage
+        assert s.get(RoomMessage, draft_id).attachments["status"] == "pending"

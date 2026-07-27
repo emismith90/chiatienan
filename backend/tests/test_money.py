@@ -145,3 +145,73 @@ def test_per_payer_folds_adhoc_payments_reducing_debt():
 def test_per_payer_is_deterministic():
     meals = [{"payer_id": 1, "shares": {1: 10, 2: 10, 3: 10}}]
     assert per_payer_transfers(meals) == per_payer_transfers(meals)
+
+
+# --- equal-delta itemized split -------------------------------------------- #
+
+def test_equal_discount_split_matches_what_the_room_did_by_hand():
+    """Production 07-27: Σ items 414,200đ, paid 324,200đ, and Emi asked for the
+    90,000đ gap split six ways (15,000đ each) rather than by dish price."""
+    from app.money import prorate_items
+
+    items = {4: 69_500, 8: 69_500, 9: 94_200, 6: 69_500, 7: 69_500, 5: 42_000}
+    shares = prorate_items(324_200, items, discount_split="equal")
+    assert shares == {4: 54_500, 8: 54_500, 9: 79_200, 6: 54_500, 7: 54_500, 5: 27_000}
+    assert sum(shares.values()) == 324_200
+
+
+def test_equal_and_proportional_disagree_and_both_sum_to_total():
+    from app.money import prorate_items
+
+    items = {1: 100_000, 2: 20_000}
+    eq = prorate_items(100_000, items, discount_split="equal")
+    pr = prorate_items(100_000, items, discount_split="proportional")
+    assert eq != pr
+    assert sum(eq.values()) == sum(pr.values()) == 100_000
+    assert eq == {1: 90_000, 2: 10_000}          # 20,000 gap, 10,000 each
+    assert pr == {1: 83_333, 2: 16_667}          # scaled by 100/120
+
+
+def test_equal_split_of_a_fee_adds_to_every_share():
+    from app.money import prorate_items
+
+    # Σ items 90,000 but 100,000 paid (ship): everyone absorbs 5,000 more.
+    shares = prorate_items(100_000, {1: 50_000, 2: 40_000}, discount_split="equal")
+    assert shares == {1: 55_000, 2: 45_000}
+
+
+def test_equal_split_remainder_is_deterministic_and_exact():
+    from app.money import prorate_items
+
+    # 10,001đ gap over 3 people: 3,334 / 3,334 / 3,333 by member id.
+    shares = prorate_items(29_999, {1: 10_000, 2: 10_000, 3: 20_000}, discount_split="equal")
+    assert sum(shares.values()) == 29_999
+    assert shares == {1: 6_666, 2: 6_666, 3: 16_667}
+
+
+def test_equal_split_refuses_to_invent_a_negative_share():
+    """A gap bigger than someone's dish has no honest equal answer — say so
+    instead of charging them a negative amount."""
+    import pytest
+
+    from app.money import MoneyError, prorate_items
+
+    with pytest.raises(MoneyError, match="âm"):
+        prorate_items(100_000, {1: 195_000, 2: 5_000}, discount_split="equal")
+
+
+def test_unknown_discount_split_is_rejected():
+    import pytest
+
+    from app.money import MoneyError, prorate_items
+
+    with pytest.raises(MoneyError, match="discount_split"):
+        prorate_items(100_000, {1: 60_000, 2: 60_000}, discount_split="median")
+
+
+def test_proportional_stays_the_default():
+    from app.money import prorate_items
+
+    items = {1: 100_000, 2: 20_000}
+    assert prorate_items(100_000, items) == prorate_items(
+        100_000, items, discount_split="proportional")

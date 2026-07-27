@@ -16,7 +16,10 @@ export function PaymentDraftCard({
   const [error, setError] = useState<string | null>(null);
 
   const statusLabel =
-    att.status === "committed" ? "Recorded" : att.status === "cancelled" ? "Cancelled" : null;
+    att.status === "committed" ? "Recorded"
+    : att.status === "cancelled" ? "Cancelled"
+    : att.status === "superseded" ? "Replaced by a newer proposal"
+    : null;
 
   const run = (fn: Promise<unknown>, fail: string) => {
     setBusy(true);

@@ -22,7 +22,12 @@ export interface DraftItem {
 
 export interface ExpenseDraft {
   type: "expense_draft";
-  status: "pending" | "committed" | "cancelled";
+  /** How the gap between Σ items and `bill_total` is shared out in itemized
+   * mode. Absent (or on an equal-split draft) means "proportional". */
+  discount_split?: "proportional" | "equal" | null;
+  /** "superseded": a later draft re-proposed the same thing, so this card is
+   * retired. Nothing was recorded and nothing blocks a settle. */
+  status: "pending" | "committed" | "cancelled" | "superseded";
   payer_member_id: number;
   member_participants: number[];
   guests: string[];
@@ -55,7 +60,9 @@ export interface PaymentTransfer {
  * pay-off). Confirm/cancel act on the whole draft (all transfers) at once. */
 export interface PaymentDraft {
   type: "payment_draft";
-  status: "pending" | "committed" | "cancelled";
+  /** "superseded": a later draft re-proposed the same thing, so this card is
+   * retired. Nothing was recorded and nothing blocks a settle. */
+  status: "pending" | "committed" | "cancelled" | "superseded";
   transfers: PaymentTransfer[];
   turn_id?: string;
 }
