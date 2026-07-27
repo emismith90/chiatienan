@@ -82,10 +82,9 @@ def test_scenario_week(db, monkeypatch):
                                       to_member_id=ids[step["to"]], amount=step["amount"],
                                       logged_by=str(actor))
 
-        elif kind in ("settle", "settle_commit"):
+        elif kind == "settle":
             ctx = tools.ToolContext(db=db, room_id=room_id, sender_member_id=actor)
-            res = tools.build_tools(ctx)["settle_period"].execute(
-                {"keyword": "since_last", "commit": kind == "settle_commit"})
+            res = tools.build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
             exp = step.get("expect", {})
             if exp.get("blocked_pending") is not None:
                 assert res["type"] == "settle_blocked", step["id"]

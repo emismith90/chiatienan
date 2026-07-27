@@ -322,3 +322,64 @@ def test_blank_trailing_block_falls_back_to_what_there_is():
 
 def test_no_text_at_all_is_empty():
     assert agent_mod._final_answer([], 0) == ""
+
+
+# --- the timing instrument must actually fire ------------------------------- #
+
+@pytest.mark.asyncio
+async def test_turn_completion_is_logged_with_its_tool_names(monkeypatch, db, caplog):
+    """The per-turn line is what /internal/debug/logs has to show to answer
+    "where did 80 seconds go" — and a log line nobody asserts is a log line that
+    quietly stops being emitted."""
+    fake_run = _FakeRun([
+        _tool_msg("find_members", {"names": ["Emi"]}, {"ok": True}),
+        _tool_msg("propose_meal", {"total": 324_200}, {"ok": True}),
+        _text_msg("Đã đề xuất nhé"),
+    ])
+
+    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
+    monkeypatch.setattr(
+        "app.cursor_runner.resolve_cursor_api_key", lambda *a, **k: "k", raising=False)
+    monkeypatch.setattr(
+        "app.cursor_runner.resolve_model_selection",
+        lambda *a, **k: types.SimpleNamespace(id="composer-2.5", params=None), raising=False)
+
+    async def _fake_launch(AsyncClient, workspace, local):
+        return _FakeClient(fake_run)
+
+    monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _fake_launch)
+
+    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="Emi")
+    with caplog.at_level("INFO", logger="chiatienan"):
+        result = await run_turn("@bot log đi", ctx, images=[{"data": "x", "mimeType": "image/png"}])
+
+    line = next(r.getMessage() for r in caplog.records if "[agent] turn" in r.getMessage())
+    assert result.turn_id in line
+    assert "tools=2" in line
+    assert "find_members,propose_meal" in line
+    assert "images=1" in line
+
+
+@pytest.mark.asyncio
+async def test_the_turn_line_reports_a_failure(monkeypatch, db, caplog):
+    """Silence on a crash looks the same as a fast, healthy turn."""
+    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
+    monkeypatch.setattr(
+        "app.cursor_runner.resolve_cursor_api_key", lambda *a, **k: "k", raising=False)
+    # Patch the model lookup too: without it this test reaches the real Cursor
+    # API before it ever gets to the bridge.
+    monkeypatch.setattr(
+        "app.cursor_runner.resolve_model_selection",
+        lambda *a, **k: types.SimpleNamespace(id="composer-2.5", params=None), raising=False)
+
+    async def _boom(*a, **k):
+        raise RuntimeError("bridge died")
+
+    monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _boom)
+
+    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="Emi")
+    with caplog.at_level("INFO", logger="chiatienan"):
+        await run_turn("@bot số dư", ctx)
+
+    line = next(r.getMessage() for r in caplog.records if "[agent] turn" in r.getMessage())
+    assert "tools=0" in line and "ERROR=" in line

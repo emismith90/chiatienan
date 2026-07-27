@@ -26,8 +26,8 @@ from app.db import Database
 from app.money import (
     MoneyError,
     itemized_adjustments,
+    net_transfers,
     normalize_items,
-    per_payer_transfers,
     prorate_items,
     split_with_guests,
 )
@@ -234,9 +234,8 @@ _SETTLE_SCHEMA = {
             "type": "string",
             "enum": ["since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"],
         },
-        "from": {"type": "string"},
-        "to": {"type": "string"},
-        "commit": {"type": "boolean", "description": "True to CLOSE the period (only when the user says 'chốt')."},
+        "from": {"type": "string", "description": "ISO date. Supplying from/to means an explicit range; omit `keyword` (or pass 'explicit')."},
+        "to": {"type": "string", "description": "ISO date, inclusive. See `from`."},
     },
 }
 
@@ -646,9 +645,18 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         }
 
     def settle_period(args, _tool_ctx=None) -> dict:
-        """Composite, server-side end-to-end: balances → net → QR → payload."""
+        """Who owes whom right now, with QR codes: edges → net → QR → payload.
+
+        Read-only. It computes a running total and writes NOTHING — there is no
+        period-closing feature, so `settlements` stays empty and every window
+        keeps the whole ledger behind it. The tool used to take a `commit` flag
+        that wrote a Settlement row; nobody ever passed it, and the day someone
+        had, `resolve_period("since_last")` would have flipped from "the whole
+        ledger" to a bounded window for the ledger panel, quick-pay, and every
+        card's balances snapshot at once. Reintroduce it deliberately or not at
+        all (see ledger.record_settlement, kept for that purpose).
+        """
         args = args or {}
-        commit = bool(args.get("commit"))
         with db.session() as s:
             from app import drafts  # lazy: avoid import cycle at module load
             pending = drafts.list_pending_drafts(s, ctx.room_id)
@@ -679,7 +687,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     "ok": True,
                     "type": "settle_blocked",
                     "pending": summaries,
-                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi tính.",
                 }
 
             last = ledger.last_settlement(s, ctx.room_id)
@@ -695,32 +703,28 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 return _err(str(exc))
 
             from_date, to_date = period["from"], period["to"]
-            balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
-            if not any(v["balance"] for v in balances.values()):
+            # One computation behind the amounts, the per-meal QR notes and the
+            # "đã cân bằng" verdict. These edges carry FIFO-attributed payments,
+            # so `outstanding > 0` is exactly "still being repaid" — which is
+            # also why the note never names a meal that is already settled.
+            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
+                          if e.outstanding > 0]
+            transfers = net_transfers(open_edges)
+
+            # Gated on the transfers themselves, not on period_balances: that
+            # number used to disagree with this one on a bounded window, so the
+            # room could be told "mọi người đã cân bằng" with transfers pending,
+            # or handed an empty transfer list with no explanation at all.
+            if not transfers:
                 return {
                     "ok": True,
                     "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
                     "transfers": [],
-                    "committed": False,
-                    "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
+                    "message": "Mọi người đã cân bằng — không ai nợ ai trong kỳ này.",
                 }
 
-            meals, payments = ledger.period_transfer_inputs(s, ctx.room_id, from_date, to_date)
-            transfers = per_payer_transfers(meals, payments)
             # include_inactive: a transfer may involve a since-removed member.
             members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
-            # Meal-level detail (date/dish) so each QR note names the meals it
-            # settles; per_payer_transfers nets these away, so we re-fetch them.
-            #
-            # From debt_breakdown, NOT period_meal_details: the latter lists every
-            # meal the debtor took part in, including ones they have already paid
-            # off. Production sent Giang a 107,000đ QR noted "T4 bun bo hue, T5
-            # bun cha rua xe, T6" when the T4 bún bò huế was settled four days
-            # earlier — he reported the memo as wrong twice and was right. These
-            # edges carry FIFO-attributed payments, so `outstanding > 0` is
-            # exactly "still being repaid".
-            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
-                          if e.outstanding > 0]
             fallback_note = f"Chia tien an {to_date.day}/{to_date.month}"
 
             rows: list[dict] = []
@@ -755,24 +759,14 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     warnings.append(str(exc))
                 rows.append(row)
 
-            committed = False
-            if commit:
-                ledger.record_settlement(
-                    s,
-                    room_id=ctx.room_id,
-                    period_from=from_date,
-                    period_to=to_date,
-                    requested_by=str(ctx.sender_member_id),
-                    transfers=rows,
-                )
-                committed = True
+            # Nothing is written. See the tool description: this is a running
+            # total, not a closing entry.
 
         return {
             "ok": True,
             "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
             "transfers": rows,
             "warnings": warnings,
-            "committed": committed,
         }
 
     return {
@@ -835,7 +829,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "settle_period": CustomTool(
             execute=settle_period,
-            description="Compute who pays whom + build VietQR codes for the period. commit:true to CLOSE it.",
+            description=(
+                "Compute who pays whom right now + build VietQR codes for a period. "
+                "READ-ONLY: it is a running total ('tạm tính'), it does NOT close or reset "
+                "anything. If the user asks to chốt/reset, show this and say plainly that "
+                "closing a period is not supported yet."
+            ),
             input_schema=_SETTLE_SCHEMA,
         ),
         "add_member": CustomTool(

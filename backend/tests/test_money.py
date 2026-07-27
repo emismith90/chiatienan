@@ -215,3 +215,139 @@ def test_proportional_stays_the_default():
     items = {1: 100_000, 2: 20_000}
     assert prorate_items(100_000, items) == prorate_items(
         100_000, items, discount_split="proportional")
+
+
+# --- a windowed settle must not invent debts -------------------------------- #
+#
+# Production 2026-07-27 20:03. Linh asked "hôm nay ai trả tiền", the day-scoped
+# settle answered "Linh Nguyen → Giang Hoàng: 107,000đ", and Linh asked three
+# times why he owed Giang anything. He didn't: Giang had PAID him 107,000đ that
+# day, for meals on the 23rd and 24th that fall outside a one-day window.
+
+EMI, NHIM, GIANG, LINH, KUN, TABU = 4, 8, 9, 6, 7, 5
+
+
+def _grab_food_day():
+    """The only meal dated 07-27: Emi paid, six shares."""
+    return [{"payer_id": EMI, "shares": {
+        EMI: 54_500, NHIM: 54_500, GIANG: 79_200, LINH: 54_500, KUN: 54_500, TABU: 27_000}}]
+
+
+def test_a_payment_for_an_older_meal_does_not_reverse_the_debt():
+    from app.money import per_payer_transfers
+
+    payments = [
+        {"from": GIANG, "to": LINH, "amount": 107_000},   # for meals on 07-23/07-24
+        {"from": TABU, "to": EMI, "amount": 27_000},
+        {"from": GIANG, "to": EMI, "amount": 79_200},
+        {"from": LINH, "to": EMI, "amount": 54_500},
+    ]
+    got = {(t.from_member, t.to_member): t.amount
+           for t in per_payer_transfers(_grab_food_day(), payments)}
+    assert (LINH, GIANG) not in got, "invented a debt from an out-of-window payment"
+    assert got == {(NHIM, EMI): 54_500, (KUN, EMI): 54_500}
+
+
+def test_a_payment_between_two_people_with_no_debt_invents_nothing():
+    """A 07-23..07-27 window produced "Giang Hoàng → Tabu: 75,000đ" — Tabu's
+    payment for a 07-22 meal, flipped into a debt the other way."""
+    from app.money import per_payer_transfers
+
+    transfers = per_payer_transfers(
+        _grab_food_day(), [{"from": TABU, "to": GIANG, "amount": 75_000}]
+    )
+    assert all({t.from_member, t.to_member} != {TABU, GIANG} for t in transfers)
+
+
+def test_overpaying_a_real_debt_settles_it_without_a_refund_transfer():
+    from app.money import per_payer_transfers
+
+    meals = [{"payer_id": EMI, "shares": {EMI: 50_000, KUN: 50_000}}]
+    transfers = per_payer_transfers(meals, [{"from": KUN, "to": EMI, "amount": 80_000}])
+    assert transfers == []
+
+
+def test_a_payment_still_pays_a_debt_down_within_the_window():
+    from app.money import per_payer_transfers
+
+    meals = [{"payer_id": EMI, "shares": {EMI: 50_000, KUN: 50_000}}]
+    transfers = per_payer_transfers(meals, [{"from": KUN, "to": EMI, "amount": 20_000}])
+    assert [(t.from_member, t.to_member, t.amount) for t in transfers] == [(KUN, EMI, 30_000)]
+
+
+def test_opposing_debts_from_real_meals_still_net():
+    """The floor is per-pair-per-direction, so genuine two-way debt still nets."""
+    from app.money import per_payer_transfers
+
+    meals = [
+        {"payer_id": LINH, "shares": {LINH: 61_000, GIANG: 61_000}},
+        {"payer_id": GIANG, "shares": {GIANG: 75_000, LINH: 75_000}},
+    ]
+    transfers = per_payer_transfers(meals, [])
+    assert [(t.from_member, t.to_member, t.amount) for t in transfers] == [(LINH, GIANG, 14_000)]
+
+
+# --- targeted payments must not evaporate ----------------------------------- #
+
+def _edge(debtor, creditor, meal_id, amount, day=1):
+    from datetime import date
+
+    from app.money import DebtEdge
+    return DebtEdge(debtor=debtor, creditor=creditor, meal_id=meal_id, dish=None,
+                    occurred_on=date(2026, 7, day), amount=amount)
+
+
+def test_a_targeted_payment_for_a_missing_meal_falls_back_to_the_pair():
+    """⑦ quick-pay stamps meal_id; editing that meal re-records it under a NEW id.
+    The payment used to bind to the vanished edge and be discarded, so the payer's
+    statement showed their share unpaid while the settlement counted it."""
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=99, amount=55_000)],
+        [{"from": 1, "to": 2, "amount": 50_000, "meal_id": 42}],   # 42 was voided
+    )
+    assert [e.paid for e in edges] == [50_000]
+    assert [e.outstanding for e in edges] == [5_000]
+
+
+def test_a_targeted_overpayment_spills_onto_the_pair_s_other_meals():
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=1, amount=50_000, day=1), _edge(1, 2, meal_id=2, amount=30_000, day=2)],
+        [{"from": 1, "to": 2, "amount": 70_000, "meal_id": 1}],
+    )
+    by_meal = {e.meal_id: e.outstanding for e in edges}
+    assert by_meal == {1: 0, 2: 10_000}
+
+
+def test_a_targeted_payment_still_settles_its_own_meal_first():
+    """The point of meal_id: pay off the meal you chose, not the oldest one."""
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=1, amount=50_000, day=1), _edge(1, 2, meal_id=2, amount=50_000, day=2)],
+        [{"from": 1, "to": 2, "amount": 50_000, "meal_id": 2}],
+    )
+    assert {e.meal_id: e.outstanding for e in edges} == {1: 50_000, 2: 0}
+
+
+def test_net_transfers_and_per_payer_transfers_agree():
+    """Two ways to the same answer; they share the netting step so they cannot
+    drift. per_payer_transfers is kept for callers holding only meals+payments."""
+    from app.money import apply_payments_fifo, net_transfers, per_payer_transfers
+
+    meals = [
+        {"meal_id": 1, "payer_id": 2, "occurred_on": __import__("datetime").date(2026, 7, 1),
+         "dish": None, "shares": {1: 40_000, 2: 40_000}},
+        {"meal_id": 2, "payer_id": 1, "occurred_on": __import__("datetime").date(2026, 7, 2),
+         "dish": None, "shares": {1: 30_000, 2: 30_000}},
+    ]
+    payments = [{"from": 1, "to": 2, "amount": 10_000, "meal_id": None}]
+    from app.money import build_debt_edges
+    edges = apply_payments_fifo(build_debt_edges(meals), payments)
+
+    a = [(t.from_member, t.to_member, t.amount) for t in net_transfers(edges)]
+    b = [(t.from_member, t.to_member, t.amount) for t in per_payer_transfers(meals, payments)]
+    assert a == b

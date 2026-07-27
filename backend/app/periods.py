@@ -38,10 +38,17 @@ def resolve_period(
       * ``this_month`` — 1st … last day of the current month.
       * ``explicit`` — the caller-supplied ``explicit_from``/``explicit_to``
         (``explicit_to`` defaults to ``today``).
+
+    Supplying ``explicit_from``/``explicit_to`` implies ``explicit``. Previously
+    they were honoured ONLY with ``keyword="explicit"`` and otherwise silently
+    dropped, so a ``settle_period`` call carrying ``from``/``to`` and no keyword
+    fell back to ``since_last`` — the whole ledger — and reported it under the
+    date range that had been asked for. A named keyword still wins if both are
+    given, since that is the caller being explicit about wanting the keyword.
     """
     kw = (keyword or "").strip().lower()
     if kw not in _KEYWORDS:
-        kw = "since_last"
+        kw = "explicit" if (explicit_from or explicit_to) else "since_last"
 
     if kw == "since_last":
         if last_settlement_to is None:

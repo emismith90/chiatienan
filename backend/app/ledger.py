@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.clock import now_ict, today_ict
 from app.models import Meal, MealShare, Member, Payment, Settlement
-from app.money import apply_payments_fifo, build_debt_edges, split_with_guests
+from app.money import (
+    Transfer,
+    apply_payments_fifo,
+    build_debt_edges,
+    net_transfers,
+    split_with_guests,
+)
 
 if TYPE_CHECKING:
     from app.money import DebtEdge
@@ -150,6 +156,26 @@ def record_payment(
     }
 
 
+def repoint_meal_payments(session: Session, *, room_id: int, old_meal_id: int,
+                          new_meal_id: int | None) -> int:
+    """Move payments stamped with ``old_meal_id`` onto ``new_meal_id`` (or None).
+
+    The ⑦ quick-pay button records a payment against a specific meal. Voiding
+    that meal, or editing it (which voids and re-records under a NEW id), used to
+    leave the payment pointing at a meal that no longer exists — real money,
+    still owed to the same person, that one view counted and another did not.
+    Passing ``None`` un-targets them so they fall back to the pair pool.
+    """
+    payments = session.scalars(
+        select(Payment).where(Payment.room_id == room_id, Payment.meal_id == old_meal_id)
+    ).all()
+    for pay in payments:
+        pay.meal_id = new_meal_id
+    if payments:
+        session.flush()
+    return len(payments)
+
+
 def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = None) -> dict:
     """Soft-delete a meal for a correction (design 6.1: void, then re-record)."""
     meal = session.get(Meal, meal_id)
@@ -160,8 +186,12 @@ def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = 
     meal.voided = True
     meal.voided_by = by
     meal.voided_at = now_ict()
+    # The meal is gone but the money was still handed over: un-target its
+    # payments so they keep counting against what this pair owes.
+    untargeted = repoint_meal_payments(session, room_id=room_id, old_meal_id=meal_id,
+                                      new_meal_id=None)
     session.flush()
-    return {"meal_id": meal_id, "voided": True}
+    return {"meal_id": meal_id, "voided": True, "payments_untargeted": untargeted}
 
 
 def period_balances(
@@ -171,10 +201,19 @@ def period_balances(
 
     Excludes voided meals. ``from_date=None`` means "from the beginning of the
     ledger". Only members with any activity in the window appear. Scoped to
-    ``room_id`` — other rooms' meals never contribute. Also folds in ad-hoc
-    payments in the window: the payer's balance gets ``+amount`` and the
-    payee's gets ``-amount`` (voided payments excluded), so a member who only
-    made/received a payment — with no meals of their own — still appears.
+    ``room_id`` — other rooms' meals never contribute.
+
+    ``paid`` and ``consumed`` are what they say: cash fronted and food eaten, in
+    the window. ``balance`` is the **debt** position and comes from
+    :func:`debt_breakdown`, not from ``paid − consumed ± payments``.
+
+    That subtraction is what made the numbers feel unstable. It folded in every
+    payment dated inside the window regardless of which meal it settled, so on
+    2026-07-27 alone it reported Giang +107,000 / Linh −107,000 — a debt nobody
+    held, from a payment for meals on the 23rd and 24th — while ``settle_period``
+    for that same day correctly listed no transfer between them. Deriving the
+    balance from the same edges the transfers and statements use means the three
+    can no longer contradict each other.
     """
     def _in_window(col):
         conds = [Meal.room_id == room_id, Meal.voided.is_(False), col <= to_date]
@@ -202,23 +241,27 @@ def period_balances(
         out.setdefault(member_id, {"paid": 0, "consumed": 0, "balance": 0})
         out[member_id]["consumed"] += amt
 
-    for row in out.values():
-        row["balance"] = row["paid"] - row["consumed"]
-
-    # Fold ad-hoc payments: a payment from X to Y increases X's balance (their
-    # debt shrinks) and decreases Y's. Done after the paid-consumed loop so it
-    # is not overwritten. Voided payments are excluded.
+    # Anyone who only moved cash in this window still belongs in the list, even
+    # though their debt position may be zero — dropping them would hide a
+    # payment from the period view entirely.
     pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
     if from_date is not None:
         pay_conds.append(Payment.occurred_on >= from_date)
-    pay_rows = session.execute(
-        select(Payment.from_member_id, Payment.to_member_id, Payment.amount).where(*pay_conds)
-    ).all()
-    for from_id, to_id, amt in pay_rows:
+    for from_id, to_id in session.execute(
+        select(Payment.from_member_id, Payment.to_member_id).where(*pay_conds)
+    ).all():
         out.setdefault(from_id, {"paid": 0, "consumed": 0, "balance": 0})
         out.setdefault(to_id, {"paid": 0, "consumed": 0, "balance": 0})
-        out[from_id]["balance"] += amt
-        out[to_id]["balance"] -= amt
+
+    for row in out.values():
+        row["balance"] = 0
+    for e in debt_breakdown(session, room_id, from_date, to_date):
+        if e.outstanding <= 0:
+            continue
+        out.setdefault(e.creditor, {"paid": 0, "consumed": 0, "balance": 0})
+        out.setdefault(e.debtor, {"paid": 0, "consumed": 0, "balance": 0})
+        out[e.creditor]["balance"] += e.outstanding
+        out[e.debtor]["balance"] -= e.outstanding
 
     return out
 
@@ -270,13 +313,19 @@ def debt_breakdown(
 ) -> list["DebtEdge"]:
     """Gross per-(debtor, creditor, meal) edges with FIFO-attributed payments.
 
-    Same window semantics as :func:`period_balances`; excludes voided meals and
-    voided payments. Does NOT net opposing debts — that is the whole point (a
-    person's real debt to a creditor, per meal).
+    Excludes voided meals and voided payments. Does NOT net opposing debts —
+    that is the whole point (a person's real debt to a creditor, per meal).
+
+    **The window filters meals, not payments.** Attribution runs over the whole
+    ledger and only the resulting edges are filtered by ``occurred_on``, because
+    a debt is not outstanding again just because it was repaid after the window
+    closed. Windowing the payments too — which this used to do, in step with
+    :func:`period_balances` — meant that asking "chốt tuần trước" on a Monday
+    reported the 107,000đ Giang had paid that same morning as still owing, and
+    printed a live VietQR for it. In a room that habitually pays the next day,
+    every week-scoped question had that property.
     """
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    if from_date is not None:
-        meal_conds.append(Meal.occurred_on >= from_date)
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False)]
     meal_rows = session.execute(
         select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on).where(*meal_conds)
     ).all()
@@ -291,17 +340,28 @@ def debt_breakdown(
         ).all():
             by_id[meal_id]["shares"][member_id] = amt
 
-    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
-    if from_date is not None:
-        pay_conds.append(Payment.occurred_on >= from_date)
     payments = [
         {"from": f, "to": t, "amount": a, "meal_id": mid}
         for f, t, a, mid in session.execute(
             select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id)
-            .where(*pay_conds)
+            .where(Payment.room_id == room_id, Payment.voided.is_(False))
         ).all()
     ]
-    return apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)
+    edges = apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)
+    return [e for e in edges
+            if e.occurred_on <= to_date and (from_date is None or e.occurred_on >= from_date)]
+
+
+def period_transfers(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list[Transfer]:
+    """Who pays whom for the meals in the window — the settlement's source.
+
+    Derived from :func:`debt_breakdown`, so the transfer amounts, the per-meal
+    QR notes and :func:`statement_for` are three views of one computation
+    instead of three computations that have to be kept in agreement.
+    """
+    return net_transfers(debt_breakdown(session, room_id, from_date, to_date))
 
 
 def statement_for(

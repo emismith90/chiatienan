@@ -9,8 +9,7 @@ noon ICT on that day. Payees (a1,a2,a4) get bank details so QR builds succeed.
   add_member       — add a new member (key)
   leave_pending    — create draft but DO NOT commit (stays an open proposal)
   confirm_pending  — commit the draft created by a named earlier step (`ref`)
-  settle           — settle_period commit:false; expect transfers OR blocked
-  settle_commit    — settle_period commit:true (reset/close the period)
+  settle           — settle_period (read-only); expect transfers OR blocked
 
 `expect` keys: balances {key: vnd}, transfers [{from,to,amount}],
 qr_payees [keys], blocked_pending (int count), empty (bool).
@@ -92,9 +91,29 @@ STEPS = [
                               {"from": "a5", "to": "a4", "amount": 100_000}],
                 "qr_payees": ["a1", "a2", "a4"]}},
 
-    {"id": "s11", "day": FRI, "actor": "a1", "kind": "settle_commit",
-     "message": "@bot trả đủ rồi, reset balance"},
+    # Everyone settles up for real. There is no period-closing feature (see
+    # settle_period's docstring), so this is the ONLY way a ledger reaches zero —
+    # the previous version of this step called settle with commit:true and
+    # expected the balances to reset, which was never what the room experienced.
+    {"id": "s11a", "day": FRI, "actor": "a1", "kind": "payment",
+     "from": "a1", "to": "a2", "amount": 40_000},
+    {"id": "s11b", "day": FRI, "actor": "a4", "kind": "payment",
+     "from": "a4", "to": "a1", "amount": 35_000},
+    {"id": "s11c", "day": FRI, "actor": "a3", "kind": "payment",
+     "from": "a3", "to": "a1", "amount": 185_000},
+    {"id": "s11d", "day": FRI, "actor": "a3", "kind": "payment",
+     "from": "a3", "to": "a2", "amount": 100_000},
+    {"id": "s11e", "day": FRI, "actor": "a3", "kind": "payment",
+     "from": "a3", "to": "a4", "amount": 100_000},
+    {"id": "s11f", "day": FRI, "actor": "a4", "kind": "payment",
+     "from": "a4", "to": "a2", "amount": 100_000},
+    {"id": "s11g", "day": FRI, "actor": "a5", "kind": "payment",
+     "from": "a5", "to": "a1", "amount": 60_000},
+    {"id": "s11h", "day": FRI, "actor": "a5", "kind": "payment",
+     "from": "a5", "to": "a4", "amount": 100_000},
 
+    # Monday: the debts are gone because they were PAID, and they stay gone even
+    # though every meal sits before this window and every payment after it.
     {"id": "s12", "day": NEXT_MON, "actor": "a1", "kind": "settle",
      "message": "@bot còn ai nợ ai gì không",
      "expect": {"empty": True}},

@@ -4,7 +4,16 @@ import { prorate, ExpenseDraftCard } from "../expense-draft-card";
 import { fmt } from "@/lib/format";
 
 vi.mock("@/lib/api", () => ({
-  ApiError: class extends Error {},
+  // Mirrors the real signature (status, msg) — a one-arg stub swallowed the
+  // message and the card fell back to its generic error text.
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(status: number, msg: string) {
+      super(msg);
+      this.status = status;
+      this.name = "ApiError";
+    }
+  },
   patchDraft: vi.fn(() => Promise.resolve()),
   commitDraft: vi.fn(() => Promise.resolve()),
   cancelDraft: vi.fn(() => Promise.resolve()),
@@ -162,5 +171,49 @@ describe("ExpenseDraftCard itemized mode", () => {
     };
     render(<ExpenseDraftCard message={withGuest} members={members.slice(0, 2)} roomId={1} />);
     expect(screen.queryByLabelText(/split by item/i)).toBeNull();
+  });
+});
+
+describe("Record now flushes pending edits first", () => {
+  it("patches the current card state before committing", async () => {
+    // commit_draft records what is STORED, and the PATCH is 600ms behind — so
+    // confirming right after an edit recorded the previous total while the card
+    // showed the new one.
+    vi.mocked(api.patchDraft).mockClear();
+    vi.mocked(api.commitDraft).mockClear();
+    const order: string[] = [];
+    vi.mocked(api.patchDraft).mockImplementation(() => {
+      order.push("patch");
+      return Promise.resolve();
+    });
+    vi.mocked(api.commitDraft).mockImplementation(() => {
+      order.push("commit");
+      return Promise.resolve();
+    });
+
+    render(<ExpenseDraftCard message={itemized} members={members} roomId={3} />);
+    // Edit a price, then hit Record immediately — inside the debounce window.
+    fireEvent.change(screen.getByLabelText("Item price for Emi"), { target: { value: "80000" } });
+    fireEvent.click(screen.getByRole("button", { name: /record now/i }));
+
+    await vi.waitFor(() => expect(order).toContain("commit"));
+    expect(order).toEqual(["patch", "commit"]);
+    // The flushed body carries the edited price, not the one on mount (69,500).
+    const flushed = vi.mocked(api.patchDraft).mock.calls[0][2] as { items: { amount: number }[] };
+    expect(flushed.items.some((i) => i.amount === 80_000)).toBe(true);
+  });
+
+  it("does not commit when the flush is rejected", async () => {
+    vi.mocked(api.patchDraft).mockClear();
+    vi.mocked(api.commitDraft).mockClear();
+    vi.mocked(api.patchDraft).mockImplementation(() =>
+      Promise.reject(new api.ApiError(400, "Chia đều phần giảm sẽ làm phần của một người âm")));
+
+    render(<ExpenseDraftCard message={itemized} members={members} roomId={3} />);
+    fireEvent.change(screen.getByLabelText("Item price for Emi"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: /record now/i }));
+
+    await vi.waitFor(() => expect(screen.getByText(/âm/)).toBeInTheDocument());
+    expect(api.commitDraft).not.toHaveBeenCalled();
   });
 });
