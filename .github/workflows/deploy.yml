@@ -19,6 +19,10 @@ name: Deploy
 #     ADMIN_PASSWORD   – admin password guarding POST /api/rooms etc.
 #   Secrets (optional):
 #     DEPLOY_USER      – SSH user (defaults to "root")
+#     DEBUG_API_KEY    – guards the read-only /internal/debug/* export API
+#                        (deploy/DEBUGGING.md §6). Unset ⇒ written empty ⇒ the
+#                        routes stay disabled; the run warns when that happens.
+#                        Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
 #   Variables (all optional except CADDY_DOMAIN; each falls back to its
 #   .env.example default when unset):
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
@@ -33,6 +37,11 @@ name: Deploy
 #     DATABASE_URL             – default "sqlite:////data/chiatienan.db" (keep it
 #                                under /data so the SQLite file persists)
 #     TZ                       – default "Asia/Ho_Chi_Minh"
+#     LOG_FILE                 – default "/data/logs/app.log" (rotating mirror of
+#                                the stdout log; what /internal/debug/logs serves.
+#                                Keep it under /data so it survives a restart)
+#     LOG_MAX_BYTES            – default "5000000"
+#     LOG_BACKUP_COUNT         – default "3"
 #     QR_BASE_URL              – default "https://img.vietqr.io/image"
 #     QR_TEMPLATE              – default "compact2"
 #
@@ -145,6 +154,7 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
           CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5-fast' }}
           CURSOR_SDK_WORKSPACE: ${{ vars.CURSOR_SDK_WORKSPACE || '/data/cursor-agent' }}
@@ -156,6 +166,9 @@ jobs:
           # Sourced from the repo `TZ` variable; kept as APP_TZ on the runner so
           # it can't shift the runner's own clock/timestamps.
           APP_TZ: ${{ vars.TZ || 'Asia/Ho_Chi_Minh' }}
+          LOG_FILE: ${{ vars.LOG_FILE || '/data/logs/app.log' }}
+          LOG_MAX_BYTES: ${{ vars.LOG_MAX_BYTES || '5000000' }}
+          LOG_BACKUP_COUNT: ${{ vars.LOG_BACKUP_COUNT || '3' }}
           QR_BASE_URL: ${{ vars.QR_BASE_URL || 'https://img.vietqr.io/image' }}
           QR_TEMPLATE: ${{ vars.QR_TEMPLATE || 'compact2' }}
         run: |
@@ -163,6 +176,9 @@ jobs:
           if [ -z "${CADDY_DOMAIN}" ]; then
             echo "::error::CADDY_DOMAIN variable is required to (re)generate .env (Caddy needs it for TLS)."
             exit 1
+          fi
+          if [ -z "${DEBUG_API_KEY}" ]; then
+            echo "::warning::DEBUG_API_KEY secret is unset — writing it empty, so the /internal/debug/* export API stays disabled (404s). Add the secret to enable it."
           fi
           umask 077
           # Mirrors .env.example. Secrets + commonly-tuned values come from
@@ -180,6 +196,10 @@ jobs:
           DATABASE_URL=${DATABASE_URL}
           TZ=${APP_TZ}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          DEBUG_API_KEY=${DEBUG_API_KEY}
+          LOG_FILE=${LOG_FILE}
+          LOG_MAX_BYTES=${LOG_MAX_BYTES}
+          LOG_BACKUP_COUNT=${LOG_BACKUP_COUNT}
           QR_BASE_URL=${QR_BASE_URL}
           QR_TEMPLATE=${QR_TEMPLATE}
           CADDY_DOMAIN=${CADDY_DOMAIN}
@@ -208,12 +228,53 @@ jobs:
           # (docker compose up -d won't recreate the unchanged caddy container,
           # so its bind-mounted config wouldn't otherwise take effect); it's a
           # graceful, zero-downtime no-op when the config is unchanged.
+          #
+          # Two deliberate details, both learned from a green run that shipped
+          # nothing (the 512 MB/25 GB droplet had filled up):
+          #   * Reclaim disk BEFORE `pull`, and with `-af` — pruning dangling
+          #     images afterwards is too late and too little. Images backing a
+          #     running container are never touched by prune, so the currently
+          #     serving containers survive this.
+          #   * Every step is `;`-separated under `set -e`, so the remote exit
+          #     status is the FIRST failure. The old form ended
+          #     `… || true; docker compose ps`, which made `ps` the exit status
+          #     and masked "no space left on device" from `pull` as a success.
           echo "${GHCR_TOKEN}" | ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "set -e; cd '${DEPLOY_PATH}' && git pull --ff-only && \
-             docker login ghcr.io -u '${GHCR_USER}' --password-stdin && \
-             export IMAGE_TAG='${IMAGE_TAG}' && \
-             docker compose pull && docker compose up -d && \
-             { docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo '::warning::caddy reload failed; previous config still active'; } && \
-             { docker logout ghcr.io >/dev/null 2>&1 || true; } && \
-             docker image prune -f >/dev/null 2>&1 || true; docker compose ps"
+            "set -e; cd '${DEPLOY_PATH}'; git pull --ff-only; \
+             docker login ghcr.io -u '${GHCR_USER}' --password-stdin; \
+             export IMAGE_TAG='${IMAGE_TAG}'; \
+             df -h /var/lib/docker; \
+             docker image prune -af; docker builder prune -af; \
+             df -h /var/lib/docker; \
+             docker compose pull; docker compose up -d; \
+             { docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo '::warning::caddy reload failed; previous config still active'; }; \
+             { docker logout ghcr.io >/dev/null 2>&1 || true; }; \
+             docker compose ps --format '{{.Service}} {{.Image}}'"
+
+      - name: Verify the running images match this commit
+        if: steps.check.outputs.configured == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # A successful `pull` still does not prove the new containers are the
+          # ones serving traffic, so assert the tag rather than trusting the
+          # step above. Fails the deploy when prod is left on stale code.
+          running=$(ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}'; export IMAGE_TAG='${IMAGE_TAG}'; docker compose ps --format '{{.Service}} {{.Image}}'")
+          printf '%s\n' "$running"
+          status=0
+          for svc in backend frontend; do
+            img=$(printf '%s\n' "$running" | awk -v s="$svc" '$1 == s { print $2 }')
+            case "$img" in
+              *:"${IMAGE_TAG}") echo "$svc is running ${IMAGE_TAG} ✓" ;;
+              "") echo "::error::$svc has no running container"; status=1 ;;
+              *) echo "::error::$svc is running '$img' — expected tag ${IMAGE_TAG}. Prod is on stale code."; status=1 ;;
+            esac
+          done
+          exit "$status"
