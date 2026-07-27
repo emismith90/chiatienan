@@ -131,10 +131,19 @@ through a filtering proxy. The export API serves the same read-only data over
 the existing HTTPS surface, so **this is the fastest path to the chatlog from
 anywhere**, and the only one from a locked-down agent.
 
-Enable it by setting `DEBUG_API_KEY` in `.env` (see `.env.example`) and
-restarting the backend. **Unset ⇒ every route 404s**, so a deploy that never
-sets it is unchanged. Keys under 24 chars are refused (the API stays off and
-logs why) so a placeholder can't quietly publish the ledger.
+**Enable it by adding a `DEBUG_API_KEY` repo secret in GitHub**, then deploying.
+Generate one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+> Do **not** just hand-edit `/opt/chiatienan/.env`. `deploy.yml` regenerates that
+> file from GitHub secrets on every deploy (the header says so), so a manual
+> entry survives until the next deploy and then silently vanishes — the API
+> starts 404ing with nothing in the diff to explain it. The secret is the
+> durable place. For a one-off test before wiring the secret, editing `.env` +
+> `docker compose up -d backend` is fine, just expect it to be temporary.
+
+**Unset ⇒ every route 404s**, so a deploy that never sets it is unchanged. Keys
+under 24 chars are refused (the API stays off and logs why) so a placeholder
+can't quietly publish the ledger.
 
 ```bash
 export H="X-Debug-Key: $DEBUG_API_KEY"

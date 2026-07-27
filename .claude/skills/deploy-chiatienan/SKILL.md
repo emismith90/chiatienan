@@ -32,7 +32,8 @@ curl -sS -H "$H" $B/db -o prod-snapshot.db                   # sanitised, WAL-sa
 curl -sS -H "$H" "$B/logs?lines=300"                         # backend + uvicorn tracebacks
 ```
 
-- **404 on every route** = `DEBUG_API_KEY` is unset (or under 24 chars) on the droplet, so the API is disabled. That is the intended "off" state, not a bug — set it in `.env` and restart the backend. **401** = the key is wrong.
+- **404 on every route** = `DEBUG_API_KEY` is unset (or under 24 chars) on the droplet, so the API is disabled. That is the intended "off" state, not a bug. **401** = the key is wrong.
+- **Set the key as a GitHub repo secret, not by editing `/opt/chiatienan/.env`.** `deploy.yml` regenerates that file from GitHub secrets on every deploy, so a hand-added key works until the next deploy and then silently disappears — an API that "stopped working" with nothing in the diff is almost always this.
 - **Secrets never come back.** `sessions` (live bearer tokens) is unexportable; `invite_token`, `pin`, `account_number` are always `[redacted]`; base64 image payloads are stripped (`keep_images=true` restores them). Draft `items`/`adjustments`/`bill_total` *are* preserved — usually the numbers you're debugging.
 - **`$B/db` needs no `-wal` sidecar** — it checkpoints before serving, unlike `scp`.
 - **Still SSH-only:** anything that writes (schema `ALTER`, backups, restart, redeploy) and anything about the container/host (`docker ps`, disk, build-OOM). Frontend and Caddy logs are separate containers and not served by the API.

@@ -145,6 +145,10 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          # Optional: unset leaves DEBUG_API_KEY empty, which disables the
+          # /internal/debug/* export API (every route 404s). Set the secret to
+          # turn it on — see deploy/DEBUGGING.md §6.
+          DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
           CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5-fast' }}
           CURSOR_SDK_WORKSPACE: ${{ vars.CURSOR_SDK_WORKSPACE || '/data/cursor-agent' }}
@@ -158,6 +162,9 @@ jobs:
           APP_TZ: ${{ vars.TZ || 'Asia/Ho_Chi_Minh' }}
           QR_BASE_URL: ${{ vars.QR_BASE_URL || 'https://img.vietqr.io/image' }}
           QR_TEMPLATE: ${{ vars.QR_TEMPLATE || 'compact2' }}
+          LOG_FILE: ${{ vars.LOG_FILE || '/data/logs/app.log' }}
+          LOG_MAX_BYTES: ${{ vars.LOG_MAX_BYTES || '5000000' }}
+          LOG_BACKUP_COUNT: ${{ vars.LOG_BACKUP_COUNT || '3' }}
         run: |
           set -euo pipefail
           if [ -z "${CADDY_DOMAIN}" ]; then
@@ -180,6 +187,10 @@ jobs:
           DATABASE_URL=${DATABASE_URL}
           TZ=${APP_TZ}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          DEBUG_API_KEY=${DEBUG_API_KEY}
+          LOG_FILE=${LOG_FILE}
+          LOG_MAX_BYTES=${LOG_MAX_BYTES}
+          LOG_BACKUP_COUNT=${LOG_BACKUP_COUNT}
           QR_BASE_URL=${QR_BASE_URL}
           QR_TEMPLATE=${QR_TEMPLATE}
           CADDY_DOMAIN=${CADDY_DOMAIN}
