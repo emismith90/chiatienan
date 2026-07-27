@@ -278,19 +278,28 @@ def test_settle_still_names_a_deleted_member(db):
 
 
 
-def test_settle_period_tool_commit_uses_sender_as_requested_by():
+def test_settle_period_is_read_only():
+    """A running total, not a closing entry. The tool used to accept commit:true
+    and write a Settlement; nobody ever passed it, and the first time anyone had,
+    `since_last` would have flipped from "the whole ledger" to a bounded window
+    for the ledger panel, quick-pay and every card's balances at once.
+
+    `ledger.record_settlement` is deliberately kept (and still tested directly)
+    for whenever closing a period becomes a real feature.
+    """
     d, (room_id, an, bi) = _ctx()
     _seed_meal(d, room_id, an, [an, bi], 100000)
 
     ctx = ToolContext(db=d, room_id=room_id, sender_member_id=an, sender_name="An")
     tools = build_tools(ctx)
-    out = tools["settle_period"].execute({"keyword": "since_last", "commit": True})
-    assert out["ok"] is True and out["committed"] is True
+    out = tools["settle_period"].execute({"keyword": "since_last"})
+    assert out["ok"] is True
+    assert "committed" not in out
+    # Even asked to close, it cannot: the flag is gone from the schema.
+    tools["settle_period"].execute({"keyword": "since_last", "commit": True})
 
     with d.session() as s:
-        settlement = ledger.last_settlement(s, room_id)
-        assert settlement is not None
-        assert settlement.requested_by == str(an)
+        assert ledger.last_settlement(s, room_id) is None
 
 
 def test_settle_period_blocks_when_pending_draft_exists(db):

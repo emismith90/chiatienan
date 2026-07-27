@@ -145,6 +145,27 @@ def test_settle_blocked_body_lists_pending():
     assert "#7" in body and "An" in body and "400,000" in body
 
 
+def test_settlement_body_calls_itself_a_running_total():
+    """Nothing is recorded and no period closes, so a "Chốt kỳ" header was telling
+    the room the books had been ruled off when `settlements` has always been empty."""
+    body = chat._settlement_body({
+        "period": {"from": None, "to": "2026-07-27"},
+        "transfers": [{"from_name": "Kun", "to_name": "Emi", "amount": 54500, "note": None}],
+    })
+    assert body.startswith("Tạm tính đến 2026-07-27:")
+    assert "Chốt" not in body
+
+
+def test_settlement_body_names_both_ends_of_a_bounded_period():
+    body = chat._settlement_body({
+        "period": {"from": "2026-07-20", "to": "2026-07-26"},
+        "transfers": [],
+        "message": "Mọi người đã cân bằng — không ai nợ ai trong kỳ này.",
+    })
+    assert body.startswith("Tạm tính 2026-07-20 → 2026-07-26:")
+    assert "cân bằng" in body
+
+
 def test_settlement_body_shows_the_transfer_memo():
     """The memo is the bank's addInfo and the thing people dispute ("sai nội dung
     chuyển khoản r"); it used to live only in the attachment."""

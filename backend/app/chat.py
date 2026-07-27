@@ -276,7 +276,10 @@ def _settlement_body(attachments: dict) -> str:
     tool-result dict — never from LLM prose (design D3, money-safety)."""
     period = attachments.get("period") or {}
     p_from, p_to = period.get("from"), period.get("to")
-    header = f"Chốt kỳ {p_from} → {p_to}:" if p_from else f"Chốt kỳ đến {p_to}:"
+    # "Tạm tính", not "Chốt kỳ": nothing is recorded and no period closes, so a
+    # header that reads like a closing entry was telling the room the books had
+    # been ruled off when `settlements` had been empty since the ledger began.
+    header = f"Tạm tính {p_from} → {p_to}:" if p_from else f"Tạm tính đến {p_to}:"
 
     transfers = attachments.get("transfers") or []
     lines = [header]
@@ -290,7 +293,7 @@ def _settlement_body(attachments: dict) -> str:
             for t in transfers
         )
     else:
-        lines.append(attachments.get("message") or "Không có gì để chốt.")
+        lines.append(attachments.get("message") or "Không ai nợ ai.")
 
     for w in attachments.get("warnings") or []:
         lines.append(f"⚠️ {w}")
@@ -499,9 +502,9 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             with db.session() as s:
                 new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
 
-            settle = result.last_result("settle_period")
-            if emit and settle and settle.get("committed"):
-                await emit({"type": "ledger:changed"})
+            # No ledger:changed here any more: settle_period is read-only, so a
+            # settlement cannot alter a balance. Meal and payment commits emit it
+            # from their own routes.
 
         # A draft the bot cancelled on request is the same situation as a
         # superseded one: open clients still show its buttons until the card
