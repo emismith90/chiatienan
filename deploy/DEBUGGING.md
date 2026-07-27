@@ -123,7 +123,64 @@ serve **stale chunks**. Before concluding a FE fix "didn't work":
 
 Otherwise you're testing the old bundle.
 
-## 6. Quick health checks
+## 6. The debug/export API — no SSH required
+
+§0–2 all assume you can reach port 22. Sometimes you can't: the office LAN
+blocks outbound SSH, and a sandboxed cloud agent may be restricted to HTTPS
+through a filtering proxy. The export API serves the same read-only data over
+the existing HTTPS surface, so **this is the fastest path to the chatlog from
+anywhere**, and the only one from a locked-down agent.
+
+Enable it by setting `DEBUG_API_KEY` in `.env` (see `.env.example`) and
+restarting the backend. **Unset ⇒ every route 404s**, so a deploy that never
+sets it is unchanged. Keys under 24 chars are refused (the API stays off and
+logs why) so a placeholder can't quietly publish the ledger.
+
+```bash
+export H="X-Debug-Key: $DEBUG_API_KEY"
+export B=https://chiatienan.duckdns.org/internal/debug
+
+curl -sS -H "$H" $B/ping                     # key OK? row counts, log-mirror status
+curl -sS -H "$H" $B/rooms                    # find the real group's room_id
+
+# the conversation log — the thing you usually want
+curl -sS -H "$H" "$B/conversation.txt?room_id=1&days=14"   # readable transcript
+curl -sS -H "$H" "$B/conversation.csv?room_id=1" -o chatlog.csv
+curl -sS -H "$H" "$B/conversation.csv?room_id=1&since_id=4210"  # incremental poll
+
+# ledger tables as CSV
+curl -sS -H "$H" $B/tables                   # names, row counts, redacted columns
+curl -sS -H "$H" "$B/tables/meals.csv?room_id=1" -o meals.csv
+curl -sS -H "$H" $B/tables/meal_shares.csv -o shares.csv
+
+# whole DB, sanitised + WAL-safe, as ONE file (no -wal sidecar needed)
+curl -sS -H "$H" $B/db -o prod-snapshot.db
+sqlite3 prod-snapshot.db "SELECT count(*) FROM room_messages;"
+
+# app log (backend logger + uvicorn tracebacks)
+curl -sS -H "$H" "$B/logs?lines=300"
+```
+
+**What is redacted, always.** This surface exports a real group's data, so
+redaction is not opt-out-able:
+
+| Data | Treatment |
+|---|---|
+| `sessions` (live bearer tokens) | **never exportable** — no route reaches it; emptied in the snapshot |
+| `rooms.invite_token`, `members.pin`, `members.account_number` | replaced with `[redacted]` |
+| base64 image payloads in `attachments` | dropped, replaced by `{"omitted":true,"bytes":N}`; pass `keep_images=true` to restore |
+
+Draft attachments (`items`, `adjustments`, `bill_total`) are **preserved** —
+they're usually the numbers you're debugging. A NULL `members.pin` stays NULL,
+so "unclaimed account" is still distinguishable in a snapshot.
+
+**Two things it deliberately does not do**, so SSH is still the tool for them:
+it never writes (no schema changes, no backups, no restarts — §3/§4 stay
+SSH-only), and it exposes nothing about the container or host (no `docker ps`,
+disk, or build-OOM state). Frontend and Caddy logs are separate containers and
+are not served here either.
+
+## 7. Quick health checks
 
 ```bash
 curl -sS https://chiatienan.duckdns.org/health        # {"status":"ok"} (routed to frontend; cosmetic)

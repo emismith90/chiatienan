@@ -1,6 +1,6 @@
 ---
 name: deploy-chiatienan
-description: Use when deploying, redeploying, or shipping the chiatienan app to production, applying a DB/schema change to prod, OR debugging/inspecting the live app — reading the production chatlog or ledger DB, checking prod logs, or when the bot/balances misbehave in prod. Covers the DigitalOcean droplet, SSH access, Docker Compose, SQLite/WAL, and the PWA service-worker cache.
+description: Use when deploying, redeploying, or shipping the chiatienan app to production, applying a DB/schema change to prod, OR debugging/inspecting the live app — reading the production chatlog/conversation log or ledger DB, exporting prod data as CSV, checking prod logs, or when the bot/balances misbehave in prod. Covers the HTTPS debug/export API (works without SSH), the DigitalOcean droplet, SSH access, Docker Compose, SQLite/WAL, and the PWA service-worker cache.
 ---
 
 # Deploy & debug chiatienan (production)
@@ -11,14 +11,39 @@ Compose (Caddy auto-TLS + FastAPI backend + Next.js frontend), SQLite on the
 
 Two reference docs hold the detail — read the one that matches the task:
 - **Deploying / redeploying / first-time setup** → [`deploy/README.md`](../../../deploy/README.md) (the runbook: droplet setup, secrets, bring-up, frontend build-OOM handling, redeploy).
-- **Debugging / inspecting the live app** → [`deploy/DEBUGGING.md`](../../../deploy/DEBUGGING.md) (logs, reading the chatlog/DB, dump/backup, schema deploy, PWA cache).
+- **Debugging / inspecting the live app** → [`deploy/DEBUGGING.md`](../../../deploy/DEBUGGING.md) (the export API in §6, logs, reading the chatlog/DB, dump/backup, schema deploy, PWA cache).
+
+## Reading prod data: try the export API first
+
+**To *read* anything from prod — the conversation log, the ledger, the app log —
+use the HTTPS export API, not SSH.** It needs no key material, no port 22, and
+works from a restricted cloud agent. SSH is for *changing* things.
+
+```bash
+export H="X-Debug-Key: $DEBUG_API_KEY"          # from the droplet's .env
+export B=https://chiatienan.duckdns.org/internal/debug
+
+curl -sS -H "$H" $B/ping                                     # key OK? row counts
+curl -sS -H "$H" $B/rooms                                    # find the real room_id
+curl -sS -H "$H" "$B/conversation.txt?room_id=1&days=14"     # readable transcript
+curl -sS -H "$H" "$B/conversation.csv?room_id=1" -o chatlog.csv
+curl -sS -H "$H" "$B/tables/meals.csv?room_id=1" -o meals.csv
+curl -sS -H "$H" $B/db -o prod-snapshot.db                   # sanitised, WAL-safe, ONE file
+curl -sS -H "$H" "$B/logs?lines=300"                         # backend + uvicorn tracebacks
+```
+
+- **404 on every route** = `DEBUG_API_KEY` is unset (or under 24 chars) on the droplet, so the API is disabled. That is the intended "off" state, not a bug — set it in `.env` and restart the backend. **401** = the key is wrong.
+- **Secrets never come back.** `sessions` (live bearer tokens) is unexportable; `invite_token`, `pin`, `account_number` are always `[redacted]`; base64 image payloads are stripped (`keep_images=true` restores them). Draft `items`/`adjustments`/`bill_total` *are* preserved — usually the numbers you're debugging.
+- **`$B/db` needs no `-wal` sidecar** — it checkpoints before serving, unlike `scp`.
+- **Still SSH-only:** anything that writes (schema `ALTER`, backups, restart, redeploy) and anything about the container/host (`docker ps`, disk, build-OOM). Frontend and Caddy logs are separate containers and not served by the API.
 
 ## Must not get wrong (read before touching prod)
 
 - **SSH to the domain, not a hardcoded IP:** `ssh -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org` (currently resolves to `165.22.246.208`). The domain follows the droplet if its IP changes — a hardcoded IP goes stale (that's why a dead `143.198.81.194` lingers in `~/.ssh/config`; ignore it). If SSH to the domain lands somewhere unexpected, DuckDNS auto-detect may have grabbed the office IP — **re-pin the DuckDNS record to the droplet IP**, don't switch to hardcoding it.
-- **The office network blocks outbound SSH** (banner stripped → "timed out during banner exchange"). Use a **phone hotspot**, or the **DigitalOcean web console** (browser terminal, always works).
+- **The office network blocks outbound SSH** (banner stripped → "timed out during banner exchange"). Use a **phone hotspot**, or the **DigitalOcean web console** (browser terminal, always works). A **sandboxed cloud agent** may be worse: egress restricted to :443 through a filtering proxy, so port 22 times out to the domain *and* the raw IP, and even `CONNECT …:22` through the proxy is refused — no key fixes that. Confirm with `curl -sS "$HTTPS_PROXY/__agentproxy/status"` and read prod through the export API instead.
 - **Schema change on the live DB = `ALTER TABLE … ADD COLUMN`, NEVER `rm` the DB.** SQLAlchemy `create_all()` only builds columns on a *fresh* DB; it will not alter the live one. Wiping erases the group's real ledger. Back up first (see DEBUGGING.md §3).
-- **The droplet has no `sqlite3` binary.** To read the DB, `scp` it off and read locally — and copy **both `chiatienan.db` AND `chiatienan.db-wal`** (WAL mode: recent writes live in `-wal`; the main file is stale until checkpoint). The conversation log is the `room_messages` table.
+- **The droplet has no `sqlite3` binary.** Prefer `$B/db` (above). If you do `scp`, copy **both `chiatienan.db` AND `chiatienan.db-wal`** (WAL mode: recent writes live in `-wal`; the main file is stale until checkpoint). The conversation log is the `room_messages` table.
+- **WAL bites any copy, not just `scp`.** A `.backup()` copy inherits `journal_mode=WAL`, so later writes to that copy land in *its* `-wal` — modify a snapshot and ship only the main file and your changes silently vanish. Checkpoint (`PRAGMA wal_checkpoint(TRUNCATE)` + `journal_mode=DELETE`) before treating a snapshot as one self-contained file.
 - **PWA service-worker cache:** after a frontend deploy, unregister the service worker + clear caches before concluding a change "didn't work" — the SW serves stale JS chunks.
 
 ## Quick reference
@@ -32,7 +57,11 @@ cd /opt/chiatienan
 docker compose logs --tail=200 backend        # bot/tool errors, tracebacks
 git pull && docker compose up -d --build       # redeploy (frontend needs build-OOM care — see README §5)
 
-# Read the prod chatlog (from your machine — copy .db AND -wal)
+# Read the prod chatlog — prefer the export API (no SSH; see section above)
+curl -sS -H "X-Debug-Key: $DEBUG_API_KEY" \
+  "https://chiatienan.duckdns.org/internal/debug/conversation.txt?room_id=1&days=14"
+
+# SSH fallback, if the API is disabled (copy .db AND -wal)
 scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db     ./prod.db
 scp -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org:/opt/chiatienan/data/chiatienan.db-wal ./prod.db-wal
 sqlite3 ./prod.db "SELECT count(*) FROM room_messages;"

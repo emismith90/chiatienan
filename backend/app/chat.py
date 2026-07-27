@@ -124,7 +124,13 @@ def list_messages_page(session: Session, room_id: int, *, days: int | None = Non
 
 def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) -> str:
     """Render chat rows as ``«Name»: body`` / ``chiatienan: body`` lines,
-    oldest→newest, each body clamped. Empty rows → ``""``."""
+    oldest→newest, each body clamped. Empty rows → ``""``.
+
+    An image attachment is rendered as a ``[ảnh: N]`` marker. The bytes cannot
+    go into the text history, but without the marker a bill someone pasted a
+    message ago is completely invisible to the model — which is how it ends up
+    asking for a total that is sitting right there in the room.
+    """
     if not rows:
         return ""
     authors = {a.id: a for a in session.scalars(select(Member).where(Member.room_id == room_id))}
@@ -133,6 +139,9 @@ def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) 
         body = (r.body or "").strip()
         if len(body) > clamp:
             body = body[:clamp] + "…"
+        n_images = len(((r.attachments or {}).get("images")) or [])
+        if n_images:
+            body = (f"{body} " if body else "") + f"[ảnh: {n_images}]"
         if r.author_member_id is None:
             lines.append(f"chiatienan: {body}")
         else:
@@ -154,6 +163,37 @@ def build_history(session: Session, room_id: int, *, watermark: int = 0,
         q = q.where(RoomMessage.id < before_id)
     rows = session.scalars(q.order_by(RoomMessage.id.desc()).limit(limit)).all()
     return _render_messages(session, room_id, list(reversed(rows)))
+
+
+def recent_images(session: Session, room_id: int, *, before_id: int | None = None,
+                  max_messages: int | None = None, max_minutes: int | None = None) -> list[dict]:
+    """Images from the most recent image-bearing message in the room's live window.
+
+    People paste the bill and *then* say "@bot log đi" — two messages. The turn's
+    own attachments are empty, so without this the bot never sees the bill and
+    asks for a total that is already on screen. Only the newest image-bearing
+    message is carried forward (one bill, not a scrollback of them), and only
+    while it is plausibly the bill under discussion: within the last
+    ``max_messages`` messages and ``max_minutes`` minutes.
+    """
+    max_messages = settings.image_lookback_messages if max_messages is None else max_messages
+    max_minutes = settings.image_lookback_minutes if max_minutes is None else max_minutes
+    if max_messages <= 0:
+        return []
+    q = select(RoomMessage).where(
+        RoomMessage.room_id == room_id,
+        # Bound in SQL, like list_messages_page: SQLite hands back naive
+        # datetimes, so an in-Python compare against aware now_ict() would raise.
+        RoomMessage.created_at >= now_ict() - timedelta(minutes=max_minutes),
+    )
+    if before_id is not None:
+        q = q.where(RoomMessage.id < before_id)
+    rows = session.scalars(q.order_by(RoomMessage.id.desc()).limit(max_messages)).all()
+    for r in rows:
+        images = ((r.attachments or {}).get("images")) or []
+        if images:
+            return [img for img in images if isinstance(img, dict) and img.get("data")]
+    return []
 
 
 def render_bot_attachments(result) -> dict | None:
@@ -306,6 +346,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 s, room_id, watermark=memory.read_watermark(room_id),
                 before_id=before_id, limit=settings.history_max_messages,
             )
+            # "bill pasted, then @bot in the next message" is the normal way
+            # people use this — carry the recent bill into the turn.
+            if not images:
+                images = recent_images(s, room_id, before_id=before_id) or None
         result = await run_turn(text, ctx, images=images, emit=emit,
                                 memory=mem_text or None, history=history or None)
 
@@ -324,9 +368,10 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                     "amount": p["amount"], "note": p.get("note")}
         payment_transfers = list(_by_pair.values())
         if proposal:
-            payload = {k: proposal[k] for k in (
+            payload = {k: proposal.get(k) for k in (
                 "payer_member_id", "member_participants", "guests", "bill_total",
-                "adjustments", "dish", "initiator", "note", "per_head_preview", "occurred_on")}
+                "adjustments", "items", "dish", "initiator", "note",
+                "per_head_preview", "occurred_on")}
             payload["raw_input"] = text
             payload["logged_by"] = str(member_id)
             payload["turn_id"] = result.turn_id

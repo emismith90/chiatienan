@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { fmt } from "@/lib/format";
-import type { ExpenseDraft } from "@/types/chat";
+import type { DraftItem, ExpenseDraft } from "@/types/chat";
 
 interface Member { id: number; display_name: string; nickname?: string | null }
 type Adjustment = { member: number; amount: number };
@@ -21,6 +21,31 @@ export function perHead(
   return heads > 0 ? Math.floor((total - adjustmentsTotal) / heads) : 0;
 }
 
+/** Provisional itemized shares — mirrors `money.prorate_items`: scale each
+ * item by total/Σitems, then hand the leftover đồng to the largest remainders
+ * (ties by member id) so the shares sum to `total` exactly. Display only; the
+ * server recomputes authoritatively on patch and on commit. */
+export function prorate(total: number, items: DraftItem[]): Map<number, number> {
+  const out = new Map<number, number>();
+  const gross = items.reduce((sum, i) => sum + Math.max(0, i.amount), 0);
+  if (!items.length || gross <= 0 || total <= 0) {
+    items.forEach((i) => out.set(i.member, 0));
+    return out;
+  }
+  items.forEach((i) => out.set(i.member, Math.floor((Math.max(0, i.amount) * total) / gross)));
+  let leftover = total - [...out.values()].reduce((a, b) => a + b, 0);
+  const byRemainder = [...items].sort((a, b) => {
+    const ra = (Math.max(0, a.amount) * total) % gross;
+    const rb = (Math.max(0, b.amount) * total) % gross;
+    return rb - ra || a.member - b.member;
+  });
+  for (const i of byRemainder) {
+    if (leftover-- <= 0) break;
+    out.set(i.member, (out.get(i.member) ?? 0) + 1);
+  }
+  return out;
+}
+
 export function ExpenseDraftCard({
   message, members, roomId,
 }: { message: any; members: Member[]; roomId: number }) {
@@ -32,6 +57,7 @@ export function ExpenseDraftCard({
   const [guests, setGuests] = useState<string[]>(att.guests ?? []);
   const [total, setTotal] = useState<number>(att.bill_total ?? 0);
   const [adjustments, setAdjustments] = useState<Adjustment[]>(att.adjustments ?? []);
+  const [items, setItems] = useState<DraftItem[]>(att.items ?? []);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dish, setDish] = useState<string>(att.dish ?? "");
   const [initiator, setInitiator] = useState<string>(att.initiator ?? "");
@@ -55,15 +81,24 @@ export function ExpenseDraftCard({
     timer.current = setTimeout(() => {
       api.patchDraft(roomId, message.id, {
         payer_member_id: payer, member_participants: billed, guests,
-        bill_total: total, adjustments,
+        bill_total: total, adjustments, items,
         dish: dish || null, initiator: initiator || null, note: note || null,
       }).catch(() => {});
     }, 600);
     return () => timer.current && clearTimeout(timer.current);
-  }, [payer, billed, guests, total, adjustments, dish, initiator, note, att.status, roomId, message.id]);
+  }, [payer, billed, guests, total, adjustments, items, dish, initiator, note, att.status, roomId, message.id]);
 
-  const toggle = (id: number) =>
-    setBilled((b) => (b.includes(id) ? b.filter((x) => x !== id) : [...b, id]));
+  const itemized = items.length > 0;
+
+  // In itemized mode every participant needs exactly one item — the server
+  // rejects a draft where they drift apart, so keep them in lockstep here.
+  const toggle = (id: number) => {
+    const drop = billed.includes(id);
+    setBilled((b) => (drop ? b.filter((x) => x !== id) : [...b, id]));
+    if (!itemized) return;
+    setItems((prev) =>
+      drop ? prev.filter((i) => i.member !== id) : [...prev, { member: id, amount: 0 }]);
+  };
   const addGuest = () => { if (guestName.trim()) { setGuests((g) => [...g, guestName.trim()]); setGuestName(""); } };
 
   const adjustmentFor = (memberId: number) =>
@@ -76,7 +111,27 @@ export function ExpenseDraftCard({
 
   const adjustmentsSum = adjustments.reduce((sum, a) => sum + a.amount, 0);
   const ph = perHead(total, billed.length, guests.length, adjustmentsSum);
-  const hasAdjustments = adjustments.some((a) => a.amount !== 0);
+  const hasAdjustments = !itemized && adjustments.some((a) => a.amount !== 0);
+
+  const itemFor = (memberId: number) => items.find((i) => i.member === memberId)?.amount ?? 0;
+  const setItemFor = (memberId: number, amount: number) =>
+    setItems((prev) => prev.map((i) => (i.member === memberId ? { ...i, amount } : i)));
+  const itemsSum = items.reduce((sum, i) => sum + i.amount, 0);
+  const shares = itemized ? prorate(total, items) : null;
+  const itemGap = total - itemsSum;
+
+  /** Switch modes. Seeding items at the even-split estimate keeps the draft
+   * valid (and committable) from the first click; the two encodings are
+   * mutually exclusive, so leaving the other one populated would be stale. */
+  const setItemized = (on: boolean) => {
+    if (on) {
+      setAdjustments([]);
+      setItems(billed.map((id) => ({ member: id, amount: Math.max(0, ph) })));
+    } else {
+      setItems([]);
+      setAdjustments([]);
+    }
+  };
 
   const statusLabel =
     att.status === "committed" ? "Recorded" : att.status === "cancelled" ? "Cancelled" : null;
@@ -111,7 +166,9 @@ export function ExpenseDraftCard({
         ))}
       </div>
 
-      {!readonly && (
+      {/* Guests and per-item shares don't compose yet (the server rejects the
+          pair), so don't offer a control that can only lead to a dead end. */}
+      {!readonly && !itemized && (
         <div className="mb-2 flex gap-2">
           <input value={guestName} onChange={(e) => setGuestName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGuest())}
@@ -133,27 +190,72 @@ export function ExpenseDraftCard({
       <input disabled={readonly} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (e.g. 'An changed their mind')"
         className="mb-2 w-full rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-sm" />
 
-      <button type="button" onClick={() => setAdvancedOpen((v) => !v)}
-        className="mb-2 text-xs font-medium text-[var(--accent-text)]">
-        Adjustments (advanced) {advancedOpen ? "▲" : "▼"}
-      </button>
-      {advancedOpen && (
+      {!readonly && guests.length === 0 && (
+        <label className="mb-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+          <input type="checkbox" checked={itemized} onChange={(e) => setItemized(e.target.checked)} />
+          Split by item (everyone pays for what they ate)
+        </label>
+      )}
+
+      {itemized && (
         <div className="mb-2 flex flex-col gap-1.5 rounded-md border border-[var(--border)] p-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span>Bill price</span><span>Pays</span>
+          </div>
           {members.filter((m) => billed.includes(m.id)).map((m) => (
             <div key={m.id} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-[var(--text-secondary)]">{m.display_name}</span>
-              <input type="number" disabled={readonly} value={adjustmentFor(m.id)}
-                onChange={(e) => setAdjustmentFor(m.id, Number(e.target.value))}
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-secondary)]">
+                {m.display_name}
+                {items.find((i) => i.member === m.id)?.label && (
+                  <span className="opacity-70"> · {items.find((i) => i.member === m.id)?.label}</span>
+                )}
+              </span>
+              <input type="number" aria-label={`Item price for ${m.display_name}`}
+                disabled={readonly} value={itemFor(m.id)}
+                onChange={(e) => setItemFor(m.id, Number(e.target.value))}
                 className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-right text-xs" />
+              <span className="w-20 text-right text-xs font-medium text-[var(--text-primary)]">
+                {fmt(shares?.get(m.id) ?? 0)}đ
+              </span>
             </div>
           ))}
+          {itemGap !== 0 && (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Bill is {fmt(Math.abs(itemGap))}đ {itemGap < 0 ? "below" : "above"} the item prices
+              ({fmt(itemsSum)}đ) — the {itemGap < 0 ? "discount" : "fee"} is spread across everyone
+              in proportion to what they ordered.
+            </p>
+          )}
         </div>
       )}
 
-      <p className="mb-2 text-xs text-[var(--text-secondary)]">
-        Estimate: <span className="font-medium text-[var(--text-primary)]">{fmt(ph)} đ/person</span>
-        {guests.length > 0 && ` • ${guests.length} guest(s) paying cash`}
-      </p>
+      {!itemized && (
+        <>
+          <button type="button" onClick={() => setAdvancedOpen((v) => !v)}
+            className="mb-2 text-xs font-medium text-[var(--accent-text)]">
+            Adjustments (advanced) {advancedOpen ? "▲" : "▼"}
+          </button>
+          {advancedOpen && (
+            <div className="mb-2 flex flex-col gap-1.5 rounded-md border border-[var(--border)] p-2">
+              {members.filter((m) => billed.includes(m.id)).map((m) => (
+                <div key={m.id} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-[var(--text-secondary)]">{m.display_name}</span>
+                  <input type="number" disabled={readonly} value={adjustmentFor(m.id)}
+                    onChange={(e) => setAdjustmentFor(m.id, Number(e.target.value))}
+                    className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg-base)] px-2 py-1 text-right text-xs" />
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {!itemized && (
+        <p className="mb-2 text-xs text-[var(--text-secondary)]">
+          Estimate: <span className="font-medium text-[var(--text-primary)]">{fmt(ph)} đ/person</span>
+          {guests.length > 0 && ` • ${guests.length} guest(s) paying cash`}
+        </p>
+      )}
       {hasAdjustments && (
         <p className="mb-2 text-xs text-[var(--text-secondary)]">
           * Members with an adjustment pay the amount above ± their own adjustment.
@@ -208,7 +310,7 @@ export function ExpenseDraftCard({
               setBusy(true); setError(null);
               api.recommitDraft(roomId, message.id, {
                 payer_member_id: payer, member_participants: billed, guests,
-                bill_total: total, adjustments,
+                bill_total: total, adjustments, items,
                 dish: dish || null, initiator: initiator || null, note: note || null,
               })
                 .then(() => setEditing(false))
@@ -225,6 +327,7 @@ export function ExpenseDraftCard({
               setGuests(att.guests ?? []);
               setTotal(att.bill_total ?? 0);
               setAdjustments(att.adjustments ?? []);
+              setItems(att.items ?? []);
               setDish(att.dish ?? "");
               setInitiator(att.initiator ?? "");
               setNote(att.note ?? "");

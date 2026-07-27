@@ -116,6 +116,7 @@ export const recommitDraft = (
     guests: string[];
     bill_total: number;
     adjustments: { member: number; amount: number }[];
+    items?: { member: number; amount: number; label?: string | null }[];
     dish?: string | null;
     initiator?: string | null;
     note?: string | null;

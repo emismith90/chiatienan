@@ -241,3 +241,34 @@ async def test_run_turn_emits_finish_on_setup_failure(monkeypatch, db):
     turn_ids = {e["turn_id"] for e in seen}
     assert len(turn_ids) == 1  # same turn_id on start and finish
     assert result.error is not None
+
+
+# --- final answer assembly -------------------------------------------------- #
+
+def test_pre_tool_narration_is_dropped_from_the_reply():
+    """Production: 'Mình đọc quy trình ghi bữa ăn rồi xử lý câu hỏi của Emi.'
+    was glued to the actual answer. Once tools have run, the block after the
+    last one is the reply."""
+    out = agent_mod._final_answer(
+        ["Mình đọc quy trình ghi bữa rồi xử lý.", "Được — ghi theo từng người."], 1
+    )
+    assert out == "Được — ghi theo từng người."
+
+
+def test_blocks_are_separated_not_concatenated():
+    """'…bữa ăn.Được — ghi theo…' — two messages run together with no space."""
+    out = agent_mod._final_answer(["Xong rồi nhé.", "Cần sửa gì thì nhắn mình."], 0)
+    assert out == "Xong rồi nhé.\n\nCần sửa gì thì nhắn mình."
+
+
+def test_narration_survives_when_it_is_the_only_text():
+    """Better a little narration than an empty bubble."""
+    assert agent_mod._final_answer(["Mình đang xem thử."], 1) == "Mình đang xem thử."
+
+
+def test_blank_trailing_block_falls_back_to_what_there_is():
+    assert agent_mod._final_answer(["Có 3 bữa chưa chốt.", "   "], 1) == "Có 3 bữa chưa chốt."
+
+
+def test_no_text_at_all_is_empty():
+    assert agent_mod._final_answer([], 0) == ""

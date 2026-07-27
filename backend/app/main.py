@@ -11,12 +11,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app import accounts, chat, drafts, ledger, roster, rooms
+from app import accounts, chat, debug_api, drafts, ledger, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
@@ -31,7 +33,44 @@ from app.realtime import hub
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("chiatienan")
 
+
+def _mirror_logs_to_file() -> None:
+    """Also write the stdout log to a file on the mounted volume.
+
+    ``docker compose logs`` is held by the daemon and cannot be read from inside
+    the container, so the debug export API has nothing to serve without this
+    mirror. Rotates so it cannot fill the droplet's disk. Best-effort: if the
+    directory is not writable we log and carry on — losing the mirror must never
+    stop the app from booting.
+    """
+    if not settings.log_file:
+        return
+    try:
+        os.makedirs(os.path.dirname(settings.log_file) or ".", exist_ok=True)
+        handler = RotatingFileHandler(
+            settings.log_file,
+            maxBytes=settings.log_max_bytes,
+            backupCount=settings.log_backup_count,
+            encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        logging.getLogger().addHandler(handler)
+        # uvicorn installs its own handlers with propagate=False, so its
+        # loggers bypass root entirely — without this, an unhandled exception
+        # in a route (logged by uvicorn.error) would be in `docker compose
+        # logs` but missing from the file the debug API serves, which is the
+        # one traceback you always want.
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            logging.getLogger(name).addHandler(handler)
+    except OSError as exc:
+        log.warning("could not open log mirror at %s: %s", settings.log_file, exc)
+
+
+_mirror_logs_to_file()
+
 app = FastAPI(title="chiatienan — PWA lunch bot")
+app.include_router(debug_api.router)
 
 # Strong refs to in-flight bot-turn tasks so they aren't GC'd mid-run.
 _BG: set[asyncio.Task] = set()
@@ -88,6 +127,7 @@ class DraftPatchIn(BaseModel):
     guests: list[str] | None = None
     bill_total: int | None = None
     adjustments: list[dict] | None = None
+    items: list[dict] | None = None
     dish: str | None = None
     initiator: str | None = None
     note: str | None = None
@@ -100,6 +140,7 @@ class DraftEditIn(BaseModel):
     guests: list[str] = []
     bill_total: int
     adjustments: list[dict] = []
+    items: list[dict] = []
     dish: str | None = None
     initiator: str | None = None
     note: str | None = None
