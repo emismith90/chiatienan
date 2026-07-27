@@ -11,6 +11,15 @@ export interface ChatImage {
  * carrying message's `id`. `per_head_preview` (like the client-side
  * `perHead` calc in expense-draft-card.tsx) is a PROVISIONAL estimate — the
  * server recomputes the authoritative split on commit. */
+/** One person's dish on an itemized ("ai ăn nấy trả") draft. `amount` is the
+ * LIST price off the bill — the server prorates any discount or fee so the
+ * shares add up to `bill_total`, so this is NOT what they end up owing. */
+export interface DraftItem {
+  member: number;
+  amount: number;
+  label?: string | null;
+}
+
 export interface ExpenseDraft {
   type: "expense_draft";
   status: "pending" | "committed" | "cancelled";
@@ -19,6 +28,9 @@ export interface ExpenseDraft {
   guests: string[];
   bill_total: number;
   adjustments: { member: number; amount: number }[];
+  /** Present in itemized mode. When set it is the source of truth: the server
+   * re-derives `adjustments` from it on every patch/commit. */
+  items?: DraftItem[] | null;
   dish: string | null;
   initiator: string | null;
   note: string | null;

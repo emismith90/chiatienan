@@ -88,6 +88,7 @@ class DraftPatchIn(BaseModel):
     guests: list[str] | None = None
     bill_total: int | None = None
     adjustments: list[dict] | None = None
+    items: list[dict] | None = None
     dish: str | None = None
     initiator: str | None = None
     note: str | None = None
@@ -100,6 +101,7 @@ class DraftEditIn(BaseModel):
     guests: list[str] = []
     bill_total: int
     adjustments: list[dict] = []
+    items: list[dict] = []
     dish: str | None = None
     initiator: str | None = None
     note: str | None = None
