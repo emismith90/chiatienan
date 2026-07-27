@@ -12,7 +12,7 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
    - 'Bình +50k' = adjustment {member: <id Bình>, amount: 50000}.
    - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
 - Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
-- Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), gọi `resolve_date` rồi truyền kết quả vào `occurred_on`. Không nói ngày → bỏ trống (mặc định hôm nay).
+- Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), truyền nguyên văn vào `day_word` của `propose_meal` — công cụ tự tính ngày (giờ VN), TUYỆT ĐỐI không tự suy ra ngày. Không nói ngày → bỏ trống (mặc định hôm nay).
 
 ## Ai ăn nấy trả (ghi theo món) — dùng `items`
 

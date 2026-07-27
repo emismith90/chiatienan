@@ -375,3 +375,62 @@ def test_settle_note_names_the_meals_per_transfer(db):
     res = build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
     notes = {(t["from_id"], t["to_id"]): t["note"] for t in res["transfers"]}
     assert notes[(m[0], m[1])] == "M1: T2 bun cha, T3 nem"
+
+
+def test_propose_meal_resolves_day_word_server_side(db, monkeypatch):
+    # The tool — not the model — computes the date, so it can never land a day off.
+    from datetime import date
+    monkeypatch.setattr("app.tools.today_ict", lambda: date(2026, 7, 25))  # Saturday
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    out = build_tools(ctx)["propose_meal"].execute({
+        "participants": [a, b], "total": 200_000, "day_word": "thursday",
+    })
+    assert out["ok"] is True
+    assert out["occurred_on"] == "2026-07-23"  # the Thursday before Sat 07-25
+
+
+def test_propose_meal_day_word_overrides_hand_supplied_occurred_on(db, monkeypatch):
+    # A model-computed occurred_on must never win over the resolved day word.
+    from datetime import date
+    monkeypatch.setattr("app.tools.today_ict", lambda: date(2026, 7, 25))
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    out = build_tools(ctx)["propose_meal"].execute({
+        "participants": [a, b], "total": 200_000,
+        "day_word": "friday", "occurred_on": "2026-07-22",  # bogus (Wednesday)
+    })
+    assert out["occurred_on"] == "2026-07-24"  # Friday wins, not the stale Wed
+
+
+def test_propose_meal_invalid_day_word_errors(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    out = build_tools(ctx)["propose_meal"].execute({
+        "participants": [a, b], "total": 200_000, "day_word": "someday",
+    })
+    assert "error" in out
+
+
+def test_settle_note_weekdays_match_the_day_words(db, monkeypatch):
+    # Regression: a Thursday + Friday meal logged by day word must produce a QR
+    # note reading T5/T6 — not the off-by-one T4/T5 from LLM-computed dates.
+    from datetime import date
+    monkeypatch.setattr("app.tools.today_ict", lambda: date(2026, 7, 25))  # Saturday
+    room_id, (a, b) = _seed_room(db, 2, token="daywords")
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1"))
+    for day, dish, total in [("thursday", "pho", 200_000), ("friday", "bun", 100_000)]:
+        d = tools["propose_meal"].execute({
+            "payer": b, "participants": [a, b], "total": total,
+            "dish": dish, "day_word": day,
+        })
+        with db.session() as s:
+            ledger.record_meal(
+                s, room_id=room_id, payer_member_id=b, participants=[a, b],
+                total_amount=total, dish=dish,
+                occurred_on=date.fromisoformat(d["occurred_on"]),
+            )
+    res = tools["settle_period"].execute({"keyword": "since_last"})
+    note = {(t["from_id"], t["to_id"]): t["note"] for t in res["transfers"]}[(a, b)]
+    assert "T5 pho" in note and "T6 bun" in note
+    assert "T4" not in note

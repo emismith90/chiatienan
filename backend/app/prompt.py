@@ -39,6 +39,7 @@ def build_system_prompt(*, sender_name: str | None = None, today=None) -> str:
         " của workspace (record-meal, record-payment, balances) — làm theo skill phù hợp.\n"
         "- Câu hỏi ngôi thứ nhất ('tôi nợ ai', 'how much do I owe') → xem số dư CỦA NGƯỜI HỎI"
         " (member_statement, mặc định là người nhắn). Chỉ xem cả nhóm khi họ nói rõ.\n"
-        "- Ngày cụ thể ('thứ 2', 'hôm qua', '20/7') → gọi `resolve_date` rồi truyền `occurred_on`.\n"
+        "- Ngày cụ thể ('thứ 2', 'hôm qua', '20/7') → truyền nguyên văn vào `day_word` của `propose_meal`;"
+        " công cụ tự tính ngày, TUYỆT ĐỐI không tự suy ra ngày.\n"
         "- Quản lý thành viên: `add_member`, `update_member`, `delete_member`.\n"
     )
