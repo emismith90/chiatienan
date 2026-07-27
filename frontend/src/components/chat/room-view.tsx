@@ -365,6 +365,13 @@ export function RoomView({ roomId }: { roomId: number }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // A history answer in the chat can scope the ledger panel to its own period;
+  // on a phone that also has to open the drawer, or the scoping is invisible.
+  const [ledgerRange, setLedgerRange] = useState<{ from: string; to: string } | null>(null);
+  const openLedgerRange = (range: { from: string; to: string }) => {
+    setLedgerRange(range);
+    setDrawerOpen(true);
+  };
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -461,7 +468,8 @@ export function RoomView({ roomId }: { roomId: number }) {
               No messages yet. Tap a suggestion below or message @bot.
             </p>
           )}
-          <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines} />
+          <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines}
+                       onOpenLedger={openLedgerRange} />
           {/* Only the in-progress turn (no draft/bot message yet) renders here,
               live. Once it finishes, its timeline attaches collapsed above the
               message it produced — see MessageList. */}
@@ -491,7 +499,8 @@ export function RoomView({ roomId }: { roomId: number }) {
 
       {/* Desktop: persistent right column */}
       <div className="hidden w-[260px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] lg:block">
-        <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion} />
+        <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion}
+                     range={ledgerRange} onClearRange={() => setLedgerRange(null)} />
       </div>
 
       {/* Phone/tablet: slide-over drawer */}
@@ -507,7 +516,8 @@ export function RoomView({ roomId }: { roomId: number }) {
             onClick={(e) => e.stopPropagation()}
             className="absolute right-0 top-0 h-full w-[82%] max-w-sm border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-xl"
           >
-            <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion} />
+            <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion}
+                         range={ledgerRange} onClearRange={() => setLedgerRange(null)} />
           </div>
         </div>
       )}

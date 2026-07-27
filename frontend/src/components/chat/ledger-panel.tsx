@@ -5,8 +5,18 @@ import { BalanceBars } from "./balance-bars";
 import { TransactionTimeline } from "./transaction-timeline";
 import { StatementSections } from "./statement-card";
 
-export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfId: number | null; version: number }) {
-  const { data, loading } = useLedger(roomId, version);
+export function LedgerPanel({
+  roomId, selfId, version, range, onClearRange,
+}: {
+  roomId: number;
+  selfId: number | null;
+  version: number;
+  /** Explicit date range to show instead of the default window — set when a
+   * history answer in the chat is opened here ("Mở sổ"). */
+  range?: { from: string; to: string } | null;
+  onClearRange?: () => void;
+}) {
+  const { data, loading } = useLedger(roomId, version, range);
   const [mine, setMine] = useState(false);
   const showMine = mine && selfId != null;
 
@@ -27,6 +37,15 @@ export function LedgerPanel({ roomId, selfId, version }: { roomId: number; selfI
           </div>
         )}
       </div>
+
+      {range && (
+        <button type="button" onClick={onClearRange}
+                className="flex items-center gap-1.5 self-start rounded-full border border-[var(--accent-primary)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--accent-text)]">
+          {range.from} → {range.to}
+          <span aria-hidden>✕</span>
+          <span className="sr-only">Bỏ giới hạn ngày</span>
+        </button>
+      )}
 
       {loading && !data ? (
         <p className="text-xs text-[var(--text-secondary)]">Loading…</p>

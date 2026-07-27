@@ -31,3 +31,34 @@ def test_quick_pay_records_meal_outstanding(api_client_room):
     led = client.get(f"/api/rooms/{room_id}/ledger", headers=headers).json()
     assert all(row["meal_id"] != meal_id for row in led["me"]["owe"])
     assert led["me"]["owe"] == []  # the fixture's single debt is fully cleared
+
+
+def test_quick_pay_leaves_the_same_audit_trail_as_a_confirmed_draft(api_client_room):
+    """It posted a bare line of text while commit_payment_draft attached the
+    amounts and a balances snapshot — so the one path a user taps most left the
+    least behind."""
+    client, headers, room_id, members = api_client_room
+    linh, giang = members["Linh"], members["Giang"]
+
+    from app import ledger
+    from app.db import get_db
+    with get_db().session() as s:
+        meal = ledger.record_meal(s, room_id=room_id, payer_member_id=linh,
+                                  participants=[linh, giang], total_amount=100_000,
+                                  adjustments={}, guests=[], dish="pho", logged_by=str(linh))
+        meal_id, share = meal["meal_id"], meal["shares"][giang]
+
+    # Giang taps ⑦ on that meal.
+    gheaders = _giang_headers(client, headers, room_id)
+    r = client.post(f"/api/rooms/{room_id}/payments/quick",
+                    json={"to": linh, "meal_id": meal_id}, headers=gheaders)
+    assert r.status_code == 200, r.text
+
+    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
+    card = [m for m in msgs if (m.get("attachments") or {}).get("type") == "payment"][-1]
+    att = card["attachments"]
+    assert att["transfers"][0]["amount"] == share
+    assert att["transfers"][0]["from"]["id"] == giang
+    assert att["meal_id"] == meal_id
+    assert att["balances"], "a payment card carries a balances snapshot"
+    assert f"{share:,}đ" in card["body"]
