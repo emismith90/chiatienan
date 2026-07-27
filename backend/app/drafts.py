@@ -17,14 +17,43 @@ from sqlalchemy.orm import Session
 from app import chat, ledger
 from app.clock import today_ict
 from app.models import Meal, Member, RoomMessage
+from app.money import MoneyError, itemized_adjustments, normalize_items, prorate_items
 from app.periods import resolve_period
 
 DRAFT_KINDS = ("expense_draft", "payment_draft")
 
 _EDITABLE = {
     "payer_member_id", "member_participants", "guests", "bill_total",
-    "adjustments", "dish", "initiator", "note",
+    "adjustments", "items", "dish", "initiator", "note",
 }
+
+
+def _sync_items(att: dict) -> dict:
+    """Re-derive ``adjustments`` from the itemized ``items``, in place.
+
+    In itemized mode ``items`` (per-person list prices off the bill) is the
+    single source of truth and ``adjustments`` is only its ledger encoding — so
+    every write path recomputes it here rather than trusting whatever the client
+    (or the model) sent. Editing a total, a price, or the guest list on the card
+    therefore re-prorates the discount instead of leaving a stale split behind.
+
+    No-op for an ordinary equal-split draft. Raises :class:`MoneyError` if the
+    items no longer describe a valid split (e.g. a participant was added on the
+    card without a price).
+    """
+    items = att.get("items")
+    if not items:
+        return att
+    if att.get("guests"):
+        raise MoneyError("Ghi theo món chưa hỗ trợ khách lẻ — bỏ khách ra hoặc chia đều.")
+    participants = [int(x) for x in att.get("member_participants") or []]
+    items = normalize_items(items, participants)
+    shares = prorate_items(int(att.get("bill_total") or 0),
+                           {i["member"]: i["amount"] for i in items})
+    att["items"] = items
+    att["adjustments"] = [{"member": m, "amount": a}
+                          for m, a in itemized_adjustments(int(att["bill_total"]), shares).items()]
+    return att
 
 
 def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
@@ -32,7 +61,7 @@ def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMes
     draft — proposals persist as independent cards until each is confirmed,
     edited, or cancelled from its own card. Returns ``(new_draft, [])``; the
     empty list preserves the caller signature (there are no supersede extras)."""
-    att = {"type": "expense_draft", "status": "pending", **payload}
+    att = _sync_items({"type": "expense_draft", "status": "pending", **payload})
     att.pop("logged_by", None)
     new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind="expense_draft")
     return new_draft, []
@@ -61,6 +90,7 @@ def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> 
         for k in _EDITABLE:
             if k in patch:
                 att[k] = patch[k]
+        _sync_items(att)
     m.attachments = att   # reassign so SQLAlchemy marks the JSON dirty
     session.flush()
     return m
@@ -94,6 +124,7 @@ def _meal_message(session: Session, room_id: int, att: dict, res: dict) -> RoomM
         "dish": att.get("dish"),
         "initiator": att.get("initiator"),
         "note": att.get("note"),
+        "items": att.get("items") or None,
         "payer": {"id": res["payer_member_id"], "name": names.get(res["payer_member_id"], "?")},
         "shares": [{"id": mid, "name": names.get(mid, "?"), "amount": amt}
                    for mid, amt in res["shares"].items()],
@@ -113,6 +144,7 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
     if (att.get("payer_member_id") is None or att.get("bill_total") is None
             or not att.get("member_participants")):
         raise ledger.LedgerError("The draft is missing required fields to record.")
+    _sync_items(att)  # authoritative recompute: the card's items win over stored adjustments
 
     res = ledger.record_meal(
         session,
@@ -160,6 +192,7 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     for k in _EDITABLE:
         if k in patch:
             att[k] = patch[k]
+    _sync_items(att)
     ledger.void_meal(session, meal.id, room_id=room_id, by=logged_by)
     res = ledger.record_meal(
         session, room_id=room_id, payer_member_id=int(att["payer_member_id"]),

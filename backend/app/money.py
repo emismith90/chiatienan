@@ -4,6 +4,9 @@ Pure functions, no I/O, no SDK imports:
 
 * :func:`split_shares` — turn a meal (total, participants, per-person
   adjustments) into an exact per-person share map whose values sum to ``total``.
+* :func:`prorate_items` — itemized ("ai ăn nấy trả") mode: scale each person's
+  own dish price so the shares sum to what was actually paid, spreading any
+  discount or delivery fee proportionally.
 * :func:`per_payer_transfers` — settle a set of meals by repaying whoever
   fronted each meal (per-pair netted), never reassigning creditors.
 
@@ -89,6 +92,106 @@ def split_shares(
 
     assert sum(shares.values()) == total, "share split must sum to total"
     return shares
+
+
+def normalize_items(items, participants: list[int]) -> list[dict]:
+    """Validate raw itemized entries against the participant list.
+
+    Returns ``[{"member", "amount", "label"}]`` ordered like ``participants``.
+    Every participant must appear exactly once: a missing person is far more
+    likely a misread bill than a genuine 0đ, and silently charging them nothing
+    would quietly push their food onto everyone else. Say so instead.
+
+    Raises :class:`MoneyError` on a malformed entry, an unknown member, a
+    duplicate, or an uncovered participant.
+    """
+    by_member: dict[int, dict] = {}
+    for raw in items or []:
+        try:
+            member, amount = int(raw["member"]), int(raw["amount"])
+        except (KeyError, TypeError, ValueError):
+            raise MoneyError("Mỗi dòng món cần {member, amount} là số.") from None
+        if member in by_member:
+            raise MoneyError(
+                f"Thành viên {member} có nhiều hơn một dòng món — gộp lại thành một dòng."
+            )
+        label = raw.get("label") if isinstance(raw, dict) else None
+        by_member[member] = {
+            "member": member,
+            "amount": amount,
+            "label": str(label) if label else None,
+        }
+
+    part_set = set(participants)
+    stray = sorted(m for m in by_member if m not in part_set)
+    if stray:
+        raise MoneyError(f"Các dòng món này không thuộc bữa ăn: {stray}.")
+    missing = [m for m in participants if m not in by_member]
+    if missing:
+        raise MoneyError(
+            f"Ghi theo món cần đủ giá của MỌI người trong bữa — còn thiếu: {missing}."
+        )
+    return [by_member[m] for m in participants]
+
+
+def prorate_items(total: int, items: dict[int, int]) -> dict[int, int]:
+    """Itemized split: scale each person's own dish price to sum exactly to ``total``.
+
+    A real bill almost never equals the sum of its line items — a promo makes it
+    lower, a delivery/service fee makes it higher. Rather than refusing (or
+    asking a human to do the arithmetic), every share is scaled by
+    ``total / Σ items`` so the discount or fee lands on each person in
+    proportion to what they ordered.
+
+    Rounding uses largest-remainder (Hamilton) so ``Σ shares == total`` exactly
+    with no share off by more than 1đ; ties break by member id, so the result is
+    deterministic. A 0đ item yields a 0đ share (ate nothing).
+
+    Raises :class:`MoneyError` if ``total <= 0``, ``items`` is empty, any item is
+    negative, or the items sum to 0.
+    """
+    if total <= 0:
+        raise MoneyError(f"Total must be greater than 0 (got {total}).")
+    if not items:
+        raise MoneyError("Itemized split needs at least one item.")
+    negative = sorted(m for m, v in items.items() if v < 0)
+    if negative:
+        raise MoneyError(f"Item prices must not be negative: {negative}.")
+
+    gross = sum(items.values())
+    if gross <= 0:
+        raise MoneyError("The item prices add up to 0 — nothing to split.")
+
+    shares = {m: (v * total) // gross for m, v in items.items()}
+    leftover = total - sum(shares.values())
+    # Hand the (< |items|) leftover đồng to the largest fractional remainders.
+    by_remainder = sorted(items, key=lambda m: (-(items[m] * total % gross), m))
+    for m in by_remainder[:leftover]:
+        shares[m] += 1
+
+    assert sum(shares.values()) == total, "itemized split must sum to total"
+    return shares
+
+
+def itemized_adjustments(total: int, shares: dict[int, int]) -> dict[int, int]:
+    """Express exact per-person ``shares`` as :func:`split_shares` adjustments.
+
+    Itemized meals ride the same ledger path as every other meal, so the
+    per-person amounts have to survive as ``adjustments`` around an equal base.
+    With ``base = total // n`` and ``adj = share - base``, ``split_shares``
+    reproduces ``shares`` exactly: it recomputes the same base (``Σ adj`` is
+    ``total - n·base``, so ``(total - Σ adj) // n == base``) and is left with no
+    remainder to hand out. Zero adjustments are omitted — they are a no-op.
+
+    ``shares`` must sum to ``total`` (:func:`prorate_items` guarantees it).
+    """
+    n = len(shares)
+    if n < 1:
+        raise MoneyError("At least one meal participant is required.")
+    if sum(shares.values()) != total:
+        raise MoneyError("Itemized shares must sum to the bill total.")
+    base = total // n
+    return {m: s - base for m, s in shares.items() if s != base}
 
 
 def per_payer_transfers(

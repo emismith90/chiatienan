@@ -8,6 +8,12 @@
 
 - **Bug when visualizing drafting payment.** Individual cost should account for number of guests.
 
+- **Itemized split + guests.** `propose_meal(items=…)` currently refuses a meal that
+  has both per-item shares and cash-paying guests, because guest heads are placeholder
+  negative ids in `split_with_guests` while items only name members — prorating across
+  both needs guest items too. Refused loudly rather than silently reweighting; wire it
+  up when someone actually hits it.
+
 - **Nicer loading** at load for the chat — currently flickers and scrolls.
 
 - **BIG: agent engine export/import**

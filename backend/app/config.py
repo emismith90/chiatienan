@@ -31,6 +31,10 @@ class Settings:
     max_seconds: int
     memory_window_weeks: int
     history_max_messages: int
+    # How far back to look for a bill image when the @bot message itself has
+    # none (people paste the bill, then say "@bot log đi" in a second message).
+    image_lookback_messages: int
+    image_lookback_minutes: int
     # Bot
     bot_handle: str
     # Storage
@@ -56,6 +60,8 @@ class Settings:
             max_seconds=_int_env("CURSOR_AGENT_MAX_SECONDS", 120),
             memory_window_weeks=_int_env("MEMORY_WINDOW_WEEKS", 10),
             history_max_messages=_int_env("HISTORY_MAX_MESSAGES", 200),
+            image_lookback_messages=_int_env("IMAGE_LOOKBACK_MESSAGES", 10),
+            image_lookback_minutes=_int_env("IMAGE_LOOKBACK_MINUTES", 120),
             bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "bot",
             database_url=(os.environ.get("DATABASE_URL") or "").strip() or "sqlite:////data/chiatienan.db",
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",

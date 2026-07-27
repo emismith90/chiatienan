@@ -116,6 +116,27 @@ def _flatten_envelope(result):
     return None
 
 
+def _final_answer(text_parts: list[str], answer_from: int) -> str:
+    """Assemble the user-visible reply from the turn's assistant text blocks.
+
+    Two things go wrong if every block is concatenated:
+
+    * The model narrates its plan before each tool call ("Mình đọc quy trình ghi
+      bữa rồi xử lý…"). That is scaffolding, not an answer — once tools have run
+      the block after the last one *is* the reply, so earlier blocks are dropped.
+    * Blocks are separate messages, not a continuing sentence; gluing them with
+      ``""`` produced run-ons like "…ghi bữa ăn.Được — ghi theo…". Whatever
+      survives is joined with a blank line.
+
+    ``answer_from`` is the block count at the last completed tool call. With no
+    tool calls, or no text after the last one, every block is kept — better a
+    little narration than an empty reply.
+    """
+    tail = [p for p in text_parts[answer_from:] if p.strip()]
+    kept = tail or [p for p in text_parts if p.strip()]
+    return "\n\n".join(p.strip() for p in kept).strip()
+
+
 def _assistant_text(msg) -> str:
     message = getattr(msg, "message", None)
     content = getattr(message, "content", None)
@@ -209,6 +230,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     started = time.monotonic()
     completed_tools = 0
     text_parts: list[str] = []
+    answer_from = 0  # index of the first text block after the last completed tool call
 
     async def _emit(events) -> None:
         if emit:
@@ -261,6 +283,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
                                 )
                             )
                             completed_tools += 1
+                            answer_from = len(text_parts)
                     elif mtype == "status":
                         if (getattr(msg, "status", "") or "").upper() == "ERROR":
                             result.error = getattr(msg, "message", "") or "Cursor agent run failed"
@@ -283,7 +306,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         except Exception:  # noqa: BLE001
             result.error = str(exc)
 
-    result.final_text = "".join(text_parts).strip()
+    result.final_text = _final_answer(text_parts, answer_from)
 
     await _emit(agui.finish(turn_id, error=result.error))
     result.turn_id = turn_id

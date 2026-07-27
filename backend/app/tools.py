@@ -23,7 +23,14 @@ from cursor_sdk import CustomTool
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
-from app.money import MoneyError, per_payer_transfers, split_with_guests
+from app.money import (
+    MoneyError,
+    itemized_adjustments,
+    normalize_items,
+    per_payer_transfers,
+    prorate_items,
+    split_with_guests,
+)
 from app.notes import build_qr_note
 from app.periods import resolve_date, resolve_period
 from app.qr import QRError, make_qr_url
@@ -101,6 +108,25 @@ _PROPOSE_SCHEMA = {
             "type": "object",
             "properties": {"member": {"type": "integer"}, "amount": {"type": "integer"}},
             "required": ["member", "amount"]}},
+        "items": {
+            "type": "array",
+            "description": (
+                "Per-person mode ('ai ăn nấy trả'): the LIST price of what each person ate,"
+                " copied straight off the bill — do NOT pre-apply the discount or split the"
+                " difference yourself. One entry per participant, every participant exactly"
+                " once. The tool prorates the gap between Σ items and `total` (promo, ship,"
+                " service fee) across the items. Omit this to split the bill evenly."
+            ),
+            "items": {
+                "type": "object",
+                "properties": {
+                    "member": {"type": "integer", "description": "member id who ate this."},
+                    "amount": {"type": "integer", "description": "Its price on the bill, integer VND."},
+                    "label": {"type": "string", "description": "Dish name, e.g. 'cơm tấm'."},
+                },
+                "required": ["member", "amount"],
+            },
+        },
         "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
         "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
         "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
@@ -248,6 +274,26 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 _parse_iso(occurred_on)
             except ValueError:
                 return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
+
+        items = args.get("items") or []
+        if items:
+            if adjustments:
+                return _err(
+                    "Dùng `items` HOẶC `adjustments`, không dùng cả hai — "
+                    "`items` đã là số tiền của từng người rồi."
+                )
+            if guests:
+                return _err(
+                    "Ghi theo món chưa hỗ trợ khách lẻ. Bỏ khách ra (chia đều), "
+                    "hoặc ghi khách như một dòng món của người trả hộ."
+                )
+            try:
+                items = normalize_items(items, participants)
+                shares = prorate_items(total, {i["member"]: i["amount"] for i in items})
+                adjustments = itemized_adjustments(total, shares)
+            except MoneyError as exc:
+                return _err(str(exc))
+
         try:
             preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
         except MoneyError as exc:
@@ -260,10 +306,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "guests": guests,
             "bill_total": total,
             "adjustments": [{"member": m, "amount": a} for m, a in adjustments.items()],
+            "items": items,
             "dish": args.get("dish"),
             "initiator": args.get("initiator"),
             "note": args.get("note"),
             "per_head_preview": preview["per_head"],
+            "shares_preview": [{"member": m, "amount": a} for m, a in preview["shares"].items()],
             "occurred_on": occurred_on,
         }
 
