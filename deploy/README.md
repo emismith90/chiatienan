@@ -111,11 +111,25 @@ up -d`. Because the image is built off-box, this side-steps M8 entirely — the 
 
 `.env` is regenerated from GitHub secrets on each deploy (the previous file is backed up to
 `.env.bak.<timestamp>`), so GitHub is the source of truth for production config. If the app
-secrets aren't set, the deploy leaves the existing `.env` untouched.
+secrets aren't set, the deploy leaves the existing `.env` untouched. **Corollary: never enable a
+production setting by hand-editing `/opt/chiatienan/.env`** — the next deploy overwrites it. Add
+it to the heredoc instead. `DEBUG_API_KEY` (the `/internal/debug/*` export API, DEBUGGING.md §6)
+is an optional Actions secret handled this way; unset means the routes stay disabled.
 
 The deploy also runs `caddy reload` after `up -d`, so `Caddyfile` edits take effect without a
 restart (`docker compose up -d` alone won't recreate the unchanged caddy container). Manual
 Caddyfile changes need the same: `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+
+Two guards exist because a full droplet once produced *green deploys that shipped nothing*
+(`docker compose pull` died with `no space left on device`, `up -d` kept the old containers, and
+the masked exit status reported success):
+
+- The remote script reclaims disk with `docker image prune -af && docker builder prune -af`
+  **before** pulling, and prints `df -h /var/lib/docker` on both sides of it. Images backing a
+  running container are never pruned, so the live containers are safe.
+- A final **Verify the running images match this commit** step re-reads
+  `docker compose ps --format '{{.Service}} {{.Image}}'` and fails the job unless both `backend`
+  and `frontend` are running `:${{ github.sha }}`. A red deploy here means prod is on stale code.
 
 ### Manual (fallback)
 

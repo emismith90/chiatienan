@@ -136,6 +136,13 @@ restarting the backend. **Unset ⇒ every route 404s**, so a deploy that never
 sets it is unchanged. Keys under 24 chars are refused (the API stays off and
 logs why) so a placeholder can't quietly publish the ledger.
 
+On the droplet, set it as a repo **Actions secret** named `DEBUG_API_KEY`, not
+by editing `/opt/chiatienan/.env` — `deploy.yml` regenerates that file wholesale
+on every deploy, so a hand-edited value survives only until the next one. The
+generated `.env` also carries `LOG_FILE` (default `/data/logs/app.log`), which
+is what `/internal/debug/logs` serves; without it that one route 404s while the
+rest keep working.
+
 ```bash
 export H="X-Debug-Key: $DEBUG_API_KEY"
 export B=https://chiatienan.duckdns.org/internal/debug
