@@ -201,14 +201,24 @@ def test_record_payment_shifts_balances(db):
 
 
 def test_record_payment_payment_only_member_appears(db):
+    """A payment with no meal behind it still puts both members in the period
+    view, but it is not a balance.
+
+    `balance` is a debt position derived from the meal edges, so cash that
+    settles nothing reads as 0 rather than an open credit. That is the same rule
+    `DebtEdge.outstanding` follows (it never goes negative), and treating a
+    payment as a standalone credit is exactly what let a bounded window report
+    debts nobody held.
+    """
     from datetime import date
     room_id, m = _seed_room(db, 2)
     with db.session() as s:
         ledger.record_payment(s, room_id=room_id, from_member_id=m[0],
                               to_member_id=m[1], amount=50, occurred_on=date(2026, 7, 20))
         bal = ledger.period_balances(s, room_id, None, date(2999, 1, 1))
-        assert bal[m[0]]["balance"] == 50
-        assert bal[m[1]]["balance"] == -50
+        assert set(bal) == {m[0], m[1]}
+        assert bal[m[0]]["balance"] == 0
+        assert bal[m[1]]["balance"] == 0
 
 
 def test_record_payment_validation(db):
@@ -251,3 +261,86 @@ def test_record_meal_stores_metadata(db):
         assert meal.dish == "phở" and meal.initiator == "Emi"
         assert meal.note == "An đổi ý" and meal.raw_input == "@bot 200k phở"
         assert meal.guests == []
+
+
+# --- window semantics: meals are windowed, payment attribution is not -------- #
+
+def _pair_meal_then_late_payment(db):
+    """Meal on the 23rd, repaid on the 27th — the room's normal rhythm."""
+    from datetime import date
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        meal = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=b, participants=[a, b],
+            total_amount=80_000, adjustments={}, guests=[], dish="bún chả",
+            occurred_on=date(2026, 7, 23), logged_by=str(b),
+        )
+        ledger.record_payment(
+            s, room_id=room_id, from_member_id=a, to_member_id=b,
+            amount=meal["shares"][a], occurred_on=date(2026, 7, 27), logged_by=str(a),
+        )
+    return room_id, a, b
+
+
+def test_a_debt_repaid_after_the_window_is_not_outstanding_again(db):
+    """Production: "chốt tuần trước" asked on Monday billed the 107,000đ that had
+    been paid that same morning, and printed a live QR for it."""
+    from datetime import date
+    room_id, a, b = _pair_meal_then_late_payment(db)
+    with db.session() as s:
+        # Window covers the meal but ends before the repayment.
+        edges = ledger.debt_breakdown(s, room_id, date(2026, 7, 20), date(2026, 7, 26))
+        assert [e.outstanding for e in edges] == [0]
+        assert ledger.period_transfers(s, room_id, date(2026, 7, 20), date(2026, 7, 26)) == []
+
+
+def test_the_window_still_excludes_meals_outside_it(db):
+    from datetime import date
+    room_id, a, b = _pair_meal_then_late_payment(db)
+    with db.session() as s:
+        # A window after the meal sees no edges at all.
+        assert ledger.debt_breakdown(s, room_id, date(2026, 7, 24), date(2026, 7, 27)) == []
+
+
+def test_period_balances_agree_with_the_edges_on_a_bounded_window(db):
+    """`balance` used to fold in every payment dated in the window regardless of
+    which meal it settled, so a bounded window reported debts nobody held."""
+    from datetime import date
+    room_id, a, b = _pair_meal_then_late_payment(db)
+    with db.session() as s:
+        # The payment lands in this window; the meal it settles does not.
+        bal = ledger.period_balances(s, room_id, date(2026, 7, 27), date(2026, 7, 27))
+        assert all(v["balance"] == 0 for v in bal.values()), bal
+        # And over the meal's own window it is settled, so also zero.
+        bal2 = ledger.period_balances(s, room_id, date(2026, 7, 20), date(2026, 7, 26))
+        assert all(v["balance"] == 0 for v in bal2.values()), bal2
+
+
+def test_paid_and_consumed_still_describe_the_window(db):
+    """Only `balance` changed meaning — cash fronted and food eaten are per-window."""
+    from datetime import date
+    room_id, a, b = _pair_meal_then_late_payment(db)
+    with db.session() as s:
+        bal = ledger.period_balances(s, room_id, date(2026, 7, 23), date(2026, 7, 23))
+        assert bal[b]["paid"] == 80_000
+        assert bal[a]["consumed"] == 40_000
+
+
+def test_voiding_a_meal_untargets_its_payments(db):
+    from datetime import date
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        meal = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=b, participants=[a, b],
+            total_amount=100_000, adjustments={}, guests=[], dish="pho",
+            occurred_on=date(2026, 7, 23), logged_by=str(b),
+        )
+        ledger.record_payment(
+            s, room_id=room_id, from_member_id=a, to_member_id=b, amount=50_000,
+            meal_id=meal["meal_id"], occurred_on=date(2026, 7, 23), logged_by=str(a),
+        )
+        out = ledger.void_meal(s, meal["meal_id"], room_id=room_id, by=str(b))
+        assert out["payments_untargeted"] == 1
+        from app.models import Payment
+        from sqlalchemy import select as _select
+        assert s.scalars(_select(Payment).where(Payment.room_id == room_id)).first().meal_id is None

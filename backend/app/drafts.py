@@ -267,6 +267,11 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
         initiator=att.get("initiator"), note=att.get("note"),
         raw_input=att.get("raw_input"), logged_by=logged_by, occurred_on=meal.occurred_on,
     )
+    # An edit is a void + re-record under a new id, so anything already paid
+    # against the old meal (⑦ quick-pay) follows it — otherwise the payer's own
+    # statement shows their share as unpaid while the settlement counts it.
+    ledger.repoint_meal_payments(session, room_id=room_id, old_meal_id=meal.id,
+                                 new_meal_id=res["meal_id"])
     meal_msg = _meal_message(session, room_id, att, res)
     att["committed_meal_id"] = res["meal_id"]
     m.attachments = att

@@ -286,6 +286,16 @@ def per_payer_transfers(
         # a genuine overpayment), and neither makes `to` the debtor.
         owed[(frm, to)] = max(0, owed.get((frm, to), 0) - amount)
 
+    return _net_pairs(owed)
+
+
+def _net_pairs(owed: dict[tuple[int, int], int]) -> list[Transfer]:
+    """Collapse ``{(debtor, creditor): gross}`` into one directed transfer per pair.
+
+    The single place the netting is done, so :func:`per_payer_transfers` and
+    :func:`net_transfers` cannot drift apart. Ties break by member id, so the
+    output is deterministic; pairs that come out even produce no transfer.
+    """
     transfers: list[Transfer] = []
     seen: set[tuple[int, int]] = set()
     for a, b in sorted(owed):
@@ -300,6 +310,23 @@ def per_payer_transfers(
             transfers.append(Transfer(from_member=b, to_member=a, amount=-net))
 
     return transfers
+
+
+def net_transfers(edges: list[DebtEdge]) -> list[Transfer]:
+    """Who pays whom, from FIFO-attributed :class:`DebtEdge` outstandings.
+
+    The authoritative path for a settlement: the edges already know which
+    payments cleared which meals, so a window can be applied by filtering edges
+    without the payment bookkeeping going wrong. :func:`per_payer_transfers`
+    computes the same answer from raw meals + payments and is kept for callers
+    that only have those; both share :func:`_net_pairs`.
+    """
+    owed: dict[tuple[int, int], int] = {}
+    for e in edges:
+        if e.outstanding <= 0:
+            continue
+        owed[(e.debtor, e.creditor)] = owed.get((e.debtor, e.creditor), 0) + e.outstanding
+    return _net_pairs(owed)
 
 
 def split_with_guests(
@@ -407,6 +434,25 @@ def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> l
             targeted[(p["from"], p["to"], mid)] = targeted.get((p["from"], p["to"], mid), 0) + p["amount"]
         else:
             pool[(p["from"], p["to"])] = pool.get((p["from"], p["to"]), 0) + p["amount"]
+
+    # A targeted payment whose edge cannot absorb it spills into the pair pool
+    # rather than evaporating. The ⑦ quick-pay button stamps `meal_id`, and its
+    # meal can then be voided or re-recorded (an Edit on a committed card records
+    # a NEW meal id) — the money is still in the ledger and still owed to the same
+    # person, so it must keep counting. Without the spill, `statement_for` showed
+    # a debt as "unpaid" while `per_payer_transfers`, which never sees meal_id,
+    # counted the payment: two views, one payment, a silent disagreement.
+    edge_capacity: dict[tuple[int, int, int], int] = {}
+    for e in edges:
+        key = (e.debtor, e.creditor, e.meal_id)
+        edge_capacity[key] = edge_capacity.get(key, 0) + e.amount
+    for key, amount in list(targeted.items()):
+        capacity = edge_capacity.get(key, 0)
+        if amount > capacity:
+            targeted[key] = capacity
+            pair = (key[0], key[1])
+            pool[pair] = pool.get(pair, 0) + (amount - capacity)
+
     out: list[DebtEdge] = []
     for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id)):
         paid = 0

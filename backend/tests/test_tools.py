@@ -503,3 +503,55 @@ def test_cancel_draft_cannot_reach_another_room(db):
     with db.session() as s:
         from app.models import RoomMessage
         assert s.get(RoomMessage, draft_id).attachments["status"] == "pending"
+
+
+def test_settle_says_balanced_based_on_transfers_not_stale_balances(db):
+    """The gate read period_balances, which could disagree with the transfers on a
+    bounded window — so the room got an empty transfer list with no explanation,
+    or "đã cân bằng" while transfers were pending."""
+    from datetime import date
+
+    from app import ledger
+    from app.models import Meal
+    from tests.test_ledger import _seed_room
+
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        meal = ledger.record_meal(
+            s, room_id=room_id, payer_member_id=b, participants=[a, b],
+            total_amount=80_000, adjustments={}, guests=[], dish="bún chả",
+            occurred_on=date(2026, 7, 23), logged_by=str(b),
+        )
+        ledger.record_payment(s, room_id=room_id, from_member_id=a, to_member_id=b,
+                              amount=meal["shares"][a], occurred_on=date(2026, 7, 27),
+                              logged_by=str(a))
+        assert s.get(Meal, meal["meal_id"]) is not None
+
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a,
+                                   sender_name="An", turn_mentions=[]))
+    out = tools["settle_period"].execute({"keyword": "explicit",
+                                          "from": "2026-07-20", "to": "2026-07-26"})
+    assert out["ok"]
+    assert out["transfers"] == []
+    assert "cân bằng" in out["message"]
+
+
+def test_settle_honours_from_to_without_the_explicit_keyword(db):
+    from datetime import date
+
+    from app import ledger
+    from tests.test_ledger import _seed_room
+
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        ledger.record_meal(
+            s, room_id=room_id, payer_member_id=b, participants=[a, b],
+            total_amount=80_000, adjustments={}, guests=[], dish="bún chả",
+            occurred_on=date(2026, 7, 23), logged_by=str(b),
+        )
+
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a,
+                                   sender_name="An", turn_mentions=[]))
+    out = tools["settle_period"].execute({"from": "2026-07-01", "to": "2026-07-02"})
+    assert out["period"] == {"from": "2026-07-01", "to": "2026-07-02"}
+    assert out["transfers"] == []   # the meal is outside the asked-for range

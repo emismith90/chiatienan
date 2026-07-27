@@ -77,3 +77,34 @@ def test_explicit_with_bounds():
         "explicit", today=WED, explicit_from=date(2026, 7, 1), explicit_to=date(2026, 7, 10)
     )
     assert p["from"] == date(2026, 7, 1) and p["to"] == date(2026, 7, 10)
+
+
+def test_explicit_dates_without_a_keyword_are_honoured():
+    """`settle_period` accepts from/to; passing them with no keyword used to fall
+    back to since_last — the whole ledger — and report it as the asked-for range."""
+    from datetime import date
+
+    from app.periods import resolve_period
+
+    p = resolve_period(None, today=date(2026, 7, 27),
+                       explicit_from=date(2026, 7, 20), explicit_to=date(2026, 7, 26))
+    assert (p["from"], p["to"]) == (date(2026, 7, 20), date(2026, 7, 26))
+    assert p["keyword"] == "explicit"
+
+
+def test_a_named_keyword_still_wins_over_stray_dates():
+    from datetime import date
+
+    from app.periods import resolve_period
+
+    p = resolve_period("last_week", today=date(2026, 7, 27),
+                       explicit_from=date(2026, 1, 1), explicit_to=date(2026, 1, 2))
+    assert (p["from"], p["to"]) == (date(2026, 7, 20), date(2026, 7, 26))
+
+
+def test_no_keyword_and_no_dates_is_still_since_last():
+    from datetime import date
+
+    from app.periods import resolve_period
+
+    assert resolve_period(None, today=date(2026, 7, 27))["keyword"] == "since_last"

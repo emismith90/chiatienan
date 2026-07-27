@@ -26,8 +26,8 @@ from app.db import Database
 from app.money import (
     MoneyError,
     itemized_adjustments,
+    net_transfers,
     normalize_items,
-    per_payer_transfers,
     prorate_items,
     split_with_guests,
 )
@@ -234,8 +234,8 @@ _SETTLE_SCHEMA = {
             "type": "string",
             "enum": ["since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"],
         },
-        "from": {"type": "string"},
-        "to": {"type": "string"},
+        "from": {"type": "string", "description": "ISO date. Supplying from/to means an explicit range; omit `keyword` (or pass 'explicit')."},
+        "to": {"type": "string", "description": "ISO date, inclusive. See `from`."},
         "commit": {"type": "boolean", "description": "True to CLOSE the period (only when the user says 'chốt')."},
     },
 }
@@ -695,8 +695,19 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 return _err(str(exc))
 
             from_date, to_date = period["from"], period["to"]
-            balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
-            if not any(v["balance"] for v in balances.values()):
+            # One computation behind the amounts, the per-meal QR notes and the
+            # "đã cân bằng" verdict. These edges carry FIFO-attributed payments,
+            # so `outstanding > 0` is exactly "still being repaid" — which is
+            # also why the note never names a meal that is already settled.
+            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
+                          if e.outstanding > 0]
+            transfers = net_transfers(open_edges)
+
+            # Gated on the transfers themselves, not on period_balances: that
+            # number used to disagree with this one on a bounded window, so the
+            # room could be told "mọi người đã cân bằng" with transfers pending,
+            # or handed an empty transfer list with no explanation at all.
+            if not transfers:
                 return {
                     "ok": True,
                     "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
@@ -705,22 +716,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng).",
                 }
 
-            meals, payments = ledger.period_transfer_inputs(s, ctx.room_id, from_date, to_date)
-            transfers = per_payer_transfers(meals, payments)
             # include_inactive: a transfer may involve a since-removed member.
             members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
-            # Meal-level detail (date/dish) so each QR note names the meals it
-            # settles; per_payer_transfers nets these away, so we re-fetch them.
-            #
-            # From debt_breakdown, NOT period_meal_details: the latter lists every
-            # meal the debtor took part in, including ones they have already paid
-            # off. Production sent Giang a 107,000đ QR noted "T4 bun bo hue, T5
-            # bun cha rua xe, T6" when the T4 bún bò huế was settled four days
-            # earlier — he reported the memo as wrong twice and was right. These
-            # edges carry FIFO-attributed payments, so `outstanding > 0` is
-            # exactly "still being repaid".
-            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
-                          if e.outstanding > 0]
             fallback_note = f"Chia tien an {to_date.day}/{to_date.month}"
 
             rows: list[dict] = []

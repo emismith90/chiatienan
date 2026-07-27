@@ -285,3 +285,69 @@ def test_opposing_debts_from_real_meals_still_net():
     ]
     transfers = per_payer_transfers(meals, [])
     assert [(t.from_member, t.to_member, t.amount) for t in transfers] == [(LINH, GIANG, 14_000)]
+
+
+# --- targeted payments must not evaporate ----------------------------------- #
+
+def _edge(debtor, creditor, meal_id, amount, day=1):
+    from datetime import date
+
+    from app.money import DebtEdge
+    return DebtEdge(debtor=debtor, creditor=creditor, meal_id=meal_id, dish=None,
+                    occurred_on=date(2026, 7, day), amount=amount)
+
+
+def test_a_targeted_payment_for_a_missing_meal_falls_back_to_the_pair():
+    """⑦ quick-pay stamps meal_id; editing that meal re-records it under a NEW id.
+    The payment used to bind to the vanished edge and be discarded, so the payer's
+    statement showed their share unpaid while the settlement counted it."""
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=99, amount=55_000)],
+        [{"from": 1, "to": 2, "amount": 50_000, "meal_id": 42}],   # 42 was voided
+    )
+    assert [e.paid for e in edges] == [50_000]
+    assert [e.outstanding for e in edges] == [5_000]
+
+
+def test_a_targeted_overpayment_spills_onto_the_pair_s_other_meals():
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=1, amount=50_000, day=1), _edge(1, 2, meal_id=2, amount=30_000, day=2)],
+        [{"from": 1, "to": 2, "amount": 70_000, "meal_id": 1}],
+    )
+    by_meal = {e.meal_id: e.outstanding for e in edges}
+    assert by_meal == {1: 0, 2: 10_000}
+
+
+def test_a_targeted_payment_still_settles_its_own_meal_first():
+    """The point of meal_id: pay off the meal you chose, not the oldest one."""
+    from app.money import apply_payments_fifo
+
+    edges = apply_payments_fifo(
+        [_edge(1, 2, meal_id=1, amount=50_000, day=1), _edge(1, 2, meal_id=2, amount=50_000, day=2)],
+        [{"from": 1, "to": 2, "amount": 50_000, "meal_id": 2}],
+    )
+    assert {e.meal_id: e.outstanding for e in edges} == {1: 50_000, 2: 0}
+
+
+def test_net_transfers_and_per_payer_transfers_agree():
+    """Two ways to the same answer; they share the netting step so they cannot
+    drift. per_payer_transfers is kept for callers holding only meals+payments."""
+    from app.money import apply_payments_fifo, net_transfers, per_payer_transfers
+
+    meals = [
+        {"meal_id": 1, "payer_id": 2, "occurred_on": __import__("datetime").date(2026, 7, 1),
+         "dish": None, "shares": {1: 40_000, 2: 40_000}},
+        {"meal_id": 2, "payer_id": 1, "occurred_on": __import__("datetime").date(2026, 7, 2),
+         "dish": None, "shares": {1: 30_000, 2: 30_000}},
+    ]
+    payments = [{"from": 1, "to": 2, "amount": 10_000, "meal_id": None}]
+    from app.money import build_debt_edges
+    edges = apply_payments_fifo(build_debt_edges(meals), payments)
+
+    a = [(t.from_member, t.to_member, t.amount) for t in net_transfers(edges)]
+    b = [(t.from_member, t.to_member, t.amount) for t in per_payer_transfers(meals, payments)]
+    assert a == b

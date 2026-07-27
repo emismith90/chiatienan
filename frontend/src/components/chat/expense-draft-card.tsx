@@ -91,6 +91,17 @@ export function ExpenseDraftCard({
   const timer = useRef<any>(null);
   const skipFirstRun = useRef(true);
 
+  /** The card's current editable state, exactly as the PATCH body wants it.
+   * Held in a ref as well as sent on the debounce, so `Record now` can flush it
+   * synchronously instead of racing the timer. */
+  const draftState = {
+    payer_member_id: payer, member_participants: billed, guests,
+    bill_total: total, adjustments, items,
+    dish: dish || null, initiator: initiator || null, note: note || null,
+  };
+  const latest = useRef(draftState);
+  latest.current = draftState;
+
   // Debounced PATCH of the editable state so auto-save-on-supersede uses the latest.
   // Skip the very first run: that fires on mount with the data we just loaded
   // from `att`, unchanged, and would PATCH the draft for no reason.
@@ -102,14 +113,25 @@ export function ExpenseDraftCard({
     if (att.status !== "pending") return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      api.patchDraft(roomId, message.id, {
-        payer_member_id: payer, member_participants: billed, guests,
-        bill_total: total, adjustments, items,
-        dish: dish || null, initiator: initiator || null, note: note || null,
-      }).catch(() => {});
+      // Surface rejections instead of swallowing them: an equal-split that
+      // drives a share negative is refused server-side, and silently dropping
+      // that left the card previewing numbers it could never record.
+      api.patchDraft(roomId, message.id, latest.current).catch((err) => {
+        setError(err instanceof ApiError ? err.message : "Couldn't save that edit.");
+      });
     }, 600);
     return () => timer.current && clearTimeout(timer.current);
   }, [payer, billed, guests, total, adjustments, items, dish, initiator, note, att.status, roomId, message.id]);
+
+  /** Push the current card state before acting on it.
+   * `commit_draft` records what is STORED, and the PATCH is 600ms behind — so
+   * confirming right after an edit recorded the previous total while the card
+   * showed the new one. Flushing first (and failing loudly) closes that window. */
+  const flushEdits = async () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (att.status !== "pending" || skipFirstRun.current) return;
+    await api.patchDraft(roomId, message.id, latest.current);
+  };
 
   const itemized = items.length > 0;
 
@@ -248,8 +270,10 @@ export function ExpenseDraftCard({
           {itemGap !== 0 && (
             <p className="text-xs text-[var(--text-secondary)]">
               Bill is {fmt(Math.abs(itemGap))}đ {itemGap < 0 ? "below" : "above"} the item prices
-              ({fmt(itemsSum)}đ) — the {itemGap < 0 ? "discount" : "fee"} is spread across everyone
-              in proportion to what they ordered.
+              ({fmt(itemsSum)}đ) — the {itemGap < 0 ? "discount" : "fee"} is spread{" "}
+              {(att.discount_split ?? "proportional") === "equal"
+                ? "equally, the same amount for everyone."
+                : "across everyone in proportion to what they ordered."}
             </p>
           )}
         </div>
@@ -298,7 +322,8 @@ export function ExpenseDraftCard({
             onClick={() => {
               setBusy(true);
               setError(null);
-              api.commitDraft(roomId, message.id)
+              flushEdits()
+                .then(() => api.commitDraft(roomId, message.id))
                 .catch((err) => {
                   setError(err instanceof ApiError ? err.message : "Couldn't record, please try again.");
                 })
