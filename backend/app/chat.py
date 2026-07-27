@@ -482,9 +482,17 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 if result.final_text:
                     stray = moneyguard.unbacked_amounts(body, text, result.tools)
                     if stray:
+                        # images=N matters for triage. Replaying four days of
+                        # production through this: of the alerts that survive a
+                        # tool-output allow-set, all but one were prices the model
+                        # read off a bill photo — correct, but unattributable by
+                        # construction because image content is not text. The one
+                        # that was not (a split it computed with bash) is the
+                        # class worth enforcing on, so the two must be separable
+                        # before this can ever block.
                         log.warning(
-                            "unbacked money in reply: room=%s turn=%s amounts=%s tools=%s",
-                            room_id, result.turn_id, stray,
+                            "unbacked money in reply: room=%s turn=%s amounts=%s images=%d tools=%s",
+                            room_id, result.turn_id, stray, len(images or []),
                             [inv.name for inv in result.tools],
                         )
 

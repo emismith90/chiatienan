@@ -560,6 +560,9 @@ async def test_unbacked_money_in_a_reply_is_logged(monkeypatch, db, caplog):
     assert "unbacked money in reply" in caplog.text
     assert "75000" in caplog.text and "89000" in caplog.text
     assert "t-abc" in caplog.text
+    # images=N is the triage key: bill-photo prices are unattributable by
+    # construction, a bash-computed split is not.
+    assert "images=0" in caplog.text
     # Reporting only — the reply is still delivered.
     assert "75,000đ" in msg.body
 
