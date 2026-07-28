@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PayActions } from "../pay-actions";
 import { BotMessage } from "../bot-message";
@@ -29,6 +29,16 @@ beforeEach(() => {
   Object.defineProperty(window, "location", { value: loc, configurable: true });
 });
 
+afterEach(() => {
+  // The save tests stub fetch/URL/navigator.share; left in place they break
+  // every test after them in the file.
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  Object.assign(navigator, { share: undefined, canShare: undefined });
+  delete (URL as unknown as Record<string, unknown>).createObjectURL;
+  delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+});
+
 describe("PayActions — launching the bank app", () => {
   it("opens the app for the member's REGISTERED bank, not the payee's", () => {
     // The roster says this member banks with Vietcombank; the payee is at
@@ -37,8 +47,7 @@ describe("PayActions — launching the bank app", () => {
       <PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
-    expect(loc.href).toContain("app=vcb");        // the payer's app opens…
-    expect(loc.href).toContain("ba=03924686701@tpb");  // …paying the TPBank payee
+    expect(loc.href).toContain("scheme=vietcombankmobile");
     expect(loc.href).toContain("package=com.VCB");
   });
 
@@ -56,24 +65,22 @@ describe("PayActions — launching the bank app", () => {
     expect(screen.getByRole("button", { name: /Mở Vietcombank/i })).toBeInTheDocument();
   });
 
-  it("carries the whole transfer, and routes through no third party", () => {
-    // The regression that shipped: these went to dl.vietqr.io, which dropped
-    // every one of them, so the app opened on its home screen.
+  it("launches a scheme a phone actually registers, and no third party", () => {
+    // Both failures this has had, pinned: routing via dl.vietqr.io put a page in
+    // the way, and `vietqr://pay?…` made iOS say "the address is invalid".
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />);
     fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
-    expect(loc.href).toContain("am=107000");
-    expect(loc.href).toContain("ba=03924686701@tpb");
-    expect(loc.href).toContain("tn=Linh%3A%20T2");
-    expect(loc.href).toContain("bn=NGUYEN%20VAN%20A");
     expect(loc.href).not.toContain("dl.vietqr.io");
+    expect(loc.href).not.toContain("vietqr:");
+    expect(loc.href).toContain("scheme=vietcombankmobile");
   });
 
-  it("uses the vietqr scheme, which is what carries a transfer", () => {
+  it("wraps the scheme in an intent on Android, for Chrome's own fallback", () => {
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="TCB" />);
     fireEvent.click(screen.getByRole("button", { name: /Mở Techcombank/i }));
-    // Android wraps it so Chrome can fall back to the Play Store by itself.
-    expect(loc.href.startsWith("intent://pay?")).toBe(true);
-    expect(loc.href).toContain("scheme=vietqr");
+    expect(loc.href.startsWith("intent://")).toBe(true);
+    expect(loc.href).toContain("scheme=tcb");
+    expect(loc.href).toContain("browser_fallback_url");
   });
 
   it("prefers the app the member last paid from over their registered bank", () => {
@@ -95,8 +102,7 @@ describe("PayActions — launching the bank app", () => {
     fireEvent.click(screen.getByRole("button", { name: /MB Bank/ }));
 
     await waitFor(() => expect(localStorage.getItem("chiatienan.bankApp")).toBe("mb"));
-    expect(loc.href).toContain("app=mb");
-    expect(loc.href).toContain("am=1000");
+    expect(loc.href).toContain("scheme=mbbank");
   });
 
   it("shows no launch button on desktop, where there is no app to open", () => {
@@ -111,6 +117,70 @@ describe("PayActions — launching the bank app", () => {
   it("renders nothing when the QR URL is unparseable", () => {
     const { container } = render(<PayActions qrUrl="https://x.test/nope.png" amount={1} note="" />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("PayActions — saving the QR, the only route that pre-fills", () => {
+  const pngBlob = () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+
+  it("shares the QR file so the camera roll can take it", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { share, canShare: () => true });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => pngBlob() }));
+
+    render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />);
+    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    const [[arg]] = share.mock.calls;
+    expect(arg.files).toHaveLength(1);
+    expect(arg.files[0].type).toBe("image/png");
+    // The amount names the file, so a camera roll full of these is navigable.
+    expect(arg.files[0].name).toContain("107000");
+    expect(await screen.findByText(/Đã lưu/)).toBeInTheDocument();
+  });
+
+  it("treats a dismissed share sheet as nothing happening, not a failure", async () => {
+    const abort = Object.assign(new Error("cancelled"), { name: "AbortError" });
+    Object.assign(navigator, { share: vi.fn().mockRejectedValue(abort), canShare: () => true });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => pngBlob() }));
+
+    render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
+    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Lưu QR/ })).toBeInTheDocument());
+    expect(screen.queryByText(/thất bại/)).not.toBeInTheDocument();
+  });
+
+  it("falls back to a download where the share sheet takes no files", async () => {
+    Object.assign(navigator, { share: undefined, canShare: () => false });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => pngBlob() }));
+    // Only the statics — replacing the whole URL global would break the
+    // `new URL(qrUrl)` that parseQrUrl needs, and the component would render
+    // nothing at all.
+    Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
+    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(await screen.findByText(/Đã lưu/)).toBeInTheDocument();
+  });
+
+  it("says so when the QR cannot be fetched, rather than claiming a save", async () => {
+    Object.assign(navigator, { canShare: () => true });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+    render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
+    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+    expect(await screen.findByText(/thất bại/)).toBeInTheDocument();
+  });
+
+  it("is not offered on desktop, where the QR can just be scanned", () => {
+    setUA(DESKTOP_UA);
+    render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
+    expect(screen.queryByRole("button", { name: /Lưu QR/ })).not.toBeInTheDocument();
   });
 });
 

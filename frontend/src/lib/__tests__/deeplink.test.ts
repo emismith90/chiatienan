@@ -6,10 +6,9 @@ import {
   detectPlatform,
   listApps,
   normalizeBankCode,
+  appLaunchUrl,
   parseQrUrl,
-  payLaunchUrl,
   storeUrlFor,
-  transferParams,
 } from "../deeplink";
 
 const ANDROID_UA =
@@ -102,79 +101,62 @@ describe("appForBankCode", () => {
   });
 });
 
-describe("payLaunchUrl", () => {
-  const payee = { bankCode: "TPB", accountNumber: "03924686701", accountName: "NGUYEN VAN A" };
-
-  it("hands iOS the documented vietqr:// payment URL", () => {
-    const url = payLaunchUrl(appById("vcb")!, "ios", payee, 107_000, "Linh: T2 bun cha",
-                             "https://chiatienan.duckdns.org");
-    expect(url).toBe(
-      "vietqr://pay?ba=03924686701@tpb&am=107000&tn=Linh%3A%20T2%20bun%20cha" +
-        "&bn=NGUYEN%20VAN%20A&app=vcb&url=https%3A%2F%2Fchiatienan.duckdns.org",
-    );
+describe("appLaunchUrl", () => {
+  it("opens the bank's own scheme on iOS", () => {
+    // The registered one. `vietqr://pay?…`, which VietQR documents and which
+    // would have carried the transfer, is unhandled on a real device — an
+    // iPhone with Techcombank installed answered it with "the address is
+    // invalid". Asserting the bank scheme here is what keeps it from coming back.
+    expect(appLaunchUrl(appById("tcb")!, "ios")).toBe("tcb://");
+    expect(appLaunchUrl(appById("tpb")!, "ios")).toBe("hydro://");
   });
 
-  it("carries the transfer on Android too, aimed at the payer's own app", () => {
-    const url = payLaunchUrl(appById("vcb")!, "android", payee, 107_000, "Linh: T2")!;
-    expect(url.startsWith("intent://pay?ba=03924686701@tpb&am=107000")).toBe(true);
-    expect(url).toContain("scheme=vietqr");
+  it("never launches the vietqr scheme, on either platform", () => {
+    for (const platform of ["ios", "android"] as const) {
+      for (const app of APPS) {
+        expect(appLaunchUrl(app, platform), `${app.appId} ${platform}`)
+          .not.toContain("vietqr:");
+      }
+    }
+  });
+
+  it("opens the intent URL on Android, with a Play Store fallback spliced in", () => {
+    const url = appLaunchUrl(appById("vcb")!, "android")!;
+    expect(url.startsWith("intent://")).toBe(true);
+    expect(url).toContain("scheme=vietcombankmobile");
     expect(url).toContain("package=com.VCB");
+    // Chrome resolves this itself when the package is absent, so iOS's timer is
+    // not needed there.
     expect(url).toContain(
       "S.browser_fallback_url=" +
         encodeURIComponent("https://play.google.com/store/apps/details?id=com.VCB"),
     );
+    // `end` must stay the terminator or Chrome rejects the whole URL.
     expect(url.endsWith(";end")).toBe(true);
   });
 
-  it("keeps the payer's app distinct from the payee's bank", () => {
-    // Paying a TPBank payee from a Vietcombank app: app=vcb, ba=…@tpb. Swapping
-    // these sends the money to the wrong bank.
-    const url = payLaunchUrl(appById("vcb")!, "ios", payee, 1000, "")!;
-    expect(url).toContain("ba=03924686701@tpb");
-    expect(url).toContain("app=vcb");
-  });
-
-  it("still pays when we cannot guess the app, just without an app hint", () => {
-    const url = payLaunchUrl(null, "ios", payee, 1000, "x")!;
-    expect(url).toContain("ba=03924686701@tpb");
-    expect(url).not.toContain("app=");
-  });
-
   it("has nothing to open on desktop", () => {
-    expect(payLaunchUrl(appById("tcb")!, "other", payee, 1000, "x")).toBeNull();
+    expect(appLaunchUrl(appById("tcb")!, "other")).toBeNull();
   });
 
-  it("resolves a store fallback for every app in the snapshot", () => {
-    // The snapshot is scraped; losing these silently strands anyone without the
-    // app installed on a link that does nothing.
-    for (const app of APPS) {
-      expect(storeUrlFor(app, "ios"), `${app.appId} ios`).toBeTruthy();
-      expect(storeUrlFor(app, "android"), `${app.appId} android`).toBeTruthy();
+  it("carries no transfer details, because no scheme we can use accepts any", () => {
+    for (const platform of ["ios", "android"] as const) {
+      const url = appLaunchUrl(appById("tcb")!, platform)!;
+      for (const leak of ["am=", "ba=", "tn=", "bn=", "107000", "03924686701"]) {
+        expect(url).not.toContain(leak);
+      }
     }
   });
-});
 
-describe("transferParams", () => {
-  const payee = { bankCode: "TPB", accountNumber: "03924686701", accountName: "NGUYEN VAN A" };
-
-  it("normalises a BIN in the payee's bank code", () => {
-    expect(transferParams({ ...payee, bankCode: "970436" }, 1000, "x")).toContain("ba=03924686701@vcb");
-  });
-
-  it("falls back to the raw bank code when it is unknown upstream", () => {
-    expect(transferParams({ ...payee, bankCode: "WEIRD" }, 1000, "x")).toContain("ba=03924686701@weird");
-  });
-
-  it("omits empty note, holder, app and return url rather than sending blanks", () => {
-    const q = transferParams({ ...payee, accountName: "" }, 1000, "");
-    expect(q).not.toContain("tn=");
-    expect(q).not.toContain("bn=");
-    expect(q).not.toContain("app=");
-    expect(q).not.toContain("url=");
-  });
-
-  it("sends a whole-dong integer amount", () => {
-    expect(transferParams(payee, 107_000.4, "x")).toContain("am=107000");
+  it("resolves a launch target and a store page for every app in the snapshot", () => {
+    // The snapshot is scraped; a silent regression there would disable the
+    // button for a whole bank without failing anything else.
+    for (const app of APPS) {
+      expect(appLaunchUrl(app, "ios"), `${app.appId} ios`).toBeTruthy();
+      expect(appLaunchUrl(app, "android"), `${app.appId} android`).toBeTruthy();
+      expect(storeUrlFor(app, "ios"), `${app.appId} store ios`).toBeTruthy();
+      expect(storeUrlFor(app, "android"), `${app.appId} store android`).toBeTruthy();
+    }
   });
 });
 
