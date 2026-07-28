@@ -10,8 +10,8 @@ import {
   isMobile,
   listApps,
   logoFor,
+  appLaunchUrl,
   parseQrUrl,
-  payLaunchUrl,
   setPreferredAppId,
   storeUrlFor,
 } from "@/lib/deeplink";
@@ -23,12 +23,12 @@ import { getProfile } from "@/lib/rooms-store";
  * and the bank app live on the same screen, so scanning your own display is
  * impossible.
  *
- *  - "Mở <app>" opens the payer's bank app on a filled-in transfer, via
- *    `vietqr://pay?ba=…&am=…&tn=…`. A custom scheme, so no page in between; and
- *    it carries the payee, amount and note, which VietQR's HTTPS redirector
- *    silently dropped.
- *  - Copy chips stay, for the 32 of 65 banks with no app in VietQR's list, and
- *    for any app that registers `vietqr://` without honouring every field.
+ *  - "Mở <app>" opens the payer's own bank app, directly via its scheme. It
+ *    opens on the app's own screen: no launch URL we have can carry a transfer
+ *    (see `lib/deeplink.ts` — including the one VietQR documents for it, which
+ *    no bank app registers).
+ *  - Copy chips carry the numbers, because the launch cannot. They are also the
+ *    only option for the 32 of 65 banks with no app in VietQR's list.
  */
 export function PayActions({
   qrUrl,
@@ -72,10 +72,6 @@ export function PayActions({
 
   const app = appById(appId);
   const mobile = isMobile(platform);
-  // Where the bank app sends them back on success. Same-origin only, and absent
-  // during SSR — never a hardcoded host, so previews and localhost return to
-  // themselves rather than to production.
-  const returnUrl = typeof window === "undefined" ? null : window.location.origin;
 
   /** Open `target`, and on iOS follow up with the App Store if nothing took it.
    *
@@ -86,11 +82,11 @@ export function PayActions({
    * used, and the reason its 3s budget is worth keeping: shorter and a slow
    * cold start looks like a missing app.
    */
-  const launch = (app: BankApp | null) => {
-    const target = payLaunchUrl(app, platform, payee, amount, note, returnUrl);
+  const launch = (app: BankApp) => {
+    const target = appLaunchUrl(app, platform);
     if (!target) return;
     window.location.href = target;
-    if (platform !== "ios" || !app) return;
+    if (platform !== "ios") return;
     const store = storeUrlFor(app, platform);
     if (!store) return;
     const startedAt = Date.now();
@@ -112,7 +108,7 @@ export function PayActions({
     <div className="flex flex-col items-center gap-2">
       {mobile && (
         <div className="flex items-center gap-2">
-          {app ? (
+          {app && appLaunchUrl(app, platform) ? (
             <button
               type="button"
               onClick={() => {

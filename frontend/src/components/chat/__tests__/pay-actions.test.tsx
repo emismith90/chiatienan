@@ -37,8 +37,7 @@ describe("PayActions — launching the bank app", () => {
       <PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
-    expect(loc.href).toContain("app=vcb");        // the payer's app opens…
-    expect(loc.href).toContain("ba=03924686701@tpb");  // …paying the TPBank payee
+    expect(loc.href).toContain("scheme=vietcombankmobile");
     expect(loc.href).toContain("package=com.VCB");
   });
 
@@ -56,24 +55,22 @@ describe("PayActions — launching the bank app", () => {
     expect(screen.getByRole("button", { name: /Mở Vietcombank/i })).toBeInTheDocument();
   });
 
-  it("carries the whole transfer, and routes through no third party", () => {
-    // The regression that shipped: these went to dl.vietqr.io, which dropped
-    // every one of them, so the app opened on its home screen.
+  it("launches a scheme a phone actually registers, and no third party", () => {
+    // Both failures this has had, pinned: routing via dl.vietqr.io put a page in
+    // the way, and `vietqr://pay?…` made iOS say "the address is invalid".
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />);
     fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
-    expect(loc.href).toContain("am=107000");
-    expect(loc.href).toContain("ba=03924686701@tpb");
-    expect(loc.href).toContain("tn=Linh%3A%20T2");
-    expect(loc.href).toContain("bn=NGUYEN%20VAN%20A");
     expect(loc.href).not.toContain("dl.vietqr.io");
+    expect(loc.href).not.toContain("vietqr:");
+    expect(loc.href).toContain("scheme=vietcombankmobile");
   });
 
-  it("uses the vietqr scheme, which is what carries a transfer", () => {
+  it("wraps the scheme in an intent on Android, for Chrome's own fallback", () => {
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="TCB" />);
     fireEvent.click(screen.getByRole("button", { name: /Mở Techcombank/i }));
-    // Android wraps it so Chrome can fall back to the Play Store by itself.
-    expect(loc.href.startsWith("intent://pay?")).toBe(true);
-    expect(loc.href).toContain("scheme=vietqr");
+    expect(loc.href.startsWith("intent://")).toBe(true);
+    expect(loc.href).toContain("scheme=tcb");
+    expect(loc.href).toContain("browser_fallback_url");
   });
 
   it("prefers the app the member last paid from over their registered bank", () => {
@@ -95,8 +92,7 @@ describe("PayActions — launching the bank app", () => {
     fireEvent.click(screen.getByRole("button", { name: /MB Bank/ }));
 
     await waitFor(() => expect(localStorage.getItem("chiatienan.bankApp")).toBe("mb"));
-    expect(loc.href).toContain("app=mb");
-    expect(loc.href).toContain("am=1000");
+    expect(loc.href).toContain("scheme=mbbank");
   });
 
   it("shows no launch button on desktop, where there is no app to open", () => {
