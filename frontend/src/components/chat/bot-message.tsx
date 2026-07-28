@@ -4,12 +4,18 @@ import remarkGfm from "remark-gfm";
 import { ZoomableImage } from "./zoomable-image";
 import { StatementCard } from "./statement-card";
 import { SummaryCard } from "./summary-card";
+import { PayActions } from "./pay-actions";
 import { fmt } from "@/lib/format";
+import { useSession } from "@/lib/session";
 
 interface Transfer {
+  /** Debtor's member id — the pay actions are for their eyes only. */
+  from_id?: number;
   from_name: string;
   to_name: string;
   amount: number;
+  /** addInfo encoded in the QR; also what the debtor copies as the transfer note. */
+  note?: string;
   qr_url?: string | null;
   /** Server-annotated at read time: this transfer is no longer outstanding, so
    * the QR must not be payable. Settlement cards live in the thread forever and
@@ -33,6 +39,9 @@ function SettlementCard({ attachments }: { attachments: any }) {
   const transfers: Transfer[] = attachments.transfers ?? [];
   const warnings: string[] = attachments.warnings ?? [];
   const period = attachments.period ?? {};
+  // Optional-chained: settlement cards are also rendered in tests and previews
+  // that mount BotMessage outside a SessionProvider.
+  const memberId = useSession()?.memberId ?? null;
 
   return (
     <div className="mt-3 space-y-3">
@@ -60,7 +69,7 @@ function SettlementCard({ attachments }: { attachments: any }) {
             </span>
           </div>
           {t.qr_url && !t.settled && (
-            <div className="self-center">
+            <div className="flex flex-col items-center gap-2 self-center">
               <ZoomableImage
                 src={t.qr_url}
                 alt={`QR to transfer ${fmt(t.amount)} đ to ${t.to_name}`}
@@ -68,6 +77,12 @@ function SettlementCard({ attachments }: { attachments: any }) {
                 height={160}
                 className="h-40 w-40 rounded-lg border border-[var(--border)] bg-white object-contain p-1"
               />
+              {/* Only the debtor gets pay actions: a "pay now" button on someone
+                  else's debt in a shared room is a misfire. Everyone still sees
+                  the QR, so handing a phone across the table keeps working. */}
+              {t.from_id != null && t.from_id === memberId && (
+                <PayActions qrUrl={t.qr_url} amount={t.amount} note={t.note ?? ""} />
+              )}
             </div>
           )}
           {t.qr_url && t.settled && (

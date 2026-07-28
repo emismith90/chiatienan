@@ -1,0 +1,809 @@
+{
+ "_generated_by": "frontend/scripts/gen-bank-apps.py",
+ "_sources": [
+  "https://api.vietqr.io/v2/android-app-deeplinks",
+  "https://api.vietqr.io/v2/ios-app-deeplinks",
+  "https://api.vietqr.io/v2/banks"
+ ],
+ "apps": [
+  {
+   "appId": "abb",
+   "appName": "AB Ditizen",
+   "bankName": "Ngân hàng TMCP An Bình",
+   "monthlyInstall": 10000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/DPT0tkkufSaDOyToT-tA3GVKj1b6_b7fWBt27NHebdVhkqTemHJKOntP5sIKkb6zFN8",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/b9/db/24/b9db243f-a89e-b156-136c-4d35558ffb06/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "acb",
+   "appName": "ACB One",
+   "bankName": "Ngân hàng TMCP Á Châu",
+   "monthlyInstall": 70000,
+   "autofill": true,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/knIdLBzE-ngS8Fhim_0FxH56vWhXaQmuLcpMdAcoFY_790hd3t4_XQAlyEWUnYJRyWFP",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/a1/ae/1e/a1ae1e68-2d58-92bc-9ec5-42917a59f767/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "acb-biz",
+   "appName": "ACB One Biz",
+   "bankName": "Ngân hàng TMCP Á Châu",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/oVYhKiohvZ2PnWSsfgmzMGQlCRQeJ-4Em4fNL8ooS6xyGNZwIHOruqscfU6-9Ez7sw",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/df/62/de/df62de23-9f41-5498-9cd1-a73c730a1e1d/AppIcon-0-0-1x_U007emarketing-0-0-0-6-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "bidv",
+   "appName": "BIDV SmartBanking",
+   "bankName": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
+   "monthlyInstall": 200000,
+   "autofill": true,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/SD4lUzWCqLq6nqURm8abnazm8sC0h_hkikryHyODrVpI0g3xMjeuaVs379jUCKrd0vk",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/88/1b/e6/881be6df-e9b6-8b66-e0fb-2499ac874734/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "bvb",
+   "appName": "BAOVIET Smart",
+   "bankName": "Ngân hàng TMCP Bảo Việt",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/ZdTADvcU3RICcXdz30qFskmAWe9i5wS-AR_Kk3OwtETvicsUwGR7328JEZRaiGZoV4M",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/1c/0a/41/1c0a4107-99e1-2ffc-7ccb-54d2ca916395/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "cake",
+   "appName": "CAKE - Digital Banking",
+   "bankName": "TMCP Việt Nam Thịnh Vượng - Ngân hàng số CAKE by VPBank",
+   "monthlyInstall": 100000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/RWPd1WdrkKP53RyHHRdmV35eOhxoCHmlujBUIizNf8Gy1pHN4_MVuYao4ncZwFp2Poc",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/7e/52/78/7e5278a7-0a19-3d30-fb30-e4a1be011e11/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "cimb",
+   "appName": "OCTO by CIMB",
+   "bankName": "Ngân hàng TNHH MTV CIMB Việt Nam",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/9_Iv94hJnVokIouNdXH7Ctczh_ZYOyG8Hm9f5iL5GzJI6NlIBnB2oJ9bBUuyqXNu_sk",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/ec/78/52/ec785212-1150-2d2c-4b53-8c55f593ce52/AppIconSummer-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "coopbank",
+   "appName": "Co-opBank Mobile Banking",
+   "bankName": "Ngân hàng Hợp tác xã Việt Nam",
+   "monthlyInstall": 6000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/3Ca0E1CbxyY9sSeEmq_rNvPIFR4cFcpx9tlucR_UkWKkJb-eJm2jLAHj3C99djB_yYY",
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/e2/62/c2/e262c20f-212d-0859-5447-f0875990fcf1/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "eib",
+   "appName": "Eximbank Mobile Banking",
+   "bankName": "Ngân hàng TMCP Xuất Nhập khẩu Việt Nam",
+   "monthlyInstall": 9000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/ku03AFfcKRFoAZCg-coMNJdVFQ0pcDWwRxy416NMd4OJ7TlD21Ia3MyqrdN8LgJTOw",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/0f/b5/01/0fb501f0-dd2c-fab7-2702-270ccf42d88c/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "hdb",
+   "appName": "HDBank",
+   "bankName": "Ngân hàng TMCP Phát triển Thành phố Hồ Chí Minh",
+   "monthlyInstall": 30000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/W9AeQiFfNrAySMdcebkiVuA4KwoYRF3QcXa1I2QzlnNDgR9Sqdwzagz8XVCmZxnW5Q",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/a0/6c/41/a06c4139-e4a9-9d1f-9f12-52d20f4ef02d/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "icb",
+   "appName": "VietinBank iPay",
+   "bankName": "Ngân hàng TMCP Công thương Việt Nam",
+   "monthlyInstall": 200000,
+   "autofill": true,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/F8D0AbyMmiuwsTZYLaPsu_o40XGfQHgvRnq25lVSWupgHPpH3-TQ9soMrWwDJco3siI",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/14/04/b8/1404b8f4-a91f-f8bf-7af5-1a0e59bbdf19/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "klb",
+   "appName": "KienlongBank Plus",
+   "bankName": "Ngân hàng TMCP Kiên Long",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/wxlX5rGP2XiyvRqDYqsHFDjlDiim0bukT2tv1QfxcpkQ5OvfwCp4lDyvNWD9_HR8GQ",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/de/97/dd/de97dd21-584c-481e-b875-112663dcccc4/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "lpb",
+   "appName": "Liên Việt 24h",
+   "bankName": "Ngân hàng TMCP Bưu Điện Liên Việt",
+   "monthlyInstall": 70000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/D2T8P3NOeROq0vaYMdBgqrhfdH7tCPB_iQafQqBhVc-NiC5m-UacTDP0qY2dM3b9OZY",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/d6/dd/3a/d6dd3a04-f846-e108-12bf-74436cc7340a/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "mb",
+   "appName": "MB Bank",
+   "bankName": "Ngân hàng TMCP Quân đội",
+   "monthlyInstall": 500000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/rBEfIxFhnCIq9p6eMdw-U1RhD5psINWr0_Rbx3Wvy3HMJpRRsnG6efhug5eyPlJc7u0",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/f4/0a/b6/f40ab6a2-e67d-e267-9c46-ae03dfa238a9/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "nab",
+   "appName": "Nam A Bank - Open Banking",
+   "bankName": "Ngân hàng TMCP Nam Á",
+   "monthlyInstall": 9000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/dsST6B9oQ167K3Mar3x-GPVlO5jrA1TTfOjO1CtzQx0gexM8tg7ZBKsFMnFvp5fgCA",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple116/v4/d5/21/44/d52144c9-e22f-0222-5b75-4a17d8decad9/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "ncb",
+   "appName": "NCB iziMobile",
+   "bankName": "Ngân hàng TMCP Quốc Dân",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/oyLbSzQz6lBIuDEC2keVHGqNIAhRP4VvowENdvjTOc7877bniURrBnacwp3ov04UFw",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/32/3a/b1/323ab10a-f2ad-268a-2e95-28e91a121e73/AppIcon-New-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "ocb",
+   "appName": "OCB OMNI - Digital Bank",
+   "bankName": "Ngân hàng TMCP Phương Đông",
+   "monthlyInstall": 80000,
+   "autofill": true,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/AUZSfk4Zv0Y1QTwbPfjZkJKwWDMW7g9koW-CaxBgkkIKuVJZYZDDL8iizRKTvq-V6-o",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/f0/66/94/f066942c-2cc6-2c87-407b-a38f2e99656f/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "oceanbank",
+   "appName": "OceanBank",
+   "bankName": "Ngân hàng Thương mại TNHH MTV Đại Dương",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/FZ-e9Sjaoe_THpguYbw3BgG-uaUR5EmEsn5NRHRj684_8oYxJoj69P0MpqDcbn4zjB4",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/94/4a/64/944a64c3-8425-f71d-bcc6-24ac88c3214b/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "pbvn",
+   "appName": "PB engage VN",
+   "bankName": "Ngân hàng TNHH MTV Public Việt Nam",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/7nGworLSRDx7Sz7bfTfynu-s74TDCscYd5eG4JAN5gHdSL8GoejBeB9E5RfqXkn2ASw",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/25/ee/83/25ee83bb-4ee0-648b-56fe-698c2bb3f21e/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "pvcb",
+   "appName": "PV Mobile Banking",
+   "bankName": "Ngân hàng TMCP Đại Chúng Việt Nam",
+   "monthlyInstall": 9000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/vJX7EY--Lts1D3pRgCDGOtIafEuxKQjYugP58WGY9PBXiUWtkyY0-D7NGHR4BEUX7sw",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/10/78/4f/10784ff4-2635-bebc-74c7-5ac09d2e161d/AppIcon-1x_U007emarketing-0-10-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "scb",
+   "appName": "SCB Mobile Banking",
+   "bankName": "Ngân hàng TMCP Sài Gòn",
+   "monthlyInstall": 20000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/z7gOit-6cq79jN3hcU-lquDoswKkIKjMYRWCpYKQ9yefkCCJBxn7DBIz0GFOmEg2mug",
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/50/3b/78/503b7850-6d35-e707-d503-c9d7d6b87ca1/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "seab",
+   "appName": "SeAMobile",
+   "bankName": "Ngân hàng TMCP Đông Nam Á",
+   "monthlyInstall": 20000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/njk0e9EHepwCNvgqcjBWYWyrnpQOnFCVzED_4S8ePI5V1vVKJ6QlVkjiwk7rhCQV0-Y",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/19/18/68/191868f2-e019-e06a-ae1e-fd29373ef151/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "sgicb",
+   "appName": "SAIGONBANK Smart Banking",
+   "bankName": "Ngân hàng TMCP Sài Gòn Công Thương",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/0G5pmrhbkXb__ZJJmQ_btF2V1sk90jnEGhvXdmm9FXORuo2T__GiSNrHWI6GlzupUds",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple126/v4/3e/25/fe/3e25fe28-ec84-d490-9301-580c636260c6/AppIcon-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "shb",
+   "appName": "SHB Mobile Banking",
+   "bankName": "Ngân hàng TMCP Sài Gòn - Hà Nội",
+   "monthlyInstall": 20000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/v5oiUb9OH80qpTRgcKPpXHkqmkO5MAZfxldamoCPCbdUMOruCabujukSJmXF2FK3hco",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/cf/50/e3/cf50e3ff-1e1b-25dc-3c17-7a2f95484310/AppIcon_Release-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "shbvn",
+   "appName": "Shinhan Bank Vietnam SOL",
+   "bankName": "Ngân hàng TNHH MTV Shinhan Việt Nam",
+   "monthlyInstall": 20000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/1BSuD_TyG_azvCaCH_p1WIv8NYdFC0GuS4tVMubcGRn1yXpGfOjeE-yPZ4lmzEdK-zg",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/4e/1a/2e/4e1a2ec7-77ca-fce6-cb67-3e104d7d1b58/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "tcb",
+   "appName": "Techcombank Mobile",
+   "bankName": "Ngân hàng TMCP Kỹ thương Việt Nam",
+   "monthlyInstall": 300000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/Ddr3ZQEu6Vef9JV9ITALeyBEXvYwQWZ3kKJXxrdncD9JR0xlsO--J6zo7uGARfuTBmk",
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple122/v4/b2/b4/d1/b2b4d153-ed9f-aab6-996c-205c583c1339/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "timo",
+   "appName": "Timo Digital Bank",
+   "bankName": "Ngân hàng TMCP Bản Việt",
+   "monthlyInstall": 70000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/vZpDzZUuTlE43Nf_XcjQOx9gxrBoKGzKMiPVuie3isiE3MTH5iv9PQ_OGJaod9AqS5M",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/a2/74/38/a274389d-f000-71b1-645c-91e9922cd577/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-P3-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "tpb",
+   "appName": "TPBank Mobile",
+   "bankName": "Ngân hàng TMCP Tiên Phong",
+   "monthlyInstall": 90000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/DiXudMm5iNSTqI1RlC8L5lYZq7DhyQUIafQJJW1iwA4EYgLUaJIjbYx6jtdHKVy5ry8",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/c3/31/46/c3314678-be31-dda0-621b-ff8f9f100c82/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "tpb-pay",
+   "appName": "TPBank QuickPay",
+   "bankName": "Ngân hàng TMCP Tiên Phong",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/EV49lQLAwGgHIPSVMd0btjPvbikN---UyGkbHVw6ldLYdMeS_6LKpmpnLk9xIGR244E",
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple116/v4/80/39/e2/8039e21e-83d4-3f1a-de06-2ea1d8ef30f1/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "vab",
+   "appName": "VietABank EzMobile",
+   "bankName": "Ngân hàng TMCP Việt Á",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/9VrdSOnjmE5ocjxm85jFYEcdAWxYSyVGqkv6X1BBH7mdWiEQKO4Lo_lbk--MHH6p1Ck",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/a3/b5/66/a3b56687-06e7-3af1-5f1f-d4bcd745ae90/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "vba",
+   "appName": "Agribank E-Mobile Banking",
+   "bankName": "Ngân hàng Nông nghiệp và Phát triển Nông thôn Việt Nam",
+   "monthlyInstall": 300000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/rNSXUqGnK-ljK6qUdUmy7h_sDrMOzZ1nPwAUAwshsmPaQuwNGn0Xwj-psgFrBSJOHg",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/a6/7e/98/a67e98e6-20c2-5f96-c364-f79a9fe03819/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "vcb",
+   "appName": "Vietcombank",
+   "bankName": "Ngân hàng TMCP Ngoại Thương Việt Nam",
+   "monthlyInstall": 300000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/hRq2DVKkzBXQkyftxr0e2ytl0fS2hEWx3UTe3V652RfJVYWqVRGgBNhmZgqNzJ8PKHE",
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/c6/c9/ed/c6c9ed04-11f8-7269-fcc3-9609126682c0/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "vib",
+   "appName": "MyVIB",
+   "bankName": "Ngân hàng TMCP Quốc tế Việt Nam",
+   "monthlyInstall": 40000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/RRo7NaHuZaHpyJHJFPLp3ue4rK-BDe8MI4LquEFHs_mMtVET2ofH21PJn3t0vU7F3Q",
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/40/a7/46/40a74658-ed09-5706-f7c1-795d1c562d86/AppIcon-1x_U007emarketing-0-5-0-0-sRGB-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "vib-2",
+   "appName": "MyVIB 2.0",
+   "bankName": "Ngân hàng TMCP Quốc tế Việt Nam",
+   "monthlyInstall": 40000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/1PXaSrS8B9f4u3OBz2IroGPIYri0Bb2PBH4CGOuZqPqgyQAoBCEFeBC7ty_hDVPaM98",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/72/95/f4/7295f4af-15b4-bc41-62e9-911a817e04dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "vietbank",
+   "appName": "Vietbank Digital",
+   "bankName": "Ngân hàng TMCP Việt Nam Thương Tín",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/lW_BzZL3I2RmWFKAM56h93do2fmNApvi2ZAO5FhV6dxBTcOM5xLrzc79fpOvLbnEU0U",
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/3f/ca/1b/3fca1b1a-9009-2a8a-6eff-2ee63c36f18f/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png"
+  },
+  {
+   "appId": "vpb",
+   "appName": "VPBank NEO",
+   "bankName": "Ngân hàng TMCP Việt Nam Thịnh Vượng",
+   "monthlyInstall": 200000,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/u9fUwltudW3eSwh0RddQsiAzTpXWRtD8TS0TCC3s--NgUej28iWoCikXCrFLd89YgxHX",
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/0f/45/e5/0f45e506-590d-860d-8a0f-61c460d8b6dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  },
+  {
+   "appId": "wvn",
+   "appName": "Woori WON Vietnam",
+   "bankName": "Ngân hàng TNHH MTV Woori Việt Nam",
+   "monthlyInstall": 0,
+   "autofill": false,
+   "android": true,
+   "ios": true,
+   "logoAndroid": "https://play-lh.googleusercontent.com/K6mADuiW7PgDg77dK03AWx-TLFaAMydQ9T05laBEwqJUa5lJMx6wZAMQidcoGYgRJg",
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/29/92/12/299212d8-a419-f884-b8c8-77807cf1ecca/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+  }
+ ],
+ "banks": [
+  {
+   "code": "ABB",
+   "bin": "970425",
+   "shortName": "ABBANK",
+   "hasApp": true
+  },
+  {
+   "code": "ACB",
+   "bin": "970416",
+   "shortName": "ACB",
+   "hasApp": true
+  },
+  {
+   "code": "BAB",
+   "bin": "970409",
+   "shortName": "BacABank",
+   "hasApp": false
+  },
+  {
+   "code": "BIDV",
+   "bin": "970418",
+   "shortName": "BIDV",
+   "hasApp": true
+  },
+  {
+   "code": "BVB",
+   "bin": "970438",
+   "shortName": "BaoVietBank",
+   "hasApp": true
+  },
+  {
+   "code": "CAKE",
+   "bin": "546034",
+   "shortName": "CAKE",
+   "hasApp": true
+  },
+  {
+   "code": "CBB",
+   "bin": "970444",
+   "shortName": "CBBank",
+   "hasApp": false
+  },
+  {
+   "code": "CIMB",
+   "bin": "422589",
+   "shortName": "CIMB",
+   "hasApp": true
+  },
+  {
+   "code": "CITIBANK",
+   "bin": "533948",
+   "shortName": "Citibank",
+   "hasApp": false
+  },
+  {
+   "code": "COOPBANK",
+   "bin": "970446",
+   "shortName": "COOPBANK",
+   "hasApp": true
+  },
+  {
+   "code": "DBS",
+   "bin": "796500",
+   "shortName": "DBSBank",
+   "hasApp": false
+  },
+  {
+   "code": "EIB",
+   "bin": "970431",
+   "shortName": "Eximbank",
+   "hasApp": true
+  },
+  {
+   "code": "GPB",
+   "bin": "970408",
+   "shortName": "GPBank",
+   "hasApp": false
+  },
+  {
+   "code": "HDB",
+   "bin": "970437",
+   "shortName": "HDBank",
+   "hasApp": true
+  },
+  {
+   "code": "HLBVN",
+   "bin": "970442",
+   "shortName": "HongLeong",
+   "hasApp": false
+  },
+  {
+   "code": "HSBC",
+   "bin": "458761",
+   "shortName": "HSBC",
+   "hasApp": false
+  },
+  {
+   "code": "IBK - HCM",
+   "bin": "970456",
+   "shortName": "IBKHCM",
+   "hasApp": false
+  },
+  {
+   "code": "IBK - HN",
+   "bin": "970455",
+   "shortName": "IBKHN",
+   "hasApp": false
+  },
+  {
+   "code": "ICB",
+   "bin": "970415",
+   "shortName": "VietinBank",
+   "hasApp": true
+  },
+  {
+   "code": "IVB",
+   "bin": "970434",
+   "shortName": "IndovinaBank",
+   "hasApp": false
+  },
+  {
+   "code": "KBHCM",
+   "bin": "970463",
+   "shortName": "KookminHCM",
+   "hasApp": false
+  },
+  {
+   "code": "KBHN",
+   "bin": "970462",
+   "shortName": "KookminHN",
+   "hasApp": false
+  },
+  {
+   "code": "KBank",
+   "bin": "668888",
+   "shortName": "KBank",
+   "hasApp": false
+  },
+  {
+   "code": "KEBHANAHCM",
+   "bin": "970466",
+   "shortName": "KEBHanaHCM",
+   "hasApp": false
+  },
+  {
+   "code": "KEBHANAHN",
+   "bin": "970467",
+   "shortName": "KEBHANAHN",
+   "hasApp": false
+  },
+  {
+   "code": "KLB",
+   "bin": "970452",
+   "shortName": "KienLongBank",
+   "hasApp": true
+  },
+  {
+   "code": "LPB",
+   "bin": "970449",
+   "shortName": "LPBank",
+   "hasApp": true
+  },
+  {
+   "code": "MAFC",
+   "bin": "977777",
+   "shortName": "MAFC",
+   "hasApp": false
+  },
+  {
+   "code": "MB",
+   "bin": "970422",
+   "shortName": "MBBank",
+   "hasApp": true
+  },
+  {
+   "code": "MBV",
+   "bin": "970414",
+   "shortName": "MBV",
+   "hasApp": false
+  },
+  {
+   "code": "MSB",
+   "bin": "970426",
+   "shortName": "MSB",
+   "hasApp": false
+  },
+  {
+   "code": "NAB",
+   "bin": "970428",
+   "shortName": "NamABank",
+   "hasApp": true
+  },
+  {
+   "code": "NCB",
+   "bin": "970419",
+   "shortName": "NCB",
+   "hasApp": true
+  },
+  {
+   "code": "NHB HN",
+   "bin": "801011",
+   "shortName": "Nonghyup",
+   "hasApp": false
+  },
+  {
+   "code": "OCB",
+   "bin": "970448",
+   "shortName": "OCB",
+   "hasApp": true
+  },
+  {
+   "code": "PBVN",
+   "bin": "970439",
+   "shortName": "PublicBank",
+   "hasApp": true
+  },
+  {
+   "code": "PGB",
+   "bin": "970430",
+   "shortName": "PGBank",
+   "hasApp": false
+  },
+  {
+   "code": "PVCB",
+   "bin": "970412",
+   "shortName": "PVcomBank",
+   "hasApp": true
+  },
+  {
+   "code": "PVDB",
+   "bin": "971133",
+   "shortName": "PVcomBank Pay",
+   "hasApp": false
+  },
+  {
+   "code": "SCB",
+   "bin": "970429",
+   "shortName": "SCB",
+   "hasApp": true
+  },
+  {
+   "code": "SCVN",
+   "bin": "970410",
+   "shortName": "StandardChartered",
+   "hasApp": false
+  },
+  {
+   "code": "SEAB",
+   "bin": "970440",
+   "shortName": "SeABank",
+   "hasApp": true
+  },
+  {
+   "code": "SGICB",
+   "bin": "970400",
+   "shortName": "SaigonBank",
+   "hasApp": true
+  },
+  {
+   "code": "SHB",
+   "bin": "970443",
+   "shortName": "SHB",
+   "hasApp": true
+  },
+  {
+   "code": "SHBVN",
+   "bin": "970424",
+   "shortName": "ShinhanBank",
+   "hasApp": true
+  },
+  {
+   "code": "STB",
+   "bin": "970403",
+   "shortName": "Sacombank",
+   "hasApp": false
+  },
+  {
+   "code": "TCB",
+   "bin": "970407",
+   "shortName": "Techcombank",
+   "hasApp": true
+  },
+  {
+   "code": "TIMO",
+   "bin": "963388",
+   "shortName": "Timo",
+   "hasApp": true
+  },
+  {
+   "code": "TPB",
+   "bin": "970423",
+   "shortName": "TPBank",
+   "hasApp": true
+  },
+  {
+   "code": "UOB",
+   "bin": "970458",
+   "shortName": "UnitedOverseas",
+   "hasApp": false
+  },
+  {
+   "code": "Ubank",
+   "bin": "546035",
+   "shortName": "Ubank",
+   "hasApp": false
+  },
+  {
+   "code": "VAB",
+   "bin": "970427",
+   "shortName": "VietABank",
+   "hasApp": true
+  },
+  {
+   "code": "VBA",
+   "bin": "970405",
+   "shortName": "Agribank",
+   "hasApp": true
+  },
+  {
+   "code": "VBSP",
+   "bin": "999888",
+   "shortName": "VBSP",
+   "hasApp": false
+  },
+  {
+   "code": "VCB",
+   "bin": "970436",
+   "shortName": "Vietcombank",
+   "hasApp": true
+  },
+  {
+   "code": "VCCB",
+   "bin": "970454",
+   "shortName": "VietCapitalBank",
+   "hasApp": false
+  },
+  {
+   "code": "VIB",
+   "bin": "970441",
+   "shortName": "VIB",
+   "hasApp": true
+  },
+  {
+   "code": "VIETBANK",
+   "bin": "970433",
+   "shortName": "VietBank",
+   "hasApp": true
+  },
+  {
+   "code": "VNPTMONEY",
+   "bin": "971011",
+   "shortName": "VNPTMoney",
+   "hasApp": false
+  },
+  {
+   "code": "VPB",
+   "bin": "970432",
+   "shortName": "VPBank",
+   "hasApp": true
+  },
+  {
+   "code": "VRB",
+   "bin": "970421",
+   "shortName": "VRB",
+   "hasApp": false
+  },
+  {
+   "code": "VTLMONEY",
+   "bin": "971005",
+   "shortName": "ViettelMoney",
+   "hasApp": false
+  },
+  {
+   "code": "Vikki",
+   "bin": "970406",
+   "shortName": "Vikki",
+   "hasApp": false
+  },
+  {
+   "code": "WVN",
+   "bin": "970457",
+   "shortName": "Woori",
+   "hasApp": true
+  },
+  {
+   "code": "momo",
+   "bin": "971025",
+   "shortName": "MoMo",
+   "hasApp": false
+  }
+ ]
+}
