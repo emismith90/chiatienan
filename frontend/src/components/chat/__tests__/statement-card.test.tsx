@@ -45,3 +45,28 @@ describe("StatementCard via BotMessage", () => {
     expect(screen.queryByText(/· paid/)).not.toBeInTheDocument();
   });
 });
+
+describe("OweRow QR button", () => {
+  it("requests the bot QR card for that creditor", async () => {
+    const spy = vi.spyOn(api, "requestQr").mockResolvedValue({ ok: true, amount: 61000 });
+    render(<BotMessage body="" attachments={att} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: "QR" }));
+    expect(spy).toHaveBeenCalledWith(3, 6);
+    await waitFor(() => expect(screen.getByRole("button", { name: "QR" })).toBeEnabled());
+  });
+
+  it("surfaces the server's reason when the QR cannot be built", async () => {
+    vi.spyOn(api, "requestQr").mockRejectedValue(
+      new api.ApiError(409, "Linh has no bank details yet — please update them on /profile."),
+    );
+    render(<BotMessage body="" attachments={att} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: "QR" }));
+    await waitFor(() => expect(screen.getByText(/no bank details/)).toBeInTheDocument());
+  });
+
+  it("offers no QR on a paid row", () => {
+    const paid = { ...att, owe: [{ ...att.owe[0], status: "paid" }] };
+    render(<BotMessage body="" attachments={paid} roomId={3} />);
+    expect(screen.queryByRole("button", { name: "QR" })).not.toBeInTheDocument();
+  });
+});

@@ -114,6 +114,11 @@ export const getLedger = (
 export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>
   req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
 
+/** Ask the bot to post the VietQR card covering everything the caller owes
+ * `to` — deterministic server-side computation, no LLM turn. */
+export const requestQr = (roomId: number, to: number): Promise<{ ok: boolean; amount: number }> =>
+  req(`/api/rooms/${roomId}/qr-requests`, { method: "POST", body: JSON.stringify({ to }) });
+
 export const getInvite = (roomId: number): Promise<{ invite_token: string }> =>
   req(`/api/rooms/${roomId}/invite`);
 

@@ -12,6 +12,8 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
   const [paid, setPaid] = useState(r.status === "paid");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
+  const [qrBusy, setQrBusy] = useState(false);
+  const [qrErr, setQrErr] = useState<string | null>(null);
   const creditorId = r.creditor_id ?? r.other_id!;
   async function pay() {
     if (busy || paid) return;
@@ -26,6 +28,21 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
       setErr(true);
     } finally {
       setBusy(false);
+    }
+  }
+  // The bot posts the QR card in the chat (SSE delivers it) — that is the
+  // success feedback; the row itself only reports failures (e.g. the creditor
+  // has no bank details yet: the server's 409 detail names the fix).
+  async function requestQr() {
+    if (qrBusy) return;
+    setQrBusy(true);
+    setQrErr(null);
+    try {
+      await api.requestQr(roomId, creditorId);
+    } catch (e) {
+      setQrErr(e instanceof Error ? e.message : "QR failed");
+    } finally {
+      setQrBusy(false);
     }
   }
   // Two lines, not one. This row lives both in a chat card and in the 260px
@@ -45,6 +62,12 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {err && <span className="text-xs font-medium text-[var(--danger)]">Failed — retry</span>}
+          {!paid && (
+            <button type="button" onClick={requestQr} disabled={qrBusy} title="Bot posts the payment QR in chat"
+                    className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
+              {qrBusy ? "…" : "QR"}
+            </button>
+          )}
           {onPaid && !paid && (
             <button type="button" onClick={pay} disabled={busy}
                     className="rounded-full border border-[var(--accent-primary)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
@@ -53,6 +76,7 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
           )}
         </span>
       </div>
+      {qrErr && <p className="mt-1 text-xs font-medium text-[var(--danger)]">{qrErr}</p>}
     </li>
   );
 }
