@@ -27,6 +27,9 @@ import { getProfile } from "@/lib/rooms-store";
  *    opens on the app's own screen: no launch URL we have can carry a transfer
  *    (see `lib/deeplink.ts` — including the one VietQR documents for it, which
  *    no bank app registers).
+ *  - "Lưu QR" saves the QR to the camera roll. This is the only route that
+ *    fills a transfer in: the payload carries the account, amount and note, and
+ *    every bank app can read one from the photo library. Two taps beats typing.
  *  - Copy chips carry the numbers, because the launch cannot. They are also the
  *    only option for the 32 of 65 banks with no app in VietQR's list.
  */
@@ -52,6 +55,7 @@ export function PayActions({
   const [platform, setPlatform] = useState<Platform>("other");
   const [appId, setAppId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [saving, setSaving] = useState<"idle" | "busy" | "done" | "error">("idle");
 
   useEffect(() => {
     setPlatform(detectPlatform());
@@ -97,6 +101,48 @@ export function PayActions({
     }, 1500);
   };
 
+  /** Put the QR in the camera roll, so the bank app's scanner can read it.
+   *
+   * The share sheet where it exists (iOS Safari offers "Save Image" there), a
+   * plain download otherwise. A cancelled sheet is not a failure — `share`
+   * rejects with AbortError when the user dismisses it, and reporting that as an
+   * error would be a lie.
+   *
+   * `img.vietqr.io` serves `access-control-allow-origin: *`, so the fetch needs
+   * no proxy of ours. If that ever changes this breaks loudly here rather than
+   * silently saving nothing.
+   */
+  const saveQr = async () => {
+    if (saving === "busy") return;
+    setSaving("busy");
+    try {
+      const res = await fetch(qrUrl);
+      if (!res.ok) throw new Error(`QR fetch failed: ${res.status}`);
+      const blob = await res.blob();
+      const file = new File([blob], `chiatienan-${Math.round(amount)}.png`, {
+        type: blob.type || "image/png",
+      });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+          setSaving("done");
+        } catch (err) {
+          setSaving((err as Error)?.name === "AbortError" ? "idle" : "error");
+        }
+        return;
+      }
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = file.name;
+      a.click();
+      URL.revokeObjectURL(href);
+      setSaving("done");
+    } catch {
+      setSaving("error");
+    }
+  };
+
   const choose = (picked: BankApp) => {
     setAppId(picked.appId);
     setPreferredAppId(picked.appId);
@@ -139,6 +185,20 @@ export function PayActions({
             </button>
           )}
         </div>
+      )}
+
+      {mobile && (
+        <button
+          type="button"
+          onClick={saveQr}
+          disabled={saving === "busy"}
+          className="rounded-md border border-[var(--accent-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-text)] transition-colors duration-150 hover:bg-[var(--bg-base)] disabled:opacity-50"
+        >
+          {saving === "busy" ? "Đang lưu…"
+            : saving === "done" ? "✓ Đã lưu — quét trong app"
+            : saving === "error" ? "Lưu thất bại — thử lại"
+            : "Lưu QR để quét"}
+        </button>
       )}
 
       <div className="flex flex-wrap items-center justify-center gap-1.5">
