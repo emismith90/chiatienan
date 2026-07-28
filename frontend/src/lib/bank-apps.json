@@ -3,7 +3,8 @@
  "_sources": [
   "https://api.vietqr.io/v2/android-app-deeplinks",
   "https://api.vietqr.io/v2/ios-app-deeplinks",
-  "https://api.vietqr.io/v2/banks"
+  "https://api.vietqr.io/v2/banks",
+  "https://dl.vietqr.io/pay?app={app_id}"
  ],
  "apps": [
   {
@@ -15,7 +16,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/DPT0tkkufSaDOyToT-tA3GVKj1b6_b7fWBt27NHebdVhkqTemHJKOntP5sIKkb6zFN8",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/b9/db/24/b9db243f-a89e-b156-136c-4d35558ffb06/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/b9/db/24/b9db243f-a89e-b156-136c-4d35558ffb06/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "abbankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1137160023",
+   "intentAndroid": "intent://#Intent;scheme=abbankmobile;package=com.vnpay.abbank;end",
+   "packageAndroid": "com.vnpay.abbank"
   },
   {
    "appId": "acb",
@@ -26,7 +31,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/knIdLBzE-ngS8Fhim_0FxH56vWhXaQmuLcpMdAcoFY_790hd3t4_XQAlyEWUnYJRyWFP",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/a1/ae/1e/a1ae1e68-2d58-92bc-9ec5-42917a59f767/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/a1/ae/1e/a1ae1e68-2d58-92bc-9ec5-42917a59f767/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "acbone://",
+   "storeIos": "https://apps.apple.com/vn/app/acb-one/id950141024",
+   "intentAndroid": "intent://#Intent;scheme=acbone;package=mobile.acb.com.vn;end",
+   "packageAndroid": "mobile.acb.com.vn"
   },
   {
    "appId": "acb-biz",
@@ -37,7 +46,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/oVYhKiohvZ2PnWSsfgmzMGQlCRQeJ-4Em4fNL8ooS6xyGNZwIHOruqscfU6-9Ez7sw",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/df/62/de/df62de23-9f41-5498-9cd1-a73c730a1e1d/AppIcon-0-0-1x_U007emarketing-0-0-0-6-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/df/62/de/df62de23-9f41-5498-9cd1-a73c730a1e1d/AppIcon-0-0-1x_U007emarketing-0-0-0-6-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "abaapp://",
+   "storeIos": "https://apps.apple.com/vn/app/id1555676479",
+   "intentAndroid": "intent://#Intent;scheme=abaapp;package=com.acb.acbb.prod;end",
+   "packageAndroid": "com.acb.acbb.prod"
   },
   {
    "appId": "bidv",
@@ -48,7 +61,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/SD4lUzWCqLq6nqURm8abnazm8sC0h_hkikryHyODrVpI0g3xMjeuaVs379jUCKrd0vk",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/88/1b/e6/881be6df-e9b6-8b66-e0fb-2499ac874734/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/88/1b/e6/881be6df-e9b6-8b66-e0fb-2499ac874734/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "bidv.smartbanking.partner://",
+   "storeIos": "https://apps.apple.com/vn/app/bidv-smartbanking/id1061867449",
+   "intentAndroid": "intent://payment#Intent;scheme=bidv.smartbanking.partner;package=com.vnpay.bidv;end",
+   "packageAndroid": "com.vnpay.bidv"
   },
   {
    "appId": "bvb",
@@ -59,7 +76,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/ZdTADvcU3RICcXdz30qFskmAWe9i5wS-AR_Kk3OwtETvicsUwGR7328JEZRaiGZoV4M",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/1c/0a/41/1c0a4107-99e1-2ffc-7ccb-54d2ca916395/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/1c/0a/41/1c0a4107-99e1-2ffc-7ccb-54d2ca916395/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "baovietmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1504422967",
+   "intentAndroid": "intent://#Intent;scheme=baovietmobile;package=com.vnpay.bvbank;end",
+   "packageAndroid": "com.vnpay.bvbank"
   },
   {
    "appId": "cake",
@@ -70,7 +91,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/RWPd1WdrkKP53RyHHRdmV35eOhxoCHmlujBUIizNf8Gy1pHN4_MVuYao4ncZwFp2Poc",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/7e/52/78/7e5278a7-0a19-3d30-fb30-e4a1be011e11/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/7e/52/78/7e5278a7-0a19-3d30-fb30-e4a1be011e11/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "cake.vn://",
+   "storeIos": "https://apps.apple.com/vn/app/id1551907051",
+   "intentAndroid": "intent://#Intent;scheme=cake.vn;package=xyz.be.cake;end",
+   "packageAndroid": "xyz.be.cake"
   },
   {
    "appId": "cimb",
@@ -81,7 +106,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/9_Iv94hJnVokIouNdXH7Ctczh_ZYOyG8Hm9f5iL5GzJI6NlIBnB2oJ9bBUuyqXNu_sk",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/ec/78/52/ec785212-1150-2d2c-4b53-8c55f593ce52/AppIconSummer-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/ec/78/52/ec785212-1150-2d2c-4b53-8c55f593ce52/AppIconSummer-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "cimb://",
+   "storeIos": "https://apps.apple.com/vn/app/id1318127958",
+   "intentAndroid": "intent://#Intent;scheme=cimb;package=vn.cimbbank.octo;end",
+   "packageAndroid": "vn.cimbbank.octo"
   },
   {
    "appId": "coopbank",
@@ -92,7 +121,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/3Ca0E1CbxyY9sSeEmq_rNvPIFR4cFcpx9tlucR_UkWKkJb-eJm2jLAHj3C99djB_yYY",
-   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/e2/62/c2/e262c20f-212d-0859-5447-f0875990fcf1/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/e2/62/c2/e262c20f-212d-0859-5447-f0875990fcf1/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "coopbankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1578445811",
+   "intentAndroid": "intent://#Intent;scheme=coopbankmobile;package=com.vnpay.coopbank;end",
+   "packageAndroid": "com.vnpay.coopbank"
   },
   {
    "appId": "eib",
@@ -103,7 +136,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/ku03AFfcKRFoAZCg-coMNJdVFQ0pcDWwRxy416NMd4OJ7TlD21Ia3MyqrdN8LgJTOw",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/0f/b5/01/0fb501f0-dd2c-fab7-2702-270ccf42d88c/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/0f/b5/01/0fb501f0-dd2c-fab7-2702-270ccf42d88c/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "eximbankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1242260338",
+   "intentAndroid": "intent://#Intent;scheme=eximbankmobile;package=com.vnpay. eximbankomnimobile;end",
+   "packageAndroid": "com.vnpay. eximbankomnimobile"
   },
   {
    "appId": "hdb",
@@ -114,7 +151,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/W9AeQiFfNrAySMdcebkiVuA4KwoYRF3QcXa1I2QzlnNDgR9Sqdwzagz8XVCmZxnW5Q",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/a0/6c/41/a06c4139-e4a9-9d1f-9f12-52d20f4ef02d/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/a0/6c/41/a06c4139-e4a9-9d1f-9f12-52d20f4ef02d/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "hdbankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1461658565",
+   "intentAndroid": "intent://#Intent;scheme=hdbankmobile;package=com.vnpay.hdbank;end",
+   "packageAndroid": "com.vnpay.hdbank"
   },
   {
    "appId": "icb",
@@ -125,7 +166,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/F8D0AbyMmiuwsTZYLaPsu_o40XGfQHgvRnq25lVSWupgHPpH3-TQ9soMrWwDJco3siI",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/14/04/b8/1404b8f4-a91f-f8bf-7af5-1a0e59bbdf19/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple112/v4/14/04/b8/1404b8f4-a91f-f8bf-7af5-1a0e59bbdf19/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "vietinbankipay://",
+   "storeIos": "https://apps.apple.com/vn/app/vietinbank-ipay/id689963454",
+   "intentAndroid": "intent://#Intent;scheme=vietinbankipay;package=com.vietinbank.ipay;end",
+   "packageAndroid": "com.vietinbank.ipay"
   },
   {
    "appId": "klb",
@@ -136,7 +181,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/wxlX5rGP2XiyvRqDYqsHFDjlDiim0bukT2tv1QfxcpkQ5OvfwCp4lDyvNWD9_HR8GQ",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/de/97/dd/de97dd21-584c-481e-b875-112663dcccc4/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/de/97/dd/de97dd21-584c-481e-b875-112663dcccc4/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "kienlongbankmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id1562823941",
+   "intentAndroid": "intent://ksbank.co#Intent;scheme=ksbank;package=com.sunshine.ksbank;end",
+   "packageAndroid": "com.sunshine.ksbank"
   },
   {
    "appId": "lpb",
@@ -147,7 +196,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/D2T8P3NOeROq0vaYMdBgqrhfdH7tCPB_iQafQqBhVc-NiC5m-UacTDP0qY2dM3b9OZY",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/d6/dd/3a/d6dd3a04-f846-e108-12bf-74436cc7340a/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/d6/dd/3a/d6dd3a04-f846-e108-12bf-74436cc7340a/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "lv24h://",
+   "storeIos": "https://apps.apple.com/vn/app/id1488794748",
+   "intentAndroid": "intent://#Intent;scheme=lv24h;package=vn.com.lpb.lienviet24h;end",
+   "packageAndroid": "vn.com.lpb.lienviet24h"
   },
   {
    "appId": "mb",
@@ -158,7 +211,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/rBEfIxFhnCIq9p6eMdw-U1RhD5psINWr0_Rbx3Wvy3HMJpRRsnG6efhug5eyPlJc7u0",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/f4/0a/b6/f40ab6a2-e67d-e267-9c46-ae03dfa238a9/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple122/v4/f4/0a/b6/f40ab6a2-e67d-e267-9c46-ae03dfa238a9/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "mbbank://",
+   "storeIos": "https://apps.apple.com/vn/app/id1205807363",
+   "intentAndroid": "intent://#Intent;scheme=mbbank;package=com.mbmobile;end",
+   "packageAndroid": "com.mbmobile"
   },
   {
    "appId": "nab",
@@ -169,7 +226,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/dsST6B9oQ167K3Mar3x-GPVlO5jrA1TTfOjO1CtzQx0gexM8tg7ZBKsFMnFvp5fgCA",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple116/v4/d5/21/44/d52144c9-e22f-0222-5b75-4a17d8decad9/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple116/v4/d5/21/44/d52144c9-e22f-0222-5b75-4a17d8decad9/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "namabankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1227187853",
+   "intentAndroid": "intent://nab/softotp#Intent;scheme=deeplinkapp;package=ops.namabank.com.vn;end",
+   "packageAndroid": "ops.namabank.com.vn"
   },
   {
    "appId": "ncb",
@@ -180,7 +241,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/oyLbSzQz6lBIuDEC2keVHGqNIAhRP4VvowENdvjTOc7877bniURrBnacwp3ov04UFw",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/32/3a/b1/323ab10a-f2ad-268a-2e95-28e91a121e73/AppIcon-New-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/32/3a/b1/323ab10a-f2ad-268a-2e95-28e91a121e73/AppIcon-New-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "ncbizimobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1465217154",
+   "intentAndroid": "intent://#Intent;scheme=ncbizimobile;package=com.ncb.bank;end",
+   "packageAndroid": "com.ncb.bank"
   },
   {
    "appId": "ocb",
@@ -191,7 +256,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/AUZSfk4Zv0Y1QTwbPfjZkJKwWDMW7g9koW-CaxBgkkIKuVJZYZDDL8iizRKTvq-V6-o",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/f0/66/94/f066942c-2cc6-2c87-407b-a38f2e99656f/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/f0/66/94/f066942c-2cc6-2c87-407b-a38f2e99656f/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "newomni-app://",
+   "storeIos": "https://apps.apple.com/vn/app/ocb-omni-4-0/id6472261202",
+   "intentAndroid": "intent://#Intent;scheme=newomni-app;package=com.ocb.omniextra;end",
+   "packageAndroid": "com.ocb.omniextra"
   },
   {
    "appId": "oceanbank",
@@ -202,7 +271,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/FZ-e9Sjaoe_THpguYbw3BgG-uaUR5EmEsn5NRHRj684_8oYxJoj69P0MpqDcbn4zjB4",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/94/4a/64/944a64c3-8425-f71d-bcc6-24ac88c3214b/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/94/4a/64/944a64c3-8425-f71d-bcc6-24ac88c3214b/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "oceanbankmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id1469028843",
+   "intentAndroid": "intent://#Intent;scheme=oceanbankmobilebanking;package=com.vnpay.ocean;end",
+   "packageAndroid": "com.vnpay.ocean"
   },
   {
    "appId": "pbvn",
@@ -213,7 +286,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/7nGworLSRDx7Sz7bfTfynu-s74TDCscYd5eG4JAN5gHdSL8GoejBeB9E5RfqXkn2ASw",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/25/ee/83/25ee83bb-4ee0-648b-56fe-698c2bb3f21e/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/25/ee/83/25ee83bb-4ee0-648b-56fe-698c2bb3f21e/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "publicbankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1573736472",
+   "intentAndroid": "intent://#Intent;scheme=publicbankmobile;package=com.vnpay.publicbank;end",
+   "packageAndroid": "com.vnpay.publicbank"
   },
   {
    "appId": "pvcb",
@@ -224,7 +301,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/vJX7EY--Lts1D3pRgCDGOtIafEuxKQjYugP58WGY9PBXiUWtkyY0-D7NGHR4BEUX7sw",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/10/78/4f/10784ff4-2635-bebc-74c7-5ac09d2e161d/AppIcon-1x_U007emarketing-0-10-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/10/78/4f/10784ff4-2635-bebc-74c7-5ac09d2e161d/AppIcon-1x_U007emarketing-0-10-0-85-220.png/1200x630wa.png",
+   "schemeIos": "pvcombankapp://",
+   "storeIos": "https://apps.apple.com/vn/app/id957284067",
+   "intentAndroid": "intent://#Intent;scheme=pvcombankapp;package=com.vsii.pvcombank;end",
+   "packageAndroid": "com.vsii.pvcombank"
   },
   {
    "appId": "scb",
@@ -235,7 +316,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/z7gOit-6cq79jN3hcU-lquDoswKkIKjMYRWCpYKQ9yefkCCJBxn7DBIz0GFOmEg2mug",
-   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/50/3b/78/503b7850-6d35-e707-d503-c9d7d6b87ca1/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/50/3b/78/503b7850-6d35-e707-d503-c9d7d6b87ca1/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "scbmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id954973621",
+   "intentAndroid": "intent://#Intent;scheme=scbmobilebanking;package=com.vnpay.SCB;end",
+   "packageAndroid": "com.vnpay.SCB"
   },
   {
    "appId": "seab",
@@ -246,7 +331,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/njk0e9EHepwCNvgqcjBWYWyrnpQOnFCVzED_4S8ePI5V1vVKJ6QlVkjiwk7rhCQV0-Y",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/19/18/68/191868f2-e019-e06a-ae1e-fd29373ef151/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/19/18/68/191868f2-e019-e06a-ae1e-fd29373ef151/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "seamobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id846407152",
+   "intentAndroid": "intent://app#Intent;scheme=seamobile;package=vn.com.seabank.mb1;end",
+   "packageAndroid": "vn.com.seabank.mb1"
   },
   {
    "appId": "sgicb",
@@ -257,7 +346,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/0G5pmrhbkXb__ZJJmQ_btF2V1sk90jnEGhvXdmm9FXORuo2T__GiSNrHWI6GlzupUds",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple126/v4/3e/25/fe/3e25fe28-ec84-d490-9301-580c636260c6/AppIcon-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple126/v4/3e/25/fe/3e25fe28-ec84-d490-9301-580c636260c6/AppIcon-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "saigonbankmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id1481832587",
+   "intentAndroid": "intent://#Intent;scheme=Sgbmobile;package=com.vnpay.sgbank;end",
+   "packageAndroid": "com.vnpay.sgbank"
   },
   {
    "appId": "shb",
@@ -268,7 +361,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/v5oiUb9OH80qpTRgcKPpXHkqmkO5MAZfxldamoCPCbdUMOruCabujukSJmXF2FK3hco",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/cf/50/e3/cf50e3ff-1e1b-25dc-3c17-7a2f95484310/AppIcon_Release-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/cf/50/e3/cf50e3ff-1e1b-25dc-3c17-7a2f95484310/AppIcon_Release-1x_U007emarketing-0-10-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "shbmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id538278798",
+   "intentAndroid": "intent://#Intent;scheme=shbmobile;package=vn.shb.mbanking;end",
+   "packageAndroid": "vn.shb.mbanking"
   },
   {
    "appId": "shbvn",
@@ -279,7 +376,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/1BSuD_TyG_azvCaCH_p1WIv8NYdFC0GuS4tVMubcGRn1yXpGfOjeE-yPZ4lmzEdK-zg",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/4e/1a/2e/4e1a2ec7-77ca-fce6-cb67-3e104d7d1b58/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/4e/1a/2e/4e1a2ec7-77ca-fce6-cb67-3e104d7d1b58/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "shinhanglbvnbank://",
+   "storeIos": "https://apps.apple.com/vn/app/id1071033810",
+   "intentAndroid": "intent://#Intent;scheme=shinhanglbvnbank;package=com.shinhan.global.vn.bank;end",
+   "packageAndroid": "com.shinhan.global.vn.bank"
   },
   {
    "appId": "tcb",
@@ -290,7 +391,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/Ddr3ZQEu6Vef9JV9ITALeyBEXvYwQWZ3kKJXxrdncD9JR0xlsO--J6zo7uGARfuTBmk",
-   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple122/v4/b2/b4/d1/b2b4d153-ed9f-aab6-996c-205c583c1339/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple122/v4/b2/b4/d1/b2b4d153-ed9f-aab6-996c-205c583c1339/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "tcb://",
+   "storeIos": "https://apps.apple.com/vn/app/id1548623362",
+   "intentAndroid": "intent://applink#Intent;scheme=tcb;package=vn.com.techcombank.bb.app;end",
+   "packageAndroid": "vn.com.techcombank.bb.app"
   },
   {
    "appId": "timo",
@@ -301,7 +406,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/vZpDzZUuTlE43Nf_XcjQOx9gxrBoKGzKMiPVuie3isiE3MTH5iv9PQ_OGJaod9AqS5M",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/a2/74/38/a274389d-f000-71b1-645c-91e9922cd577/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-P3-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/a2/74/38/a274389d-f000-71b1-645c-91e9922cd577/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-P3-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "plus://",
+   "storeIos": "https://apps.apple.com/vn/app/id1521230347",
+   "intentAndroid": "intent://#Intent;scheme=plus;package=io.lifestyle.plus;end",
+   "packageAndroid": "io.lifestyle.plus"
   },
   {
    "appId": "tpb",
@@ -312,7 +421,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/DiXudMm5iNSTqI1RlC8L5lYZq7DhyQUIafQJJW1iwA4EYgLUaJIjbYx6jtdHKVy5ry8",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/c3/31/46/c3314678-be31-dda0-621b-ff8f9f100c82/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/c3/31/46/c3314678-be31-dda0-621b-ff8f9f100c82/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "hydro://",
+   "storeIos": "https://apps.apple.com/vn/app/id450464147",
+   "intentAndroid": "intent://onboarding#Intent;scheme=hydro;package=com.tpb.mb.gprsandroid;end",
+   "packageAndroid": "com.tpb.mb.gprsandroid"
   },
   {
    "appId": "tpb-pay",
@@ -323,7 +436,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/EV49lQLAwGgHIPSVMd0btjPvbikN---UyGkbHVw6ldLYdMeS_6LKpmpnLk9xIGR244E",
-   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple116/v4/80/39/e2/8039e21e-83d4-3f1a-de06-2ea1d8ef30f1/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple116/v4/80/39/e2/8039e21e-83d4-3f1a-de06-2ea1d8ef30f1/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "qpaymobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id1292194225",
+   "intentAndroid": "intent://#Intent;scheme=qpaymobile;package=com.tpbankquickpay;end",
+   "packageAndroid": "com.tpbankquickpay"
   },
   {
    "appId": "vab",
@@ -334,7 +451,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/9VrdSOnjmE5ocjxm85jFYEcdAWxYSyVGqkv6X1BBH7mdWiEQKO4Lo_lbk--MHH6p1Ck",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/a3/b5/66/a3b56687-06e7-3af1-5f1f-d4bcd745ae90/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/a3/b5/66/a3b56687-06e7-3af1-5f1f-d4bcd745ae90/AppIcon-0-0-1x_U007emarketing-0-0-0-10-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "vabmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id910897337",
+   "intentAndroid": "intent://#Intent;scheme=vabmobilebanking;package=phn.com.vn.mb;end",
+   "packageAndroid": "phn.com.vn.mb"
   },
   {
    "appId": "vba",
@@ -345,7 +466,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/rNSXUqGnK-ljK6qUdUmy7h_sDrMOzZ1nPwAUAwshsmPaQuwNGn0Xwj-psgFrBSJOHg",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/a6/7e/98/a67e98e6-20c2-5f96-c364-f79a9fe03819/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple112/v4/a6/7e/98/a67e98e6-20c2-5f96-c364-f79a9fe03819/AppIcon-1x_U007emarketing-0-5-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "agribankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id935944952",
+   "intentAndroid": "intent://#Intent;scheme=agribankmobile;package=com.vnpay.Agribank3g;end",
+   "packageAndroid": "com.vnpay.Agribank3g"
   },
   {
    "appId": "vcb",
@@ -356,7 +481,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/hRq2DVKkzBXQkyftxr0e2ytl0fS2hEWx3UTe3V652RfJVYWqVRGgBNhmZgqNzJ8PKHE",
-   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/c6/c9/ed/c6c9ed04-11f8-7269-fcc3-9609126682c0/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is4-ssl.mzstatic.com/image/thumb/Purple122/v4/c6/c9/ed/c6c9ed04-11f8-7269-fcc3-9609126682c0/AppIcon-1x_U007emarketing-0-7-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "vietcombankmobile://",
+   "storeIos": "https://apps.apple.com/vn/app/id561433133",
+   "intentAndroid": "intent://#Intent;scheme=vietcombankmobile;package=com.VCB;end",
+   "packageAndroid": "com.VCB"
   },
   {
    "appId": "vib",
@@ -367,7 +496,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/RRo7NaHuZaHpyJHJFPLp3ue4rK-BDe8MI4LquEFHs_mMtVET2ofH21PJn3t0vU7F3Q",
-   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/40/a7/46/40a74658-ed09-5706-f7c1-795d1c562d86/AppIcon-1x_U007emarketing-0-5-0-0-sRGB-85-220.png/1200x630wa.png"
+   "logoIos": "https://is1-ssl.mzstatic.com/image/thumb/Purple122/v4/40/a7/46/40a74658-ed09-5706-f7c1-795d1c562d86/AppIcon-1x_U007emarketing-0-5-0-0-sRGB-85-220.png/1200x630wa.png",
+   "schemeIos": "myvib://",
+   "storeIos": "https://apps.apple.com/vn/app/id949371011",
+   "intentAndroid": "intent://vib.com.vn/data#Intent;scheme=myvib;package=com.vn.vib.mobileapp;end",
+   "packageAndroid": "com.vn.vib.mobileapp"
   },
   {
    "appId": "vib-2",
@@ -378,7 +511,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/1PXaSrS8B9f4u3OBz2IroGPIYri0Bb2PBH4CGOuZqPqgyQAoBCEFeBC7ty_hDVPaM98",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/72/95/f4/7295f4af-15b4-bc41-62e9-911a817e04dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple112/v4/72/95/f4/7295f4af-15b4-bc41-62e9-911a817e04dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "myvib2://",
+   "storeIos": "https://apps.apple.com/vn/app/id1626624790",
+   "intentAndroid": "intent://myvib2.com.vn/data#Intent;scheme=myvib2;package=com.vib.myvib2;end",
+   "packageAndroid": "com.vib.myvib2"
   },
   {
    "appId": "vietbank",
@@ -389,7 +526,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/lW_BzZL3I2RmWFKAM56h93do2fmNApvi2ZAO5FhV6dxBTcOM5xLrzc79fpOvLbnEU0U",
-   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/3f/ca/1b/3fca1b1a-9009-2a8a-6eff-2ee63c36f18f/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png"
+   "logoIos": "https://is5-ssl.mzstatic.com/image/thumb/Purple112/v4/3f/ca/1b/3fca1b1a-9009-2a8a-6eff-2ee63c36f18f/AppIcon-1x_U007emarketing-0-6-0-0-85-220.png/1200x630wa.png",
+   "schemeIos": "vietbankmobilebanking://",
+   "storeIos": "https://apps.apple.com/vn/app/id1469883896",
+   "intentAndroid": "intent://#Intent;scheme=vietbankmobilebanking;package=com.vnpay.vietbank;end",
+   "packageAndroid": "com.vnpay.vietbank"
   },
   {
    "appId": "vpb",
@@ -400,7 +541,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/u9fUwltudW3eSwh0RddQsiAzTpXWRtD8TS0TCC3s--NgUej28iWoCikXCrFLd89YgxHX",
-   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/0f/45/e5/0f45e506-590d-860d-8a0f-61c460d8b6dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is3-ssl.mzstatic.com/image/thumb/Purple122/v4/0f/45/e5/0f45e506-590d-860d-8a0f-61c460d8b6dd/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "vpbankneo://",
+   "storeIos": "https://apps.apple.com/vn/app/id1209349510",
+   "intentAndroid": "intent://#Intent;scheme=vpbankneo;package=com.vnpay.vpbankonline;end",
+   "packageAndroid": "com.vnpay.vpbankonline"
   },
   {
    "appId": "wvn",
@@ -411,7 +556,11 @@
    "android": true,
    "ios": true,
    "logoAndroid": "https://play-lh.googleusercontent.com/K6mADuiW7PgDg77dK03AWx-TLFaAMydQ9T05laBEwqJUa5lJMx6wZAMQidcoGYgRJg",
-   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/29/92/12/299212d8-a419-f884-b8c8-77807cf1ecca/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png"
+   "logoIos": "https://is2-ssl.mzstatic.com/image/thumb/Purple112/v4/29/92/12/299212d8-a419-f884-b8c8-77807cf1ecca/AppIcon-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-0-0-0-GLES2_U002c0-512MB-85-220-0-0.png/1200x630wa.png",
+   "schemeIos": "wvbs://",
+   "storeIos": "https://apps.apple.com/vn/app/id1501785125",
+   "intentAndroid": "intent://#Intent;scheme=wvbs;package=vn.com.woori.smart;end",
+   "packageAndroid": "vn.com.woori.smart"
   }
  ],
  "banks": [

@@ -5,14 +5,15 @@ import {
   Platform,
   appById,
   appForBankCode,
-  buildDeeplink,
   detectPlatform,
   getPreferredAppId,
   isMobile,
   listApps,
   logoFor,
   parseQrUrl,
+  payLaunchUrl,
   setPreferredAppId,
+  storeUrlFor,
 } from "@/lib/deeplink";
 import { getProfile } from "@/lib/rooms-store";
 
@@ -22,20 +23,28 @@ import { getProfile } from "@/lib/rooms-store";
  * and the bank app live on the same screen, so scanning your own display is
  * impossible.
  *
- *  - "Mở app" hands off to `dl.vietqr.io`, which opens the bank app with the
- *    payee and amount filled in.
- *  - Copy buttons cover every member regardless of bank — 32 of 65 Vietnamese
- *    banks have no app in VietQR's list at all, and not every app that does
- *    actually pre-fills.
+ *  - "Mở <app>" opens the payer's bank app on a filled-in transfer, via
+ *    `vietqr://pay?ba=…&am=…&tn=…`. A custom scheme, so no page in between; and
+ *    it carries the payee, amount and note, which VietQR's HTTPS redirector
+ *    silently dropped.
+ *  - Copy chips stay, for the 32 of 65 banks with no app in VietQR's list, and
+ *    for any app that registers `vietqr://` without honouring every field.
  */
 export function PayActions({
   qrUrl,
   amount,
   note,
+  payerBankCode,
 }: {
   qrUrl: string;
   amount: number;
   note: string;
+  /** The payer's own `bank_code` from the room roster — the app they hold an
+   * account with, and so the app to open. Authoritative: this used to be read
+   * from the localStorage profile cache, which is empty for anyone who signed in
+   * on another device or never opened the profile dialog, and that silently fell
+   * back to the generic picker every time. */
+  payerBankCode?: string | null;
 }) {
   const payee = useMemo(() => parseQrUrl(qrUrl), [qrUrl]);
   // Resolved after mount: both the UA and localStorage are client-only, and
@@ -46,27 +55,57 @@ export function PayActions({
 
   useEffect(() => {
     setPlatform(detectPlatform());
-    // Best guess, cheapest first: what they paid from last time, else the app
-    // for their own bank — people pay from the bank they hold an account with,
-    // and the payee's bank says nothing about that.
+    // Cheapest first: what they paid from last time, else the bank they
+    // registered on their profile, and only then the device's local cache of it.
+    // People pay from the bank they hold an account with; the payee's bank says
+    // nothing about that and is never consulted here.
     const remembered = getPreferredAppId();
     if (remembered && appById(remembered)) {
       setAppId(remembered);
       return;
     }
-    setAppId(appForBankCode(getProfile().bank_code)?.appId ?? null);
-  }, []);
+    const own = appForBankCode(payerBankCode) ?? appForBankCode(getProfile().bank_code);
+    setAppId(own?.appId ?? null);
+  }, [payerBankCode]);
 
   if (!payee) return null;
 
   const app = appById(appId);
   const mobile = isMobile(platform);
+  // Where the bank app sends them back on success. Same-origin only, and absent
+  // during SSR — never a hardcoded host, so previews and localhost return to
+  // themselves rather than to production.
+  const returnUrl = typeof window === "undefined" ? null : window.location.origin;
+
+  /** Open `target`, and on iOS follow up with the App Store if nothing took it.
+   *
+   * Android needs no timer: the `intent://` URL carries a
+   * `browser_fallback_url` that Chrome resolves itself. iOS has no equivalent,
+   * so we watch instead — if the app opened, this document is backgrounded and
+   * loses focus, and the timer's guard fails. Same technique VietQR's own page
+   * used, and the reason its 3s budget is worth keeping: shorter and a slow
+   * cold start looks like a missing app.
+   */
+  const launch = (app: BankApp | null) => {
+    const target = payLaunchUrl(app, platform, payee, amount, note, returnUrl);
+    if (!target) return;
+    window.location.href = target;
+    if (platform !== "ios" || !app) return;
+    const store = storeUrlFor(app, platform);
+    if (!store) return;
+    const startedAt = Date.now();
+    window.setTimeout(() => {
+      if (document.hidden || !document.hasFocus()) return;
+      if (Date.now() - startedAt > 3000) return;
+      window.location.href = store;
+    }, 1500);
+  };
 
   const choose = (picked: BankApp) => {
     setAppId(picked.appId);
     setPreferredAppId(picked.appId);
     setPicking(false);
-    window.location.href = buildDeeplink(picked.appId, payee, amount, note);
+    launch(picked);
   };
 
   return (
@@ -74,14 +113,17 @@ export function PayActions({
       {mobile && (
         <div className="flex items-center gap-2">
           {app ? (
-            <a
-              href={buildDeeplink(app.appId, payee, amount, note)}
-              onClick={() => setPreferredAppId(app.appId)}
+            <button
+              type="button"
+              onClick={() => {
+                setPreferredAppId(app.appId);
+                launch(app);
+              }}
               className="inline-flex items-center gap-2 rounded-md bg-[var(--accent-primary)] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
             >
               <AppLogo app={app} platform={platform} />
               Mở {app.appName}
-            </a>
+            </button>
           ) : (
             <button
               type="button"

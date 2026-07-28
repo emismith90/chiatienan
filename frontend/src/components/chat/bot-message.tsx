@@ -32,16 +32,28 @@ interface BotMessageProps {
   body: string;
   attachments?: any;
   roomId: number;
+  /** Room roster, carrying every member's `bank_code`. A settlement card needs
+   * the *caller's* — the app they will pay from — which the roster already has,
+   * so nothing extra is fetched. */
+  members?: { id: number; bank_code?: string | null }[];
   onOpenLedger?: (range: { from: string; to: string }) => void;
 }
 
-function SettlementCard({ attachments }: { attachments: any }) {
+function SettlementCard({ attachments, members }: {
+  attachments: any;
+  members?: { id: number; bank_code?: string | null }[];
+}) {
   const transfers: Transfer[] = attachments.transfers ?? [];
   const warnings: string[] = attachments.warnings ?? [];
   const period = attachments.period ?? {};
   // Optional-chained: settlement cards are also rendered in tests and previews
   // that mount BotMessage outside a SessionProvider.
   const memberId = useSession()?.memberId ?? null;
+  // The bank the payer registered in their profile — authoritative, unlike the
+  // localStorage profile cache PayActions used to guess from, which is empty
+  // for anyone who joined on another device or never opened the profile dialog.
+  const payerBankCode =
+    members?.find((m) => m.id === memberId)?.bank_code ?? null;
 
   return (
     <div className="mt-3 space-y-3">
@@ -81,7 +93,8 @@ function SettlementCard({ attachments }: { attachments: any }) {
                   else's debt in a shared room is a misfire. Everyone still sees
                   the QR, so handing a phone across the table keeps working. */}
               {t.from_id != null && t.from_id === memberId && (
-                <PayActions qrUrl={t.qr_url} amount={t.amount} note={t.note ?? ""} />
+                <PayActions qrUrl={t.qr_url} amount={t.amount} note={t.note ?? ""}
+                            payerBankCode={payerBankCode} />
               )}
             </div>
           )}
@@ -143,14 +156,14 @@ function MealCard({ attachments }: { attachments: any }) {
   );
 }
 
-export function BotMessage({ body, attachments, roomId, onOpenLedger }: BotMessageProps) {
+export function BotMessage({ body, attachments, roomId, members, onOpenLedger }: BotMessageProps) {
   const type = attachments?.type;
   return (
     <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-sm">
       <div className="prose-chat text-sm leading-relaxed text-[var(--text-primary)] [&_a]:text-[var(--accent-text)] [&_a]:underline [&_code]:rounded [&_code]:bg-[var(--bg-base)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_h1]:mb-2 [&_h1]:mt-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-1 [&_h2]:text-sm [&_h2]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[var(--border)] [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
       </div>
-      {type === "settlement" && <SettlementCard attachments={attachments} />}
+      {type === "settlement" && <SettlementCard attachments={attachments} members={members} />}
       {type === "meal" && <MealCard attachments={attachments} />}
       {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
       {type === "summary" && <SummaryCard attachments={attachments} onOpenLedger={onOpenLedger} />}
