@@ -11,7 +11,7 @@ def test_render_statement_attachment():
                 "period": {"from": None, "to": "2026-07-22"},
                 "owe": [{"creditor_id": 6, "name": "Linh", "meal_id": 2, "dish": "bun bo",
                          "occurred_on": "2026-07-21", "amount": 61000, "status": "unpaid"}],
-                "owed": [], "net": -61000})
+                "owed": []})
     att = render_bot_attachments(res)
     assert att["type"] == "statement"
     body = _statement_body(att)
@@ -23,7 +23,8 @@ def test_render_summary_attachment():
                 "period": {"from": None, "to": "2026-07-22"},
                 "timeline": [{"kind": "meal", "dish": "bun bo", "payer_name": "Linh", "total": 122000,
                               "occurred_on": "2026-07-21"}],
-                "balances": [{"id": 6, "name": "Linh", "balance": 61000}]})
+                "outstanding": [{"debtor_id": 9, "debtor_name": "Giang", "creditor_id": 6,
+                                 "creditor_name": "Linh", "amount": 61000}]})
     att = render_bot_attachments(res)
     assert att["type"] == "summary"
     # The body is a headline; the rows live in the card (grouped by day) and in
@@ -53,6 +54,26 @@ def test_summary_body_counts_meals_payments_and_days():
 def test_summary_body_when_the_period_is_empty():
     body = _summary_body({"period": {"from": None, "to": "2026-07-26"}, "timeline": []})
     assert body == "Tóm tắt đến 2026-07-26: chưa có giao dịch nào trong kỳ."
+
+
+def test_statement_body_prints_no_net_line():
+    """Production, 2026-07-27/28: every balance answer ended "Ròng: -54.500đ" —
+    a number that is not payable to anyone, and that reads as an offset the
+    ledger never performs. Both directions, no total."""
+    body = _statement_body({
+        "member": {"id": 9, "name": "Giang"},
+        "owe": [{"name": "Linh", "amount": 61000, "dish": "bun bo", "status": "unpaid"}],
+        "owed": [{"name": "Linh", "amount": 20000, "dish": "ca phe", "status": "unpaid"}],
+    })
+    assert "Ròng" not in body and "-41" not in body and "41.000" not in body
+    assert "Bạn nợ:" in body and "Được nợ:" in body
+    assert "61,000đ" in body and "20,000đ" in body
+
+
+def test_statement_body_when_nothing_is_open_either_way():
+    body = _statement_body({"member": {"id": 9, "name": "Giang"}, "owe": [], "owed": []})
+    assert body == "Giang — nợ và được nợ:\nBạn không nợ ai, không ai nợ bạn."
+    assert "Ròng" not in body
 
 
 def test_err_statement_result_not_wrapped():

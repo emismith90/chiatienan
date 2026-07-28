@@ -14,7 +14,7 @@ export interface Suggestion {
 export const SUGGESTIONS: Suggestion[] = [
   { label: "Log an expense", icon: "🍜", text: "@bot I paid " },
   { label: "Who pays this week", icon: "🧮", text: "@bot who pays this week" },
-  { label: "My balance", icon: "💰", text: "@bot how much do I owe" },
+  { label: "Who do I owe", icon: "💰", text: "@bot how much do I owe" },
 ];
 
 export function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {

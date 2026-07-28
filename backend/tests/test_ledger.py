@@ -344,3 +344,40 @@ def test_voiding_a_meal_untargets_its_payments(db):
         from app.models import Payment
         from sqlalchemy import select as _select
         assert s.scalars(_select(Payment).where(Payment.room_id == room_id)).first().meal_id is None
+
+
+# --- outstanding_pairs: who owes whom, both directions kept ------------------ #
+
+def test_outstanding_pairs_sums_a_pair_over_meals_without_netting_directions(db):
+    """The group-wide owe/owed view that replaced the per-person balance bars.
+
+    A owes B for two meals and B owes A for one. Three edges, two directions,
+    two rows — nothing collapses into a single signed number. Netting belongs to
+    period_transfers, and only so a settlement can print one QR.
+    """
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=a, participants=[a, b],
+                           total_amount=100_000, occurred_on=date(2026, 7, 21))
+        ledger.record_meal(s, room_id=room_id, payer_member_id=a, participants=[a, b],
+                           total_amount=60_000, occurred_on=date(2026, 7, 22))
+        ledger.record_meal(s, room_id=room_id, payer_member_id=b, participants=[a, b],
+                           total_amount=40_000, occurred_on=date(2026, 7, 23))
+        rows = ledger.outstanding_pairs(s, room_id, None, date(2026, 7, 31))
+
+    assert rows == [
+        {"debtor_id": b, "creditor_id": a, "amount": 80_000},   # 50k + 30k
+        {"debtor_id": a, "creditor_id": b, "amount": 20_000},
+    ]
+
+
+def test_outstanding_pairs_drops_a_debt_once_it_is_paid(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        meal = ledger.record_meal(s, room_id=room_id, payer_member_id=a,
+                                  participants=[a, b], total_amount=100_000,
+                                  occurred_on=date(2026, 7, 21))
+        assert ledger.outstanding_pairs(s, room_id, None, date(2026, 7, 31))
+        ledger.record_payment(s, room_id=room_id, from_member_id=b, to_member_id=a,
+                              amount=meal["shares"][b], logged_by=str(b))
+        assert ledger.outstanding_pairs(s, room_id, None, date(2026, 7, 31)) == []

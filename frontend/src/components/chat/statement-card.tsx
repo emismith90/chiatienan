@@ -28,46 +28,63 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
       setBusy(false);
     }
   }
+  // Two lines, not one. This row lives both in a chat card and in the 260px
+  // ledger panel — which is now the panel's default view — and name + dish +
+  // amount + button never fit across that width: the amount used to land on top
+  // of the dish. Name/amount on top, dish/button under it, fits either column.
   return (
-    <li className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-      <span className="min-w-0">
-        <span className="text-[var(--text-primary)]">{r.name}</span>
-        <span className="ml-2 text-xs text-[var(--text-secondary)]">
+    <li className="px-3 py-2 text-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-[var(--text-primary)]">{r.name}</span>
+        <span className="shrink-0 font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+      </div>
+      <div className="mt-0.5 flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-xs text-[var(--text-secondary)]">
           {r.dish || "meal"}{(paid || r.status === "paid") && " · paid"}
           {!paid && r.status === "partial" && " · partial"}
         </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-2">
-        <span className="font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
-        {err && <span className="text-xs font-medium text-[var(--danger)]">Failed — retry</span>}
-        {onPaid && !paid && (
-          <button type="button" onClick={pay} disabled={busy}
-                  className="rounded-full border border-[var(--accent-primary)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
-            {busy ? "…" : "Mark paid"}
-          </button>
-        )}
-      </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {err && <span className="text-xs font-medium text-[var(--danger)]">Failed — retry</span>}
+          {onPaid && !paid && (
+            <button type="button" onClick={pay} disabled={busy}
+                    className="rounded-full border border-[var(--accent-primary)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
+              {busy ? "…" : "Mark paid"}
+            </button>
+          )}
+        </span>
+      </div>
     </li>
   );
 }
 
 function OwedRow({ r }: { r: Row }) {
   return (
-    <li className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-      <span className="min-w-0">
-        <span className="text-[var(--text-primary)]">{r.name}</span>
-        <span className="ml-2 text-xs text-[var(--text-secondary)]">{r.dish || "meal"}</span>
-      </span>
-      <span className="shrink-0 font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+    <li className="px-3 py-2 text-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-[var(--text-primary)]">{r.name}</span>
+        <span className="shrink-0 font-medium text-[var(--text-secondary)]">{fmt(r.amount)} đ</span>
+      </div>
+      <p className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">{r.dish || "meal"}</p>
     </li>
   );
 }
 
-/** Shared owe/owed sections + net. Pass `onPaid` (+ roomId) to enable the ⑦
+/** The two owe/owed sections — and deliberately no total under them.
+ *
+ * A "Net −54.500đ" line used to close this card. It was the only figure here you
+ * could not act on, and with debts in both directions it read as if they had been
+ * offset, which the ledger never does. Pass `onPaid` (+ roomId) to enable the ⑦
  * "Mark paid" button on unpaid owe rows. Used by StatementCard and LedgerPanel. */
-export function StatementSections({ owe, owed, net, roomId, onPaid }: {
-  owe: Row[]; owed: Row[]; net: number; roomId: number; onPaid?: () => void;
+export function StatementSections({ owe, owed, roomId, onPaid }: {
+  owe: Row[]; owed: Row[]; roomId: number; onPaid?: () => void;
 }) {
+  if (owe.length === 0 && owed.length === 0) {
+    return (
+      <p className="mt-2 text-xs text-[var(--text-secondary)]">
+        Bạn không nợ ai, không ai nợ bạn.
+      </p>
+    );
+  }
   return (
     <div>
       {owe.length > 0 && (
@@ -86,12 +103,6 @@ export function StatementSections({ owe, owed, net, roomId, onPaid }: {
           </ul>
         </div>
       )}
-      <div className="mt-3 flex items-center justify-between border-t border-dashed border-[var(--border)] pt-2 text-sm">
-        <span className="font-medium text-[var(--text-primary)]">Net</span>
-        <span className={`font-semibold ${net < 0 ? "text-[#c0492e]" : net > 0 ? "text-[#2e7d46]" : "text-[var(--text-secondary)]"}`}>
-          {net > 0 ? `+${fmt(net)}` : fmt(net)} đ
-        </span>
-      </div>
     </div>
   );
 }
@@ -100,7 +111,7 @@ export function StatementCard({ attachments, roomId }: { attachments: any; roomI
   return (
     <div className="mt-3">
       <StatementSections
-        owe={attachments.owe ?? []} owed={attachments.owed ?? []} net={attachments.net ?? 0}
+        owe={attachments.owe ?? []} owed={attachments.owed ?? []}
         roomId={roomId} onPaid={() => {}}
       />
     </div>

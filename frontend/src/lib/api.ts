@@ -64,7 +64,13 @@ export const updateMe = (b: any) => req(`/api/me`, { method: "PUT", body: JSON.s
 
 export const getMembers = (roomId: number) => req(`/api/rooms/${roomId}/members`);
 
-export type BalanceRow = { id: number; name: string; balance: number };
+/** One open debt, one direction. There is no net/balance figure anywhere in the
+ * API: if A owes B and B owes A, both rows are here and neither cancels. */
+export type OutstandingRow = {
+  debtor_id: number; debtor_name: string;
+  creditor_id: number; creditor_name: string;
+  amount: number;
+};
 
 export type TimelineEvent =
   | {
@@ -85,9 +91,9 @@ export type StatementRow = {
 
 export type LedgerData = {
   period: { from: string | null; to: string; keyword: string };
-  balances: BalanceRow[];
+  outstanding: OutstandingRow[];
   timeline: TimelineEvent[];
-  me: { owe: StatementRow[]; owed: StatementRow[]; net: number };
+  me: { owe: StatementRow[]; owed: StatementRow[] };
 };
 
 /** `range` scopes the ledger to explicit dates, so a "last week, day by day"

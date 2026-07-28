@@ -400,9 +400,16 @@ def _meal_body(attachments: dict) -> str:
 
 
 def _statement_body(att: dict) -> str:
-    """Deterministic VN text for a personal statement — numbers from the tool dict."""
+    """Deterministic VN text for a personal statement — numbers from the tool dict.
+
+    Two sections and no total. The old closing line, "Ròng: -54.500đ", was the
+    one number in the reply nobody could act on: it is not what you send anyone,
+    it is not what anyone sends you, and when the two sections disagreed with it
+    (a debt in each direction) it read as though they had been cancelled out.
+    What you owe and what you are owed, per person per meal, is the whole answer.
+    """
     name = (att.get("member") or {}).get("name", "?")
-    lines = [f"Số dư của {name}:"]
+    lines = [f"{name} — nợ và được nợ:"]
     owe = att.get("owe") or []
     owed = att.get("owed") or []
     if owe:
@@ -413,9 +420,7 @@ def _statement_body(att: dict) -> str:
         lines.append("Được nợ:")
         lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'bữa ăn'})" for r in owed]
     if not owe and not owed:
-        lines.append("Bạn đã cân bằng — không nợ ai, không ai nợ bạn.")
-    else:
-        lines.append(f"Ròng: {att.get('net', 0):,}đ")
+        lines.append("Bạn không nợ ai, không ai nợ bạn.")
     return "\n".join(lines)
 
 
