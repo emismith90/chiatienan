@@ -17,7 +17,34 @@ def test_ledger_endpoint_since_last(api_client_room):
     data = r.json()
     assert data["period"]["keyword"] == "since_last"
     assert any(e["kind"] == "meal" and e["payer_name"] == "Linh" for e in data["timeline"])
-    assert {b["name"] for b in data["balances"]} == {"Linh", "Giang"}
+    # Who owes whom, by name and direction — not a per-person net column.
+    assert data["outstanding"] == [
+        {"debtor_id": m["Giang"], "debtor_name": "Giang",
+         "creditor_id": m["Linh"], "creditor_name": "Linh", "amount": 61000},
+    ]
+    assert "balances" not in data
+    assert "net" not in data["me"]
+
+
+def test_ledger_endpoint_keeps_both_directions_of_a_two_way_debt(api_client_room):
+    """A and B each fronted a meal the other ate. There is no netting here — that
+    is settle_period's job, and only so it can print one QR. The panel shows both
+    rows, because both are real and each is settled separately."""
+    client, headers, room_id, m = api_client_room
+    from app.db import get_db
+    from app import ledger
+    with get_db().session() as s:
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m["Linh"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=122000,
+                           dish="bun bo", occurred_on=date(2026, 7, 21))
+        ledger.record_meal(s, room_id=room_id, payer_member_id=m["Giang"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=40000,
+                           dish="ca phe", occurred_on=date(2026, 7, 22))
+    out = client.get(f"/api/rooms/{room_id}/ledger", headers=headers).json()["outstanding"]
+    assert [(r["debtor_name"], r["creditor_name"], r["amount"]) for r in out] == [
+        ("Giang", "Linh", 61000),
+        ("Linh", "Giang", 20000),
+    ]
 
 
 # --- settled QRs must stop being payable ------------------------------------ #

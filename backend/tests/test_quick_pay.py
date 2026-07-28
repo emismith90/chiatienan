@@ -35,8 +35,7 @@ def test_quick_pay_records_meal_outstanding(api_client_room):
 
 def test_quick_pay_leaves_the_same_audit_trail_as_a_confirmed_draft(api_client_room):
     """It posted a bare line of text while commit_payment_draft attached the
-    amounts and a balances snapshot — so the one path a user taps most left the
-    least behind."""
+    amounts — so the one path a user taps most left the least behind."""
     client, headers, room_id, members = api_client_room
     linh, giang = members["Linh"], members["Giang"]
 
@@ -60,5 +59,5 @@ def test_quick_pay_leaves_the_same_audit_trail_as_a_confirmed_draft(api_client_r
     assert att["transfers"][0]["amount"] == share
     assert att["transfers"][0]["from"]["id"] == giang
     assert att["meal_id"] == meal_id
-    assert att["balances"], "a payment card carries a balances snapshot"
+    assert "balances" not in att, "no card carries a net-balance snapshot any more"
     assert f"{share:,}đ" in card["body"]

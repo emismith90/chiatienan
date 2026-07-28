@@ -29,8 +29,8 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(api, "getMembers").mockResolvedValue([] as any);
   vi.spyOn(api, "getLedger").mockResolvedValue(
-    { period: { from: null, to: "2026-07-22", keyword: "since_last" }, balances: [], timeline: [],
-      me: { owe: [], owed: [], net: 0 } } as any,
+    { period: { from: null, to: "2026-07-22", keyword: "since_last" }, outstanding: [], timeline: [],
+      me: { owe: [], owed: [] } } as any,
   );
 });
 

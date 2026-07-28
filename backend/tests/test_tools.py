@@ -199,16 +199,25 @@ def test_void_meal_tool_cannot_void_another_rooms_meal():
     assert out["ok"] is False and "error" in out
 
 
-def test_get_period_balances_tool_scoped_to_room():
+def test_no_tool_hands_the_agent_a_net_balance():
+    """`get_period_balances` returned paid/consumed/balance per person. While it
+    existed the agent could fetch a net figure and narrate it, whatever the
+    prompt said — so it is gone, not merely unused."""
+    d, (room_id, an, _bi) = _ctx()
+    tools = build_tools(ToolContext(db=d, room_id=room_id, sender_member_id=an))
+    assert "get_period_balances" not in tools
+
+
+def test_group_summary_outstanding_is_scoped_to_room():
     d, (room_id, an, bi) = _ctx()
     other_room_id, other_id = _other_room_member(d)
     _seed_meal(d, room_id, an, [an, bi], 100000)
 
     other_ctx = ToolContext(db=d, room_id=other_room_id, sender_member_id=other_id)
     other_tools = build_tools(other_ctx)
-    out = other_tools["get_period_balances"].execute({"to": "2999-01-01"})
+    out = other_tools["get_period_summary"].execute({})
     assert out["ok"] is True
-    assert out["balances"] == []
+    assert out["outstanding"] == []
 
 
 def test_add_member_tool_creates_unclaimed_member_and_rejects_duplicate_nickname():

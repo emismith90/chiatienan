@@ -1,7 +1,6 @@
 "use client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { BalanceTable } from "./balance-table";
 import { ZoomableImage } from "./zoomable-image";
 import { StatementCard } from "./statement-card";
 import { SummaryCard } from "./summary-card";
@@ -125,7 +124,6 @@ function MealCard({ attachments }: { attachments: any }) {
           ))}
         </ul>
       )}
-      <BalanceTable rows={attachments.balances ?? []} />
     </div>
   );
 }

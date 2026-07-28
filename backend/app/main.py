@@ -360,7 +360,7 @@ async def get_ledger(room_id: int, period: str = "since_last",
                            today=today_ict(),
                            last_settlement_to=last.period_to if last else None,
                            explicit_from=explicit_from, explicit_to=explicit_to)
-        balances = ledger.period_balances(s, room_id, p["from"], p["to"])
+        outstanding = ledger.outstanding_pairs(s, room_id, p["from"], p["to"])
         timeline = ledger.period_timeline(s, room_id, p["from"], p["to"])
         me_stmt = ledger.statement_for(s, room_id, ctx.member_id, p["from"], p["to"])
         names = {mm.id: mm.display_name
@@ -374,13 +374,14 @@ async def get_ledger(room_id: int, period: str = "since_last",
     return {
         "period": {"from": p["from"].isoformat() if p["from"] else None,
                    "to": p["to"].isoformat(), "keyword": p["keyword"]},
-        "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
-                     for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
+        "outstanding": [{**r,
+                         "debtor_name": names.get(r["debtor_id"], "?"),
+                         "creditor_name": names.get(r["creditor_id"], "?")}
+                        for r in outstanding],
         "timeline": timeline,
         "me": {
             "owe": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owe"]],
             "owed": [{**r, "name": names.get(r["other_id"], "?")} for r in me_stmt["owed"]],
-            "net": me_stmt["net"],
         },
     }
 
@@ -406,8 +407,8 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
             names = {mm.id: mm.display_name
                      for mm in roster.list_members(s, room_id, include_inactive=True)}
             # Same attachment shape as a confirmed payment draft, so this path
-            # leaves the same audit trail (amounts + a balances snapshot) instead
-            # of a bare line of text that nothing can reconstruct later.
+            # leaves the same audit trail instead of a bare line of text that
+            # nothing can reconstruct later.
             pay_att = {
                 "type": "payment",
                 "transfers": [{
@@ -416,7 +417,6 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
                     "amount": outstanding,
                 }],
                 "meal_id": body.meal_id,
-                "balances": drafts.current_balances(s, room_id),
             }
             msg = chat.post_message(s, room_id, None, chat._payment_body(pay_att),
                                     attachments=pay_att, kind="bot")

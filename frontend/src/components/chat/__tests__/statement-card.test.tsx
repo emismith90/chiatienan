@@ -7,17 +7,24 @@ const att = {
   type: "statement", member: { id: 9, name: "Giang" },
   period: { from: null, to: "2026-07-22" },
   owe: [{ creditor_id: 6, name: "Linh", meal_id: 2, dish: "bun bo", occurred_on: "2026-07-21", amount: 61000, status: "unpaid" }],
-  owed: [], net: -61000,
+  owed: [],
 };
 
 beforeEach(() => vi.restoreAllMocks());
 
 describe("StatementCard via BotMessage", () => {
-  it("shows what you owe, the meal, and the net", () => {
+  it("shows what you owe and the meal, and no net total", () => {
     render(<BotMessage body="" attachments={att} roomId={3} />);
     expect(screen.getByText("Linh")).toBeInTheDocument();
     expect(screen.getByText(/bun bo/)).toBeInTheDocument();
-    expect(screen.getByText(/-61.000/)).toBeInTheDocument(); // net
+    expect(screen.getByText(/61\.000/)).toBeInTheDocument();   // the debt itself
+    expect(screen.queryByText("Net")).not.toBeInTheDocument();
+    expect(screen.queryByText(/-61\.000/)).not.toBeInTheDocument();
+  });
+
+  it("says so plainly when there is nothing either way", () => {
+    render(<BotMessage body="" attachments={{ ...att, owe: [], owed: [] }} roomId={3} />);
+    expect(screen.getByText(/không nợ ai, không ai nợ bạn/)).toBeInTheDocument();
   });
 
   it("Mark paid records the meal and flips the row", async () => {

@@ -164,15 +164,6 @@ _PERIOD_SCHEMA = {
     },
 }
 
-_BALANCES_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "from": {"type": "string", "description": "ISO date (blank = from the start of the ledger)."},
-        "to": {"type": "string", "description": "ISO date."},
-    },
-    "required": ["to"],
-}
-
 _ADD_MEMBER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -403,28 +394,6 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "keyword": period["keyword"],
         }
 
-    def get_period_balances(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        try:
-            from_date = _parse_iso(args.get("from"))
-            to_date = _parse_iso(args.get("to"))
-        except ValueError:
-            return _err("Invalid date; expected YYYY-MM-DD.")
-        if to_date is None:
-            return _err("Missing end date (to).")
-        with db.session() as s:
-            balances = ledger.period_balances(s, ctx.room_id, from_date, to_date)
-            names = _names_for(s, ctx.room_id, balances.keys())
-        return {
-            "ok": True,
-            "from": from_date.isoformat() if from_date else None,
-            "to": to_date.isoformat(),
-            "balances": [
-                {"id": mid, "name": names.get(mid, "?"), **vals}
-                for mid, vals in sorted(balances.items(), key=lambda kv: kv[1]["balance"])
-            ],
-        }
-
     def member_statement(args, _tool_ctx=None) -> dict:
         args = args or {}
         member = args.get("member") or ctx.sender_member_id
@@ -453,13 +422,12 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
 
         owe = [_row(r, "creditor_id") for r in stmt["owe"]]
         owed = [_row(r, "debtor_id") for r in stmt["owed"]]
-        net = stmt["net"]
         return {
             "ok": True, "type": "statement",
             "member": {"id": member, "name": names.get(member, "?")},
             "period": {"from": period["from"].isoformat() if period["from"] else None,
                        "to": period["to"].isoformat()},
-            "owe": owe, "owed": owed, "net": net,
+            "owe": owe, "owed": owed,
         }
 
     def get_period_summary(args, _tool_ctx=None) -> dict:
@@ -471,8 +439,9 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 last_settlement_to=last.period_to if last else None,
             )
             timeline = ledger.period_timeline(s, ctx.room_id, period["from"], period["to"])
-            balances = ledger.period_balances(s, ctx.room_id, period["from"], period["to"])
-            ids = set(balances) | {e.get("payer_id") for e in timeline} \
+            outstanding = ledger.outstanding_pairs(s, ctx.room_id, period["from"], period["to"])
+            ids = {r["debtor_id"] for r in outstanding} | {r["creditor_id"] for r in outstanding} \
+                | {e.get("payer_id") for e in timeline} \
                 | {e.get("from_id") for e in timeline} | {e.get("to_id") for e in timeline}
             ids.discard(None)
             names = _names_for(s, ctx.room_id, ids)
@@ -487,8 +456,10 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "period": {"from": period["from"].isoformat() if period["from"] else None,
                        "to": period["to"].isoformat()},
             "timeline": timeline,
-            "balances": [{"id": mid, "name": names.get(mid, "?"), "balance": v["balance"]}
-                         for mid, v in sorted(balances.items(), key=lambda kv: kv[1]["balance"])],
+            "outstanding": [{**r,
+                             "debtor_name": names.get(r["debtor_id"], "?"),
+                             "creditor_name": names.get(r["creditor_id"], "?")}
+                            for r in outstanding],
         }
 
     def add_member(args, _tool_ctx=None) -> dict:
@@ -653,8 +624,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         that wrote a Settlement row; nobody ever passed it, and the day someone
         had, `resolve_period("since_last")` would have flipped from "the whole
         ledger" to a bounded window for the ledger panel, quick-pay, and every
-        card's balances snapshot at once. Reintroduce it deliberately or not at
-        all (see ledger.record_settlement, kept for that purpose).
+        statement at once. Reintroduce it deliberately or not at all (see
+        ledger.record_settlement, kept for that purpose).
         """
         args = args or {}
         with db.session() as s:
@@ -809,14 +780,9 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             description="Turn a day word ('thứ 2', 'hôm qua', '20/7') into an ISO date (ICT). Use before propose_meal when the user names a day.",
             input_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]},
         ),
-        "get_period_balances": CustomTool(
-            execute=get_period_balances,
-            description="Per-person paid/consumed/balance over a range (display only).",
-            input_schema=_BALANCES_SCHEMA,
-        ),
         "member_statement": CustomTool(
             execute=member_statement,
-            description="A person's own statement: what they owe + are owed, per meal, with paid/unpaid status. Default member = the sender. Use for first-person balance questions ('tôi nợ ai', 'how much do I owe').",
+            description="A person's own statement: what they owe + are owed, per meal, with paid/unpaid status. There is no net/ròng figure — report the owe and owed rows as they are. Default member = the sender. Use for first-person questions ('tôi nợ ai', 'how much do I owe').",
             input_schema={"type": "object", "properties": {
                 "member": {"type": "integer", "description": "member id; blank = the sender."},
                 "keyword": _PERIOD_SCHEMA["properties"]["keyword"],
@@ -824,7 +790,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "get_period_summary": CustomTool(
             execute=get_period_summary,
-            description="Group summary: chronological timeline of meals + payments and per-person net balances (display only). Use for 'summary'/'current state'/'tổng kết'.",
+            description="Group summary: chronological timeline of meals + payments plus every open 'X owes Y' row (display only). Use for 'summary'/'current state'/'tổng kết'.",
             input_schema={"type": "object", "properties": {"keyword": _PERIOD_SCHEMA["properties"]["keyword"]}},
         ),
         "settle_period": CustomTool(

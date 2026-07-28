@@ -6,7 +6,6 @@ const LABELS: Record<string, string> = {
   find_members: "Looking up members…",
   propose_meal: "Drafting the meal…",
   settle_period: "Computing transfers…",
-  get_period_balances: "Computing balances…",
   resolve_period: "Resolving the period…",
 };
 

@@ -1,5 +1,5 @@
 "use client";
-import { BalanceBars } from "./balance-bars";
+import { OutstandingList } from "./outstanding-list";
 import { TransactionTimeline } from "./transaction-timeline";
 
 export function SummaryCard({
@@ -25,10 +25,10 @@ export function SummaryCard({
           Mở sổ {period.from ? `${period.from} → ${period.to}` : `đến ${period.to}`}
         </button>
       )}
-      {(attachments.balances ?? []).length > 0 && (
+      {(attachments.outstanding ?? []).length > 0 && (
         <div className="border-t border-dashed border-[var(--border)] pt-3">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Balances</p>
-          <BalanceBars rows={attachments.balances} />
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Ai nợ ai</p>
+          <OutstandingList rows={attachments.outstanding} />
         </div>
       )}
     </div>

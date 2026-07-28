@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useLedger } from "@/hooks/use-ledger";
-import { BalanceBars } from "./balance-bars";
+import { OutstandingList } from "./outstanding-list";
 import { TransactionTimeline } from "./transaction-timeline";
 import { StatementSections } from "./statement-card";
 
@@ -17,7 +17,10 @@ export function LedgerPanel({
   onClearRange?: () => void;
 }) {
   const { data, loading } = useLedger(roomId, version, range);
-  const [mine, setMine] = useState(false);
+  /** Mine is the default view: the panel's job is "what do I owe, who owes me",
+   * and the group tab is the thing you go looking for. It only holds once we know
+   * who "mine" is — before sign-in there is no statement to show. */
+  const [mine, setMine] = useState(true);
   const showMine = mine && selfId != null;
 
   return (
@@ -26,13 +29,13 @@ export function LedgerPanel({
         <h2 className="text-sm font-bold text-[var(--text-primary)]">Ledger</h2>
         {selfId != null && (
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-xs">
-            <button type="button" onClick={() => setMine(false)}
-                    className={`px-2.5 py-1 ${!mine ? "bg-[var(--accent-primary)] font-semibold text-white" : "text-[var(--text-secondary)]"}`}>
-              Group
-            </button>
             <button type="button" onClick={() => setMine(true)}
                     className={`px-2.5 py-1 ${mine ? "bg-[var(--accent-primary)] font-semibold text-white" : "text-[var(--text-secondary)]"}`}>
               Mine
+            </button>
+            <button type="button" onClick={() => setMine(false)}
+                    className={`px-2.5 py-1 ${!mine ? "bg-[var(--accent-primary)] font-semibold text-white" : "text-[var(--text-secondary)]"}`}>
+              Group
             </button>
           </div>
         )}
@@ -50,21 +53,15 @@ export function LedgerPanel({
       {loading && !data ? (
         <p className="text-xs text-[var(--text-secondary)]">Loading…</p>
       ) : showMine ? (
-        <>
-          <section>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Balances</p>
-            <BalanceBars rows={(data?.balances ?? []).filter((b) => b.id === selfId)} selfId={selfId} />
-          </section>
-          <StatementSections
-            owe={data?.me?.owe ?? []} owed={data?.me?.owed ?? []} net={data?.me?.net ?? 0}
-            roomId={roomId} onPaid={() => {}}
-          />
-        </>
+        <StatementSections
+          owe={data?.me?.owe ?? []} owed={data?.me?.owed ?? []}
+          roomId={roomId} onPaid={() => {}}
+        />
       ) : (
         <>
           <section>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Balances</p>
-            <BalanceBars rows={data?.balances ?? []} selfId={selfId} />
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Ai nợ ai</p>
+            <OutstandingList rows={data?.outstanding ?? []} selfId={selfId} />
           </section>
           <section>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Transactions</p>

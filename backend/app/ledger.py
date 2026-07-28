@@ -199,6 +199,12 @@ def period_balances(
 ) -> dict[int, dict[str, int]]:
     """Per-member ``paid`` / ``consumed`` / ``balance`` over an inclusive window.
 
+    **Internal ledger math — not for display.** Nothing user-facing reports a
+    net balance any more (see :func:`statement_for`); this survives because it
+    is how the tests state the invariants a split has to satisfy (shares sum to
+    the bill, balances sum to zero, a void leaves nobody owing). Report
+    :func:`statement_for` or :func:`outstanding_pairs` instead.
+
     Excludes voided meals. ``from_date=None`` means "from the beginning of the
     ledger". Only members with any activity in the window appear. Scoped to
     ``room_id`` — other rooms' meals never contribute.
@@ -367,7 +373,14 @@ def period_transfers(
 def statement_for(
     session: Session, room_id: int, member_id: int, from_date: date | None, to_date: date
 ) -> dict:
-    """The caller's own owe/owed edges (outstanding > 0) + net. Ids only."""
+    """The caller's own owe/owed edges (outstanding > 0). Ids only.
+
+    Deliberately returns no net figure. "Ròng: -54.500đ" answered a question
+    nobody asked — the group's questions are "tôi nợ ai" and "ai nợ tôi", and a
+    single signed scalar answers neither while quietly implying the debts had
+    been offset against each other. They are not: each edge is owed to a
+    specific person for a specific meal, and that is all any surface reports.
+    """
     edges = debt_breakdown(session, room_id, from_date, to_date)
     owe = [{"other_id": e.creditor, "meal_id": e.meal_id, "dish": e.dish,
             "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
@@ -375,8 +388,28 @@ def statement_for(
     owed = [{"other_id": e.debtor, "meal_id": e.meal_id, "dish": e.dish,
              "occurred_on": e.occurred_on.isoformat(), "amount": e.outstanding, "status": e.status}
             for e in edges if e.creditor == member_id and e.outstanding > 0]
-    net = sum(r["amount"] for r in owed) - sum(r["amount"] for r in owe)
-    return {"owe": owe, "owed": owed, "net": net}
+    return {"owe": owe, "owed": owed}
+
+
+def outstanding_pairs(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list[dict]:
+    """Every open debt in the room as ``debtor owes creditor`` rows.
+
+    The group-wide counterpart to :func:`statement_for`, and what replaced the
+    per-person balance bars: a direction and an amount per pair, summed over the
+    pair's meals. Opposing directions are **not** netted here — if A owes B and
+    B owes A, both rows appear, because that is what the two of them each have
+    to settle. Netting is :func:`period_transfers`' job, for QR codes only.
+
+    Sorted by amount descending, then by ids, so the ordering is stable.
+    """
+    totals: dict[tuple[int, int], int] = {}
+    for e in debt_breakdown(session, room_id, from_date, to_date):
+        if e.outstanding > 0:
+            totals[(e.debtor, e.creditor)] = totals.get((e.debtor, e.creditor), 0) + e.outstanding
+    return [{"debtor_id": d, "creditor_id": c, "amount": amt}
+            for (d, c), amt in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
 def period_timeline(

@@ -24,7 +24,7 @@ def setup(tmp_path):
     return d, room, m
 
 
-def test_summary_timeline_and_balances(setup):
+def test_summary_timeline_and_outstanding(setup):
     d, room, m = setup
     res = build_tools(ToolContext(db=d, room_id=room, sender_member_id=m["Giang"]))["get_period_summary"].execute({})
     assert res["type"] == "summary"
@@ -32,5 +32,19 @@ def test_summary_timeline_and_balances(setup):
     assert kinds == ["meal", "payment"]
     assert res["timeline"][0]["payer_name"] == "Linh"
     assert res["timeline"][1]["from_name"] == "Giang" and res["timeline"][1]["to_name"] == "Linh"
-    bal = {b["name"]: b["balance"] for b in res["balances"]}
-    assert bal["Giang"] == 0 and bal["Linh"] == 0     # 61k meal debt, 61k paid -> even
+    # 61k meal debt, 61k paid -> nothing left open, and no net column to read.
+    assert res["outstanding"] == []
+    assert "balances" not in res
+
+
+def test_summary_lists_who_owes_whom_by_name(setup):
+    d, room, m = setup
+    with d.session() as s:
+        ledger.record_meal(s, room_id=room, payer_member_id=m["Giang"],
+                           participants=[m["Linh"], m["Giang"]], total_amount=80000,
+                           dish="ca phe", occurred_on=date(2026, 7, 23))
+    res = build_tools(ToolContext(db=d, room_id=room, sender_member_id=m["Giang"]))["get_period_summary"].execute({})
+    assert res["outstanding"] == [
+        {"debtor_id": m["Linh"], "debtor_name": "Linh",
+         "creditor_id": m["Giang"], "creditor_name": "Giang", "amount": 40000},
+    ]

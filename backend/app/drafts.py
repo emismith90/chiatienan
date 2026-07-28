@@ -16,10 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import chat, ledger
-from app.clock import today_ict
 from app.models import Meal, Member, RoomMessage
 from app.money import MoneyError, itemized_adjustments, normalize_items, prorate_items
-from app.periods import resolve_period
 
 DRAFT_KINDS = ("expense_draft", "payment_draft")
 
@@ -169,9 +167,9 @@ def _all_member_names(session: Session, room_id: int) -> dict[int, str]:
     """Display names for EVERY member of the room, active or not.
 
     Unlike :func:`app.roster.list_members` (active-only, used for LLM-facing
-    resolution), the meal/balances payloads shown to humans must still show a
+    resolution), the meal/payment payloads shown to humans must still show a
     real name for a since-deactivated member instead of "?" — this is display
-    only, the underlying balance math is unaffected.
+    only, the underlying share math is unaffected.
     """
     return {m.id: m.display_name for m in session.scalars(select(Member).where(Member.room_id == room_id))}
 
@@ -193,7 +191,6 @@ def _meal_message(session: Session, room_id: int, att: dict, res: dict) -> RoomM
         "payer": {"id": res["payer_member_id"], "name": names.get(res["payer_member_id"], "?")},
         "shares": [{"id": mid, "name": names.get(mid, "?"), "amount": amt}
                    for mid, amt in res["shares"].items()],
-        "balances": current_balances(session, room_id),
     }
     body = chat._meal_body(meal_att)
     return chat.post_message(session, room_id, None, body, attachments=meal_att, kind="bot")
@@ -279,19 +276,6 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     return meal_msg
 
 
-def current_balances(session: Session, room_id: int) -> list[dict]:
-    last = ledger.last_settlement(session, room_id)
-    period = resolve_period(
-        "since_last",
-        today=today_ict(),
-        last_settlement_to=last.period_to if last else None,
-    )
-    balances = ledger.period_balances(session, room_id, period["from"], period["to"])
-    names = _all_member_names(session, room_id)
-    rows = [{"id": mid, "name": names.get(mid, "?"), **vals} for mid, vals in balances.items()]
-    return sorted(rows, key=lambda r: r["balance"], reverse=True)
-
-
 def create_payment_draft(session: Session, room_id: int,
                          payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
     """Persist a pending payment draft, retiring any it re-proposes.
@@ -336,7 +320,6 @@ def commit_payment_draft(session: Session, draft_id: int, room_id: int,
              "amount": t["amount"]}
             for t in transfers
         ],
-        "balances": current_balances(session, room_id),
     }
     card = chat.post_message(session, room_id, None, chat._payment_body(pay_att),
                             attachments=pay_att, kind="bot")
