@@ -418,7 +418,12 @@ export function RoomView({ roomId }: { roomId: number }) {
       <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg-base)]">
       <header className="pt-safe border-b border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
+          {/* `flex-wrap`, because the right-hand cluster is four buttons that
+              must not squash: at 320px (iPhone SE) they overran the row by 18px
+              and gave the whole page a horizontal scrollbar. Wrapping drops them
+              to a second line on the narrowest phones and changes nothing above
+              that. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 items-center gap-2">
               <RoomSwitcher />
               {!online && (

@@ -133,7 +133,7 @@ export function MessageList({
               Bot
             </span>
             <BotMessage body={m.body} attachments={m.attachments} roomId={roomId}
-                        onOpenLedger={onOpenLedger} />
+                        members={members} onOpenLedger={onOpenLedger} />
           </div>
         ) : (
           <HumanMessage key={m.id} message={m} />

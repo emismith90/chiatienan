@@ -45,6 +45,14 @@ html,body{background:var(--bg-base);color:var(--text-primary);
   font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;
   -webkit-text-size-adjust:100%;}
 
+/* No horizontal page scroll, ever. The app is a vertical chat column: any
+   sideways scrollbar is a layout bug leaking out (a header row that would not
+   wrap at 320px was the one that shipped). `clip` rather than `hidden` because
+   `hidden` makes this a scroll container and breaks `position:sticky` in
+   descendants. Anything that genuinely needs to scroll sideways — a wide table
+   in a bot reply — must own an `overflow-x:auto` box of its own. */
+html,body{overflow-x:clip;max-width:100%;}
+
 /* Safe-area insets for the installed PWA (viewport-fit=cover) so fixed top/
    bottom chrome clears the notch and home indicator. No-ops on devices with
    zero insets. */
