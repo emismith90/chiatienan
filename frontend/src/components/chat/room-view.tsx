@@ -9,6 +9,7 @@ import { InstallButton } from "@/components/install-button";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
+import { LotterySpinner, looksLikeRandomRequest } from "./lottery-spinner";
 import { RoomSwitcher } from "./room-switcher";
 import { LedgerPanel } from "./ledger-panel";
 import { saveProfile } from "@/lib/rooms-store";
@@ -394,13 +395,27 @@ export function RoomView({ roomId }: { roomId: number }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
+  // A random-pick request is recognisable from the message text alone, so the
+  // lottery animation can start the instant the message is sent (optimistic
+  // bubble) and run until the bot's reply lands — at which point that reply
+  // becomes the last message and `awaitingRandom` flips false, revealing the
+  // result card. A false positive just shows the spinner briefly, then the real
+  // reply replaces it.
+  const lastMsg = messages.length ? messages[messages.length - 1] : null;
+  const lastId = lastMsg ? lastMsg.id : null;
+  const awaitingRandom =
+    !!lastMsg &&
+    !["bot", "expense_draft", "payment_draft", "context_reset"].includes(lastMsg.kind ?? "") &&
+    !lastMsg.error &&
+    !lastMsg.queued &&
+    looksLikeRandomRequest(lastMsg.body);
+
   // Auto-scroll to the newest message / typing indicator. Keyed on the LAST
   // message id (not the array) so prepending older history via "load earlier"
   // doesn't yank the viewport to the bottom.
-  const lastId = messages.length ? messages[messages.length - 1].id : null;
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [lastId, typing]);
+  }, [lastId, typing, awaitingRandom]);
 
   // Load older messages while keeping the reader anchored: content is inserted
   // above, so restore scrollTop by the height the list grew.
@@ -475,21 +490,29 @@ export function RoomView({ roomId }: { roomId: number }) {
           )}
           <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines}
                        onOpenLedger={openLedgerRange} />
-          {/* Only the in-progress turn (no draft/bot message yet) renders here,
-              live. Once it finishes, its timeline attaches collapsed above the
-              message it produced — see MessageList. */}
-          {activeTurn && timelines[activeTurn] && (
-            <AgentTimeline steps={timelines[activeTurn]} live={true} />
-          )}
-          {typing && (
-            <div role="status" className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-              <span aria-hidden className="flex gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.3s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.15s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)]" />
-              </span>
-              bot is replying…
-            </div>
+          {/* A random-pick request gets the lottery reel instead of the agent
+              timeline / typing dots — it plays until the result card arrives. */}
+          {awaitingRandom ? (
+            <LotterySpinner names={members.map((m) => m.display_name)} />
+          ) : (
+            <>
+              {/* Only the in-progress turn (no draft/bot message yet) renders here,
+                  live. Once it finishes, its timeline attaches collapsed above the
+                  message it produced — see MessageList. */}
+              {activeTurn && timelines[activeTurn] && (
+                <AgentTimeline steps={timelines[activeTurn]} live={true} />
+              )}
+              {typing && (
+                <div role="status" className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <span aria-hidden className="flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)]" />
+                  </span>
+                  bot is replying…
+                </div>
+              )}
+            </>
           )}
           <div ref={bottomRef} />
         </div>
