@@ -395,6 +395,46 @@ def test_settle_note_names_the_meals_per_transfer(db):
     assert notes[(m[0], m[1])] == "M1: T2 bun cha, T3 nem"
 
 
+def test_pick_random_draws_from_active_members(db, monkeypatch):
+    # The tool owns the draw; we pin random.choice to make the winner assertable.
+    room_id, (a, b, c) = _seed_room(db, 3)
+    monkeypatch.setattr("app.tools.random.choice", lambda pool: pool[0])
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    out = build_tools(ctx)["pick_random"].execute({"label": "trả tiền"})
+    assert out["ok"] is True and out["type"] == "random_pick"
+    assert {c_["id"] for c_ in out["candidates"]} == {a, b, c}
+    assert out["chosen"]["id"] in {a, b, c}
+    assert out["label"] == "trả tiền"
+
+
+def test_pick_random_honours_exclude_and_candidate_ids(db, monkeypatch):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    monkeypatch.setattr("app.tools.random.choice", lambda pool: pool[0])
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    # candidate pool {a,b,c} minus exclude {a} → {b,c}; a can never be chosen.
+    out = build_tools(ctx)["pick_random"].execute({
+        "candidate_ids": [a, b, c], "exclude_ids": [a],
+    })
+    ids = {c_["id"] for c_ in out["candidates"]}
+    assert ids == {b, c} and out["chosen"]["id"] in {b, c}
+
+
+def test_pick_random_empty_pool_errors(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    out = build_tools(ctx)["pick_random"].execute({"exclude_ids": [a, b]})
+    assert "error" in out
+
+
+def test_pick_random_ignores_ids_from_other_rooms(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    other_room, (x, y) = _seed_room(db, 2, token="other")
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    out = build_tools(ctx)["pick_random"].execute({"candidate_ids": [a, b, x, y]})
+    ids = {c_["id"] for c_ in out["candidates"]}
+    assert ids == {a, b}  # foreign ids silently dropped, never chosen
+
+
 def test_propose_meal_resolves_day_word_server_side(db, monkeypatch):
     # The tool — not the model — computes the date, so it can never land a day off.
     from datetime import date

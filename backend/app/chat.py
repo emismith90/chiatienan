@@ -313,6 +313,9 @@ def render_bot_attachments(result) -> dict | None:
     summary = result.last_result("get_period_summary")
     if summary and summary.get("type") == "summary":
         return {"type": "summary", **summary}
+    pick = result.last_result("pick_random")
+    if pick and pick.get("type") == "random_pick":
+        return {"type": "random_pick", **pick}
     return None
 
 
@@ -451,6 +454,16 @@ def _summary_body(att: dict) -> str:
     return f"Tóm tắt {window}: {', '.join(parts)} trong {days} ngày — chi tiết ở dưới."
 
 
+def _random_pick_body(att: dict) -> str:
+    """Deterministic VN text for a random draw — the winner comes from the tool
+    dict, never the LLM, so it can't be re-typed into a different name."""
+    chosen = att.get("chosen") or {}
+    n = len(att.get("candidates") or [])
+    label = att.get("label")
+    tail = f" ({label})" if label else ""
+    return f"🎲 Người được chọn{tail}: **{chosen.get('name', '?')}** — bốc trong {n} người."
+
+
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
                         text: str, images=None, emit=None,
                         before_id: int | None = None) -> RoomMessage:
@@ -539,6 +552,8 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 body = _statement_body(attachments)
             elif attachments and attachments.get("type") == "summary":
                 body = _summary_body(attachments)
+            elif attachments and attachments.get("type") == "random_pick":
+                body = _random_pick_body(attachments)
             else:
                 body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
                 # The one path where money reaches the room as LLM prose. Report

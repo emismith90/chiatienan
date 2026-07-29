@@ -156,6 +156,25 @@ function MealCard({ attachments }: { attachments: any }) {
   );
 }
 
+function RandomPickCard({ attachments }: { attachments: any }) {
+  const chosen = attachments.chosen ?? {};
+  const candidates: { id: number; name: string }[] = attachments.candidates ?? [];
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg-base)] p-4 text-center">
+      <div className="text-2xl" aria-hidden>🎲</div>
+      <div className="mt-1 text-lg font-semibold text-[var(--accent-text)]">{chosen.name ?? "?"}</div>
+      {attachments.label && (
+        <div className="text-xs text-[var(--text-secondary)]">{attachments.label}</div>
+      )}
+      {candidates.length > 0 && (
+        <div className="mt-2 text-xs text-[var(--text-secondary)]">
+          bốc trong {candidates.length} người: {candidates.map((c) => c.name).join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BotMessage({ body, attachments, roomId, members, onOpenLedger }: BotMessageProps) {
   const type = attachments?.type;
   return (
@@ -167,6 +186,7 @@ export function BotMessage({ body, attachments, roomId, members, onOpenLedger }:
       {type === "meal" && <MealCard attachments={attachments} />}
       {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
       {type === "summary" && <SummaryCard attachments={attachments} onOpenLedger={onOpenLedger} />}
+      {type === "random_pick" && <RandomPickCard attachments={attachments} />}
     </div>
   );
 }
