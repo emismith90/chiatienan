@@ -15,6 +15,7 @@ Numbers that end up in a QR are computed and rendered entirely inside
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -150,6 +151,24 @@ _VOID_SCHEMA = {
     "type": "object",
     "properties": {"meal_id": {"type": "integer"}},
     "required": ["meal_id"],
+}
+
+_RANDOM_PICK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "candidate_ids": {
+            "type": "array", "items": {"type": "integer"},
+            "description": "member ids to draw among; omit = all active members ('cả nhóm').",
+        },
+        "exclude_ids": {
+            "type": "array", "items": {"type": "integer"},
+            "description": "member ids to leave OUT of the draw (e.g. 'trừ An').",
+        },
+        "label": {
+            "type": "string",
+            "description": "What the pick is for, as the user said it ('trả tiền', 'đi mua đồ ăn'). Cosmetic only.",
+        },
+    },
 }
 
 _PERIOD_SCHEMA = {
@@ -372,6 +391,29 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 }
             except ledger.LedgerError as exc:
                 return _err(str(exc))
+
+    def pick_random(args, _tool_ctx=None) -> dict:
+        # The draw itself lives in the tool, never in the model — an LLM cannot
+        # be trusted to be uniform (or unmanipulable). The visible body is built
+        # server-side from `chosen`, so the winner can't be re-typed either.
+        args = args or {}
+        exclude = {int(x) for x in (args.get("exclude_ids") or [])}
+        with db.session() as s:
+            members = {m.id: m.display_name for m in roster.list_members(s, ctx.room_id)}
+        requested = args.get("candidate_ids")
+        pool_ids = [int(x) for x in requested if int(x) in members] if requested else list(members)
+        pool_ids = [i for i in pool_ids if i not in exclude]
+        if not pool_ids:
+            return _err("Không còn ai để bốc (danh sách rỗng sau khi loại trừ).")
+        chosen_id = random.choice(pool_ids)
+        label = (args.get("label") or "").strip() or None
+        return {
+            "ok": True,
+            "type": "random_pick",
+            "chosen": {"id": chosen_id, "name": members[chosen_id]},
+            "candidates": [{"id": i, "name": members[i]} for i in pool_ids],
+            "label": label,
+        }
 
     def resolve_period_tool(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -769,6 +811,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                                             "description": "The # shown on the draft card."}},
                 "required": ["draft_id"],
             },
+        ),
+        "pick_random": CustomTool(
+            execute=pick_random,
+            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). The tool does the draw — never pick yourself.",
+            input_schema=_RANDOM_PICK_SCHEMA,
         ),
         "resolve_period": CustomTool(
             execute=resolve_period_tool,

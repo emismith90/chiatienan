@@ -43,6 +43,8 @@ def build_system_prompt(*, sender_name: str | None = None, today=None) -> str:
         " (member_statement, mặc định là người nhắn). Chỉ xem cả nhóm khi họ nói rõ.\n"
         "- Ngày cụ thể ('thứ 2', 'hôm qua', '20/7') → truyền nguyên văn vào `day_word` của `propose_meal`;"
         " công cụ tự tính ngày, TUYỆT ĐỐI không tự suy ra ngày.\n"
+        "- Bốc thăm ngẫu nhiên một người ('random', 'chọn đại ai trả') → `pick_random`;"
+        " công cụ tự bốc, TUYỆT ĐỐI không tự chọn.\n"
         "- Quản lý thành viên: `add_member`, `update_member`, `delete_member`.\n"
         "- Thẻ nháp treo làm `settle_period` bị chặn: người dùng nói huỷ thì gọi"
         " `cancel_draft` với số thẻ. XÁC NHẬN thì không làm qua chat được —"

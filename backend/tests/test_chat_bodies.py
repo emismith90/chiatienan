@@ -1,4 +1,9 @@
-from app.chat import render_bot_attachments, _statement_body, _summary_body
+from app.chat import (
+    render_bot_attachments,
+    _statement_body,
+    _summary_body,
+    _random_pick_body,
+)
 
 
 class _Fake:
@@ -84,4 +89,19 @@ def test_err_statement_result_not_wrapped():
 
 def test_err_summary_result_not_wrapped():
     res = _Fake("get_period_summary", {"ok": False, "error": "x"})
+    assert render_bot_attachments(res) is None
+
+
+def test_render_random_pick_attachment_and_body():
+    res = _Fake("pick_random", {"ok": True, "type": "random_pick",
+                "chosen": {"id": 3, "name": "An"}, "label": "trả tiền",
+                "candidates": [{"id": 1, "name": "Bình"}, {"id": 3, "name": "An"}]})
+    att = render_bot_attachments(res)
+    assert att["type"] == "random_pick"
+    body = _random_pick_body(att)
+    assert "An" in body and "trả tiền" in body and "2 người" in body
+
+
+def test_err_random_pick_result_not_wrapped():
+    res = _Fake("pick_random", {"ok": False, "error": "x"})
     assert render_bot_attachments(res) is None
