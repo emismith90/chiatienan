@@ -156,14 +156,6 @@ _VOID_SCHEMA = {
 _RANDOM_PICK_SCHEMA = {
     "type": "object",
     "properties": {
-        "candidate_ids": {
-            "type": "array", "items": {"type": "integer"},
-            "description": "member ids to draw among; omit = all active members ('cả nhóm').",
-        },
-        "exclude_ids": {
-            "type": "array", "items": {"type": "integer"},
-            "description": "member ids to leave OUT of the draw (e.g. 'trừ An').",
-        },
         "label": {
             "type": "string",
             "description": "What the pick is for, as the user said it ('trả tiền', 'đi mua đồ ăn'). Cosmetic only.",
@@ -397,14 +389,13 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         # be trusted to be uniform (or unmanipulable). The visible body is built
         # server-side from `chosen`, so the winner can't be re-typed either.
         args = args or {}
-        exclude = {int(x) for x in (args.get("exclude_ids") or [])}
         with db.session() as s:
             members = {m.id: m.display_name for m in roster.list_members(s, ctx.room_id)}
-        requested = args.get("candidate_ids")
-        pool_ids = [int(x) for x in requested if int(x) in members] if requested else list(members)
-        pool_ids = [i for i in pool_ids if i not in exclude]
+        # The pool is ALWAYS every active member of the group — no subsetting,
+        # no exclusions. The draw is over the whole room by design.
+        pool_ids = list(members)
         if not pool_ids:
-            return _err("Không còn ai để bốc (danh sách rỗng sau khi loại trừ).")
+            return _err("Không có ai trong nhóm để bốc.")
         chosen_id = random.choice(pool_ids)
         label = (args.get("label") or "").strip() or None
         return {
@@ -814,7 +805,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "pick_random": CustomTool(
             execute=pick_random,
-            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). The tool does the draw — never pick yourself.",
+            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Always draws from EVERYONE in the group — no subsetting, no exclusions. The tool does the draw — never pick yourself.",
             input_schema=_RANDOM_PICK_SCHEMA,
         ),
         "resolve_period": CustomTool(

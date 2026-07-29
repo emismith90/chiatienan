@@ -407,32 +407,32 @@ def test_pick_random_draws_from_active_members(db, monkeypatch):
     assert out["label"] == "trả tiền"
 
 
-def test_pick_random_honours_exclude_and_candidate_ids(db, monkeypatch):
+def test_pick_random_always_draws_whole_group(db, monkeypatch):
     room_id, (a, b, c) = _seed_room(db, 3)
     monkeypatch.setattr("app.tools.random.choice", lambda pool: pool[0])
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
-    # candidate pool {a,b,c} minus exclude {a} → {b,c}; a can never be chosen.
+    # Any attempt to subset or exclude is ignored — the pool is the whole group.
     out = build_tools(ctx)["pick_random"].execute({
-        "candidate_ids": [a, b, c], "exclude_ids": [a],
+        "candidate_ids": [a, b], "exclude_ids": [a],
     })
     ids = {c_["id"] for c_ in out["candidates"]}
-    assert ids == {b, c} and out["chosen"]["id"] in {b, c}
+    assert ids == {a, b, c} and out["chosen"]["id"] in {a, b, c}
 
 
-def test_pick_random_empty_pool_errors(db):
-    room_id, (a, b) = _seed_room(db, 2)
-    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
-    out = build_tools(ctx)["pick_random"].execute({"exclude_ids": [a, b]})
+def test_pick_random_empty_group_errors(db):
+    room_id, _ = _seed_room(db, 0)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=None)
+    out = build_tools(ctx)["pick_random"].execute({})
     assert "error" in out
 
 
-def test_pick_random_ignores_ids_from_other_rooms(db):
+def test_pick_random_only_includes_own_room(db):
     room_id, (a, b) = _seed_room(db, 2)
-    other_room, (x, y) = _seed_room(db, 2, token="other")
+    _seed_room(db, 2, token="other")  # foreign members never in this room's pool
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
-    out = build_tools(ctx)["pick_random"].execute({"candidate_ids": [a, b, x, y]})
+    out = build_tools(ctx)["pick_random"].execute({})
     ids = {c_["id"] for c_ in out["candidates"]}
-    assert ids == {a, b}  # foreign ids silently dropped, never chosen
+    assert ids == {a, b}
 
 
 def test_propose_meal_resolves_day_word_server_side(db, monkeypatch):
