@@ -16,6 +16,8 @@
 
 - **Nicer loading** at load for the chat — currently flickers and scrolls.
 
+- **Randomizer** — randomly pick 1 person from the group (e.g. who pays / who fetches lunch).
+
 - **BIG: agent engine export/import**
   - Define mounting point vs skeleton.
   - What to export.
