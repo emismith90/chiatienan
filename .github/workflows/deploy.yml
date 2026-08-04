@@ -27,7 +27,7 @@ name: Deploy
 #   .env.example default when unset):
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
 #     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
-#     CURSOR_SDK_MODEL         – default "grok-4.5-fast"
+#     CURSOR_SDK_MODEL         – default "grok-4.5"
 #     CURSOR_SDK_WORKSPACE     – default "/data/cursor-agent". MUST stay under the
 #                                mounted /data volume: it is the only writable path
 #                                that survives a container recreate, and every
@@ -160,7 +160,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
-          CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5-fast' }}
+          CURSOR_SDK_MODEL: ${{ vars.CURSOR_SDK_MODEL || 'grok-4.5' }}
           CURSOR_SDK_WORKSPACE: ${{ vars.CURSOR_SDK_WORKSPACE || '/data/cursor-agent' }}
           WORKSPACE_FALLBACK: /data/cursor-agent
           CURSOR_API_BASE: ${{ vars.CURSOR_API_BASE || 'https://api.cursor.com' }}
