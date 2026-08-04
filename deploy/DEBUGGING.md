@@ -92,18 +92,38 @@ PY
 
 ## 4. Schema changes / deploy
 
-The app uses SQLAlchemy `create_all()` — it **only creates missing tables/
-columns on a FRESH database**. It will **not** add a new column to the existing
-live DB.
+**Additive columns apply themselves on startup.** `app.db.create_all()` runs
+SQLAlchemy's `create_all()` for missing *tables*, then `_sync_additive_columns()`
+issues `ALTER TABLE … ADD COLUMN` for any column the models have and the live
+table lacks. It is idempotent, so a redeploy against an already-current DB does
+nothing. **A new `mapped_column` therefore needs no manual step** — merge and
+deploy.
 
-- **Additive column on the live DB:** apply it by hand, non-destructively —
-  **never `rm` the live DB** (that erases the group's real ledger):
+This used to be a hand-run `ALTER TABLE`, and forgetting it took prod down:
+plain `create_all()` skips a table that already exists, so PR #34's
+`members.default_participant` never landed on the live DB, every member SELECT
+raised `no such column`, and the room rendered empty — the group's ledger looked
+**wiped** while all 274 messages and 11 members sat untouched on disk. If you
+ever see that symptom again, read the error before believing the data is gone:
+
+```bash
+curl -sS -H "X-Debug-Key: $DEBUG_API_KEY" "$B/logs?lines=300" | grep -i "no such column"
+curl -sS -H "X-Debug-Key: $DEBUG_API_KEY" $B/ping     # row counts: proof the rows are still there
+```
+
+Still hand-written migrations (the auto-step is **additive only** — it never
+drops, renames, retypes, or reorders):
+
+- **Dropped/renamed column, changed type, new constraint or index.** Back up
+  first (§3), then apply by hand — **never `rm` the live DB** (that erases the
+  group's real ledger):
   ```bash
-  # back up first (§3), then:
-  docker compose exec backend python -c "import sqlite3; sqlite3.connect('/data/chiatienan.db').execute('ALTER TABLE payments ADD COLUMN meal_id INTEGER')"
+  docker compose exec backend python -c "import sqlite3; sqlite3.connect('/data/chiatienan.db').execute('ALTER TABLE payments RENAME COLUMN a TO b')"
   ```
-  (SQLite `ALTER TABLE ADD COLUMN` is cheap and non-destructive; a fresh DB gets
-  the column from `create_all` automatically.)
+- **A `NOT NULL` column whose default is a Python callable** (`now_ict`, `list`)
+  has no DDL literal, so it is added **nullable** and a `WARNING` is logged
+  naming the column; existing rows hold NULL until you backfill them. Give the
+  column a scalar `default=` (like `default_participant`'s `True`) to avoid this.
 - **Only** wipe + recreate (`rm data/chiatienan.db*` + restart) for a throwaway
   DB with no data worth keeping — never on the live group.
 
