@@ -109,7 +109,7 @@ def soft_delete_member(session: Session, member: Member) -> Member:
 
 def update_member(session: Session, member: Member, *, display_name=None, nickname=None,
                   bank_code=None, account_number=None, account_holder=None,
-                  aliases=None, active=None) -> Member:
+                  aliases=None, active=None, default_participant=None) -> Member:
     """Edit a member's details (only non-None fields), or restore/deactivate it.
 
     A nickname change is validated for room-uniqueness (excluding this member),
@@ -133,6 +133,8 @@ def update_member(session: Session, member: Member, *, display_name=None, nickna
         member.aliases = list(aliases)
     if active is not None:
         member.active = bool(active)
+    if default_participant is not None:
+        member.default_participant = bool(default_participant)
     session.flush()
     return member
 
@@ -146,6 +148,8 @@ def update_profile(session: Session, member: Member, **fields) -> Member:
     for k in ("display_name", "bank_code", "account_number", "account_holder"):
         if k in fields and fields[k] is not None:
             setattr(member, k, fields[k])
+    if "default_participant" in fields and fields["default_participant"] is not None:
+        member.default_participant = bool(fields["default_participant"])
     session.flush()
     return member
 

@@ -256,6 +256,18 @@ def test_update_member_tool_edits_renames_and_handles_errors(db):
     assert missing["ok"] is False and "error" in missing
 
 
+def test_update_member_tool_sets_default_participant_flag(db):
+    room_id, (a, b) = _seed_room(db, 2)
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
+    tools = build_tools(ctx)
+
+    out = tools["update_member"].execute({"target": "m2", "default_participant": False})
+    assert out["ok"] is True and out["default_participant"] is False
+    # excluded from the "whole group" find_members sweep, still resolvable by name
+    assert {m["id"] for m in tools["find_members"].execute({"all_active": True})["matched"]} == {a}
+    assert {m["id"] for m in tools["find_members"].execute({"names": ["m2"]})["matched"]} == {b}
+
+
 def test_delete_member_tool_soft_deletes_out_of_roster_but_reversible(db):
     room_id, (a, b) = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
@@ -407,16 +419,29 @@ def test_pick_random_draws_from_active_members(db, monkeypatch):
     assert out["label"] == "trả tiền"
 
 
-def test_pick_random_always_draws_whole_group(db, monkeypatch):
+def test_pick_random_ignores_request_level_subsetting(db, monkeypatch):
     room_id, (a, b, c) = _seed_room(db, 3)
     monkeypatch.setattr("app.tools.random.choice", lambda pool: pool[0])
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
-    # Any attempt to subset or exclude is ignored — the pool is the whole group.
+    # The tool takes no participant list — candidate_ids/exclude_ids in the
+    # request are just unknown args and are ignored. The pool is every
+    # default-participant member (see the dedicated flag test below for that).
     out = build_tools(ctx)["pick_random"].execute({
         "candidate_ids": [a, b], "exclude_ids": [a],
     })
     ids = {c_["id"] for c_ in out["candidates"]}
     assert ids == {a, b, c} and out["chosen"]["id"] in {a, b, c}
+
+
+def test_pick_random_excludes_default_participant_false(db, monkeypatch):
+    room_id, (a, b, c) = _seed_room(db, 3)
+    monkeypatch.setattr("app.tools.random.choice", lambda pool: pool[0])
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a)
+    tools = build_tools(ctx)
+
+    tools["update_member"].execute({"target": c, "default_participant": False})
+    out = tools["pick_random"].execute({})
+    assert {c_["id"] for c_ in out["candidates"]} == {a, b}
 
 
 def test_pick_random_empty_group_errors(db):

@@ -198,6 +198,14 @@ _UPDATE_MEMBER_SCHEMA = {
         "account_holder": {"type": "string"},
         "aliases": {"type": "array", "items": {"type": "string"}},
         "active": {"type": "boolean", "description": "Set true to restore a previously removed member."},
+        "default_participant": {
+            "type": "boolean",
+            "description": (
+                "Whether this member is swept into a 'whole group' chia tien split or "
+                "rot tra draw by default. Set false to exclude an irregular/casual member "
+                "— they can still be added to a specific activity by name. Defaults true."
+            ),
+        },
     },
     "required": ["target"],
 }
@@ -390,9 +398,14 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         # server-side from `chosen`, so the winner can't be re-typed either.
         args = args or {}
         with db.session() as s:
-            members = {m.id: m.display_name for m in roster.list_members(s, ctx.room_id)}
-        # The pool is ALWAYS every active member of the group — no subsetting,
-        # no exclusions. The draw is over the whole room by design.
+            members = {
+                m.id: m.display_name
+                for m in roster.list_members(s, ctx.room_id, default_only=True)
+            }
+        # The pool is every default-participant member of the group — no
+        # per-request subsetting (the tool takes no participant list), but a
+        # member flagged out of default group activities (default_participant
+        # = false) is skipped here.
         pool_ids = list(members)
         if not pool_ids:
             return _err("Không có ai trong nhóm để bốc.")
@@ -536,12 +549,14 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     account_holder=args.get("account_holder"),
                     aliases=args.get("aliases"),
                     active=args.get("active"),
+                    default_participant=args.get("default_participant"),
                 )
             except accounts.AccountError as exc:
                 return _err(str(exc))
             return {
                 "ok": True, "member_id": m.id, "nickname": m.nickname,
                 "display_name": m.display_name, "active": m.active,
+                "default_participant": m.default_participant,
             }
 
     def delete_member(args, _tool_ctx=None) -> dict:
@@ -805,7 +820,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "pick_random": CustomTool(
             execute=pick_random,
-            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Always draws from EVERYONE in the group — no subsetting, no exclusions. The tool does the draw — never pick yourself.",
+            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Draws from default-participant members only (see update_member's default_participant flag) — no per-request subsetting. The tool does the draw — never pick yourself.",
             input_schema=_RANDOM_PICK_SCHEMA,
         ),
         "resolve_period": CustomTool(
@@ -848,7 +863,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "update_member": CustomTool(
             execute=update_member,
-            description="Update a member's details (display_name, nickname, bank, aliases) or restore a removed one (active:true).",
+            description="Update a member's details (display_name, nickname, bank, aliases), restore a removed one (active:true), or exclude/include them from default group activities (default_participant:false/true).",
             input_schema=_UPDATE_MEMBER_SCHEMA,
         ),
         "delete_member": CustomTool(

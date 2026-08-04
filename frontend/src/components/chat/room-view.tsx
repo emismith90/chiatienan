@@ -23,6 +23,7 @@ interface Member {
   bank_code?: string | null;
   account_number?: string | null;
   account_holder?: string | null;
+  default_participant?: boolean;
 }
 
 /** Copy text to the clipboard, falling back to a hidden-textarea + execCommand
@@ -230,6 +231,7 @@ export function ProfileDialog({
     account_number: member.account_number || "",
     account_holder: member.account_holder || "",
   });
+  const [defaultParticipant, setDefaultParticipant] = useState(member.default_participant ?? true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
@@ -250,7 +252,7 @@ export function ProfileDialog({
     setSaved(false);
     setSaving(true);
     try {
-      await api.updateMe(f);
+      await api.updateMe({ ...f, default_participant: defaultParticipant });
       // Save-back (design 2026-07-22): the local profile mirrors the latest
       // values so joining the NEXT room prefills them. No fan-out to other
       // rooms' servers — their member records may drift; that's accepted.
@@ -318,6 +320,18 @@ export function ProfileDialog({
               />
             </div>
           ))}
+          <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              checked={defaultParticipant}
+              onChange={(e) => {
+                setSaved(false);
+                setDefaultParticipant(e.target.checked);
+              }}
+              className="h-4 w-4"
+            />
+            Include me by default in group splits &amp; random picks
+          </label>
         </div>
 
         {err && (

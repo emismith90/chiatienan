@@ -116,3 +116,22 @@ def test_update_member_renames_with_uniqueness_and_restores():
         assert a.active is False
         accounts.update_member(s, a, active=True)
         assert a.active is True
+
+
+def test_default_participant_defaults_true_and_is_settable_via_member_and_profile():
+    d, rid = _room()
+    with d.session() as s:
+        room = rooms.room_by_id(s, rid)
+        m = accounts.add_unclaimed(s, room, display_name="An", nickname="an")
+        mid = m.id
+        assert m.default_participant is True  # opt-out, not opt-in
+
+        accounts.update_member(s, m, default_participant=False)  # e.g. set by an organizer via chat
+        assert m.default_participant is False
+
+    with d.session() as s:
+        from app.models import Member
+
+        m = s.get(Member, mid)
+        accounts.update_profile(s, m, default_participant=True)  # self-service via the profile popup
+        assert m.default_participant is True
