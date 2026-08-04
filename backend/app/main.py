@@ -134,6 +134,7 @@ class ProfileIn(BaseModel):
     bank_code: str | None = None
     account_number: str | None = None
     account_holder: str | None = None
+    default_participant: bool | None = None
 
 
 class MessageIn(BaseModel):
@@ -272,6 +273,7 @@ async def me(ctx: AuthCtx = Depends(require_session)):
             "id": m.id, "display_name": m.display_name, "nickname": m.nickname,
             "bank_code": m.bank_code, "account_number": m.account_number,
             "account_holder": m.account_holder,
+            "default_participant": m.default_participant,
         }
 
 
@@ -306,6 +308,7 @@ async def members(room_id: int, ctx: AuthCtx = Depends(require_session)):
                 "bank_code": m.bank_code,
                 "account_number": m.account_number,
                 "account_holder": m.account_holder,
+                "default_participant": m.default_participant,
             }
             for m in roster.list_members(s, room_id)
         ]

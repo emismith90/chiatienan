@@ -96,6 +96,33 @@ def test_resolve_by_mention_nickname_does_not_cross_rooms(db):
         assert got["unresolved"] == ["zed"]
 
 
+def test_list_members_default_only_excludes_flagged_out_members(db):
+    with db.session() as s:
+        r1 = _make_room(s, "A", "a")
+        s.add(Member(room_id=r1.id, display_name="An", nickname="an", pin="1"))
+        s.add(Member(room_id=r1.id, display_name="Cu", nickname="cu", pin="2", default_participant=False))
+        s.flush()
+
+        assert {m.display_name for m in roster.list_members(s, r1.id)} == {"An", "Cu"}
+        assert {m.display_name for m in roster.list_members(s, r1.id, default_only=True)} == {"An"}
+
+
+def test_resolve_all_active_skips_default_participant_false_but_name_still_resolves(db):
+    with db.session() as s:
+        r1 = _make_room(s, "A", "a")
+        s.add(Member(room_id=r1.id, display_name="An", nickname="an", pin="1"))
+        cu = Member(room_id=r1.id, display_name="Cu", nickname="cu", pin="2", default_participant=False)
+        s.add(cu)
+        s.flush()
+
+        got = roster.resolve(s, r1.id, all_active=True)
+        assert {m["display_name"] for m in got["matched"]} == {"An"}
+
+        # Cu is opted out of "whole group" sweeps but still resolvable by name.
+        got2 = roster.resolve(s, r1.id, names=["Cu"])
+        assert got2["matched"][0]["id"] == cu.id
+
+
 def test_teams_capture_helpers_are_removed():
     assert not hasattr(roster, "capture_sender")
     assert not hasattr(roster, "member_by_teams_id")

@@ -47,6 +47,11 @@ class Member(Base):
     account_number: Mapped[str | None] = mapped_column(String(40))
     account_holder: Mapped[str | None] = mapped_column(String(120))
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Whether this member is swept into a "whole group" chia tien split or rot
+    # tra draw without being named explicitly. Opt-out (not opt-in): defaults
+    # True, so a new/casual member is included until someone flags them as
+    # irregular. They can still be added to a specific activity by name.
+    default_participant: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
 
     def has_bank_details(self) -> bool:

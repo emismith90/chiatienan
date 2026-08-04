@@ -13,17 +13,26 @@ from sqlalchemy.orm import Session
 from app.models import Member
 
 
-def list_members(session: Session, room_id: int, *, include_inactive: bool = False) -> list[Member]:
+def list_members(
+    session: Session, room_id: int, *, include_inactive: bool = False, default_only: bool = False
+) -> list[Member]:
     """Members of ``room_id``, ordered by display name.
 
     Excludes soft-deleted (``active=False``) members by default so they drop out
     of the roster, mentions, and new-meal selection. Pass
     ``include_inactive=True`` for name-resolution over historical data (past
     balances/settlements can still reference a since-removed member).
+
+    ``default_only=True`` further restricts to ``default_participant=True``
+    members — the ones swept into a "whole group" chia tien split or rot tra
+    draw without being named explicitly (design: exclude irregular members by
+    default; they're still resolvable by name).
     """
     stmt = select(Member).where(Member.room_id == room_id)
     if not include_inactive:
         stmt = stmt.where(Member.active.is_(True))
+    if default_only:
+        stmt = stmt.where(Member.default_participant.is_(True))
     return list(session.scalars(stmt.order_by(Member.display_name)))
 
 
@@ -46,8 +55,10 @@ def resolve(
     name matches on ``display_name``, ``nickname``, or any alias
     (case-insensitive) among the room's active members. Returns
     ``{"matched": [{"id", "display_name"}], "unresolved": [<raw strings>]}``.
-    ``all_active=True`` returns every active room member so the LLM never has
-    to enumerate the roster from memory (design §5).
+    ``all_active=True`` returns every *default-participant* room member so the
+    LLM never has to enumerate the roster from memory (design §5) — members
+    flagged out of default group activities are skipped here but still match
+    by an explicit name/mention below.
     """
     members = list_members(session, room_id)
 
@@ -62,7 +73,7 @@ def resolve(
     unresolved: list[str] = []
 
     if all_active:
-        for m in members:
+        for m in list_members(session, room_id, default_only=True):
             matched[m.id] = m
 
     for mention in mentions or []:
