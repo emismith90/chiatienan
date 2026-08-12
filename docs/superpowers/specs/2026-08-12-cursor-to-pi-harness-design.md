@@ -45,6 +45,10 @@ Three options were considered:
 | Port the whole backend to Node | **Rejected.** Out of all proportion to the change. |
 | Node sidecar + Python shim, tools stay in Python | **Chosen.** |
 
+**Five** files import `cursor_sdk` today: `agent.py`, `cursor_runner.py`,
+`tools.py`, `summarize.py`, and `bridge_smoke.py`. The last is the one that gets
+forgotten — it is only touched via a rename.
+
 ## 3. Architecture: TypeScript is the source of truth
 
 The Node side owns the **entire harness**. Python reimplements no part of pi's
@@ -97,16 +101,21 @@ no port, no auth surface, and nothing else on the box can invoke a ledger tool.
 
 ### 4.1 Python → sidecar
 
+Every command carries a `req_id`. The sidecar echoes it on every message it emits
+in response, so concurrent commands can be demultiplexed on one stdout — a
+`ping` from `/internal/bridge-smoke` can arrive mid-turn, because that route is
+**not** under `chat._agent_lock`.
+
 ```json
-{"type":"run","turn_id":"…","system":"…","message":"…",
+{"type":"run","req_id":"…","turn_id":"…","system":"…","message":"…",
  "images":[{"data":"<base64>","mimeType":"image/png"}],
  "tools":[{"name":"propose_meal","description":"…","schema":{…}}],
  "skills":[{"name":"record-meal","description":"…","body":"…"}],
  "context_files":[{"path":"money-safety","content":"…"}],
  "max_tools":40,"max_seconds":120}
-{"type":"tool_result","call_id":"…","content":"{\"ok\":true,…}"}
-{"type":"summarize","turn_id":"…","text":"…"}
-{"type":"ping"}
+{"type":"tool_result","req_id":"…","call_id":"…","content":"{\"ok\":true,…}"}
+{"type":"summarize","req_id":"…","text":"…"}
+{"type":"ping","req_id":"…"}
 ```
 
 ### 4.2 Sidecar → Python: events forwarded verbatim
@@ -123,16 +132,20 @@ straight to `emit` without touching them:
 {"type":"agent.run.error","turn_id":"…","message":"…"}
 ```
 
-The names are **identical** to what `agui.py` emits today. That identity is what
-lets `agui.py` and `test_agui.py` be deleted with zero frontend change —
-`use-room.ts:45-90` and `agent-timeline.tsx` keep working untouched.
+The names are **identical** to what `agui.py` emits today — verified line by line
+against `agui.py:48-73` and against everything `use-room.ts:50-89` consumes. That
+identity is what lets `agui.py` and `test_agui.py` be deleted with zero frontend
+change.
 
 ### 4.3 Sidecar → Python: control messages
 
 ```json
-{"type":"tool_call","turn_id":"…","call_id":"…","name":"propose_meal","args":{…}}
-{"type":"turn_done","turn_id":"…","final_text":"…","tools":[…],"error":null,
- "stats":{"tokens":…,"cost":…,"tool_calls":…,"elapsed_s":…}}
+{"type":"tool_call","req_id":"…","turn_id":"…","call_id":"…","name":"propose_meal","args":{…}}
+{"type":"turn_done","req_id":"…","turn_id":"…","final_text":"…","tools":[…],"error":null,
+ "capped":false,"stats":{"tokens":…,"cost":…,"tool_calls":…,"elapsed_s":…}}
+{"type":"summarize_done","req_id":"…","text":"…"}
+{"type":"pong","req_id":"…","elapsed_s":0.4,"text":"pong"}
+{"type":"fatal","req_id":"…","message":"…"}
 ```
 
 `tool_call` blocks the sidecar until the matching `tool_result` arrives. The
@@ -188,9 +201,28 @@ already `name` + `description`, exactly what pi requires. `money-safety.mdc` has
 no pi always-apply equivalent, so its body ships as a `context_files` entry,
 which pi loads into every system prompt.
 
+### 5.1 ⚠️ Skill bodies must be *verified* to reach the model
+
+`tools: []` removes `read`. Pi's documented skill mechanism puts each skill's
+name and description in the system prompt and expects the agent to **read the
+full `SKILL.md`** when a task matches. Under Cursor the agent demonstrably did
+exactly that — `_strip_narration` exists *because* the model narrated its skill
+reads ("Mình đọc skill record-meal…", `agent.py:127-155`).
+
+If `skillsOverride` only surfaces name+description and defers the body to a
+read-like tool, then with `tools: []` **the model never sees a single procedure
+body** — a corpus-wide silent regression in precisely the money workflows the
+skills encode, and one no unit test would catch.
+
+So this is an assertion, not an assumption: a sidecar test must show a skill's
+**body text present in the model-visible context** with the built-in toolset
+empty. If pi cannot do that, the fallback is to ship the four skill bodies as
+additional `context_files` entries (always in the system prompt, ~8KB total) and
+drop the skill mechanism entirely.
+
 ## 6. `schema.js` — JSON Schema → TypeBox
 
-Pi requires TypeBox for `parameters`, not raw JSON Schema. Our 14 schemas were
+Pi requires TypeBox for `parameters`, not raw JSON Schema. All 14 schemas were
 dumped and analysed; the converter needs to support **exactly six keywords** and
 nothing more:
 
@@ -215,9 +247,12 @@ Mapping:
 | `{"type":["string","integer"]}` | `Type.Union([Type.String(), Type.Integer()])` |
 
 `StringEnum` comes from `@earendil-works/pi-ai`; pi's `docs/extensions.md` is
-explicit that `Type.Union`/`Type.Literal` breaks Google's API. Three schemas hit
-this: `discount_split` (`proportional|equal`), `keyword` (7 period values, in
-both `_PERIOD_SCHEMA` and `_SETTLE_SCHEMA`), and `mode` (`gross|offset`).
+explicit that `Type.Union`/`Type.Literal` breaks Google's API. There are **three
+distinct enum definitions** — `discount_split` (`proportional|equal`), `keyword`
+(7 period values), and `mode` (`gross|offset`) — but they appear in **six of the
+14 schemas**, because `member_statement` and `get_period_summary` reuse
+`_PERIOD_SCHEMA["properties"]["keyword"]` by reference (`tools.py:841`, `:847`)
+alongside `resolve_period` and `settle_period`.
 
 Nested objects appear in two places, both inside `_PROPOSE_SCHEMA`:
 `adjustments.items` (`{member, amount}`, both required) and `items.items`
@@ -243,23 +278,41 @@ a subtle, corpus-wide regression that no unit test would catch.
 Result shape: `content: [{type:"text", text: JSON.stringify(result)}]` for the
 model, `details: result` for the session record.
 
-## 8. What this deletes rather than ports
+## 8. Turn caps are a partial answer, not an error
+
+Today a cap breach is **not** a failure. `agent.py:374-384` logs a warning,
+cancels the run, and `break`s the loop: `result.error` stays `None`,
+`final_text` keeps everything accumulated so far, and `chat.py:558` posts it as a
+normal reply.
+
+`turn.js` must preserve that exactly. A cap breach sets `capped: true` on
+`turn_done`, keeps `error: null`, and keeps the accumulated text and tool
+invocations. If a cap became an error, every capped turn would flip from a
+partial reply to a `⚠️` message in the room — a visible regression on the
+slowest, most complex turns, which are the ones users care about most.
+
+## 9. What this deletes rather than ports
 
 | Python today | Fate |
 |---|---|
-| `cursor_runner.py` — 372 lines resolving `ModelSelection` variants, because bare parameterized ids return an opaque `RUN_LIFECYCLE_STATUS_ERROR` | **Deleted, not replaced.** Provider/model/thinking are three strings in `session.js` |
-| `agui.py` — 75-line run-message → `agent.*` translator | **Deleted.** The sidecar emits the final format (§4.2) |
+| `cursor_runner.py` — 371 lines resolving `ModelSelection` variants, because bare parameterized ids return an opaque `RUN_LIFECYCLE_STATUS_ERROR` | **Deleted, not replaced.** Provider/model/thinking are three strings in `session.js` |
+| `agui.py` — 74-line run-message → `agent.*` translator | **Deleted.** The sidecar emits the final format (§4.2) |
 | `_unwrap_tool_name` / `_unwrap_tool_args` / `_unwrap_tool_result` / `_flatten_envelope` — undo Cursor's `name=="mcp"` MCP envelopes | **Deleted.** Our own envelope has no wrapping |
 | `_assistant_text`, `_final_answer`, `_split_at_seams`, `_is_narration`, `_strip_narration` | **Moved to `turn.js`** |
-| `skills.py` (77 lines) + `_prune` + `test_skills_materializer.py` | **Deleted.** §5 |
+| `skills.py` (74 lines) + `_prune` + `test_skills_materializer.py` | **Deleted.** §5 |
 | `summarize.py`'s SDK wiring | One RPC command; send text, get text |
 | `bridge_smoke.py`'s SDK wiring | A `ping` RPC command |
 | No `instructions` field → system prompt prepended to the user message (`prompt.py:3`) | Real `getSystemPrompt()` |
 
-`app/agent.py` goes from ~410 lines to roughly 80. Three modules disappear. **The
+`app/agent.py` goes from 408 lines to roughly 80. Three modules disappear. **The
 Python side gets smaller than it is today** — the port is mostly deletion.
 
-## 9. Configuration
+The `run_turn` contract is frozen because **14 `monkeypatch.setattr` sites across
+4 test files** depend on it: `test_chat.py` (7), `test_chat_payment_turn.py` (3),
+`test_bill_image_carryover.py` (2), and `test_api.py` (2, on `run_bot_turn`).
+Those tests passing unedited is the proof the contract held.
+
+## 10. Configuration
 
 | Removed | Added |
 |---|---|
@@ -268,38 +321,125 @@ Python side gets smaller than it is today** — the port is mostly deletion.
 | `CURSOR_API_BASE` | *(nothing — hard-coded, §5)* |
 | `CURSOR_SDK_WORKSPACE` | `DATA_DIR=/data`, `PI_THINKING=medium` |
 | `CURSOR_AGENT_MAX_TOOLS` / `_MAX_SECONDS` | `PI_MAX_TOOLS=40`, `PI_MAX_SECONDS=120` |
-| | `PI_VISION_MODEL` (§11) |
+| | `PI_VISION_MODEL` (§12) |
 
-The workspace rename is **not cosmetic**. With `tools: []` and in-memory skills
-the agent needs no persistent workspace at all — but `memory.py` stores
-`memory.md` + `memory.meta.json` under `settings.cursor_workspace/rooms/{id}/`,
-which is app data that must stay on the mounted volume. So the setting becomes
-`DATA_DIR`, `memory.py` points at `DATA_DIR/rooms/{id}/`, and
-`main.py`'s `_warn_if_workspace_is_ephemeral` keeps guarding it — the warning now
-protects room memory, which was always its real subject.
+### 10.1 ⚠️ The `DATA_DIR` rename orphans production room memory
 
-## 10. The benchmark
+With `tools: []` and in-memory skills the agent needs no persistent workspace at
+all — but `memory.py:26-34` stores `memory.md` and `memory.meta.json` under
+`{cursor_workspace}/rooms/{id}/`, and **production's workspace is
+`/data/cursor-agent`** (`deploy.yml:164`).
 
-Full design in the implementation plan, §Phase 1. The shape:
+Setting `DATA_DIR=/data` therefore points memory at `/data/rooms/{id}/` — a
+different directory. On the first post-deploy turn:
 
-- **Corpus** — `tests/golden/meals.py` (G1–G12) and
-  `tests/golden/scenario_week.py` (12 steps, real Vietnamese messages) imported
-  as-is, plus a new sanitized production corpus.
+- `load_memory` returns `""` — every room's long-term memory is gone
+- `read_watermark` returns `0`
+- `_maybe_rollover` (`chat.py:603-619`) re-summarizes the room's **entire
+  >10-week history** into a fresh `memory.md`, using the new model
+
+That is a silent, expensive, user-visible data loss dressed up as a rename. So
+`memory.py` gains a one-release **idempotent startup migration**: if
+`DATA_DIR/rooms/{id}` is absent and the legacy `/data/cursor-agent/rooms/{id}`
+exists, copy it across. The repo already does startup migrations of this shape
+(commit `aa1f992`, "Add missing columns to existing tables on startup"), so this
+matches house style and is testable in CI rather than living in a deploy script.
+
+`main.py`'s `_warn_if_workspace_is_ephemeral` keeps guarding the path — the
+warning now protects room memory, which was always its real subject.
+
+## 11. The benchmark
+
+Full design in the implementation plan, Phase 1. The shape, and the two
+constraints that make it mean anything:
+
+### 11.1 Each case runs in a deterministically reconstructed world
+
+This is the load-bearing requirement. The corpora do **not** carry replayable
+chat state:
+
+- **`tests/golden/meals.py`** has no messages at all — its 9 cases are draft
+  payloads addressed by 1-based member index, consumed by `drafts.create_draft`.
+  A canonical Vietnamese message has to be *authored* per case for LLM replay.
+- **`tests/golden/scenario_week.py`** has 21 steps, of which only **11** are
+  LLM-replayable (`s1`–`s8`, `s9b`, `s10b`, `s12`). The other 10 carry no
+  `message`: two are `confirm_pending` button presses, and **eight are the
+  `s11a`–`s11h` payments that zero the ledger** — which is exactly what `s12`'s
+  `expect: {empty: True}` depends on.
+
+So replaying history as *chat text* creates zero ledger rows, and every
+mid-scenario `ledger_state` expectation fails. Worse, it fails **identically on
+both engines**, so `--compare` reports "no change" — the precise false
+equivalence the harness exists to prevent.
+
+The runner must therefore reconstruct each case's world the way
+`tests/test_scenario_week.py:49-115` does — `drafts.create_draft` /
+`commit_draft`, `ledger.record_payment`, `Member` inserts — for every prior step,
+including the message-less ones, and only then run the case's own message through
+the LLM.
+
+Room seeding matters for the same reason: `tests/test_ledger._seed_room` creates
+`M1..Mn` with **no bank details**, while `scenario_week.MEMBERS` gives `a1`/`a2`/
+`a4` banks precisely "so QR builds succeed" (`scenario_week.py:4`). Seeded the
+wrong way, `make_qr_url` raises `QRError` for every payee and `qr_payees` can
+never pass.
+
+### 11.2 One run per engine cannot separate a regression from noise
+
+Both engines are nondeterministic, and they are different models. A single
+Cursor run as reference against a single Pi run as candidate makes a verdict flip
+indistinguishable from sampling variance — and the corpus is small (9 meals + 11
+week + prod).
+
+So `bench/run.py` takes `--repeat N` (default 3), the graders record per-case
+**pass rates**, and the ship criterion is expressed as a pass-rate drop
+threshold, not raw verdict flips.
+
+### 11.3 The rest
+
 - **Prod fixtures** — pulled from the existing read-only
-  `/internal/debug/conversation.csv`, pseudonymized, and **stripped of
-  `account_number`, `account_holder`, `bank_code`, `invite_token`, `pin`, and
-  every `qr_url`** (a VietQR URL embeds a real account number, and
-  `test_ledger_endpoint.py:53` records that prod history holds 34 live ones).
-  Amounts are kept — they are the thing being graded, and harmless once the
-  account numbers are gone. The sanitizer is CI-tested; a leak here is a privacy
-  incident, not a test failure.
+  `/internal/debug/conversation.csv`, pseudonymized, and stripped of bank
+  details. See §11.4 — the naive version of this is unsafe.
 - **Four graders** — `tool_selection` (+ money-arg subset), `ledger_state`
   (final balances / ordered transfers / QR payees), `prose_quality`
   (`moneyguard.unbacked_amounts` as a deterministic pre-check, then an LLM
   judge), and `cost_latency` (reported, never pass/fail).
-- **Report** — per-case grid plus a `--compare` mode that diffs two runs.
+- **Report** — per-case grid plus a `--compare` mode that diffs two runs by pass
+  rate.
 
-### 10.1 Sequencing is load-bearing
+### 11.4 ⚠️ Bank details reach the corpus through message bodies, not attachments
+
+The obvious sanitizer scrubs `account_number` / `account_holder` / `bank_code`
+as **attachment keys**. That is not sufficient, because bank details enter this
+system *through chat*: `add_member` and `update_member` accept `bank_code`,
+`account_number`, and `account_holder` as tool arguments (`tools.py:178-211`),
+which means a real message body reads something like
+
+> `@bot cập nhật stk của tôi 0071000123456 VCB NGUYEN VAN A`
+
+and `body` is exactly what the corpus **keeps**, amounts and all. An
+`account_holder` is an uppercase, de-diacriticized legal name that a
+display-name map will never match.
+
+So the sanitizer must additionally:
+
+1. **Redact digit runs of 8 or more** in bodies. VND amounts in this corpus are
+   ≤7 digits or carry a `k`/`tr`/`đ` unit, so this is nearly free.
+2. Build the replacement map from `display_name` **+ `nickname` + `aliases` +
+   `account_holder` variants**, matched on **word boundaries** — bare
+   longest-first substring replacement mangles Vietnamese, because "An" occurs
+   inside the ubiquitous pronoun "anh".
+3. Have the manual pre-commit check grep for every real `account_number` and
+   `account_holder` from the members table, not just display names.
+
+**And the corpus does not have to be committed at all.** Nothing downstream needs
+it in git — only on disk when `bench.run --corpus prod` executes. Committing the
+case ids, the derived expectations (pseudonyms and integers), and the corpus
+file's SHA-256, while gitignoring the corpus itself, turns "a leak here is an
+unrecoverable privacy incident" into "a leak here cannot happen via git." That is
+the recommended default; committing the bodies is the opt-in.
+
+### 11.5 Sequencing is load-bearing
 
 The cutover is a hard one: Cursor gets ripped out, not kept behind a flag. That
 conflicts with proving equivalence unless the baseline is captured **first**.
@@ -312,7 +452,12 @@ conflicts with proving equivalence unless the baseline is captured **first**.
 Skip step 1 and "exactly the same behavior" becomes unfalsifiable — the report
 could only say "Pi passes the tests we wrote", which is a weaker claim.
 
-## 11. Open risk: vision
+The judge must be pinned across both runs. A baseline graded with no judge (or a
+different one) against a Pi run graded with one is not a comparison, so
+`BENCH_JUDGE_MODEL` and its key are a requirement of the **baseline** task, not
+just the final one.
+
+## 12. Open risk: vision
 
 OpenRouter's model catalogue is egress-blocked from the dev environment, but web
 sources consistently report **text-only input modalities** for
@@ -328,11 +473,19 @@ separate setting. A turn carrying images resolves to that model (via
 `session.setModel` / `scopedModels`); text-only turns use `PI_MODEL`. If
 deepseek-v4-flash does accept images, set them equal and the branch is inert.
 
-**Verify the modality before writing the sidecar.** If it is text-only and no
-vision model is configured, image turns must **fail loudly**, never silently drop
-the photo — a dropped bill means the model invents the total.
+**Verify the modality before writing the sidecar — and verify tool-calling
+support for the vision model too.** A bill-photo turn ends in `propose_meal`;
+a vision model that cannot call tools breaks the money path just as thoroughly as
+one that cannot see. If the primary is text-only and no tool-capable vision model
+is configured, image turns must **fail loudly**, never silently drop the photo —
+a dropped bill means the model invents the total.
 
-## 12. Deferred, deliberately
+The benchmark cannot cover this path from the existing corpora (no images in the
+golden data; prod images are stripped), so it gains 2–3 **synthetic bill-image
+cases with known totals**. Otherwise the riskiest path in the system ships on one
+manual check.
+
+## 13. Deferred, deliberately
 
 `_strip_narration` exists because Cursor's agent narrated its skill reads ("Mình
 đọc skill…") and glued that onto the answer. With skills injected in-memory and
