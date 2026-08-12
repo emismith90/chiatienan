@@ -548,7 +548,7 @@ of `tests/test_scenario_week.py:49-115` (do not re-derive it) into
 For the `meals` corpus a case's world is just the 4-member seeded room — the
 golden cases are independent, with no prior steps.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_world_reconstruction_puts_s5_in_the_state_its_expectation_assumes(db):
@@ -613,9 +613,9 @@ def test_repeat_produces_n_records_per_case(monkeypatch):
     assert len([r for r in recs if r["case_id"] == "G1"]) == 3
 ```
 
-- [ ] **Step 2: Verify they fail.**
+- [x] **Step 2: Verify they fail.**
 
-- [ ] **Step 3: Implement `bench/world.py`**, then `bench/run.py` on top of it.
+- [x] **Step 3: Implement `bench/world.py`**, then `bench/run.py` on top of it.
       Per case per repetition: fresh temp SQLite via `app.db.Database`,
       `build_world`, clock frozen to `case.day` by patching `app.clock.now_ict`
       (**never** `today_ict`), then `agent.run_turn(case.message, ctx, images=…)`.
@@ -624,8 +624,44 @@ def test_repeat_produces_n_records_per_case(monkeypatch):
       run** — a benchmark that stops at the first error cannot report honestly.
       Write `bench/results/<engine>-<timestamp>.json`.
 
-- [ ] **Step 4: Verify they pass.**
-- [ ] **Step 5: Commit** — `bench: deterministic world reconstruction and case runner`
+- [x] **Step 4: Verify they pass.**
+- [x] **Step 5: Commit** — `bench: deterministic world reconstruction and case runner`
+
+> ### What implementing this changed, beyond the plan
+>
+> **Grading moved into the runner.** `grade_ledger_state` reads the database, and
+> each case's database is a temp SQLite directory that is gone before any report
+> runs. So a record carries its own verdicts (`record["grades"]`) and
+> `bench.report` only aggregates. Grading also happens *inside* the frozen clock,
+> because `balances_by_member` resolves the open period from `today_ict`.
+>
+> **`--engine` is checked, not trusted** — Task 22 Step 2 asked for this, and it
+> is cheaper to build in now than to remember later: `cursor_sdk` importable ⇒
+> `cursor`, `agent_sidecar/` present ⇒ `pi`, mismatch ⇒ the run refuses to start
+> rather than writing Cursor results under a Pi filename.
+>
+> **An oracle test, which is the other half of the vacuity guard.** The plan
+> guards hard against graders that pass everything. A grader nobody can *satisfy*
+> produces the identical false equivalence — both engines fail, `--compare` says
+> "no change" — so `tests/test_bench_run.py` also runs an oracle engine that makes
+> exactly the expected call through the real tools, and asserts **no case fails**
+> on any grader, plus a companion assertion that the verdicts are real `True`s and
+> not a wall of `None`. Both directions are now pinned.
+>
+> That oracle immediately earned itself, finding two defects no other test caught:
+>
+> 1. **`posted_body_kind` missed every settlement.** A successful `settle_period`
+>    result does not carry `type: "settlement"` — `chat.render_bot_attachments`
+>    (`chat.py:304-319`) stamps that on afterwards. Matching result types alone
+>    left `s5`/`s10b`/`s12`'s discarded prose graded, and failed all three as
+>    "empty reply". It now mirrors chat's own precedence order (proposal → payment
+>    draft → settle → statement → summary → pick) using the same
+>    `ok`-truthy admission rule as `TurnResult.all_results`.
+>
+> 2. **`adjustments` was ungraded**, the same omission as `guests`. Golden `G4` is
+>    a 250k bill over two people: 100k/150k with the adjustment, 125k/125k without.
+>    A model that dropped it passed `tool_selection` outright. `adjustments` is now
+>    a money arg, compared as a multiset of `(member, amount)`.
 
 ---
 

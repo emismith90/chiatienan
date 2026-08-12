@@ -521,9 +521,12 @@ def test_a_proposal_turn_is_not_graded_because_its_prose_is_never_posted():
 
 def test_a_settlement_turn_is_not_graded_either():
     from bench.graders import grade_prose
+    # A real settle_period result carries NO "type": "settlement" — chat's
+    # render_bot_attachments stamps that on. Matching result types alone would
+    # miss every settlement and fail its discarded prose as an empty reply.
     rec = _record(final_text="An chuyển cho Bình 125.000đ",
-                  tools=[("settle_period", {}, {"ok": True, "type": "settlement",
-                                                "transfers": []})])
+                  tools=[("settle_period", {}, {"ok": True, "transfers": [],
+                                                "period": {"from": None, "to": "2026-07-27"}})])
     assert grade_prose(_case(), rec, judge=lambda *_: {"ok": True, "reason": "-"}).passed is None
 
 
@@ -612,3 +615,23 @@ def test_an_empty_record_list_is_reported_not_crashed():
     from bench.graders import summarize_cost_latency
     s = summarize_cost_latency([])
     assert s["n"] == 0 and s["p50_s"] is None and s["mean_tool_calls"] is None
+
+
+def test_a_dropped_adjustment_fails_because_it_splits_one_persons_extra():
+    from bench.graders import grade_tool_selection
+    # Golden G4: 250k over two people is 100k/150k with the adjustment and
+    # 125k/125k without. A grader blind to `adjustments` calls the wrong one
+    # correct.
+    case = _case(expect={"tools": ["propose_meal"], "args": {"propose_meal": {
+        "total": 250000, "adjustments": [{"member": 2, "amount": 50000}]}}})
+    v = grade_tool_selection(case, _record(tools=[("propose_meal", {"total": 250000})]))
+    assert not v.passed and "adjustments" in v.reason
+
+
+def test_adjustments_compare_as_a_multiset():
+    from bench.graders import grade_tool_selection
+    case = _case(expect={"tools": ["propose_meal"], "args": {"propose_meal": {
+        "adjustments": [{"member": 1, "amount": 20000}, {"member": 2, "amount": 50000}]}}})
+    rec = _record(tools=[("propose_meal", {"adjustments": [
+        {"member": 2, "amount": 50000}, {"member": 1, "amount": 20000}]})])
+    assert grade_tool_selection(case, rec).passed

@@ -28,12 +28,23 @@ from dataclasses import dataclass
 #: Arguments whose value is money, or decides who owes it. Everything else the
 #: model sends is free-form and deliberately not compared.
 #:
-#: `guests` is here although the plan's list omits it: a guest pays cash, so
-#: dropping one divides the bill by too few heads and overcharges every member
-#: (golden `G6` is a 400k bill with a 300k tracked total for exactly this
-#: reason). Only the guest **count** is graded — the names are the model reading
-#: prose, but the count is arithmetic.
-MONEY_ARGS = ("total", "payer", "participants", "from", "to", "amount", "items", "guests")
+#: `guests` and `adjustments` are here although the plan's list omits both, and
+#: each omission would have hidden a real money regression:
+#:
+#: * a guest pays cash, so dropping one divides the bill by too few heads and
+#:   overcharges every member (golden `G6` is a 400k bill with a 300k tracked
+#:   total for exactly this reason). Only the guest **count** is graded — the
+#:   names are the model reading prose, but the count is arithmetic.
+#: * an adjustment is what one person ordered extra of, so dropping one splits
+#:   that cost across everybody. Golden `G4` is the case: 250k over two people is
+#:   100k/150k with the adjustment and 125k/125k without, and a grader blind to
+#:   `adjustments` calls the wrong one correct.
+MONEY_ARGS = ("total", "payer", "participants", "from", "to", "amount", "items",
+              "guests", "adjustments")
+
+#: Money args that are lists of `{member, amount}`, compared as a multiset — the
+#: order the model happens to emit them in carries no meaning.
+_MEMBER_AMOUNT_LISTS = ("items", "adjustments")
 
 #: Money args whose order carries no meaning.
 _UNORDERED = ("participants",)
@@ -80,9 +91,10 @@ def _args_differ(key: str, want, got) -> str | None:
         if len(want) != len(got):
             return f"guests: expected {len(want)}, got {len(got)} ({got})"
         return None
-    if key == "items" and isinstance(want, list) and isinstance(got, list):
+    if key in _MEMBER_AMOUNT_LISTS and isinstance(want, list) and isinstance(got, list):
         if sorted(map(_item_key, want)) != sorted(map(_item_key, got)):
-            return f"items: expected {[_item_key(i) for i in want]}, got {[_item_key(i) for i in got]}"
+            return (f"{key}: expected {[_item_key(i) for i in want]}, "
+                    f"got {[_item_key(i) for i in got]}")
         return None
     if want != got:
         return f"{key}: expected {want!r}, got {got!r}"
@@ -362,10 +374,8 @@ Pass the reply only if all of these hold:
 Reply with JSON only: {"ok": true|false, "reason": "<one short sentence>"}.
 """
 
-#: Tool results that make `chat.py` build the room's reply itself, so the model's
-#: `final_text` is never posted. Two produce a draft card (`chat.py:511-538`) and
-#: five a server-rendered body (`chat.py:544-556`).
-_CARD_TYPES = {
+#: How the room saw each kind of reply, for the "not graded" reason string.
+_CARD_LABELS = {
     "expense_draft": "an expense draft card",
     "payment_draft": "a payment draft card",
     "settlement": "a server-rendered settlement body",
@@ -392,19 +402,42 @@ class _Invocation:
         self.result = call.get("result")
 
 
+def _ok_results(record: dict, name: str) -> list[dict]:
+    """Successful result dicts for one tool, in call order.
+
+    Same admission rule as `TurnResult.all_results`: a dict whose `ok` is truthy.
+    """
+    return [c["result"] for c in record.get("tools") or []
+            if c.get("name") == name and isinstance(c.get("result"), dict)
+            and c["result"].get("ok")]
+
+
 def posted_body_kind(record: dict) -> str | None:
     """Which card `chat.py` would post for this turn, or None for plain prose.
 
-    Mirrors the selection at `chat.py:511-558`: a `propose_meal` proposal or a
-    `propose_payment` draft becomes a card, five other result types become a
-    server-rendered body, and only what is left posts `TurnResult.final_text`.
+    Mirrors the selection at `chat.py:511-558` **in chat's own precedence order**,
+    not in tool-call order: a `propose_meal` proposal wins, then a
+    `propose_payment` draft, then `render_bot_attachments`
+    (`chat.py:304-319`) in its order.
+
+    Note that a successful `settle_period` result does **not** carry
+    `type: "settlement"` — `render_bot_attachments` stamps that on. Matching
+    result types alone would therefore miss every settlement, leave its discarded
+    prose graded, and fail it as an empty reply.
     """
-    for call in record.get("tools") or []:
-        result = call.get("result")
-        if not isinstance(result, dict) or result.get("ok") is False:
-            continue
-        kind = result.get("type")
-        if kind in _CARD_TYPES:
+    if _ok_results(record, "propose_meal"):
+        return "expense_draft"
+    if any(r.get("type") == "payment_draft" for r in _ok_results(record, "propose_payment")):
+        return "payment_draft"
+
+    settle = _ok_results(record, "settle_period")
+    if settle:
+        return "settle_blocked" if settle[-1].get("type") == "settle_blocked" else "settlement"
+    for tool_name, kind in (("member_statement", "statement"),
+                            ("get_period_summary", "summary"),
+                            ("pick_random", "random_pick")):
+        results = _ok_results(record, tool_name)
+        if results and results[-1].get("type") == kind:
             return kind
     return None
 
@@ -434,7 +467,7 @@ def grade_prose(case, record: dict, judge=None) -> Verdict:
 
     card = posted_body_kind(record)
     if card:
-        return Verdict(None, f"not graded: the room saw {_CARD_TYPES[card]}, "
+        return Verdict(None, f"not graded: the room saw {_CARD_LABELS[card]}, "
                              "not the model's prose")
 
     body = record.get("final_text") or ""

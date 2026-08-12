@@ -33,7 +33,7 @@ import base64
 import copy
 import json
 import mimetypes
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from bench.corpus import meal_messages
@@ -103,10 +103,13 @@ def _money_args(spec: dict, kind: str) -> dict:
     if kind in ("meal_confirmed", "leave_pending"):
         args = {"total": spec["total"], "payer": spec["payer"],
                 "participants": list(spec["participants"])}
-        # `guests` changes the tracked total, so it belongs with the money args
-        # even though the grader's MONEY_ARGS does not cover it yet.
+        # `guests` and `adjustments` are money-bearing too, though the plan's
+        # MONEY_ARGS list omits both: a lost guest divides by too few heads, and a
+        # lost adjustment splits evenly what one person ordered extra of.
         if spec.get("guests"):
             args["guests"] = list(spec["guests"])
+        if spec.get("adjustments"):
+            args["adjustments"] = [dict(a) for a in spec["adjustments"]]
         return {"propose_meal": args}
     if kind == "payment":
         return {"propose_payment": {"from": spec["from"], "to": spec["to"],
@@ -126,7 +129,9 @@ def _meal_case(case: dict) -> Case:
     key = lambda idx: f"m{idx}"  # noqa: E731 — 1-based index → corpus key
     spec = {"total": case["total"], "payer": key(case["payer"]),
             "participants": [key(p) for p in case["participants"]],
-            "guests": case.get("guests") or []}
+            "guests": case.get("guests") or [],
+            "adjustments": [{"member": key(a["member"]), "amount": a["amount"]}
+                            for a in case.get("adjustments") or []]}
     expect = {
         "tools": ["propose_meal"],
         "args": _money_args(spec, "meal_confirmed"),
@@ -220,3 +225,48 @@ def load(name: str) -> list[Case]:
         return _load_meals() + _load_week() + load("prod") + load("bills")
     raise ValueError(f"unknown corpus: {name!r} "
                      "(expected meals, week, prod, bills, or all)")
+
+
+#: Money args whose value names a **member** rather than an amount. Everything
+#: else in `expect["args"]` is an integer VND or a free string and is left alone.
+_MEMBER_ARGS = ("payer", "from", "to")
+_MEMBER_LIST_ARGS = ("participants",)
+
+
+def resolve_args(case: Case, ids: dict[str, int]) -> Case:
+    """Return a copy of `case` with `expect["args"]` member keys turned into ids.
+
+    `grade_tool_selection` takes no key→id map — it compares the model's raw
+    arguments, which are database ids — so the runner resolves first.
+    `grade_ledger_state` is the other convention and resolves internally, which is
+    what lets `compare_settlement` be the same code `test_scenario_week` imports.
+
+    Raises `KeyError` on a key the world does not contain, rather than grading
+    against a silently wrong id.
+    """
+    args = (case.expect or {}).get("args")
+    if not args:
+        return case
+
+    def member_id(key):
+        if key not in ids:
+            raise KeyError(f'{case.id}: expectation names unknown member {key!r}')
+        return ids[key]
+
+    resolved = {}
+    for tool_name, tool_args in args.items():
+        out = dict(tool_args)
+        for name in _MEMBER_ARGS:
+            if name in out:
+                out[name] = member_id(out[name])
+        for name in _MEMBER_LIST_ARGS:
+            if name in out:
+                out[name] = [member_id(k) for k in out[name]]
+        for name in ("items", "adjustments"):
+            if name in out:
+                out[name] = [dict(i, member=member_id(i["member"])) for i in out[name]]
+        resolved[tool_name] = out
+
+    expect = dict(case.expect)
+    expect["args"] = resolved
+    return replace(case, expect=expect)
