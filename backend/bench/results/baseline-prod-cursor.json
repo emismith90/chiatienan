@@ -1,0 +1,3182 @@
+{
+  "version": 1,
+  "engine": "cursor",
+  "corpus": "prod",
+  "repeat": 1,
+  "judge_model": "google/gemini-2.5-flash-lite",
+  "baseline_kind": "recorded-prod-log",
+  "bodies_included": false,
+  "source_room": 3,
+  "records": [
+    {
+      "version": 1,
+      "case_id": "p10",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p12",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 305000,
+            "payer": "A3",
+            "participants": [
+              "A1",
+              "A6",
+              "A3",
+              "A4",
+              "A5"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p15",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 375000,
+            "payer": "A6",
+            "participants": [
+              "A2",
+              "A1",
+              "A6",
+              "A3",
+              "A5"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p18",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p20",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [61000, 75000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p23",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p25",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [61000, 75000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p28",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p32",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p36",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A4",
+            "to": "A3",
+            "amount": 61000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p41",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p43",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p48",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A3",
+            "amount": 61000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p52",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p54",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A2",
+            "to": "A6",
+            "amount": 75000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p57",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A3",
+            "to": "A6",
+            "amount": 75000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated the amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p60",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 120000,
+            "payer": "A3",
+            "participants": [
+              "A6",
+              "A4",
+              "A3"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p63",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A4",
+            "to": "A3",
+            "amount": 40000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the payment and the sender/receiver in Vietnamese."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p66",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p68",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p74",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p78",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 335000,
+            "payer": "A3",
+            "participants": [
+              "A4",
+              "A6",
+              "A1",
+              "A3"
+            ],
+            "guests": [
+              "G3"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p81",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A4",
+            "to": "A3",
+            "amount": 67000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the payment and the amount from the user's input."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p84",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000, 67000, 174000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p86",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A1",
+            "to": "A3",
+            "amount": 67000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p89",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000, 67000, 107000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p91",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p93",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p95",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p100",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p120",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 324200,
+            "payer": "A1",
+            "participants": [
+              "A1",
+              "A5",
+              "A6",
+              "A3",
+              "A4",
+              "A2"
+            ],
+            "adjustments": [
+              {
+                "member": "A1",
+                "amount": 54500
+              },
+              {
+                "member": "A5",
+                "amount": 54500
+              },
+              {
+                "member": "A6",
+                "amount": 79200
+              },
+              {
+                "member": "A3",
+                "amount": 54500
+              },
+              {
+                "member": "A4",
+                "amount": 54500
+              },
+              {
+                "member": "A2",
+                "amount": 27000
+              }
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p123",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A3",
+            "amount": 107000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated the amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p126",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p129",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A2",
+            "to": "A1",
+            "amount": 27000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p132",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p136",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p140",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p146",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p148",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A1",
+            "amount": 79200
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the recipient and the amount to be transferred, adhering to all constraints."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p152",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p154",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000, 61000, 67000, 75000, 120000, 268000, 305000, 375000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p156",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000, 61000, 67000, 75000, 120000, 268000, 305000, 375000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p158",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [54500]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p160",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p162",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [54500]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p164",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [54500]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p167",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified that the user had no outstanding debts and communicated this clearly in Vietnamese."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p169",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-28",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 110000,
+            "payer": "A4",
+            "participants": [
+              "A6",
+              "A3",
+              "A4"
+            ],
+            "adjustments": [
+              {
+                "member": "A6",
+                "amount": -6666
+              },
+              {
+                "member": "A3",
+                "amount": 3334
+              },
+              {
+                "member": "A4",
+                "amount": 3334
+              }
+            ],
+            "items": [
+              {
+                "member": "A6",
+                "amount": 30000,
+                "label": "bánh mì"
+              },
+              {
+                "member": "A3",
+                "amount": 40000,
+                "label": "bánh mì"
+              },
+              {
+                "member": "A4",
+                "amount": 40000,
+                "label": "bánh mì"
+              }
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p172",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-28",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [40000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p176",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-28",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p178",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-28",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A4",
+            "amount": 30000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the transaction and the amounts involved, and responded in Vietnamese casual register without unnecessary narration."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p183",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 1107000,
+            "payer": "A3",
+            "participants": [
+              "A1",
+              "A6",
+              "A4",
+              "A3",
+              "A5",
+              "A2"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p186",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the user's request and chose a person to pour tea in Vietnamese, without unnecessary narration or restating information."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p192",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p196",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not answer the user's question about who sits outside."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p198",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not answer the user's request to recalculate the split randomly."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p200",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p203",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A3",
+            "amount": 184500
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's prompt."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p206",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the user's request and provided a random selection in Vietnamese, adhering to all constraints."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p208",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly selected a user and did not violate any other rules."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p212",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p214",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A2",
+            "to": "A3",
+            "amount": 184500
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p220",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-30",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p222",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-30",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 265000,
+            "payer": "A1",
+            "participants": [
+              "A1",
+              "A4",
+              "A3",
+              "A6"
+            ],
+            "guests": [
+              "G5"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p225",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-30",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not answer the user's question about the current balance."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p228",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A7",
+            "to": "A1",
+            "amount": 53000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p232",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A1",
+            "amount": 53000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the user's request and provided the relevant information in Vietnamese without unnecessary narration or restating amounts."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p235",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p237",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [53000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p242",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 250000,
+            "payer": "A3",
+            "participants": [
+              "A7",
+              "A6",
+              "A4",
+              "A3",
+              "A2"
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p248",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A2",
+            "to": "A3",
+            "amount": 50000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p251",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-01",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['member_statement'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [50000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p254",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-01",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A3",
+            "amount": 50000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's prompt."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p260",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": true,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p264",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": true,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly identified the user's request and provided a casual Vietnamese response without unnecessary narration or restating information."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p266",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": true,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p275",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A2",
+            "to": "A5",
+            "amount": 155000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated the amount which was already present in the user's input."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p278",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "settle_period",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['settle_period'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p281",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-05",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": "A6",
+            "to": "A5",
+            "amount": 155000
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_payment'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot restated an amount that was already present in the user's prompt."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p286",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-05",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "pick_random",
+          "args": {},
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['pick_random'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "judge gave no reason"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p288",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-05",
+      "had_images": false,
+      "room_id": null,
+      "tools": [
+        {
+          "name": "propose_meal",
+          "args": {
+            "total": 95000,
+            "payer": "A6",
+            "participants": [
+              "A6",
+              "A3"
+            ],
+            "adjustments": [
+              {
+                "member": "A6",
+                "amount": 2500
+              },
+              {
+                "member": "A3",
+                "amount": -2500
+              }
+            ],
+            "items": [
+              {
+                "member": "A6",
+                "amount": 50000,
+                "label": "bánh mì xôi"
+              },
+              {
+                "member": "A3",
+                "amount": 45000,
+                "label": "bánh mì xôi"
+              }
+            ]
+          },
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    }
+  ]
+}

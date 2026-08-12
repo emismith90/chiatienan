@@ -181,6 +181,15 @@ def render_compare(base: dict, new: dict) -> str:
 
     lines = [f"# `{base_engine}` → `{new_engine}` equivalence", ""]
 
+    if base.get("baseline_kind") == "recorded-prod-log":
+        lines += [
+            "> ⚠️ **The base run is a recorded production log, not a measured "
+            "engine run.** Its expectations were derived from the same rows as its "
+            "records, so its `tool_selection` rate is **1.0 by construction** and "
+            "says nothing about the graders. Read the new run's **absolute** rate "
+            "as the equivalence number, not the delta — and note the base side has "
+            "`repeat=1`, since a log cannot be re-rolled.", ""]
+
     if base.get("judge_model") != new.get("judge_model"):
         lines += [
             f'> ⚠️ **The judge differs between these runs** — base '

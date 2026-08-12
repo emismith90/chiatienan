@@ -949,86 +949,112 @@ python -m bench.report bench/results/baseline-cursor.json > bench/results/baseli
 
 ---
 
-## ⛔ GATE NOT PASSED — one host short
+## ✅ GATE PASSED — differently, and better
 
-Steps 3–5 are still blocked, but the diagnosis is now exact and two of the three
-original obstacles are cleared. Everything below was measured, not inferred.
+**The baseline no longer needs the Cursor engine.** Production has been running
+Cursor all along, so the conversation log **is** a recorded Cursor run: every bot
+reply in it was produced by the engine being replaced, against real messages, with
+the real prompt. Reading it needs `DEBUG_API_KEY` and the existing read-only export
+API (`deploy/DEBUGGING.md` §6) — no Cursor credentials, and no `api2.cursor.sh`,
+which the egress policy still refuses.
 
-### Cleared
+`bench/results/baseline-prod-cursor.json` is committed. Steps 3–5 above are
+superseded by `python -m bench.export_prod --baseline …`.
 
-- **`OPEN_ROUTER_KEY` is the credential's real name**, not design §10's
-  `OPENROUTER_API_KEY`. `bench/judge.py` reads `OPEN_ROUTER_KEY`; one canonical
-  name, no aliases, because Task 13's sidecar needs the same variable and a second
-  accepted spelling is how half a deployment ends up unauthenticated. **Design §10
-  and Task 21 Step 4 are corrected.**
+### What was captured
 
-- **The judge is verified working end to end** against the live API — not stubbed.
-  Three trials through `grade_prose` with `google/gemini-2.5-flash-lite`:
+| | |
+|---|---|
+| source | room 3, 282 rows, 2026-07-22 → 2026-08-06 |
+| turns recorded | **81** gradeable (108 cases; 27 flagged `review`) |
+| vs. the golden corpora | 20 authored cases |
+| `tool_selection` | 81/81 = **1.00 — by construction, see below** |
+| `ledger_state` | n/a — no reconstructable prod ledger |
+| `prose_quality` | **15/45 = 0.33**, judged by `google/gemini-2.5-flash-lite` |
 
-  | reply | verdict |
-  |---|---|
-  | `Đã thêm A5 vào nhóm rồi nhé.` | **pass** |
-  | `Sure, I've added A5 to the group.` | fail — "in English, not Vietnamese" |
-  | `Mình đọc skill roster rồi gọi tool add_member. Đã thêm A5.` | fail — "narrated its own machinery" |
+### Three things this baseline is not
 
-  The third is worth noting for **Task 22 Step 7**: the judge detects exactly the
-  narration `_strip_narration` exists to remove, so the "measure, don't guess"
-  decision has a working instrument. The judge *model* is still an open choice —
-  `gemini-2.5-flash-lite` was the smoke-test pick, and whatever is chosen must be
-  pinned identically across the baseline and the Pi run (§11.5). Prefer a dated id
-  over a floating one, for the same reason Task 0 flags `~…-latest`.
+1. **It is not a measurement of Cursor's tool selection.** The expectation and the
+   record come from the same log row, so `tool_selection` is 1.0 by definition. The
+   number that means something is **Pi's absolute rate against prod's recorded
+   behavior**, not the delta. `bench/report.py` prints a warning whenever the base
+   run carries `baseline_kind: "recorded-prod-log"`, so nobody reads
+   "1.00 → 0.87" as a 13-point regression measured two ways.
+2. **It has `repeat=1`.** A log cannot be re-rolled. Repeat *Pi* instead — a fixed
+   reference with a repeated candidate still separates a regression from sampling
+   noise on the side that can vary.
+3. **Its `prose_quality` is inflated toward failure**, for two separate reasons
+   that were only visible once it ran, and both must be fixed before Task 22
+   compares anything:
 
-- **`api.cursor.com` is reachable** (HTTP 200), and model resolution now succeeds:
-  the SDK lists models and resolves `grok-4.5-fast` → `effort=medium,fast=false`.
+   - **The log records the produced attachment, not the tool calls.** So a baseline
+     record carries **one** tool invocation, while the real turn may have called
+     `find_members` and `get_period_summary` too — whose results would have
+     *backed* the amounts in the reply. `moneyguard.backed_amounts` is therefore
+     under-populated and stage 1 over-reports: 14 of the 30 prose failures are
+     `unbacked amounts`, some listing eight at once. A Pi run records its real tool
+     list and gets a fairer stage 1, so this asymmetry flatters **Pi**. Disclose it;
+     do not let it read as an improvement.
+   - **The judge over-applies rubric item 4.** 11 of the 30 failures are "restated
+     an amount already present in the user's message" — but the rubric says
+     *"amounts the card already shows"*. Echoing the user's own number back
+     ("ghi 305k nhé") is normal confirmation, not a fault. **Tighten the wording in
+     `graders.PROSE_RUBRIC` before the Pi run**, and re-grade this baseline with the
+     same rubric afterwards, or the two runs are not comparable (§11.5).
 
-### ⚠️ The Node-bridge proxy requirement — needed twice, so write it down
+   Net: treat 0.33 as a *provisional* reference. The genuine signal underneath is
+   real — Cursor does type unbacked amounts into prose, which is exactly what
+   `moneyguard`'s own field note describes — but this number is not yet a clean
+   measurement of it.
 
-`cursor_sdk` does not call Cursor from Python. It spawns a bundled **Node** binary
-(`_vendor/bridge/bin/cursor-sdk-bridge`, Node v24.5.0) on `127.0.0.1`, and *that*
-process makes every outbound request. Node's `fetch`/undici **ignores
-`HTTPS_PROXY`**, so behind this container's agent proxy the bridge went direct and
-was refused — while `curl` and `httpx`, which do use the proxy, succeeded against
-the same host. That is why the first diagnosis looked like a plain allowlist miss.
+### Privacy, and what human review actually caught
 
-Two variables fix it, and the bridge inherits them from the Python process:
+The corpus file stays **gitignored**; the committed baseline carries **no message
+bodies** (`bodies_included: false`) — ids, expectations, verdicts and the judge's
+one-sentence reasons only, per design §11.4. `sanitize` found no member name,
+`account_holder`, `qr_url` or 8+ digit run in the output.
 
-```bash
-export NODE_USE_ENV_PROXY=1                          # Node 24 --use-env-proxy
-export NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt  # trust the proxy's CA
-```
+**And reading it still found two leaks the tests could not**, which is the whole
+argument for Step 6 existing:
 
-**This applies to Phase 2 as well.** The Pi sidecar is also a Node process making
-outbound HTTPS calls, so any dev or CI environment behind an HTTPS proxy needs the
-same two variables or the sidecar will fail identically — with an error that looks
-like a bad key rather than a blocked route. Task 12's `fatal` path and Task 15's
-"missing key raises a clear error at spawn" should not be allowed to swallow it.
-(Production needs neither: the droplet has open egress.)
+1. **Non-member people.** `thứ 3 ăn bún bò huế, <name> rủ` — a meal's `initiator`
+   and its `guests` are real people who are not in the members table, so the map
+   never touched them. Now collected from the log's own attachments and
+   pseudonymized `G1…` (6 names, 12 occurrences in this room).
+2. **ASCII-folded and partial name forms.** `notes.build_qr_note` folds the
+   debtor's name into the QR memo (`notes.py:78`), and that memo is rendered into
+   the bot's visible reply — so "Hoàng" reaches the corpus as "Hoang" and a map
+   holding only the diacritic form sails past it. Fixed by mapping each name's
+   folded spelling **and** each token of ≥4 characters, with kinship pronouns
+   ("anh", "chị", "em") excluded so a pseudonym never replaces an ordinary word.
 
-### Still blocking: `api2.cursor.sh`
+`residual_name_candidates` now lists what is left for a reviewer to skim. After
+both fixes: 66 distinct title-case tokens, all Vietnamese sentence-initial words,
+app vocabulary (`Chốt`, `Ròng`, `Tóm`), brands (`Grab`, `Food`) or a restaurant
+(`Phở Tần`) — checked in context, none a person.
 
-Model listing goes to `api.cursor.com`, but the **API-key exchange** goes to a
-second host, and the gateway denies it:
+### Also corrected: the schema this was written against
 
-```
-[unknown] Failed to connect to API key exchange endpoint: fetch failed
-```
+Verified rather than assumed, and the plan's guesses were wrong in ways that found
+**zero** cases:
 
-```
-recentRelayFailures:
-  connect_rejected  api2.cursor.sh:443
-    gateway answered 403 to CONNECT (policy denial or upstream failure)
-```
+- a human message is `kind="text"`, **not** `"user"`;
+- cases pair **backwards from bot replies** (nearest preceding `text` row), which
+  also catches the bare answers `chat.replies_to_bot_question` lets through —
+  forward-matching on `@bot` would have missed them;
+- `meal` and `payment` attachments are **Confirm presses, not LLM turns**, so they
+  expect no tool;
+- one triggering message can produce several bot rows (a card plus prose) and is
+  still one case.
 
-`curl https://api2.cursor.sh/` → `000`; `curl https://api.cursor.com/` → `200`.
-So the allowlist covers one of the two hosts the Cursor SDK needs.
+### What is still not covered
 
-**To pass this gate:** add **`api2.cursor.sh`** to the environment's egress
-allowlist. Nothing in this repo needs to change — with that host open, Steps 3–5
-run as written, with `NODE_USE_ENV_PROXY=1` and `NODE_EXTRA_CA_CERTS` set. The
-alternative remains capturing the baseline off-box, where no proxy is involved.
-
-**Phase 2 has not been started**, and the plan's gate is being respected rather
-than worked around.
+`ledger_state` gets nothing from prod: there is no reconstructable prod ledger and
+prod member ids mean nothing in a bench room. The money graders therefore still
+rest entirely on the golden corpora (Tasks 1–6) and the synthetic bills. Rebuilding
+a prod world from the log's `meal`/`payment` commit rows is possible — they carry
+`payer`, `shares`, `occurred_on` and `transfers` — and is the obvious next
+increment, but it is **not done**.
 
 ## Phase 2 — The TypeScript harness
 

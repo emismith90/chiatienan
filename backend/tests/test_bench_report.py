@@ -187,3 +187,14 @@ def test_the_cli_compares_two_results_files(tmp_path, capsys):
     assert main(["--compare", str(base), str(new)]) == 0
     out = capsys.readouterr().out
     assert "cursor" in out and "pi" in out
+
+
+def test_compare_warns_when_the_base_run_is_a_recorded_log():
+    from bench.report import render_compare
+    base = _results([_rec("p1")], judge_model=None)
+    base["baseline_kind"] = "recorded-prod-log"
+    new = _results([_rec("p1")], engine="pi", judge_model=None)
+    out = render_compare(base, new)
+    # Its tool_selection rate is 1.0 by construction, so a delta is not a
+    # measurement — the new run's absolute rate is.
+    assert "by construction" in out and "absolute" in out
