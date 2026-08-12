@@ -330,6 +330,54 @@ def _turns(rows: list[dict]) -> list[tuple[dict, list[dict]]]:
     return [pairs[k] for k in sorted(pairs)]
 
 
+#: How many preceding messages a replayed prod case carries as history.
+#:
+#: Production passes `limit=settings.history_max_messages` (200) from the last
+#: memory watermark, and **the watermark is unrecoverable from the log** — the
+#: summarizer's position was never written to `room_messages`. So this is a
+#: reconstruction, not the exact window prod used: bounded at 30 because that is
+#: enough for the references these messages actually make ("log", "còn nợ ai",
+#: "viết lại cho gọn") while keeping a 107-case replay affordable.
+HISTORY_WINDOW = 30
+
+#: `kind`s production feeds the model as history. `chat.build_history` filters
+#: `kind.in_(("text", "bot"))`, so the two *draft* kinds are absent — a card's
+#: contents never entered the model's history, only the prose that came with it.
+HISTORY_KINDS = ("text", "bot")
+
+
+def render_history(rows: list[dict], index: int, to_key, *,
+                   window: int = HISTORY_WINDOW, clamp: int = 500) -> str:
+    """The rows before `index`, rendered the way production renders history.
+
+    Mirrors `chat._render_messages` exactly — `«Name»: body` for a member,
+    `chiatienan: body` for the bot, `[ảnh: N]` for an image, oldest→newest, each
+    body clamped — because a replay fed a *different* history is not a replay.
+
+    **Without this the prod corpus was unanswerable in places, and graded the
+    engine for it.** `p120`'s whole message is "@bot log"; `p129` is "tôi đã trả
+    tiền A1" against an expectation of 27,000đ that appears nowhere in it; `p156`
+    asks to reformat an answer given one turn earlier. Production had the
+    conversation in front of it for all three. Replaying the message alone asks
+    the model to guess, then records the guess as a tool-selection failure.
+    """
+    prior = [row for row in rows[:index] if row.get("kind") in HISTORY_KINDS]
+    lines = []
+    for row in prior[-window:]:
+        body = (row.get("body") or "").strip()
+        if len(body) > clamp:
+            body = body[:clamp] + "…"
+        count = int(row.get("had_images") or 0)
+        if count:
+            body = (f"{body} " if body else "") + f"[ảnh: {count}]"
+        author_id = row.get("author_member_id")
+        if author_id in (None, "", 0):
+            lines.append(f"chiatienan: {body}")
+        else:
+            lines.append(f"«{to_key(author_id)}»: {body}")
+    return "\n".join(lines)
+
+
 def _money_args_from_attachment(tool: str, attachments: dict) -> dict | None:
     """The money the bot actually passed, read back out of what it produced.
 
@@ -405,6 +453,10 @@ def build_cases(rows: list[dict], *, image_lookback: int = 10,
             "day": str(trigger.get("created_at") or "")[:10],
             "actor": to_key(trigger.get("author_member_id")) or trigger.get("author") or "A1",
             "message": trigger.get("body") or "",
+            # What the room had already said. `chat.py:495` gives production this
+            # on every turn, so a replay without it is a harder task than the one
+            # being measured.
+            "history": render_history(rows, index, to_key),
             "had_images": bool(tainted),
             "reply": prose,
             # The produced attachment IS what the tool returned, so it is carried

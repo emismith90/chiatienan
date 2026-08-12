@@ -411,3 +411,65 @@ def test_a_prose_case_is_graded_on_prose_and_not_on_tools():
                             )["records"][0]["grades"]
     assert grades["tool_selection"]["passed"] is None
     assert grades["prose_quality"]["passed"] is True
+
+
+# --------------------------------------------------------------------------- #
+# history — the replay's other half
+# --------------------------------------------------------------------------- #
+
+def test_a_case_carries_the_conversation_that_came_before_it():
+    from bench.export_prod import build_cases
+    # "@bot log" is a real prod message (p120) and it is unanswerable alone.
+    # Production had the whole room in front of it; the corpus has to as well, or
+    # the engine is graded on a question production never asked.
+    rows = [_row(id=1, body="trưa nay 6 người ăn cơm gà"),
+            _row(id=2, author_member_id=8, author="Kun", body="hết 324k anh Linh trả"),
+            _row(id=3, body="@bot log"),
+            _bot(id=4, body="", attachments={"type": "expense_draft",
+                                             "payer_member_id": 7, "total": 324000,
+                                             "shares": []})]
+    case = build_cases(rows, key_by_member_id={7: "A1", 8: "A2"})[0]
+    assert case["message"] == "@bot log"
+    assert case["history"] == ("«A1»: trưa nay 6 người ăn cơm gà\n"
+                              "«A2»: hết 324k anh Linh trả")
+
+
+def test_history_renders_exactly_as_production_renders_it():
+    from bench.export_prod import render_history
+    # chat._render_messages: «Name» for a member, `chiatienan` for the bot,
+    # [ảnh: N] for a photo, oldest→newest. A replay fed a different history is
+    # not a replay.
+    rows = [_row(id=1, body="ai trả tiền hôm qua"),
+            _bot(id=2, body="A1 trả 200k."),
+            _row(id=3, body="", had_images=2),
+            _row(id=4, body="@bot log")]
+    rendered = render_history(rows, 3, lambda mid: "A1")
+    assert rendered == ("«A1»: ai trả tiền hôm qua\n"
+                        "chiatienan: A1 trả 200k.\n"
+                        "«A1»: [ảnh: 2]")
+
+
+def test_the_history_window_is_bounded_and_keeps_the_most_recent():
+    from bench.export_prod import render_history
+    # ten earlier messages, then the trigger at index 10
+    rows = [_row(id=i, body=f"m{i}") for i in range(1, 11)] + [_row(id=11, body="@bot log")]
+    lines = render_history(rows, 10, lambda mid: "A1", window=3).splitlines()
+    assert lines == ["«A1»: m8", "«A1»: m9", "«A1»: m10"]
+
+
+def test_card_rows_stay_out_of_history_because_production_excludes_them():
+    from bench.export_prod import render_history
+    # chat.build_history filters kind.in_(("text", "bot")) — an expense_draft row
+    # never entered the model's history, only the prose beside it.
+    rows = [_row(id=1, body="ghi bữa trưa"),
+            _bot(id=2, kind="expense_draft", body="",
+                 attachments={"type": "expense_draft"}),
+            _row(id=3, body="@bot log")]
+    assert render_history(rows, 2, lambda mid: "A1") == "«A1»: ghi bữa trưa"
+
+
+def test_a_long_body_is_clamped_in_history_like_production_clamps_it():
+    from bench.export_prod import render_history
+    rows = [_row(id=1, body="x" * 900), _row(id=2, body="@bot log")]
+    line = render_history(rows, 1, lambda mid: "A1")
+    assert line.endswith("…") and len(line) < 600

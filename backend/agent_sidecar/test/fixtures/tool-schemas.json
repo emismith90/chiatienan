@@ -196,7 +196,7 @@
         "type": "string"
       },
       "participants": {
-        "description": "member ids of those who ate (split the bill).",
+        "description": "member ids of EVERYONE who ate, the sender included when they ate ('tôi với Bình ăn' = both ids).",
         "items": {
           "type": "integer"
         },

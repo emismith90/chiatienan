@@ -66,6 +66,16 @@ def _grade(case, record: dict, db, ids: dict, judge=None) -> dict:
     return graded
 
 
+def _display_name(db, member_id: int | None) -> str | None:
+    """The sender's display name, as `chat.py` supplies it."""
+    if member_id is None:
+        return None
+    from app.models import Member
+    with db.session() as s:
+        member = s.get(Member, member_id)
+        return member.display_name if member else None
+
+
 async def _run_one(case, rep: int, run_turn, judge=None) -> dict:
     """One case, one repetition: fresh database, rebuilt world, one LLM turn."""
     from app import tools
@@ -88,11 +98,25 @@ async def _run_one(case, rep: int, run_turn, judge=None) -> dict:
             # Recorded because the graders need it: the schema lets `payer` and
             # `from` be omitted when they are the sender.
             record["sender_member_id"] = sender_member_id
+            # **The sender has a name here, as they do in production.**
+            # `chat.py:489` passes `sender_name=member_name`, and
+            # `build_system_prompt` turns it into 'The person messaging you now is
+            # "…"'. Leaving it out looked harmless and was not: on `G4` the model
+            # called `find_members` twice, then asked *"bạn là ai trong nhóm nhỉ?"*
+            # and never proposed anything — a turn failed by the harness, not by
+            # the engine, since production never asks that question.
             ctx = tools.ToolContext(db=db, room_id=room_id,
                                     sender_member_id=sender_member_id,
+                                    sender_name=_display_name(db, sender_member_id),
                                     turn_mentions=[])
             with frozen_clock(case.day):
-                result = run_turn(case.message, ctx, images=case.images or None)
+                # `history` is part of the turn, not context the engine can be
+                # asked to do without: production passes it on every call
+                # (`chat.py:495`), and several prod messages ("@bot log") mean
+                # nothing without it. Replaying them bare graded the model on a
+                # question production never asked.
+                result = run_turn(case.message, ctx, images=case.images or None,
+                                  history=case.history or None)
                 if inspect.isawaitable(result):
                     result = await result
                 record["elapsed_s"] = time.monotonic() - started
@@ -130,7 +154,7 @@ async def run_corpus_async(name: str, *, repeat: int = 3, run_turn=None, judge=N
 
     `run_turn` is injected so the tests can drive this offline; production passes
     `app.agent.run_turn`. Its signature is the frozen one —
-    `run_turn(user_text, ctx, images=…)` — and it may be sync or async.
+    `run_turn(user_text, ctx, images=…, history=…)` — and it may be sync or async.
     """
     if run_turn is None:
         from app.agent import run_turn as real_run_turn

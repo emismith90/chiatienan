@@ -9,9 +9,26 @@ transcribes, or re-types a number that a tool produced.
 from __future__ import annotations
 
 
-def build_system_prompt(*, sender_name: str | None = None, today=None) -> str:
+def build_system_prompt(*, sender_name: str | None = None, sender_id: int | None = None,
+                        today=None) -> str:
+    """The turn's system prompt.
+
+    ``sender_id`` is stated alongside ``sender_name`` because a name alone is not
+    enough to act: every tool takes member **ids**, so a model told only "you are
+    talking to An" still has to go and look An up — and when it feels unsure it
+    asks instead. Benchmark case ``G4`` failed exactly that way, repeatedly: two
+    ``find_members`` calls and then *"bạn là ai trong nhóm nhỉ?"*, with no proposal
+    at all, on a message that named the total, the eaters and the extra. The id
+    removes the question rather than discouraging it.
+    """
     from app.clock import today_ict
-    who = f' The person messaging you now is "{sender_name}".' if sender_name else ""
+    who = ""
+    if sender_name:
+        who = f' Người đang nhắn bạn lúc này là «{sender_name}»'
+        who += f' (member_id={sender_id}).' if sender_id is not None else "."
+        who += (' "Tôi"/"mình"/"tớ"/"em"/"anh" trong tin nhắn là chính người này —'
+                ' ĐỪNG hỏi lại họ là ai, và mặc định họ là người trả tiền khi câu'
+                ' nói là "tôi trả".')
     today = today or today_ict()
     day = today.isoformat()
     return (

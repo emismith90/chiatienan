@@ -91,6 +91,11 @@ class Case:
     #: Every earlier step, in order, message-less ones included.
     prior_steps: list[dict] = field(default_factory=list)
     message: str = ""
+    #: The room's rendered conversation before `message`, as `chat.build_history`
+    #: would have produced it. Empty for the authored corpora, whose worlds are
+    #: rebuilt through `prior_steps` instead; populated for prod cases, which are
+    #: often only answerable in context ("@bot log").
+    history: str = ""
     #: `[{"data": <base64>, "mimeType": …}]`, as `run_turn` takes them.
     images: list[dict] = field(default_factory=list)
     #: True when the real turn saw a photo, even one this corpus cannot carry.
@@ -190,7 +195,8 @@ def _case_from_json(raw: dict, source: str, members: list[dict],
     return Case(id=raw["id"], source=source, day=raw["day"], actor=raw["actor"],
                 members=copy.deepcopy(raw.get("members") or members),
                 prior_steps=copy.deepcopy(raw.get("prior_steps") or []),
-                message=raw.get("message") or "", images=images,
+                message=raw.get("message") or "", history=raw.get("history") or "",
+                images=images,
                 had_images=bool(raw.get("had_images") or images),
                 expect=copy.deepcopy(raw.get("expect") or {}))
 

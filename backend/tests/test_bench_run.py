@@ -305,3 +305,56 @@ def test_limit_and_case_filters_narrow_the_run():
         == {"G1", "G2"}
     assert {r["case_id"] for r in run_corpus("meals", repeat=1, run_turn=_stub,
                                              cases=["G5", "G12"])} == {"G5", "G12"}
+
+
+def test_a_cases_history_is_handed_to_the_engine():
+    """A prod case's conversation reaches `run_turn`, or the replay is not one.
+
+    Production calls `run_turn(..., history=build_history(...))` on every turn
+    (`chat.py:495`). Several prod messages — "@bot log", "viết lại cho gọn" — mean
+    nothing without it, and replaying them bare recorded the model's guess as a
+    tool-selection failure.
+    """
+    import asyncio
+
+    from bench.corpus import Case
+    from bench.run import _run_one
+
+    seen = {}
+
+    def run_turn(user_text, ctx, **kwargs):
+        seen.update(kwargs)
+        async def _run():
+            return _StubResult()
+        return _run()
+
+    case = Case(id="h1", source="prod", day="2026-07-27", actor="A1",
+                members=[{"key": "A1", "display_name": "A1", "nickname": "a1"}],
+                message="@bot log", history="«A1»: trưa nay 6 người ăn cơm gà")
+    asyncio.run(_run_one(case, 0, run_turn))
+    assert seen["history"] == "«A1»: trưa nay 6 người ăn cơm gà"
+
+
+def test_no_history_is_passed_as_none_not_an_empty_string():
+    # The golden corpora rebuild their world through `prior_steps`, so they have
+    # no history — and `chat.py` passes `history or None`, which is what keeps
+    # `_render_prompt` from emitting an empty "# Lịch sử hội thoại" heading.
+    import asyncio
+
+    from bench.corpus import Case
+    from bench.run import _run_one
+
+    seen = {}
+
+    def run_turn(user_text, ctx, **kwargs):
+        seen.update(kwargs)
+        async def _run():
+            return _StubResult()
+        return _run()
+
+    asyncio.run(_run_one(
+        Case(id="h2", source="meals", day="2026-07-27", actor="A1",
+             members=[{"key": "A1", "display_name": "A1", "nickname": "a1"}],
+             message="@bot x"),
+        0, run_turn))
+    assert seen["history"] is None

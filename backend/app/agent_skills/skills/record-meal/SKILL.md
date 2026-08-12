@@ -5,6 +5,11 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
 # Ghi một bữa ăn
 
 1. `find_members` để xác định người trả + người tham gia (`all_active:true` cho 'cả nhóm').
+   - «tôi»/«mình»/«tớ» = NGƯỜI ĐANG NHẮN. `member_id` của họ đã ghi trong prompt hệ thống,
+     nên không cần tìm và **TUYỆT ĐỐI không hỏi "bạn là ai"**. "Tôi trả" → để trống `payer`
+     (công cụ tự lấy người nhắn) hoặc truyền đúng id đó.
+   - "Tôi với Bình ăn" = `participants` có CẢ HAI id. Người nhắn cũng là một người ăn —
+     đừng bỏ họ ra khỏi `participants` chỉ vì họ là người trả.
 2. `propose_meal` với payer, participants (id), total (tổng hoá đơn), và `items` HOẶC `adjustments`,
    cùng guests/dish/initiator/note nếu có.
    - 'trừ An' = An KHÔNG nằm trong participants.
@@ -42,7 +47,11 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 
 ## Hỏi lại — tối đa một lần
 
-Chỉ hỏi khi thiếu thứ KHÔNG thể suy ra: ai trả, hoặc tổng tiền khi không có hoá đơn.
+Chỉ hỏi khi thiếu thứ KHÔNG thể suy ra: người trả là một người thứ ba không tra được
+tên, hoặc tổng tiền khi không có hoá đơn.
+
+- «tôi trả» KHÔNG BAO GIỜ là thiếu thông tin: người nhắn là ai đã nằm trong prompt.
+  Hỏi lại "bạn là ai trong nhóm" là lỗi — cứ đề xuất với người nhắn là payer.
 
 - Đã có đủ để đề xuất → gọi `propose_meal` ngay. Thẻ nháp sửa được, nên đề xuất tốt hơn hỏi.
 - KHÔNG hỏi lại thông tin người dùng đã nói ở tin nhắn trước trong lượt/lịch sử này.

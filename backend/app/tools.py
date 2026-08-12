@@ -114,7 +114,12 @@ _PROPOSE_SCHEMA = {
     "properties": {
         "payer": {"type": "integer", "description": "member id of the payer; blank = the sender."},
         "participants": {"type": "array", "items": {"type": "integer"},
-                         "description": "member ids of those who ate (split the bill)."},
+                         # "tôi với Bình ăn" listed only Bình on one run, which
+                         # charges a two-person bill to one person. The sender is
+                         # a participant like anyone else — being the payer does
+                         # not put them in, and saying "tôi" does not leave them out.
+                         "description": "member ids of EVERYONE who ate, the sender included"
+                                        " when they ate ('tôi với Bình ăn' = both ids)."},
         "total": {"type": "integer", "description": "Bill total, integer VND (840k → 840000)."},
         "guests": {"type": "array", "items": {"type": "string"},
                    "description": "Guest names (non-members who pay cash)."},
