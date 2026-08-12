@@ -167,6 +167,53 @@ discover:
    the floating id as instructed; Task 22's report should record the exact id it
    ran against.
 
+### Tool calling was *validated*, not taken on faith
+
+`supported_parameters` containing `tools` is a vendor's claim about a capability,
+not evidence that a model emits a well-formed call against **our** fourteen
+schemas — and the money path depends on it completely. `bench/probe_models.py`
+sends the **live** schemas from `app.tools` (not a copy, so it cannot drift) to
+each model and checks the reply strictly: a call must come back, name the right
+tool, parse as JSON, carry every `required` property, use the right JSON types, and
+pick only from `enum` where one is declared. Answering in prose **fails** — that is
+the failure mode that puts arithmetic back on the model's side of the wire.
+
+Three schemas are probed, chosen as the ones a provider is most likely to
+mistranslate: `propose_meal` (nested `items` objects + the `discount_split` enum),
+`update_member` (`{"type": ["string","integer"]}` on `target` — the only union in
+all 14, `tools.py:193`), and `settle_period` (the 7-value `keyword` enum shared by
+four tools).
+
+**`~deepseek/deepseek-v4-flash-latest` — 3/3 PASS**, measured 2026-08-12:
+
+```
+PASS  propose_meal   {"participants":[1,2,3],"total":154000,
+                      "items":[{"member":1,"amount":45000,"label":"cơm tấm"},…]}
+PASS  update_member  {"target":"binh","nickname":"Bình Nguyễn"}
+PASS  settle_period  {"keyword":"this_week"}
+```
+
+Three things that settles beyond the catalogue's claim: the **union** round-trips
+(it chose the `string` arm), the **enum** is respected, and a **nested object
+array** comes back with correct integer types — which is the exact shape Task 11's
+converter has to preserve. It also read `154k` → `154000` unprompted, so the
+`k`-suffix convention the prompt relies on survives.
+
+**⚠️ `meta/muse-glimmer-30b` is rate-limited upstream.** Two of three probes came
+back `429 Provider returned error … temporarily rate-limited upstream. Please
+retry shortly, or add your own key to accumulate your rate limit`, while
+`settle_period` passed. So the failures are **capacity, not capability** — but this
+is the model every bill photo routes to, and a 429 on that path means a dropped
+bill, which §12 says must never happen silently. Two consequences:
+
+- The probe now retries `429`/`5xx` with backoff, so a capacity blip cannot read as
+  a capability failure.
+- **Task 13 must treat a vision-path 429 as a retry-then-fail-loudly case, not a
+  generic error.** Design §12's "image turns must fail loudly, never silently drop
+  the photo" now has a specific, observed trigger. Worth also raising with the user
+  whether a paid/dedicated route for this model is available, since the upstream
+  message suggests shared capacity.
+
 **One consequence carried into Task 11.** Design §6's `StringEnum` requirement
 was written because pi's `docs/extensions.md` warns that `Type.Union`/
 `Type.Literal` breaks **Google's** API. Neither model here is Google's, so that
