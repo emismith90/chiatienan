@@ -791,3 +791,47 @@ def test_every_committed_judgement_carries_a_reason():
     from bench.corpus import prod_judgements
     prod_judgements.check()          # raises if a reason is missing
     assert prod_judgements.JUDGEMENTS, "the file documents its own rules; keep an example"
+
+
+def test_the_same_shares_pass_whatever_the_encoding():
+    """`p120`: expected `adjustments` are production's final shares; ours are
+    prorated `items`. Both put the same six numbers in the ledger."""
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    # 324,200 over six, with two people off the even split
+    shares = {1: 54500, 2: 27000, 3: 54500, 4: 54500, 5: 54500, 6: 79200}
+    total = sum(shares.values())
+    case = Case(id="p120", source="prod", day="2026-07-27", actor="A1",
+                expect={"tools": ["propose_meal"],
+                        "args": {"propose_meal": {
+                            "total": total, "payer": 1, "participants": list(shares),
+                            # production's encoding: shares as adjustments (base 0)
+                            "adjustments": [{"member": m, "amount": a}
+                                            for m, a in shares.items()]}}})
+    record = {"sender_member_id": 1, "tools": [{
+        "name": "propose_meal",
+        # our encoding: list prices + an equal split of the discount
+        "args": {"total": total, "payer": 1, "participants": list(shares),
+                 "discount_split": "equal",
+                 "items": [{"member": m, "amount": a + 15000} for m, a in shares.items()]},
+        "result": {"ok": True, "type": "expense_draft"}}]}
+    verdict = grade_tool_selection(case, record)
+    assert verdict.passed is True, verdict.reason
+
+
+def test_different_shares_still_fail_and_say_the_shares():
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="x", source="prod", day="2026-07-27", actor="A1",
+                expect={"tools": ["propose_meal"],
+                        "args": {"propose_meal": {
+                            "total": 100000, "participants": [1, 2],
+                            "adjustments": [{"member": 1, "amount": 60000},
+                                            {"member": 2, "amount": 40000}]}}})
+    record = {"sender_member_id": 1, "tools": [{
+        "name": "propose_meal",
+        "args": {"total": 100000, "participants": [1, 2]},   # even split
+        "result": {"ok": True}}]}
+    verdict = grade_tool_selection(case, record)
+    assert verdict.passed is False
+    assert "shares expected" in verdict.reason

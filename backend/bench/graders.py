@@ -79,6 +79,43 @@ def _last_call(record: dict, name: str) -> dict | None:
     return None
 
 
+def _share_map(args: dict) -> dict | None:
+    """What each participant ends up owing, given one `propose_meal` argument set.
+
+    **The invariant is the money, not the encoding.** `p120` is the case: the
+    expectation (read off production's card) carries
+    `adjustments=[54500, 54500, 79200, 54500, 54500, 27000]` — the *final shares*,
+    which happen to sum to the total, so `split_shares` computes a base of 0 and
+    reproduces them. Our turn passed the bill's list prices as `items` with
+    `discount_split="equal"`, and the tool prorated them to the same six shares
+    around a base of 54,033 — so its `adjustments` read `[467, …, -27033, 25167]`.
+    Identical money, unrecognizably different arguments.
+
+    Returns None when the split cannot be reproduced here (guests change the
+    per-head, and a malformed argument set is not this function's business).
+    """
+    from app.money import MoneyError, prorate_items, split_shares
+
+    total = args.get("total")
+    participants = [int(p) for p in args.get("participants") or [] if str(p).lstrip("-").isdigit()]
+    if not isinstance(total, int) or not participants or args.get("guests"):
+        return None
+    try:
+        items = args.get("items")
+        if items:
+            prices = {int(i["member"]): int(i["amount"]) for i in items
+                      if isinstance(i, dict) and "member" in i and "amount" in i}
+            if sorted(prices) != sorted(participants):
+                return None
+            return prorate_items(total, prices,
+                                 discount_split=args.get("discount_split") or "proportional")
+        adjustments = {int(a["member"]): int(a["amount"]) for a in args.get("adjustments") or []
+                       if isinstance(a, dict) and "member" in a and "amount" in a}
+        return split_shares(total, participants, adjustments)
+    except (MoneyError, KeyError, TypeError, ValueError):
+        return None
+
+
 def _recorded(call: dict, key: str):
     """What the **tool** put in the draft for `key`, if anything.
 
@@ -175,6 +212,22 @@ def grade_tool_selection(case, record: dict) -> Verdict:
         for key, want in want_args.items():
             if key not in MONEY_ARGS:
                 continue
+            if key in ("adjustments", "items") and tool_name == "propose_meal":
+                # **Compare the money, not the encoding.** `p120`: the expectation's
+                # `adjustments` are production's *final shares* (they sum to the
+                # total, so `split_shares` computes a base of 0 and reproduces them),
+                # while our turn passed the bill's list prices as `items` with
+                # `discount_split="equal"` and the tool prorated them to the same six
+                # shares around a base of 54,033. Identical money, unrecognizably
+                # different arguments. Only the share map decides.
+                want_shares = _share_map({**want_args, key: want})
+                got_shares = _share_map(got_args)
+                if want_shares is not None and got_shares is not None:
+                    if want_shares != got_shares:
+                        problems.append(
+                            f"{tool_name}: shares expected {want_shares}, got {got_shares}")
+                    continue
+
             if key not in got_args:
                 if key in _SENDER_DEFAULTED and want == record.get("sender_member_id"):
                     # The schema permits omitting it when it is the sender, and the
@@ -182,21 +235,12 @@ def grade_tool_selection(case, record: dict) -> Verdict:
                     continue
                 if _args_differ(key, want, _recorded(call, key)) is None:
                     # **The tool worked it out, which is the preferred path.**
-                    # Two real cases, both failed for doing the right thing:
-                    #
-                    # * `p129` "tôi đã trả tiền A1" (expecting 27,000đ) called
-                    #   `propose_payment(to=A1)` with no `amount`, exactly as
-                    #   `record-payment` says to — the tool then reads the debt off
-                    #   the ledger and the model transcribes nothing (design D3).
-                    # * `p120` "@bot log" passed `items` (the list prices off the
-                    #   bill) with `discount_split="equal"`, and the tool prorated
-                    #   them into the very `adjustments` the expectation names —
-                    #   54,500 / 79,200 / 27,000, to the đồng. Production got there
-                    #   by computing them in bash and typing them in, which is the
-                    #   D3 violation the room argued about at the time.
-                    #
-                    # So an absent argument passes only when the tool's own result
-                    # matches the expectation. Checked, never assumed.
+                    # `p129` "tôi đã trả tiền A1" (expecting 27,000đ) called
+                    # `propose_payment(to=A1)` with no `amount`, exactly as
+                    # `record-payment` says to — the tool then reads the debt off the
+                    # ledger and the model transcribes nothing (design D3). An absent
+                    # argument passes only when the tool's own result matches the
+                    # expectation: checked, never assumed.
                     continue
                 # Any other omitted money arg is a failure, not a comparison to skip.
                 problems.append(f"{tool_name}.{key}: expected {want!r}, absent")

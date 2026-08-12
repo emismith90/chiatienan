@@ -13,8 +13,15 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
 2. `propose_meal` với payer, participants (id), total (tổng hoá đơn), và `items` HOẶC `adjustments`,
    cùng guests/dish/initiator/note nếu có.
    - 'trừ An' = An KHÔNG nằm trong participants.
+   - Chỉ nói "trừ An" / "An không ăn" mà không kể ai ăn → mặc định là **CẢ NHÓM trừ An**
+     (`find_members all_active:true` rồi bỏ An ra). ĐỪNG hỏi "vậy những ai ăn".
    - 'An trả nhưng không ăn' = An là payer nhưng không nằm trong participants.
    - 'Bình +50k' = adjustment {member: <id Bình>, amount: 50000}.
+   - "X rủ đi" / "X rủ" = `initiator` (người khởi xướng), KHÔNG phải người ăn: chỉ thêm X
+     vào `participants` khi người dùng nói X cũng ăn.
+   - Có người ngoài nhóm ăn cùng ("+ 1 khách", "2 đứa bạn nữa", "có khách") → truyền
+     `guests` (tên nếu biết, không thì "khách 1", "khách 2"). Khách làm giảm suất mỗi người
+     nhưng KHÔNG bị ghi nợ; bỏ `guests` là chia sai cho tất cả mọi người.
    - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
 - Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
 - Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), truyền nguyên văn vào `day_word` của `propose_meal` — công cụ tự tính ngày (giờ VN), TUYỆT ĐỐI không tự suy ra ngày. Không nói ngày → bỏ trống (mặc định hôm nay).
