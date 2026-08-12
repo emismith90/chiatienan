@@ -234,14 +234,24 @@ test("a rate limit gets its own Vietnamese message", () => {
   assert.match(formatError(new Error("429 Too Many Requests")), /quá tải/);
 });
 
-test("images become base64 content blocks, and no images means no option", () => {
+test("images take pi's OWN ImageContent shape, flat — not Anthropic's nesting", () => {
+  // pi-ai types.d.ts:241 — {type, data, mimeType}. Sending
+  // {source:{type:"base64",mediaType,data}} put `undefined` in both fields and every
+  // bill silently disappeared: B1–B3 returned no tools, no text and no error.
   assert.equal(buildPromptOptions({ message: "x" }), undefined);
   const options = buildPromptOptions({
     images: [{ data: "aGk=", mimeType: "image/jpeg" }],
   });
-  assert.equal(options.images[0].type, "image");
-  assert.equal(options.images[0].source.mediaType, "image/jpeg");
-  assert.equal(options.images[0].source.data, "aGk=");
+  assert.deepEqual(options.images[0], { type: "image", data: "aGk=", mimeType: "image/jpeg" });
+  assert.equal(options.images[0].source, undefined);
+});
+
+test("a python-side mime_type key is accepted, and png is the default", () => {
+  // `chat.recent_images` carries whatever the PWA stored; both spellings exist.
+  const [snake] = buildPromptOptions({ images: [{ data: "aGk=", mime_type: "image/webp" }] }).images;
+  assert.equal(snake.mimeType, "image/webp");
+  const [bare] = buildPromptOptions({ images: [{ data: "aGk=" }] }).images;
+  assert.equal(bare.mimeType, "image/png");
 });
 
 test("the deadline bounds the turn even when prompt never settles", async () => {

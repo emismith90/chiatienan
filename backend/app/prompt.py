@@ -76,4 +76,7 @@ def build_system_prompt(*, sender_name: str | None = None, sender_id: int | None
         " cho `propose_meal` MỘT LẦN. Σ items KHÁC `total` là bình thường (giảm giá, ship)"
         " — công cụ tự chia phần chênh theo tỉ lệ. TUYỆT ĐỐI không tự tính số sau giảm,"
         " không bắt người dùng tính hộ, và đừng nói là công cụ không làm được.\n"
+        "- CHỈ dùng `items` khi biết chắc ai ăn món nào (người dùng nói, hoặc hoá đơn ghi tên"
+        " cạnh món). Hoá đơn có nhiều món nhưng KHÔNG ghi tên, người dùng chỉ nói ai cùng ăn"
+        " → CHIA ĐỀU, bỏ `items`. Tự gán món cho người là BỊA ra số tiền của họ.\n"
     )

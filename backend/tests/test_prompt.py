@@ -100,3 +100,36 @@ def test_propose_meal_says_the_sender_counts_as_a_participant():
     from app.tools import tool_manifest
     schema = {t["name"]: t for t in tool_manifest()}["propose_meal"]["schema"]
     assert "sender included" in schema["properties"]["participants"]["description"]
+
+
+def test_items_are_forbidden_when_nobody_said_who_ate_what():
+    """`B2` charged Bình 80,308đ of a 261,000đ bill split three ways.
+
+    The bill lists dishes; nobody said who ordered which. The model assigned them
+    anyway — one dish per person, in bill order — and the numbers looked plausible.
+    Inventing the allocation is worse than splitting evenly, because it is wrong in
+    a way that reads as precision.
+    """
+    prompt = build_system_prompt(today=date(2026, 7, 22))
+    assert "CHỈ dùng `items` khi biết chắc ai ăn món nào" in prompt
+    assert "CHIA ĐỀU" in prompt
+
+    from app.tools import tool_manifest
+    items = {t["name"]: t for t in tool_manifest()}["propose_meal"]["schema"]["properties"]["items"]
+    assert "Only when you KNOW who ate what" in items["description"]
+
+
+def test_the_balances_skill_routes_settle_phrasings_to_settle_period():
+    """"tính tiền" is a settle-up, not a statement.
+
+    Four golden cases (`s5`, `s8`, `s10b`, `s12`) failed on this: the model answered
+    with `member_statement` or `get_period_summary`, which lists both directions
+    uncancelled — so "A nợ B 100k" and "B nợ A 100k" both appear and nobody learns
+    what to transfer.
+    """
+    from pathlib import Path
+    body = (Path(__file__).resolve().parent.parent / "app" / "agent_skills" / "skills"
+            / "balances" / "SKILL.md").read_text(encoding="utf-8")
+    for phrase in ("'tính tiền'", "còn ai nợ ai gì không", "tôi phải trả bao nhiêu"):
+        assert phrase in body, phrase
+    assert "member_statement" in body and "settle_period" in body

@@ -220,15 +220,22 @@ export async function runTurn(session, req, emit) {
   };
 }
 
-/** `images` reach pi as base64 content blocks. */
+/**
+ * `images` reach pi as its own `ImageContent`: **flat `{type, data, mimeType}`**.
+ *
+ * Not the Anthropic `{source: {type: "base64", mediaType, data}}` nesting this
+ * originally sent. `pi-ai`'s `ImageContent` (types.d.ts:241) has `data` and
+ * `mimeType` at the top level, so the nested version arrived with both
+ * `undefined` and the whole bill vanished: every image case (`B1`–`B3`) came back
+ * with **no tools, no text and no error** — the exact silent-drop failure design
+ * §12 says must never happen, and one no unit test caught because the tests
+ * asserted the shape this function *emitted* rather than the shape pi accepts.
+ */
 export function buildPromptOptions(req) {
   const images = (req.images || []).map((image) => ({
     type: "image",
-    source: {
-      type: "base64",
-      mediaType: image.mimeType || image.mime_type || "image/png",
-      data: image.data,
-    },
+    data: image.data,
+    mimeType: image.mimeType || image.mime_type || "image/png",
   }));
   return images.length ? { images } : undefined;
 }

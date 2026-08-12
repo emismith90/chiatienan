@@ -135,6 +135,10 @@ _PROPOSE_SCHEMA = {
                 " difference yourself. One entry per participant, every participant exactly"
                 " once. The tool prorates the gap between Σ items and `total` (promo, ship,"
                 " service fee) across the items. Omit this to split the bill evenly."
+                " **Only when you KNOW who ate what** — the user said so, or the bill writes a"
+                " name next to each line. A bill that merely lists dishes does not say who"
+                " ordered them: guessing changes what each person owes and looks correct while"
+                " being invented. Split evenly instead."
             ),
             "items": {
                 "type": "object",

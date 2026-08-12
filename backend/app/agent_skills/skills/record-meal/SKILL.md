@@ -25,7 +25,16 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 "ghi theo từng người được không" → **dùng `items`**, KHÔNG chia đều và KHÔNG nhét thông tin
 đó vào `note`.
 
+**Chỉ dùng `items` khi BIẾT ai ăn món nào** — người dùng nói ra, hoặc trên hoá đơn có ghi tên
+cạnh từng món. Hoá đơn liệt kê nhiều món nhưng KHÔNG ghi tên, và người dùng chỉ nói ai cùng ăn
+("tôi với Bình và Cường ăn") → **CHIA ĐỀU**, bỏ `items`. Tự gán món cho người là bịa: nó đổi
+số tiền từng người phải trả, và không ai phát hiện được vì con số trông vẫn hợp lý.
+
 - Mỗi participant đúng MỘT dòng `{member, amount, label}`; `amount` là **giá trên hoá đơn**.
+- `member` là **id của người ăn món đó**. Tên viết trên hoá đơn (hoặc trong tin nhắn) phải
+  đi qua `find_members` để lấy id trước — đọc được tên trên ảnh KHÔNG có nghĩa là biết id.
+  TUYỆT ĐỐI không dồn mọi món cho một người rồi để tên trong `label`: làm vậy là cả bill
+  ghi nợ cho một người. `participants` cũng phải gồm đủ những người đó.
 - Một dòng "2x cơm tấm 138.000đ" cho Linh và Kun → mỗi người 69.000đ.
 - **Σ items không cần bằng `total`.** Giảm giá / phí ship / phí dịch vụ là chuyện bình thường —
   công cụ tự chia phần chênh lệch. ĐỪNG tự tính "số sau giảm", đừng bắt người
