@@ -96,6 +96,32 @@ JUDGEMENTS: dict[str, dict] = {
                "`get_period_summary(keyword=\"today\")` answers it by name and "
                "amount. A settlement answers who owes whom instead.",
     },
+    "p136": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'rồi mà? Đã ghi #6 …' insists the meal is already recorded. The "
+               "summary is what shows whether it is, and who still owes on it; the "
+               "reply says both. Prod re-ran the settlement.",
+    },
+    "p146": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'hết nháp chưa?' asks whether any draft is still pending. A summary "
+               "answers it directly; `settle_period` answers it only as a side "
+               "effect of being blocked, and says nothing when nothing is pending.",
+    },
+    "p225": {
+        "tools_ok": ["member_statement"],
+        "why": "'currrent balance' from someone with debts of their own reads as "
+               "their balance, and `member_statement` gives it per creditor and per "
+               "meal. Prod used the group summary; both are honest readings, and the "
+               "expectation here happens to be the summary rather than a settlement.",
+    },
+    "p235": {
+        "tools_ok": ["member_statement"],
+        "why": "'xin qr cho anh A3' asks for a QR — but on this ledger the asker owes "
+               "A3 nothing, so there is no transfer and no QR to produce. The "
+               "statement is what establishes that, and the reply says it plainly. "
+               "Judged on this case's state, not on QR requests in general.",
+    },
     "p160": {
         "tools_ok": ["get_period_summary"],
         "why": "'grab food hôm nay à' asks to confirm today's meal; same period "

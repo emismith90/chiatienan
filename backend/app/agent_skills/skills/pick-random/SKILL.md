@@ -11,5 +11,9 @@ description: Chọn ngẫu nhiên một người trong nhóm — "bốc thăm ai
   `default_participant`: đó là thay đổi lâu dài cho mọi lượt bốc và mọi lần chia "cả
   nhóm", và người dùng không yêu cầu điều đó. Chỉ đổi khi họ nói rõ là muốn *từ nay*
   không tham gia nữa.
+- Chỉ bốc khi người dùng NÓI RÕ là muốn bốc: 'bốc thăm', 'random', 'roll', 'chọn đại',
+  'ai rót trà'. "Hôm nay ai trả tiền?" / "ai trả tuần này?" là câu HỎI VỀ SỔ (ai đã trả)
+  → dùng `get_period_summary`/`settle_period`, TUYỆT ĐỐI không bốc thăm. Bốc thăm khi
+  người ta chỉ hỏi thông tin là tự dựng ra một nghĩa vụ trả tiền.
 - Bốc để làm gì ('trả tiền', 'đi mua đồ ăn') → truyền nguyên văn vào `label`.
 - Thẻ kết quả đã hiện tên người được chọn; trả lời ngắn gọn, ĐỪNG gõ lại tên (gõ lại là cách duy nhất làm sai một kết quả đúng).

@@ -77,7 +77,10 @@ def test_the_prompt_names_the_sender_and_their_member_id():
 def test_the_sender_line_survives_a_missing_id():
     # `sender_id` is optional: an unauthenticated or system turn still gets a name.
     prompt = build_system_prompt(sender_name="An", today=date(2026, 7, 22))
-    assert "«An»" in prompt and "member_id" not in prompt
+    # The sender line itself carries no id — `member_id` appears elsewhere in the
+    # prompt (the `update_member` guidance), so the assertion is on the line.
+    sender_line = next(l for l in prompt.splitlines() if "«An»" in l)
+    assert "member_id" not in sender_line
 
 
 def test_no_sender_means_no_sender_line_at_all():

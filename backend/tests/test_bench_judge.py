@@ -131,7 +131,12 @@ def test_prepare_batch_offers_only_what_a_judge_could_decide():
 
 def test_prepare_batch_carries_the_bodies_from_the_corpus():
     from bench.judge import prepare_batch
-    results = _results(_record_with("p1", None, "not graded: no judge configured"))
+    # The corpus fills in what the *record* lacks — which is the baseline's case,
+    # since its bodies are stripped before it is committed. A record that has its
+    # own reply keeps it (see the test below).
+    record = _record_with("p1", None, "not graded: no judge configured")
+    record["final_text"] = ""
+    results = _results(record)
     corpus = {"cases": [{"id": "p1", "message": "@bot ai nợ ai", "reply": "Không ai nợ ai."}]}
     case = prepare_batch(results, corpus)[0]
     assert case["message"] == "@bot ai nợ ai" and case["reply"] == "Không ai nợ ai."
@@ -164,3 +169,34 @@ def test_a_verdict_for_an_unknown_case_is_reported():
     results = _results(_record_with("p1", None, "not graded: no judge configured"))
     _, unmatched = apply_verdicts(results, {"p1": {"ok": True}, "p99": {"ok": True}}, "agent")
     assert unmatched == 1
+
+
+def test_the_batch_judges_the_run_s_own_reply_not_the_corpus_one():
+    """`--corpus` is for the recorded baseline, whose bodies were stripped.
+
+    Its `reply` field is *production's* text, so preferring it handed a Pi run prod's
+    replies to grade — twenty of them, with the narration prod was being replaced
+    for.
+    """
+    from bench.judge import prepare_batch
+    results = {"records": [{
+        "case_id": "p98", "rep": 0, "message": "@bot log đi",
+        "final_text": "Đã ghi bữa trưa nhé.",
+        "grades": {"prose_quality": {"passed": None,
+                                     "reason": "not graded: no judge configured"}}}]}
+    corpus = {"cases": [{"id": "p98", "message": "@bot log đi",
+                         "reply": "mình đọc skill phù hợp rồi xử lý…"}]}
+    batch = prepare_batch(results, corpus)
+    assert batch[0]["reply"] == "Đã ghi bữa trưa nhé."
+
+
+def test_the_corpus_reply_is_the_fallback_when_the_record_has_none():
+    from bench.judge import prepare_batch
+    results = {"records": [{
+        "case_id": "p98", "rep": 0, "final_text": "",
+        "grades": {"prose_quality": {"passed": None,
+                                     "reason": "not graded: no judge configured"}}}]}
+    corpus = {"cases": [{"id": "p98", "message": "@bot log đi", "reply": "Đã ghi."}]}
+    batch = prepare_batch(results, corpus)
+    assert batch[0] == {"case_id": "p98", "rep": 0, "message": "@bot log đi",
+                        "reply": "Đã ghi."}

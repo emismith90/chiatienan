@@ -127,6 +127,13 @@ def prepare_batch(results: dict, corpus: dict | None = None) -> list[dict]:
     Only records that reached the judge are included: a card turn, an errored turn
     and a stage-1 failure are already decided, and re-judging them would let an
     opinion overrule `moneyguard`.
+
+    **The record's own `final_text` is what gets judged.** `--corpus` exists for the
+    recorded baseline, whose bodies were stripped before it was committed — but its
+    `reply` field is *production's* text, and preferring it meant a Pi run was
+    handed prod's replies to grade. Twenty of them, verbatim, with narration prod
+    was being replaced for ("mình đọc skill phù hợp rồi xử lý"). The corpus is now
+    the fallback, never the override.
     """
     bodies = {}
     for case in (corpus or {}).get("cases") or []:
@@ -144,8 +151,8 @@ def prepare_batch(results: dict, corpus: dict | None = None) -> list[dict]:
         batch.append({
             "case_id": record["case_id"],
             "rep": record.get("rep", 0),
-            "message": message or record.get("message") or "",
-            "reply": reply or record.get("final_text") or "",
+            "message": record.get("message") or message or "",
+            "reply": record.get("final_text") or reply or "",
         })
     return batch
 
