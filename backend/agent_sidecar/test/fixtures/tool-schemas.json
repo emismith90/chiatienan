@@ -1,0 +1,368 @@
+{
+  "add_member": {
+    "properties": {
+      "account_holder": {
+        "type": "string"
+      },
+      "account_number": {
+        "type": "string"
+      },
+      "bank_code": {
+        "type": "string"
+      },
+      "display_name": {
+        "description": "Display name.",
+        "type": "string"
+      },
+      "nickname": {
+        "description": "Nickname used to sign in, unique within the room.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "display_name",
+      "nickname"
+    ],
+    "type": "object"
+  },
+  "cancel_draft": {
+    "properties": {
+      "draft_id": {
+        "description": "The # shown on the draft card.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "draft_id"
+    ],
+    "type": "object"
+  },
+  "delete_member": {
+    "properties": {
+      "target": {
+        "description": "Member to remove: nickname or numeric id.",
+        "type": [
+          "string",
+          "integer"
+        ]
+      }
+    },
+    "required": [
+      "target"
+    ],
+    "type": "object"
+  },
+  "find_members": {
+    "properties": {
+      "all_active": {
+        "description": "True to fetch all active members ('cả nhóm').",
+        "type": "boolean"
+      },
+      "names": {
+        "description": "Names or nicknames to look up (e.g. ['An', 'Bình']).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "type": "object"
+  },
+  "get_period_summary": {
+    "properties": {
+      "keyword": {
+        "enum": [
+          "since_last",
+          "this_week",
+          "last_week",
+          "today",
+          "yesterday",
+          "this_month",
+          "explicit"
+        ],
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "member_statement": {
+    "properties": {
+      "keyword": {
+        "enum": [
+          "since_last",
+          "this_week",
+          "last_week",
+          "today",
+          "yesterday",
+          "this_month",
+          "explicit"
+        ],
+        "type": "string"
+      },
+      "member": {
+        "description": "member id; blank = the sender.",
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
+  "pick_random": {
+    "properties": {
+      "label": {
+        "description": "What the pick is for, as the user said it ('trả tiền', 'đi mua đồ ăn'). Cosmetic only.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "propose_meal": {
+    "properties": {
+      "adjustments": {
+        "items": {
+          "properties": {
+            "amount": {
+              "type": "integer"
+            },
+            "member": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "member",
+            "amount"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "day_word": {
+        "description": "The day EXACTLY as the user said it ('thứ 5', 'hôm qua', '20/7'). The tool resolves it to a date (ICT) — never compute the date yourself. Omit = today.",
+        "type": "string"
+      },
+      "discount_split": {
+        "description": "Only with `items`. How to share the gap between Σ items and `total`: 'proportional' (default) scales each dish price; 'equal' takes the same amount off everyone — use it when the user says so ('chia đều phần giảm', 'mỗi người trừ như nhau'). Either way the TOOL does the arithmetic.",
+        "enum": [
+          "proportional",
+          "equal"
+        ],
+        "type": "string"
+      },
+      "dish": {
+        "description": "Dish (if the user mentioned it).",
+        "type": "string"
+      },
+      "guests": {
+        "description": "Guest names (non-members who pay cash).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "initiator": {
+        "description": "Who initiated the meal (if any).",
+        "type": "string"
+      },
+      "items": {
+        "description": "Per-person mode ('ai ăn nấy trả'): the LIST price of what each person ate, copied straight off the bill — do NOT pre-apply the discount or split the difference yourself. One entry per participant, every participant exactly once. The tool prorates the gap between Σ items and `total` (promo, ship, service fee) across the items. Omit this to split the bill evenly.",
+        "items": {
+          "properties": {
+            "amount": {
+              "description": "Its price on the bill, integer VND.",
+              "type": "integer"
+            },
+            "label": {
+              "description": "Dish name, e.g. 'cơm tấm'.",
+              "type": "string"
+            },
+            "member": {
+              "description": "member id who ate this.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "member",
+            "amount"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "note": {
+        "description": "Free-form note (e.g. 'An đổi ý').",
+        "type": "string"
+      },
+      "occurred_on": {
+        "description": "Deprecated: pre-resolved meal date, ISO YYYY-MM-DD. Prefer `day_word` so the tool does the date math. Ignored when `day_word` is given.",
+        "type": "string"
+      },
+      "participants": {
+        "description": "member ids of those who ate (split the bill).",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "payer": {
+        "description": "member id of the payer; blank = the sender.",
+        "type": "integer"
+      },
+      "total": {
+        "description": "Bill total, integer VND (840k → 840000).",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "participants",
+      "total"
+    ],
+    "type": "object"
+  },
+  "propose_payment": {
+    "properties": {
+      "amount": {
+        "description": "Integer VND (125k → 125000). OMIT to pay off exactly what `from` currently owes `to`.",
+        "type": "integer"
+      },
+      "from": {
+        "description": "member id who paid; blank = the sender.",
+        "type": "integer"
+      },
+      "mode": {
+        "description": "For a two-way pair only: 'gross' = pay the full amount `from` owes `to`; 'offset' = settle the net difference. Omit otherwise.",
+        "enum": [
+          "gross",
+          "offset"
+        ],
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "to": {
+        "description": "member id who received the money.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "to"
+    ],
+    "type": "object"
+  },
+  "resolve_date": {
+    "properties": {
+      "word": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "word"
+    ],
+    "type": "object"
+  },
+  "resolve_period": {
+    "properties": {
+      "from": {
+        "description": "ISO date for keyword=explicit.",
+        "type": "string"
+      },
+      "keyword": {
+        "enum": [
+          "since_last",
+          "this_week",
+          "last_week",
+          "today",
+          "yesterday",
+          "this_month",
+          "explicit"
+        ],
+        "type": "string"
+      },
+      "to": {
+        "description": "ISO date for keyword=explicit.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "settle_period": {
+    "properties": {
+      "from": {
+        "description": "ISO date. Supplying from/to means an explicit range; omit `keyword` (or pass 'explicit').",
+        "type": "string"
+      },
+      "keyword": {
+        "enum": [
+          "since_last",
+          "this_week",
+          "last_week",
+          "today",
+          "yesterday",
+          "this_month",
+          "explicit"
+        ],
+        "type": "string"
+      },
+      "to": {
+        "description": "ISO date, inclusive. See `from`.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "update_member": {
+    "properties": {
+      "account_holder": {
+        "type": "string"
+      },
+      "account_number": {
+        "type": "string"
+      },
+      "active": {
+        "description": "Set true to restore a previously removed member.",
+        "type": "boolean"
+      },
+      "aliases": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "bank_code": {
+        "type": "string"
+      },
+      "default_participant": {
+        "description": "Whether this member is swept into a 'whole group' chia tien split or rot tra draw by default. Set false to exclude an irregular/casual member — they can still be added to a specific activity by name. Defaults true.",
+        "type": "boolean"
+      },
+      "display_name": {
+        "type": "string"
+      },
+      "nickname": {
+        "description": "New nickname; must be unique in the room.",
+        "type": "string"
+      },
+      "target": {
+        "description": "Member to update: nickname or numeric id.",
+        "type": [
+          "string",
+          "integer"
+        ]
+      }
+    },
+    "required": [
+      "target"
+    ],
+    "type": "object"
+  },
+  "void_meal": {
+    "properties": {
+      "meal_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "meal_id"
+    ],
+    "type": "object"
+  }
+}

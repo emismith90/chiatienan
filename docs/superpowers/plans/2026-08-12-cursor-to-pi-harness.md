@@ -1219,7 +1219,7 @@ increment, but it is **not done**.
 - Create: `backend/agent_sidecar/test/fixtures/tool-schemas.json`
 - Create: `backend/tests/test_tool_schemas_fixture.py`
 
-- [ ] **Step 1: Write the failing test** — assert the committed fixture matches
+- [x] **Step 1: Write the failing test** — assert the committed fixture matches
       what `build_tools` produces *right now*, so the two runtimes cannot drift:
 
 ```python
@@ -1230,15 +1230,15 @@ def test_committed_schema_fixture_matches_the_live_tools(db):
     assert fixture == live, "regenerate with: python -m bench.dump_schemas"
 ```
 
-- [ ] **Step 2: Verify it fails** (no fixture yet).
-- [ ] **Step 3: Implement** `bench/dump_schemas.py` (it must resolve the subscript
+- [x] **Step 2: Verify it fails** (no fixture yet).
+- [x] **Step 3: Implement** `bench/dump_schemas.py` (it must resolve the subscript
       references like `_PERIOD_SCHEMA["properties"]["keyword"]` by importing the
       real module) and generate the fixture. `package.json`: `type: "module"`,
       deps `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, `typebox`;
       `"test": "node --test"`. Commit `package-lock.json` — deploys must be
       reproducible.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `sidecar: package skeleton and committed tool-schema fixture`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `sidecar: package skeleton and committed tool-schema fixture`
 
 ---
 
@@ -1253,7 +1253,7 @@ Only six keywords need support — `type`, `properties`, `required`, `items`,
 mapping table. Note **six** of the 14 schemas contain an `enum` (three distinct
 definitions; `keyword` is shared by reference across four tools).
 
-- [ ] **Step 1: Write the failing test** — cover each mapping, and give the two
+- [x] **Step 1: Write the failing test** — cover each mapping, and give the two
       genuinely dangerous cases their own assertions:
 
 ```js
@@ -1298,12 +1298,29 @@ Also assert a realistic `propose_meal` payload validates end to end — nested
 `items` objects with `{member, amount, label}`, an `adjustments` array, and
 `discount_split: "proportional"`.
 
-- [ ] **Step 2: Verify it fails** — `cd backend/agent_sidecar && npm test`.
-- [ ] **Step 3: Implement** the recursive converter. Throw loudly on an
+- [x] **Step 2: Verify it fails** — `cd backend/agent_sidecar && npm test`.
+- [x] **Step 3: Implement** the recursive converter. Throw loudly on an
       unsupported keyword rather than silently dropping it — a dropped constraint
       means the model sends garbage the tool then rejects.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `sidecar: JSON Schema to TypeBox converter`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `sidecar: JSON Schema to TypeBox converter`
+
+> **Confirmed against the real packages** rather than the docs alone. Both pi
+> packages are on npm at `0.84.1` (`@earendil-works/pi-ai` re-exports `Type`), and
+> `StringEnum(["a","b"])` really does produce `{"type":"string","enum":["a","b"]}` —
+> no `anyOf`, no `const`, which is the whole reason the design insists on it.
+> `Check` lives at the `typebox/value` subpath, not on the package root.
+>
+> The fixture came out at **14 schemas with 6 enum properties**, matching the
+> design's count exactly, and `bench/dump_schemas.py` imports the module rather than
+> reading literals so the four tools that share
+> `_PERIOD_SCHEMA["properties"]["keyword"]` by reference resolve — a test asserts all
+> four carry the 7-value enum.
+>
+> `toTypeBox` throws on any keyword outside the six, and one test feeds it the exact
+> `propose_meal` payload `~deepseek/deepseek-v4-flash-latest` returned when probed,
+> so the converter is pinned against a real model's output rather than an imagined
+> one.
 
 ---
 
