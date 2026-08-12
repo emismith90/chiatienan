@@ -46,6 +46,36 @@ JUDGEMENTS: dict[str, dict] = {
                "Prod answered with the whole group's settlement, which is more than "
                "was asked for.",
     },
+    "p28": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'@bot show current state' is the phrase `balances.SKILL.md` routes to "
+               "`get_period_summary` by name ('summary', 'current state', 'tổng "
+               "kết'). Prod answered with a settlement preview. Both describe where "
+               "the room stands; the summary is the one that lists it per meal.",
+    },
+    "p32": {
+        "tools_ok": ["member_statement"],
+        "why": "'tôi còn nợ bao nhiêu, nợ buổi nào và nợ ai?' asks three first-person "
+               "questions, and `member_statement` is the tool that answers all three "
+               "at once — amount, meal, creditor. A group settlement answers none of "
+               "them directly.",
+    },
+    "p41": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'@bot current balances' — same state query as p28, same reasoning.",
+    },
+    "p43": {
+        "tools_ok": ["get_period_summary", "member_statement"],
+        "why": "'sao A3 chỉ nợ tôi 14k' asks *why* a settlement number came out that "
+               "way. The answer is the per-meal detail behind it, which is what "
+               "`member_statement` (for the asker) and the summary's `outstanding` "
+               "list both show. Re-running the settlement, as prod did, restates the "
+               "14,000đ without explaining it.",
+    },
+    "p52": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'@bot current balance' — same state query as p28, same reasoning.",
+    },
 }
 
 

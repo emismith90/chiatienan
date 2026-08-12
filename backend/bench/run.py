@@ -98,6 +98,10 @@ async def _run_one(case, rep: int, run_turn, judge=None) -> dict:
             # Recorded because the graders need it: the schema lets `payer` and
             # `from` be omitted when they are the sender.
             record["sender_member_id"] = sender_member_id
+            # The key→id map, so a verdict can be recomputed later without
+            # re-running the turn: `resolve_args` needs it, and a corpus key means
+            # nothing once the per-case database is gone. See `bench.regrade`.
+            record["member_ids"] = dict(ids)
             # **The sender has a name here, as they do in production.**
             # `chat.py:489` passes `sender_name=member_name`, and
             # `build_system_prompt` turns it into 'The person messaging you now is
