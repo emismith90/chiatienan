@@ -277,24 +277,24 @@ def _oracle(case):
 
 
 @pytest.mark.parametrize("corpus_name", ["meals", "week", "bills"])
-def test_an_oracle_engine_passes_every_gradable_case(corpus_name):
+async def test_an_oracle_engine_passes_every_gradable_case(corpus_name):
     from bench.run import _run_one
     failures = []
     for case in load(corpus_name):
-        rec = _run_one(case, 0, _oracle(case),
-                       judge=lambda *_: {"ok": True, "reason": "oracle"})
+        rec = await _run_one(case, 0, _oracle(case),
+                             judge=lambda *_: {"ok": True, "reason": "oracle"})
         for grader, verdict in rec["grades"].items():
             if verdict["passed"] is False:
                 failures.append(f'{case.id}/{grader}: {verdict["reason"]}')
     assert failures == [], "\n".join(failures)
 
 
-def test_the_oracle_is_actually_being_graded_not_skipped():
+async def test_the_oracle_is_actually_being_graded_not_skipped():
     # Guards the test above: if every verdict were None it would pass vacuously.
     from bench.run import _run_one
     passed = 0
     for case in load("week"):
-        rec = _run_one(case, 0, _oracle(case), judge=lambda *_: {"ok": True, "reason": "-"})
+        rec = await _run_one(case, 0, _oracle(case), judge=lambda *_: {"ok": True, "reason": "-"})
         passed += sum(1 for v in rec["grades"].values() if v["passed"] is True)
     assert passed >= 20, passed
 

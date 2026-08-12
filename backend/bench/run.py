@@ -66,7 +66,7 @@ def _grade(case, record: dict, db, ids: dict, judge=None) -> dict:
     return graded
 
 
-def _run_one(case, rep: int, run_turn, judge=None) -> dict:
+async def _run_one(case, rep: int, run_turn, judge=None) -> dict:
     """One case, one repetition: fresh database, rebuilt world, one LLM turn."""
     from app import tools
     from app.db import Database
@@ -94,7 +94,7 @@ def _run_one(case, rep: int, run_turn, judge=None) -> dict:
             with frozen_clock(case.day):
                 result = run_turn(case.message, ctx, images=case.images or None)
                 if inspect.isawaitable(result):
-                    result = asyncio.run(_await(result))
+                    result = await result
                 record["elapsed_s"] = time.monotonic() - started
                 record["tools"] = _invocation_dicts(result)
                 record["final_text"] = getattr(result, "final_text", "") or ""
@@ -115,13 +115,18 @@ def _run_one(case, rep: int, run_turn, judge=None) -> dict:
     return record
 
 
-async def _await(awaitable):
-    return await awaitable
-
-
-def run_corpus(name: str, *, repeat: int = 3, run_turn=None, judge=None,
-               on_record=None, limit: int | None = None, cases: list[str] | None = None) -> list[dict]:
+async def run_corpus_async(name: str, *, repeat: int = 3, run_turn=None, judge=None,
+                           on_record=None, limit: int | None = None,
+                           cases: list[str] | None = None) -> list[dict]:
     """Replay every case in `name`, `repeat` times each, and return the records.
+
+    **One event loop for the whole run, and therefore one sidecar.** The first
+    version used `asyncio.run` per case, which does not work: a subprocess's pipes
+    belong to the loop that created them, so the bridge either outlived its loop
+    (case 2 hung on dead streams) or had to be torn down and respawned per case —
+    and *that* hung too, reproducibly, on the second case of every run while the
+    same case passed in 11.7s when run alone. One loop removes the whole class of
+    problem and drops the per-case spawn cost.
 
     `run_turn` is injected so the tests can drive this offline; production passes
     `app.agent.run_turn`. Its signature is the frozen one —
@@ -139,13 +144,26 @@ def run_corpus(name: str, *, repeat: int = 3, run_turn=None, judge=None,
         selected = selected[:limit]
 
     records = []
-    for case in selected:
-        for rep in range(repeat):
-            record = _run_one(case, rep, run_turn, judge=judge)
-            records.append(record)
-            if on_record:
-                on_record(record)
+    try:
+        for case in selected:
+            for rep in range(repeat):
+                record = await _run_one(case, rep, run_turn, judge=judge)
+                records.append(record)
+                if on_record:
+                    on_record(record)
+    finally:
+        # Close once, at the end, inside the loop that opened it.
+        try:
+            from app.pi_bridge import close_bridge
+            await close_bridge()
+        except Exception:  # noqa: BLE001 — a stub engine has no bridge to close
+            pass
     return records
+
+
+def run_corpus(name: str, **kwargs) -> list[dict]:
+    """Synchronous wrapper: one `asyncio.run` for the whole corpus."""
+    return asyncio.run(run_corpus_async(name, **kwargs))
 
 
 def _assert_engine_matches_the_tree(engine: str) -> None:
