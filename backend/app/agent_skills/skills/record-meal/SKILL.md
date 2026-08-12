@@ -15,6 +15,10 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
    - 'trừ An' = An KHÔNG nằm trong participants.
    - Chỉ nói "trừ An" / "An không ăn" mà không kể ai ăn → mặc định là **CẢ NHÓM trừ An**
      (`find_members all_active:true` rồi bỏ An ra). ĐỪNG hỏi "vậy những ai ăn".
+   - KHÔNG nói ai ăn cả ("I paid 1107k chả cá ông già") → mặc định **CẢ NHÓM**
+     (`all_active:true`), đề xuất luôn, và nói rõ trong câu trả lời là đã giả định cả
+     nhóm để họ sửa trên thẻ nếu sai. Thẻ nháp sửa được; hỏi lại thì lượt nào cũng phải
+     hỏi hai lần.
    - 'An trả nhưng không ăn' = An là payer nhưng không nằm trong participants.
    - 'Bình +50k' = adjustment {member: <id Bình>, amount: 50000}.
    - "X rủ đi" / "X rủ" = `initiator` (người khởi xướng), KHÔNG phải người ăn: chỉ thêm X

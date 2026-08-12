@@ -76,11 +76,61 @@ JUDGEMENTS: dict[str, dict] = {
         "tools_ok": ["get_period_summary"],
         "why": "'@bot current balance' — same state query as p28, same reasoning.",
     },
+    "p93": {
+        "tools_ok": ["get_period_summary", "member_statement"],
+        "why": "'sai mẹ nội A4 chuyển khoản r' disputes a settlement that was just "
+               "printed. Answering it means looking at what the ledger actually "
+               "holds for those two people, which is what the summary and the "
+               "statement show; prod re-printed the same settlement.",
+    },
+    "p132": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'#101: A1 trả 324,000đ (6 người)? registered ?????' asks whether a "
+               "draft was recorded. The summary lists what *is* on the books, which "
+               "is the answer; prod's settlement preview mentions the pending draft "
+               "only as the reason it is blocked.",
+    },
+    "p152": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'hôm nay ai trả tiền' asks who paid today — a period query, and "
+               "`get_period_summary(keyword=\"today\")` answers it by name and "
+               "amount. A settlement answers who owes whom instead.",
+    },
+    "p160": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'grab food hôm nay à' asks to confirm today's meal; same period "
+               "query as p152.",
+    },
+}
+
+#: `case_id -> why` for cases whose recorded expectation **cannot be graded**, with
+#: the reason. Unlike a judgement these do not accept an alternative — they remove
+#: the tool expectation entirely, so `tool_selection` reports "not graded" rather
+#: than a verdict nobody should believe.
+UNGRADEABLE: dict[str, str] = {
+    "p100": "'@bot i paid, 324k' — production read the per-dish prices off a bill "
+            "photo. Prod images are stripped from the corpus by design, so the "
+            "information the recorded turn used is not in the case. Asking for the "
+            "prices, which is what the replay does, is the only honest answer "
+            "available to it.",
+    "p260": "'@bot A5 đã trả' produced a 930,000đ meal from an attached photo. Same "
+            "reason as p100: without the image there is no total to log.",
+    "p278": "'set A4 and A7 to be opted out by default' is a membership change, and "
+            "the replay does exactly that (`update_member` twice). The recorded "
+            "expectation is `settle_period`, which has nothing to do with the "
+            "request — the log's own reply for this turn is a settlement card that "
+            "belongs to a different exchange. The expectation is wrong, not the "
+            "answer, and a wrong expectation should grade nothing.",
 }
 
 
 def check() -> None:
     """Fail loudly if a judgement breaks its own rules."""
+    for case_id, why in UNGRADEABLE.items():
+        if not why.strip():
+            raise ValueError(f"{case_id}: an ungradeable case needs a reason")
+        if case_id in JUDGEMENTS:
+            raise ValueError(f"{case_id}: cannot be both judged and ungradeable")
     for case_id, entry in JUDGEMENTS.items():
         if not entry.get("why", "").strip():
             raise ValueError(f"{case_id}: a judgement needs a reason")
@@ -92,7 +142,13 @@ def check() -> None:
 
 
 def apply_to(case_id: str, expect: dict) -> dict:
-    """Return `expect` with this case's accepted alternatives, if it has any."""
+    """Return `expect` with this case's alternatives — or with nothing to grade."""
+    if case_id in UNGRADEABLE:
+        # Drop the tool expectation *and* its args: there is nothing here anyone
+        # should be graded against. `grade_tool_selection` then reports None.
+        stripped = {k: v for k, v in expect.items() if k not in ("tools", "args")}
+        stripped["ungradeable_why"] = UNGRADEABLE[case_id]
+        return stripped
     entry = JUDGEMENTS.get(case_id)
     if not entry:
         return expect
