@@ -876,8 +876,11 @@ different models; a single flip is indistinguishable from sampling noise.
 > silently passed on error would turn an outage into a clean bill of health; one
 > that failed on error would blame the engine for the harness's own problem.
 
-- [ ] **Step 1: Full CI run first** — `cd backend && pytest -q`. The harness must
+- [x] **Step 1: Full CI run first** — `cd backend && pytest -q`. The harness must
       be green before its output means anything.
+
+      → **636 passed, 1 skipped** (the skip is `test_scenario_week_llm.py`, which
+      is opt-in behind `RUN_LLM_EVAL`). 125 of those tests are new in Phase 1.
 
 - [ ] **Step 2: Pin the judge.** `BENCH_JUDGE_MODEL` and its key must be set for
       **this** run, identically to Task 22. A baseline graded without a judge
@@ -903,6 +906,56 @@ python -m bench.report bench/results/baseline-cursor.json > bench/results/baseli
 - [ ] **Step 5: Commit** — `bench: record the Cursor baseline over every corpus`
 
 > **Do not proceed to Phase 2 until this file is committed.**
+
+---
+
+## ⛔ GATE NOT PASSED — the baseline cannot be captured in this environment
+
+Steps 3–5 are **blocked**, and the block is in the environment rather than in the
+code. Diagnosed rather than assumed:
+
+- `CURSOR_API_KEY` **is** present.
+- The engine is wired correctly — `bench.run` reaches `cursor_runner._list_models`
+  on a real turn.
+- That call fails at the network layer:
+
+  ```
+  cursor_sdk.errors.InternalServerError: internal: [unknown]
+    Host not in allowlist: api.cursor.com. Add this host to your network
+    egress settings to allow access.
+  ```
+
+  The session's agent proxy confirms it: policy denials come back as a 403 to
+  `CONNECT`, and `api.cursor.com` is not permitted. (`openrouter.ai` **is**
+  reachable — that is how Task 0 was resolved.)
+
+- `OPENROUTER_API_KEY` is **absent** here, so even with Cursor egress the pinned
+  judge could not run and `prose_quality` would be `n/a` for the whole baseline.
+  Step 2 allows that, but only if the Pi run is equally unjudged — and an
+  unjudged baseline is a weaker artifact, since `prose_quality`'s only golden
+  coverage is `s6` (Task 4's note).
+
+**The harness behaved correctly under the failure**, which is worth recording: the
+errored turn was captured rather than crashing the run, and all three graders
+reported the transport error instead of passing. That is the Task 6 "one bad case
+is a data point" property doing its job on a real failure.
+
+### To pass this gate
+
+1. **Preferred — allow the host.** Add `api.cursor.com` to the environment's
+   network egress settings (and set `OPENROUTER_API_KEY` for the judge), then run
+   Steps 3–5 unchanged. Nothing in the code needs to change.
+2. **Or capture it off-box.** Run Steps 3–5 from a machine with open egress and
+   both credentials, then commit `bench/results/baseline-cursor.{json,md}`. The
+   whole harness is engine-agnostic and needs no edits to run there.
+3. **Waiving it is a real cost, not a formality.** With no recorded baseline the
+   report after the port can only say "Pi passes the tests we wrote", never "Pi
+   behaves as Cursor did" — the weaker claim §11.5 exists to prevent. If the
+   baseline is waived deliberately, say so in Task 22's report rather than letting
+   its absence read as a clean comparison.
+
+**Phase 2 has not been started.** The plan gates it on this file existing, and
+that gate is being respected rather than worked around.
 
 ---
 
