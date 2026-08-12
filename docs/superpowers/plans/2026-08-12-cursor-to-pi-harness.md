@@ -170,9 +170,20 @@ git commit -m "Record the deepseek-v4-flash modality finding for the Pi port"
 ### Task 1: `bench` package + corpus loaders
 
 **Files:**
-- Create: `backend/bench/__init__.py`, `backend/bench/corpus.py`
+- Create: `backend/bench/__init__.py`, `backend/bench/corpus/__init__.py`
 - Create: `backend/bench/corpus/meal_messages.py`
 - Create: `backend/tests/test_bench_corpus.py`
+
+> **Deviation from the plan as written, resolving a conflict in it.** The file
+> list originally called for both `bench/corpus.py` and
+> `bench/corpus/meal_messages.py`. Those cannot coexist: a module and a package
+> of the same name collide, and with `bench/corpus/` lacking an `__init__.py` the
+> module wins, leaving `bench.corpus.meal_messages` unimportable. `bench/corpus/`
+> is a **package** instead, with the loaders in its `__init__.py`. Every import
+> path and file path the plan depends on is unchanged —
+> `from bench.corpus import load`, `monkeypatch.setattr(corpus, "PROD_PATH", …)`,
+> `bench/corpus/prod_conversations.json` (Task 7), `bench/corpus/bills/`
+> (Task 7 Step 7) — only the loaders' filename differs.
 
 **Interfaces:**
 - `bench.corpus.load(name) -> list[Case]`, `name` ∈ `{"meals","week","prod","bills","all"}`
@@ -188,7 +199,7 @@ accident.
 > `s10b`, `s12`); the other 10 are two `confirm_pending` button presses and the
 > eight `s11a`–`s11h` payments. Both facts drive Task 6.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `backend/tests/test_bench_corpus.py`:
 
@@ -234,10 +245,10 @@ Note the last test: it asserts behavior **when the file is absent**, against a
 tmp path. Asserting `load("prod") == []` unconditionally would start failing the
 moment Task 7 produces a fixture, and nothing in Task 7 would fix it.
 
-- [ ] **Step 2: Run to verify it fails** — `cd backend && pytest tests/test_bench_corpus.py -v`
+- [x] **Step 2: Run to verify it fails** — `cd backend && pytest tests/test_bench_corpus.py -v`
       → `ModuleNotFoundError: bench`.
 
-- [ ] **Step 3: Implement.** `bench/corpus.py` imports
+- [x] **Step 3: Implement.** `bench/corpus.py` imports
       `tests.golden.meals.CASES` and `tests.golden.scenario_week.{MEMBERS, STEPS}`
       **directly** — they stay the source of truth for payloads and expectations.
       On top of that:
@@ -253,8 +264,8 @@ moment Task 7 produces a fixture, and nothing in Task 7 would fix it.
   - `load("prod")` reads `PROD_PATH` if present, else `[]`, and skips cases
     flagged `"review": true`.
 
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `bench: corpus loaders over the existing golden datasets`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `bench: corpus loaders over the existing golden datasets`
 
 ---
 
