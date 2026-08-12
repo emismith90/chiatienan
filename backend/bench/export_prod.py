@@ -321,8 +321,23 @@ def _turns(rows: list[dict]) -> list[tuple[dict, list[dict]]]:
             # LLM ran. Pairing one would invent a case out of whatever text row
             # happened to precede the button press.
             continue
-        trigger = next((rows[j] for j in range(index - 1, -1, -1)
-                        if rows[j].get("kind") == USER_KIND), None)
+        # Walk back to the trigger, but stop at a commit: a card posted *after* a
+        # `meal`/`payment` row with no user message in between is that commit's
+        # fallout, not an answer to the text further up.
+        #
+        # This is how `p266` — "@bot cho tôi 1 số để đánh lô", answered in prose
+        # with a lottery number — ended up expecting `settle_period`: three rows
+        # later a human pressed Confirm on a payment, and the QR card that came
+        # with it (`type: "settlement"`) walked back past the commit to the lottery
+        # message. The expectation then graded every engine on producing a
+        # settlement for a joke about lottery numbers.
+        trigger = None
+        for j in range(index - 1, -1, -1):
+            if _attachment_type(rows[j]) in COMMIT_TYPES:
+                break
+            if rows[j].get("kind") == USER_KIND:
+                trigger = rows[j]
+                break
         if trigger is None:
             continue
         entry = pairs.setdefault(trigger["id"], (trigger, []))

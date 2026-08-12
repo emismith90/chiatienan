@@ -473,3 +473,18 @@ def test_a_long_body_is_clamped_in_history_like_production_clamps_it():
     rows = [_row(id=1, body="x" * 900), _row(id=2, body="@bot log")]
     line = render_history(rows, 1, lambda mid: "A1")
     assert line.endswith("…") and len(line) < 600
+
+
+def test_a_card_after_a_commit_belongs_to_the_commit_not_to_the_message_above():
+    from bench.export_prod import build_cases
+    # Real sequence (prod rows 266-270): a joke, its prose answer, then a human
+    # pressing Confirm on a payment — whose QR card carries `type: "settlement"`.
+    # Walking back past the commit made the joke expect `settle_period`.
+    rows = [_row(id=266, body="@bot cho tôi 1 số để đánh lô"),
+            _bot(id=267, body="Số lô cho A5: **30**. Chúc trúng!", attachments={}),
+            _bot(id=268, body="💸 A2 trả A5 155,000đ", attachments={"type": "payment"}),
+            _bot(id=269, body="📱 QR chuyển khoản A3 → A5",
+                 attachments={"type": "settlement", "transfers": []})]
+    cases = {c["id"]: c for c in build_cases(rows)}
+    assert cases["p266"]["expect"] == {}                  # a prose case, as it was
+    assert cases["p266"]["reply"].startswith("Số lô")

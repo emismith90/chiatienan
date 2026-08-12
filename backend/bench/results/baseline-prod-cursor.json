@@ -6102,47 +6102,23 @@
       "day": "2026-08-04",
       "had_images": true,
       "room_id": null,
-      "tools": [
-        {
-          "name": "settle_period",
-          "args": {},
-          "result": {
-            "ok": true,
-            "type": "settlement",
-            "period": {
-              "from": null,
-              "to": "2026-08-04"
-            },
-            "transfers": [
-              {
-                "from_id": 6,
-                "from_name": "A3",
-                "to_id": 8,
-                "to_name": "A5",
-                "amount": 155000,
-                "note": "A3: T3 lau ech Ha My"
-              }
-            ],
-            "requested": true
-          }
-        }
-      ],
+      "tools": [],
       "final_text": "",
       "error": null,
       "elapsed_s": 0.0,
       "stats": null,
       "grades": {
         "tool_selection": {
-          "passed": true,
-          "reason": "called ['settle_period'] with matching money args"
+          "passed": null,
+          "reason": "no tool expectation for this case"
         },
         "ledger_state": {
           "passed": null,
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": null,
-          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+          "passed": true,
+          "reason": "playful, in register, answers the ask, no narration"
         }
       }
     },
