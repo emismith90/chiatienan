@@ -705,3 +705,41 @@ def test_an_omitted_amount_still_fails_when_the_tool_computed_a_different_one():
     verdict = grade_tool_selection(case, record)
     assert verdict.passed is False
     assert "amount" in verdict.reason
+
+
+def test_items_that_prorate_into_the_expected_adjustments_pass():
+    """`p120` "@bot log": `items` + `discount_split="equal"` instead of `adjustments`.
+
+    The tool prorated the list prices into exactly the adjustments the expectation
+    names — 54,500 / 79,200 / 27,000 — while production got there by computing them
+    in bash and typing them in. Grading the argument shape marked the better turn
+    wrong.
+    """
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    want = [{"member": 1, "amount": 54500}, {"member": 2, "amount": 79200},
+            {"member": 3, "amount": 27000}]
+    case = Case(id="x", source="prod", day="2026-07-27", actor="A1",
+                expect={"tools": ["propose_meal"],
+                        "args": {"propose_meal": {"total": 160700, "adjustments": want}}})
+    record = {"sender_member_id": 1, "tools": [
+        {"name": "propose_meal",
+         "args": {"total": 160700, "items": [{"member": 1, "amount": 69500},
+                                             {"member": 2, "amount": 94200},
+                                             {"member": 3, "amount": 42000}],
+                  "discount_split": "equal"},
+         "result": {"ok": True, "type": "expense_draft", "adjustments": want}}]}
+    assert grade_tool_selection(case, record).passed is True
+
+
+def test_a_tool_result_that_disagrees_with_the_expectation_still_fails():
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="x", source="prod", day="2026-07-27", actor="A1",
+                expect={"tools": ["propose_meal"],
+                        "args": {"propose_meal": {"total": 100000,
+                                                  "adjustments": [{"member": 1, "amount": 50000}]}}})
+    record = {"sender_member_id": 1, "tools": [
+        {"name": "propose_meal", "args": {"total": 100000},
+         "result": {"ok": True, "adjustments": [{"member": 1, "amount": 10000}]}}]}
+    assert grade_tool_selection(case, record).passed is False

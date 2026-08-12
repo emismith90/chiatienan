@@ -79,21 +79,24 @@ def _last_call(record: dict, name: str) -> dict | None:
     return None
 
 
-def _result_amount(call: dict):
-    """The amount the tool itself put in the draft, if it says one.
+def _recorded(call: dict, key: str):
+    """What the **tool** put in the draft for `key`, if anything.
 
-    A `payment_draft` carries `amount` directly; a multi-transfer one carries
-    `transfers`, and a single transfer among them is still one amount.
+    The expectation describes the money that reached the ledger, and the tool's
+    result *is* that money — so an argument the model left out is still gradeable
+    whenever the tool worked it out. `amount` has one special case: a payment draft
+    may carry `transfers` instead, and a single transfer is still one amount.
     """
     result = call.get("result")
     if not isinstance(result, dict):
         return None
-    if isinstance(result.get("amount"), int):
-        return result["amount"]
-    transfers = result.get("transfers")
-    if isinstance(transfers, list) and len(transfers) == 1 \
-            and isinstance(transfers[0], dict):
-        return transfers[0].get("amount")
+    if result.get(key) not in (None, [], {}):
+        return result[key]
+    if key == "amount":
+        transfers = result.get("transfers")
+        if isinstance(transfers, list) and len(transfers) == 1 \
+                and isinstance(transfers[0], dict):
+            return transfers[0].get("amount")
     return None
 
 
@@ -167,14 +170,23 @@ def grade_tool_selection(case, record: dict) -> Verdict:
                     # The schema permits omitting it when it is the sender, and the
                     # tool resolves it to the same id.
                     continue
-                if key == "amount" and _result_amount(call) == want:
-                    # **Omitting `amount` is the preferred behavior, not a gap.**
-                    # `record-payment` says so: with no amount in the message, leave
-                    # it out and the tool works out what is owed from the ledger. The
-                    # model then never transcribes a number (design D3), and the
-                    # draft carries the same amount the expectation asked for — which
-                    # is checked here rather than assumed. `p129` ("tôi đã trả tiền
-                    # A1", expecting 27,000đ) was failed for doing this correctly.
+                if _args_differ(key, want, _recorded(call, key)) is None:
+                    # **The tool worked it out, which is the preferred path.**
+                    # Two real cases, both failed for doing the right thing:
+                    #
+                    # * `p129` "tôi đã trả tiền A1" (expecting 27,000đ) called
+                    #   `propose_payment(to=A1)` with no `amount`, exactly as
+                    #   `record-payment` says to — the tool then reads the debt off
+                    #   the ledger and the model transcribes nothing (design D3).
+                    # * `p120` "@bot log" passed `items` (the list prices off the
+                    #   bill) with `discount_split="equal"`, and the tool prorated
+                    #   them into the very `adjustments` the expectation names —
+                    #   54,500 / 79,200 / 27,000, to the đồng. Production got there
+                    #   by computing them in bash and typing them in, which is the
+                    #   D3 violation the room argued about at the time.
+                    #
+                    # So an absent argument passes only when the tool's own result
+                    # matches the expectation. Checked, never assumed.
                     continue
                 # Any other omitted money arg is a failure, not a comparison to skip.
                 problems.append(f"{tool_name}.{key}: expected {want!r}, absent")
