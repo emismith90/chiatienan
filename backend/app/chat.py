@@ -559,7 +559,14 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 # The one path where money reaches the room as LLM prose. Report
                 # it (see app.moneyguard); enforcing comes after the log is quiet.
                 if result.final_text:
-                    stray = moneyguard.unbacked_amounts(body, text, result.tools)
+                    # The history counts as the user having said it. A number the
+                    # room stated two messages ago and the bot repeats back
+                    # ("bạn nói tổng 324k") is not invented money, and flagging it
+                    # buries the alerts that matter — the benchmark's `p102`/`p104`
+                    # replies were reported as unbacked for quoting a total from the
+                    # conversation they were handed.
+                    stray = moneyguard.unbacked_amounts(
+                        body, f"{text}\n{history or ''}", result.tools)
                     if stray:
                         # images=N matters for triage. Replaying four days of
                         # production through this: of the alerts that survive a

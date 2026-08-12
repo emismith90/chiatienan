@@ -49,6 +49,10 @@ số tiền từng người phải trả, và không ai phát hiện được v�
 
 - Ảnh hoá đơn trong ngữ cảnh lượt này (kể cả người dùng dán ở tin nhắn ngay trước rồi mới
   `@bot`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
+- Đọc được ảnh KHÔNG thay thế bước xác định người ăn: vẫn phải `find_members`
+  (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người") rồi mới
+  `propose_meal`. Bỏ bước đó thì `participants` chỉ còn mình người nhắn — cả cái bill
+  ghi nợ cho một người, và con số nhìn vẫn "đúng" nên không ai thấy sai.
 - Đọc từ ảnh: tổng thực trả → `total`; giá từng dòng → `items` (nhớ nhân số lượng, và giá
   đã gạch ngang là giá gốc — lấy giá đang áp dụng).
 - Trong lịch sử hội thoại, `[ảnh: N]` nghĩa là tin nhắn đó có ảnh. Nếu cần ảnh mà lượt này

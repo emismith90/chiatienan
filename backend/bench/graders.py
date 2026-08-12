@@ -540,7 +540,11 @@ def grade_prose(case, record: dict, judge=None) -> Verdict:
         return Verdict(False, "empty reply")
 
     stray = moneyguard.unbacked_amounts(
-        body, case.message, [_Invocation(c) for c in record.get("tools") or []])
+        # The turn's history backs an amount as much as its message does: the room
+        # said "tổng 324k" a message ago, the model was handed it, and repeating it
+        # is not invented money. `chat.py` passes the history for the same reason.
+        body, f"{case.message}\n{case.history or ''}",
+        [_Invocation(c) for c in record.get("tools") or []])
     if stray:
         return Verdict(False, f"unbacked amounts in the reply: {stray}")
 
