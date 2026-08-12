@@ -353,7 +353,7 @@ Those tests passing unedited is the proof the contract held.
 | `CURSOR_API_BASE` | *(nothing — hard-coded, §5)* |
 | `CURSOR_SDK_WORKSPACE` | `DATA_DIR=/data`, `PI_THINKING=medium` |
 | `CURSOR_AGENT_MAX_TOOLS` / `_MAX_SECONDS` | `PI_MAX_TOOLS=40`, `PI_MAX_SECONDS=120` |
-| | `PI_VISION_MODEL=meta/muse-glimmer-30b` (§12) |
+| | `PI_VISION_MODEL=qwen/qwen3-vl-30b-a3b-instruct` (§12) |
 
 ### 10.1 ⚠️ The `DATA_DIR` rename orphans production room memory
 
@@ -505,13 +505,19 @@ Mitigation, wired from the start rather than bolted on: `PI_VISION_MODEL` is a
 separate setting. A turn carrying images resolves to that model (via
 `session.setModel` / `scopedModels`); text-only turns use `PI_MODEL`. With a
 text-only primary the branch is **live code**, not a dormant safeguard:
-`PI_VISION_MODEL=meta/muse-glimmer-30b` carries every bill photo.
+`PI_VISION_MODEL=qwen/qwen3-vl-30b-a3b-instruct` carries every bill photo.
 
-Its context window is **131,072** against the primary's **1,048,576**, and an
-image turn is the heaviest turn in the system — so the branch has to trim the
-history window as well as swap the model. Sizing the text path against 1M and then
-routing the largest turns into a 131k window is how a long-lived room starts
-failing only on bill photos.
+**A vision model must be probed, not trusted.** `tools: true` in a catalogue is a
+datasheet claim: the first model configured here passed it and then emitted nothing
+at all for `propose_meal` — the one tool a bill turn must end in — on both text and
+a real bill image. `bench/probe_models.py` sends the live schemas and the committed
+bill PNG and is the gate any replacement has to clear.
+
+Its context window is **262,144** against the primary's **1,048,576**, and an image
+turn is the heaviest turn in the system — so the branch has to trim the history
+window as well as swap the model. Sizing the text path against 1M and then routing
+the largest turns into a 262k window is how a long-lived room starts failing only on
+bill photos.
 
 **Verify the modality before writing the sidecar — and verify tool-calling
 support for the vision model too.** A bill-photo turn ends in `propose_meal`;

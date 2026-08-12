@@ -40,10 +40,12 @@ is concerned.
 
 ### Two things the next session must read first
 
-1. **⛔ `PI_VISION_MODEL=meta/muse-glimmer-30b` cannot call `propose_meal`** — see
-   Task 0. It is left configured because the model choice is the user's, but the
-   bill path does not work until it changes. `qwen/qwen3-vl-30b-a3b-instruct` passed
-   all four probes; re-run `python -m bench.probe_models` to confirm any choice.
+1. **The model pair is `~deepseek/deepseek-v4-flash-latest` +
+   `qwen/qwen3-vl-30b-a3b-instruct`**, both probed against the real tool schemas
+   (Task 0). `meta/muse-glimmer-30b` was rejected because it emits nothing for
+   `propose_meal`; `bench.probe_models` carries the rejected models in `KNOWN_BAD`.
+   Re-run that probe after any model change — the catalogue's `tools: true` is not
+   evidence.
 2. **Behind an HTTPS proxy, a Node child needs `NODE_USE_ENV_PROXY=1` and
    `NODE_EXTRA_CA_CERTS`** or its outbound calls fail in a way that reads like a bad
    key. This bit the Cursor bridge and will bite the Pi sidecar identically. See the
@@ -172,11 +174,12 @@ PI_MODEL=~deepseek/deepseek-v4-flash-latest        ("DeepSeek V4 Flash Latest")
   pricing  prompt $0.080/M   completion $0.252/M   input_cache_read $0.0252/M
   context_length 1,048,576
 
-PI_VISION_MODEL=meta/muse-glimmer-30b              ("Meta: Muse Glimmer 30B")
+PI_VISION_MODEL=qwen/qwen3-vl-30b-a3b-instruct     ("Qwen: Qwen3 VL 30B A3B Instruct")
   input_modalities  ['text','image']               output ['text']
   tools True   tool_choice True
-  pricing  prompt $0.350/M   completion $1.500/M   input_cache_read $0.040/M
-  context_length 131,072
+  pricing  prompt $0.150/M   completion $0.600/M
+  context_length 262,144
+  probed 4/4 — all three schemas plus a real bill image (see below)
 ```
 
 Both clear the non-negotiable bar. The primary is text-only, so `PI_VISION_MODEL`
@@ -185,19 +188,19 @@ is **mandatory, not inert**, and the §12 vision branch is live code.
 Three properties of this pair that Phase 2 has to design around rather than
 discover:
 
-1. **⚠️ The vision model's context is 8× smaller than the primary's** — 131,072
+1. **⚠️ The vision model's context is 4× smaller than the primary's** — 262,144
    against 1,048,576. An image turn is the *heaviest* turn in the system: system
    prompt + `money-safety` + four skill bodies + `memory.md` + the history window
    + the base64 image. Sizing the text path against a 1M budget and then routing
-   the largest turns into a 131k one is how a room with a long history starts
+   the largest turns into a 262k one is how a room with a long history starts
    failing only on bill photos. **Task 13 must bound the image turn's context to
    the vision model's window**, not the primary's — and design §5's
    `history_max_messages` is the knob that has to give.
-2. **The vision model has no per-image price**, unlike a per-image vendor: image
-   input is billed as prompt tokens at $0.350/M. So a bill photo's cost scales
-   with its resolution, and `images.py`'s downscaling is a cost control as well as
-   a latency one. `cost_latency` will show image turns as the expensive ones;
-   that is expected, not a regression.
+2. **The vision model has no per-image price**: image input is billed as prompt
+   tokens at $0.150/M. So a bill photo's cost scales with its resolution, and
+   `images.py`'s downscaling is a cost control as well as a latency one.
+   `cost_latency` will show image turns as the expensive ones; that is expected,
+   not a regression.
 3. **`~deepseek/deepseek-v4-flash-latest` is a floating "latest" pointer.** The
    `~` prefix and the name both say so. That is worth one sentence of caution
    given what this project is: the harness exists to detect behavior change, and
@@ -241,10 +244,14 @@ array** comes back with correct integer types — which is the exact shape Task 
 converter has to preserve. It also read `154k` → `154000` unprompted, so the
 `k`-suffix convention the prompt relies on survives.
 
-### ⛔ BLOCKING, and a user decision: the configured vision model cannot call `propose_meal`
+### ✅ RESOLVED: the vision model was changed because it could not call `propose_meal`
+
+**`PI_VISION_MODEL=qwen/qwen3-vl-30b-a3b-instruct`**, chosen by the user after the
+first candidate failed measurement. The history is kept because it is the reason the
+probe exists.
 
 The first probe of `meta/muse-glimmer-30b` returned `429 … temporarily rate-limited
-upstream`, so the probe gained retry/backoff. **With retries, the real answer is
+upstream`, so the probe gained retry/backoff. **With retries, the real answer was
 worse than rate limiting.** Measured twice, independently:
 
 ```
@@ -258,13 +265,12 @@ worse than rate limiting.** Measured twice, independently:
 
 It calls the two simple schemas and **silently emits nothing** for `propose_meal` —
 no tool call, empty content — on both the text itemized case and the bill photo. A
-bill turn ends in `propose_meal`, so **the bill path does not work with this
-model**. This is exactly the case Step 3's stop-rule reserves for the user: the
-catalogue said `tools: true`, and that claim does not survive contact with our
-hardest schema.
+bill turn ends in `propose_meal`, so the bill path did not work with that model.
+This is exactly the case Step 3's stop-rule reserves for the user: the catalogue
+said `tools: true`, and that claim did not survive contact with our hardest schema.
 
-`PI_VISION_MODEL` is left as configured rather than changed unilaterally. Three
-alternatives were probed on the identical four checks so the choice is measured:
+Three alternatives were probed on the identical four checks, so the replacement was
+chosen on measurement rather than on a datasheet:
 
 | model | 3 schemas | bill image | in/out per M | ctx | note |
 |---|---|---|---|---|---|
@@ -272,14 +278,25 @@ alternatives were probed on the identical four checks so the choice is measured:
 | `google/gemini-2.5-flash-lite` | 2/3 | PASS | $0.10 / $0.40 | 1M | failed *text* `propose_meal`, passed the image; also read the bill's date into `day_word` |
 | `meta/muse-spark-1.2` | — | — | — | — | `404 No endpoints available matching your guardrail restrictions and data policy` — blocked by the account's OpenRouter privacy settings |
 
-**Recommendation: `qwen/qwen3-vl-30b-a3b-instruct`** — the only candidate that
-passed every check, with more than twice `muse-glimmer`'s context and correct
-Vietnamese OCR. `gemini-2.5-flash-lite` is cheaper and passed the path that
-matters, but a model that intermittently declines to call the same tool is a poor
-foundation for the money path. Changing this is one environment variable; nothing
-in the code depends on the choice.
+**Chosen: `qwen/qwen3-vl-30b-a3b-instruct`** — the only candidate that passed every
+check, with twice the context and correct Vietnamese OCR. Re-confirmed on a second
+run after being selected: **4/4, zero failures.** It read the bill's total
+as `154000` and returned all three items with their real dish names
+(`Trân châu đường đen`, …) as a well-formed `propose_meal` call.
+`gemini-2.5-flash-lite` is cheaper and passed the path that matters, but a model
+that intermittently declines to call the same tool is a poor foundation for the
+money path.
 
-Two things to keep regardless of which model wins:
+`bench.probe_models` now defaults to the configured pair and carries a `KNOWN_BAD`
+list naming the three rejected models and why, so nobody has to re-measure to learn
+it. Re-run it after any model change:
+
+```bash
+python -m bench.probe_models      # both configured models, all three schemas
+python -m bench.probe_models --vision qwen/qwen3-vl-30b-a3b-instruct   # + the bill
+```
+
+Two things to keep regardless of the model:
 
 - The probe retries `429`/`5xx` with backoff, so a capacity blip cannot read as a
   capability failure — that distinction cost two runs to establish.
@@ -1469,7 +1486,7 @@ test("a skill BODY reaches the model with the built-in toolset empty", async () 
     and no vision model is configured, **fail the turn loudly** — never silently
     drop the photo.
   - **Bound an image turn's context to the vision model's window, not the
-    primary's.** `meta/muse-glimmer-30b` holds 131,072 tokens against the
+    primary's.** `qwen/qwen3-vl-30b-a3b-instruct` holds 262,144 tokens against the
     primary's 1,048,576, and an image turn is the heaviest turn in the system
     (system prompt + `money-safety` + four skill bodies + `memory.md` + history +
     the base64 image). Trim the history window for image turns rather than letting
@@ -1811,7 +1828,7 @@ cd backend && pytest -q
       — the variable is **`OPEN_ROUTER_KEY`**, not `OPENROUTER_API_KEY`
       (`(SECRET)`, empty, matching the file's convention) —
       `PI_MODEL=~deepseek/deepseek-v4-flash-latest`,
-      `PI_VISION_MODEL=meta/muse-glimmer-30b`, `PI_PROVIDER=openrouter`,
+      `PI_VISION_MODEL=qwen/qwen3-vl-30b-a3b-instruct`, `PI_PROVIDER=openrouter`,
       `PI_THINKING`, `PI_MAX_TOOLS`, `PI_MAX_SECONDS`, `DATA_DIR`. **No base-URL
       entry** — it is a constant.
 

@@ -47,7 +47,20 @@ _HERE = Path(__file__).resolve().parent
 BILL_TOTAL = 154_000
 
 #: The models the design settles on (plan, Task 0).
-DEFAULT_MODELS = ("~deepseek/deepseek-v4-flash-latest", "meta/muse-glimmer-30b")
+DEFAULT_MODELS = ("~deepseek/deepseek-v4-flash-latest", "qwen/qwen3-vl-30b-a3b-instruct")
+
+#: Models that failed this probe and must not be configured. Kept by name so a
+#: future reader does not repeat the measurement to learn it.
+#:
+#: * `meta/muse-glimmer-30b` — calls `update_member` and `settle_period` but emits
+#:   **nothing at all** for `propose_meal` (no tool call, empty content), on both
+#:   the text case and a real bill image. A bill turn ends in `propose_meal`.
+#: * `google/gemini-2.5-flash-lite` — passes the image path but intermittently
+#:   declines the same tool on text.
+#: * `meta/muse-spark-1.2` — `404 No endpoints available matching your guardrail
+#:   restrictions and data policy` on this account.
+KNOWN_BAD = ("meta/muse-glimmer-30b", "google/gemini-2.5-flash-lite",
+             "meta/muse-spark-1.2")
 
 #: `(tool, message, [required properties to check])` per probe. The messages are
 #: Vietnamese because every real turn is.
