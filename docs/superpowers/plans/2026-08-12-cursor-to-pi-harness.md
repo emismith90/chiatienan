@@ -863,6 +863,19 @@ different models; a single flip is indistinguishable from sampling noise.
 
 **Files:** Create `backend/bench/results/baseline-cursor.json`, `…/baseline-cursor.md`
 
+> **`bench/judge.py` exists now, unnamed in the plan.** Steps 2 here and 1 in
+> Task 22 both require a pinned `BENCH_JUDGE_MODEL` to work, and nothing in the
+> plan created the thing that reads it. It is one `urllib` POST to OpenRouter —
+> deliberately **not** the engine under test, so the same judge answers the
+> Cursor baseline and the Pi run across the cutover — wired into `bench.run` as
+> `--judge-model`. `bench/run.py` reads it there; `BENCH_JUDGE_MODEL` is the
+> environment name Tasks 9 and 22 should pass through to that flag.
+>
+> Every failure route — no key, transport error, unparseable reply — returns a
+> dict without `ok`, which `grade_prose` records as **not graded**. A judge that
+> silently passed on error would turn an outage into a clean bill of health; one
+> that failed on error would blame the engine for the harness's own problem.
+
 - [ ] **Step 1: Full CI run first** — `cd backend && pytest -q`. The harness must
       be green before its output means anything.
 
