@@ -20,6 +20,48 @@ Node ≥22.19 · plain ESM JavaScript (no build step) · `node --test`.
 
 ---
 
+## State of play — 2026-08-12
+
+**Done: Phase 0, Phase 1 (all of it), and Tasks 10–11 of Phase 2.**
+686 backend tests + 14 sidecar tests green; `cursor_sdk` is still installed, so the
+tree is deliberately still the `cursor` engine as far as `bench.run --engine`
+is concerned.
+
+| | status |
+|---|---|
+| Task 0 vision/modality | ✅ measured; **see the blocking model finding below** |
+| Tasks 1–8 benchmark harness | ✅ complete, 100+ tests |
+| Task 9 GATE (baseline) | ✅ **passed differently** — `bench/results/baseline-prod-cursor.json`, derived from the production log instead of a Cursor re-run |
+| Tasks 10–11 sidecar schema | ✅ `agent_sidecar/{package.json,schema.js}`, fixture + 14 `node --test` cases |
+| Tasks 12–14 sidecar runtime | ⬜ `main.js`, `session.js`, `turn.js` not started |
+| Tasks 15–19 Python shim | ⬜ not started |
+| Tasks 20–21 delete Cursor, ship | ⬜ not started |
+| Task 22 benchmark Pi | ⬜ blocked on the above |
+
+### Two things the next session must read first
+
+1. **⛔ `PI_VISION_MODEL=meta/muse-glimmer-30b` cannot call `propose_meal`** — see
+   Task 0. It is left configured because the model choice is the user's, but the
+   bill path does not work until it changes. `qwen/qwen3-vl-30b-a3b-instruct` passed
+   all four probes; re-run `python -m bench.probe_models` to confirm any choice.
+2. **Behind an HTTPS proxy, a Node child needs `NODE_USE_ENV_PROXY=1` and
+   `NODE_EXTRA_CA_CERTS`** or its outbound calls fail in a way that reads like a bad
+   key. This bit the Cursor bridge and will bite the Pi sidecar identically. See the
+   Task 9 section.
+
+### Local setup this work assumed
+
+```bash
+cd backend && uv venv --python 3.12 .venv && uv pip install -e ".[test]" && .venv/bin/python -m pytest -q
+cd backend/agent_sidecar && npm install && npm test
+```
+
+Credentials, by their real names: `OPEN_ROUTER_KEY` (not `OPENROUTER_API_KEY`),
+`DEBUG_API_KEY` for the prod export API, `CURSOR_API_KEY` (still needed only if
+anyone re-runs the old engine, which also needs `api2.cursor.sh` allowlisted).
+
+---
+
 ## Global Constraints
 
 - All money is **integer VND**. Tools own every number; the LLM never computes or
