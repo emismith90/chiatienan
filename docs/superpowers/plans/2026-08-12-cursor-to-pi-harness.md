@@ -55,7 +55,7 @@ Node ≥22.19 · plain ESM JavaScript (no build step) · `node --test`.
 
 ## Phase 0 — Resolve the vision question
 
-### Task 0: Verify `deepseek/deepseek-v4-flash` modality
+### Task 0: Verify the DeepSeek V4 Flash modality
 
 **Blocking.** If this model cannot accept images, bill-photo reading breaks, and
 that is a headline feature. Resolve it before writing any sidecar code.
@@ -95,8 +95,9 @@ for m in json.load(sys.stdin)["data"]:
 
 - [x] **Step 3: Record the finding and decide `PI_VISION_MODEL`**
 
-**Finding — `deepseek/deepseek-v4-flash` is text-only and does support tools.**
-Catalogue output, 2026-08-12 (406 models total), for every `deepseek-v4` id:
+**Finding — every DeepSeek V4 variant is text-only, and all of them support
+tools.** Catalogue output, 2026-08-12 (406 models total), for every `deepseek-v4`
+id, the chosen one first:
 
 ```
 ~deepseek/deepseek-v4-flash-latest  ['text'] ['text'] tools=True  in $0.080/M  out $0.252/M
@@ -106,35 +107,68 @@ deepseek/deepseek-v4-flash          ['text'] ['text'] tools=True  in $0.140/M  o
 ```
 
 So the web-sourced report was right: `input_modalities` is `['text']` — **no
-`image`**. `tools` and `tool_choice` are both in `supported_parameters`, so the
-primary clears the non-negotiable bar and the model choice stands. `PI_VISION_MODEL`
-is therefore **mandatory, not inert**, and the §12 vision branch is live code.
+`image`** — on all four. `tools` and `tool_choice` are in `supported_parameters`
+for every one of them, so the family clears the non-negotiable bar whichever
+variant is picked.
 
-**Decision — `PI_VISION_MODEL=google/gemini-2.5-flash-lite.`** Of the 213
-catalogue entries carrying both `image` input and `tools`, this is the cheapest
-that is a real synchronous endpoint from a first-party vendor (the cheaper rows
-are `:free` tiers, `:batch` variants of an async API, or `openrouter/auto`):
+### The models, as chosen by the user
+
+Both were verified against the same catalogue snapshot before being written down
+here, on the two axes that matter — `image` in `input_modalities` for the vision
+model, and `tools` for **both**, since a bill turn ends in `propose_meal`.
 
 ```
-google/gemini-2.5-flash-lite
-  input_modalities  ['text','image','file','audio','video']   output ['text']
-  tools True   tool_choice True   reasoning True
-  pricing  prompt $0.10/M   completion $0.40/M   image $0.0001/img
-           input_cache_read $0.01/M
+PI_MODEL=~deepseek/deepseek-v4-flash-latest        ("DeepSeek V4 Flash Latest")
+  input_modalities  ['text']                       output ['text']
+  tools True   tool_choice True
+  pricing  prompt $0.080/M   completion $0.252/M   input_cache_read $0.0252/M
   context_length 1,048,576
+
+PI_VISION_MODEL=meta/muse-glimmer-30b              ("Meta: Muse Glimmer 30B")
+  input_modalities  ['text','image']               output ['text']
+  tools True   tool_choice True
+  pricing  prompt $0.350/M   completion $1.500/M   input_cache_read $0.040/M
+  context_length 131,072
 ```
 
-Image cost is $0.0001 per bill photo — negligible against the turn's token cost.
-The 1M context matches the primary's, so a long room history does not need a
-second budget for image turns.
+Both clear the non-negotiable bar. The primary is text-only, so `PI_VISION_MODEL`
+is **mandatory, not inert**, and the §12 vision branch is live code.
 
-**One consequence worth carrying into Task 11.** The vision model is a **Google**
-model, and pi's `docs/extensions.md` warns specifically that
-`Type.Union`/`Type.Literal` breaks Google's API. Design §6's `StringEnum`
-requirement was written as a precaution; with this model choice it is a live
-runtime constraint on every bill-photo turn, which ends in `propose_meal` — a tool
-whose schema carries the `discount_split` enum. The `schema.js` enum test is
-load-bearing, not defensive.
+Three properties of this pair that Phase 2 has to design around rather than
+discover:
+
+1. **⚠️ The vision model's context is 8× smaller than the primary's** — 131,072
+   against 1,048,576. An image turn is the *heaviest* turn in the system: system
+   prompt + `money-safety` + four skill bodies + `memory.md` + the history window
+   + the base64 image. Sizing the text path against a 1M budget and then routing
+   the largest turns into a 131k one is how a room with a long history starts
+   failing only on bill photos. **Task 13 must bound the image turn's context to
+   the vision model's window**, not the primary's — and design §5's
+   `history_max_messages` is the knob that has to give.
+2. **The vision model has no per-image price**, unlike a per-image vendor: image
+   input is billed as prompt tokens at $0.350/M. So a bill photo's cost scales
+   with its resolution, and `images.py`'s downscaling is a cost control as well as
+   a latency one. `cost_latency` will show image turns as the expensive ones;
+   that is expected, not a regression.
+3. **`~deepseek/deepseek-v4-flash-latest` is a floating "latest" pointer.** The
+   `~` prefix and the name both say so. That is worth one sentence of caution
+   given what this project is: the harness exists to detect behavior change, and
+   pins the judge at `temperature: 0` for exactly that reason. A floating primary
+   can change under a recorded baseline, so a future re-run may differ from
+   `cursor-vs-pi.md` without anything in this repo having changed. If a
+   reproducible comparison matters more than tracking upstream, the dated
+   `deepseek/deepseek-v4-flash-0731` is the same price and pinned. Proceeding with
+   the floating id as instructed; Task 22's report should record the exact id it
+   ran against.
+
+**One consequence carried into Task 11.** Design §6's `StringEnum` requirement
+was written because pi's `docs/extensions.md` warns that `Type.Union`/
+`Type.Literal` breaks **Google's** API. Neither model here is Google's, so that
+specific incompatibility is no longer the live risk it was under the previous
+choice — but `StringEnum` stays the mapping, because it is what pi documents and
+because `PI_VISION_MODEL` is one environment variable away from being a Google
+model again. The `schema.js` enum test stays; treat it as a compatibility
+guarantee rather than as a fix for this pair's known bug.
 
 Then:
 
@@ -155,7 +189,7 @@ picked and its cost recorded above.)*
 
 ```bash
 git add docs/superpowers/plans/2026-08-12-cursor-to-pi-harness.md
-git commit -m "Record the deepseek-v4-flash modality finding for the Pi port"
+git commit -m "Record the DeepSeek V4 Flash modality finding for the Pi port"
 ```
 
 ---
@@ -1159,6 +1193,13 @@ test("a skill BODY reaches the model with the built-in toolset empty", async () 
   - Images route to `PI_VISION_MODEL` per Task 0's finding; if a turn has images
     and no vision model is configured, **fail the turn loudly** — never silently
     drop the photo.
+  - **Bound an image turn's context to the vision model's window, not the
+    primary's.** `meta/muse-glimmer-30b` holds 131,072 tokens against the
+    primary's 1,048,576, and an image turn is the heaviest turn in the system
+    (system prompt + `money-safety` + four skill bodies + `memory.md` + history +
+    the base64 image). Trim the history window for image turns rather than letting
+    a long-lived room fail only on bill photos. A test with an oversized history
+    and an image belongs here.
   - **If the skill-body test cannot be made to pass**, fall back to shipping the
     four skill bodies as extra `context_files` entries (~8KB, always in the system
     prompt) and drop the skill mechanism. Record which path was taken.
@@ -1490,9 +1531,11 @@ cd backend && pytest -q
       non-empty.
 
 - [ ] **Step 4: `.env.example`** — rewrite the LLM block: `OPENROUTER_API_KEY`
-      (`(SECRET)`, empty, matching the file's convention), `PI_MODEL`,
-      `PI_VISION_MODEL`, `PI_PROVIDER`, `PI_THINKING`, `PI_MAX_TOOLS`,
-      `PI_MAX_SECONDS`, `DATA_DIR`. **No base-URL entry** — it is a constant.
+      (`(SECRET)`, empty, matching the file's convention),
+      `PI_MODEL=~deepseek/deepseek-v4-flash-latest`,
+      `PI_VISION_MODEL=meta/muse-glimmer-30b`, `PI_PROVIDER=openrouter`,
+      `PI_THINKING`, `PI_MAX_TOOLS`, `PI_MAX_SECONDS`, `DATA_DIR`. **No base-URL
+      entry** — it is a constant.
 
 - [ ] **Step 5: Verify** — each command from the repo root, so the `cd`s don't
       compound:

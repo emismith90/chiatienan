@@ -2,7 +2,7 @@
   "_comment": [
     "Synthetic bill-image cases. The golden corpora carry no images and prod",
     "images are stripped, so without these the riskiest path in the system",
-    "(design §12 — deepseek-v4-flash is text-only, so every bill turn routes to",
+    "(design §12 — the primary model is text-only, so every bill turn routes to",
     "PI_VISION_MODEL) has zero benchmark coverage.",
     "",
     "The PNGs beside this file are rendered by a committed script, not photographed,",
