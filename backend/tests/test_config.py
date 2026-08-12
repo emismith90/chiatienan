@@ -2,6 +2,7 @@ from app.config import Settings
 
 _REQUIRED_UNSET = (
     "PI_MODEL",
+    "PI_BUILTIN_TOOLS",
     "PI_MAX_TOOLS",
     "PI_MAX_SECONDS",
     "BOT_HANDLE",
@@ -21,6 +22,7 @@ def test_defaults_when_env_absent(monkeypatch):
     assert s.pi_vision_model == "qwen/qwen3-vl-30b-a3b-instruct"
     assert s.pi_provider == "openrouter" and s.pi_thinking == "medium"
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 120
+    assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]
     assert s.bot_handle == "bot"
     assert s.database_url == "sqlite:////data/chiatienan.db"
@@ -99,3 +101,15 @@ def test_data_dir_on_the_volume_is_silent(monkeypatch, caplog):
     with caplog.at_level("WARNING", logger="chiatienan"):
         main._warn_if_workspace_is_ephemeral()
     assert caplog.text == ""
+
+
+def test_builtin_tools_can_be_turned_off_entirely(monkeypatch):
+    # Empty restores the structural guarantee: no bash means the model cannot
+    # compute money, whatever money-safety.mdc does or does not persuade it to do.
+    monkeypatch.setenv("PI_BUILTIN_TOOLS", "")
+    assert Settings.from_env().pi_builtin_tools == ()
+
+
+def test_builtin_tools_ignore_whitespace_and_empties(monkeypatch):
+    monkeypatch.setenv("PI_BUILTIN_TOOLS", " read , bash ,,")
+    assert Settings.from_env().pi_builtin_tools == ("read", "bash")

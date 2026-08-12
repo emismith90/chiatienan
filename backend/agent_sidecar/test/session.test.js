@@ -8,8 +8,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAgentsFiles, KEY_ENV, OPENROUTER_BASE_URL, proxyTool, resolveModel }
-  from "../session.js";
+import { buildAgentsFiles, KEY_ENV, OPENROUTER_BASE_URL, proxyTool, resolveModel,
+  toolOptionsFor } from "../session.js";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } } };
 
@@ -130,4 +130,25 @@ test("a missing PI_MODEL is an error, not a default", () => {
 test("the base URL is a constant and the key env name is the real one", () => {
   assert.equal(OPENROUTER_BASE_URL, "https://openrouter.ai/api/v1");
   assert.equal(KEY_ENV, "OPEN_ROUTER_KEY");
+});
+
+// --------------------------------------------------------------------------- //
+// builtin tools
+// --------------------------------------------------------------------------- //
+
+test("no builtin tools means money-safety is structural, not advisory", () => {
+  // Without `bash` the model cannot compute money, so money-safety.mdc's request
+  // becomes a property of the harness rather than a plea in a prompt.
+  assert.deepEqual(toolOptionsFor([], ["propose_meal"]), { noTools: "builtin" });
+  assert.deepEqual(toolOptionsFor(undefined, ["propose_meal"]), { noTools: "builtin" });
+});
+
+test("builtin tools are allowlisted ALONGSIDE the money tools, never instead", () => {
+  // pi treats `tools` as an allowlist, so omitting our own names would silently
+  // disable all 14 and leave the model holding only bash — the worst of both worlds.
+  const options = toolOptionsFor(["read", "write", "bash"],
+    ["propose_meal", "settle_period"]);
+  assert.deepEqual(options.tools,
+    ["read", "write", "bash", "propose_meal", "settle_period"]);
+  assert.equal(options.noTools, undefined);
 });

@@ -159,3 +159,39 @@ def test_every_bill_expectation_matches_what_the_money_engine_computes():
         want = {index[k]: v for k, v in case.expect["shares"].items()}
         assert split["shares"] == want, case.id
         assert sum(split["shares"].values()) == case.expect["tracked"], case.id
+
+
+def test_typical_keeps_every_golden_case_and_samples_prod():
+    from bench.corpus import TYPICAL_PER_CLUSTER, load
+    typical = load("typical")
+    ids = {c.id for c in typical}
+    # the golden corpora are the only cases with exact money expectations, so all
+    # of them stay — `typical` shrinks prod, not the goldens
+    assert {c.id for c in load("meals")} <= ids
+    assert {c.id for c in load("week")} <= ids
+    prod_picked = [c for c in typical if c.source == "prod"]
+    clusters = {}
+    for c in prod_picked:
+        clusters.setdefault((c.expect.get("tools") or ["prose"])[0], []).append(c)
+    assert all(len(v) <= TYPICAL_PER_CLUSTER for v in clusters.values())
+    assert len(typical) < len(load("all"))
+
+
+def test_typical_prefers_prod_cases_that_carry_money_args():
+    from bench.corpus import load
+    picked = [c for c in load("typical") if c.source == "prod"]
+    if not picked:
+        return                       # no prod fixture on this checkout
+    # A graded `total` beats a graded tool name, so any cluster that has such a
+    # case must have contributed one.
+    by_tool = {}
+    for c in picked:
+        by_tool.setdefault((c.expect.get("tools") or ["prose"])[0], []).append(c)
+    for tool, members in by_tool.items():
+        if tool in ("propose_meal", "propose_payment"):
+            assert any(c.expect.get("args") for c in members), tool
+
+
+def test_typical_is_stable_across_calls():
+    from bench.corpus import load
+    assert [c.id for c in load("typical")] == [c.id for c in load("typical")]

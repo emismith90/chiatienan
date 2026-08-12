@@ -10,6 +10,14 @@ import os
 from dataclasses import dataclass
 
 
+def _csv_env(name: str, default: str) -> tuple[str, ...]:
+    """Comma-separated env var → tuple. An explicitly empty value means empty."""
+    raw = os.environ.get(name)
+    if raw is None:
+        raw = default
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 def _int_env(name: str, default: int) -> int:
     raw = (os.environ.get(name) or "").strip()
     if raw == "":
@@ -30,6 +38,7 @@ class Settings:
     pi_thinking: str
     pi_max_tools: int
     pi_max_seconds: int
+    pi_builtin_tools: tuple[str, ...]
     memory_window_weeks: int
     history_max_messages: int
     # How far back to look for a bill image when the @bot message itself has
@@ -77,6 +86,15 @@ class Settings:
             pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
             pi_max_tools=_int_env("PI_MAX_TOOLS", 40),
             pi_max_seconds=_int_env("PI_MAX_SECONDS", 120),
+            # Built-in pi tools available alongside the 14 money tools. Empty makes
+            # money-safety structural (no `bash` = the model cannot compute money);
+            # non-empty lets it work things out itself and re-enables the mechanism
+            # behind a known prod defect. `grade_prose`'s moneyguard stage measures
+            # the cost — see agent_sidecar/session.js::toolOptionsFor.
+            # `is None` rather than `or`: an explicitly empty PI_BUILTIN_TOOLS
+            # means "none", and falling back to the default there would silently
+            # re-enable bash for anyone trying to turn it off.
+            pi_builtin_tools=_csv_env("PI_BUILTIN_TOOLS", "read,write,bash"),
             memory_window_weeks=_int_env("MEMORY_WINDOW_WEEKS", 10),
             history_max_messages=_int_env("HISTORY_MAX_MESSAGES", 200),
             image_lookback_messages=_int_env("IMAGE_LOOKBACK_MESSAGES", 10),

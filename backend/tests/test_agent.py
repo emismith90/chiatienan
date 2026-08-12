@@ -204,3 +204,12 @@ def test_turn_result_helpers_still_filter_on_ok():
     assert r.last_result("propose_meal") == {"ok": True, "n": 2}
     assert [x["n"] for x in r.all_results("propose_meal")] == [1, 2]
     assert r.last_result("settle_period") is None
+
+
+async def test_the_command_carries_the_builtin_tool_list(db, bridge):
+    # read/write/bash let the model work things out itself, at the cost of the
+    # structural money-safety guarantee. It travels as configuration so a run can
+    # be compared with and without it.
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("x", _ctx(db))
+    assert fake.command["builtin_tools"] == ["read", "write", "bash"]

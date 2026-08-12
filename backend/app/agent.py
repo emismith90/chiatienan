@@ -153,6 +153,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         "model": settings.pi_model,
         "vision_model": settings.pi_vision_model,
         "thinking": settings.pi_thinking,
+        "builtin_tools": list(settings.pi_builtin_tools),
         "max_tools": settings.pi_max_tools,
         "max_seconds": settings.pi_max_seconds,
     }

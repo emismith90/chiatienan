@@ -211,8 +211,49 @@ def _load_json_corpus(path: Path, source: str) -> list[Case]:
             if not raw.get("review")]
 
 
+#: How many prod representatives to keep per behaviour cluster in `typical`.
+TYPICAL_PER_CLUSTER = 2
+
+
+def _load_typical() -> list[Case]:
+    """Every golden case, plus a few real ones per behaviour cluster.
+
+    `--corpus all` is 130 cases and ~45 minutes of real model time, which is too
+    slow to iterate against. `typical` keeps the whole of the golden corpora — they
+    are the only cases with *exact* money expectations, so they are the signal worth
+    having every time — and generalizes the 107 prod cases down to representatives.
+
+    The prod corpus clusters cleanly by the tool its turn produced:
+
+        (prose only) 26 · settle_period 24 · propose_payment 21 · propose_meal 12
+        member_statement 11 · pick_random 10 · get_period_summary 3
+
+    so `typical` takes `TYPICAL_PER_CLUSTER` from each, **preferring cases that carry
+    money args** (a graded `total` beats a graded tool name) and taking one
+    image-tainted case if the cluster has one, since that path is otherwise covered
+    only by the synthetic bills.
+    """
+    prod = _load_json_corpus(PROD_PATH, "prod")
+    clusters: dict[str, list[Case]] = {}
+    for case in prod:
+        key = (case.expect.get("tools") or ["prose"])[0]
+        clusters.setdefault(key, []).append(case)
+
+    picked: list[Case] = []
+    for key in sorted(clusters):
+        members = clusters[key]
+        # Money args first, then image-tainted, then whatever is left — a stable
+        # order so the corpus is the same set every run.
+        members.sort(key=lambda c: (not c.expect.get("args"), not c.had_images, c.id))
+        picked.extend(members[:TYPICAL_PER_CLUSTER])
+
+    return _load_meals() + _load_week() + load("bills") + picked
+
+
 def load(name: str) -> list[Case]:
-    """Load a corpus by name: `meals`, `week`, `prod`, `bills`, or `all`."""
+    """Load a corpus by name: `meals`, `week`, `prod`, `bills`, `typical`, or `all`."""
+    if name == "typical":
+        return _load_typical()
     if name == "meals":
         return _load_meals()
     if name == "week":

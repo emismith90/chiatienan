@@ -1,6 +1,6 @@
 """Replay a corpus through the engine and grade every turn.
 
-    python -m bench.run --corpus {meals,week,prod,bills,all} \
+    python -m bench.run --corpus {meals,week,prod,bills,typical,all} \
         --engine {cursor,pi} --repeat N --out PATH
 
 Three properties this runner has to have, each because the alternative quietly
@@ -193,7 +193,7 @@ def _assert_engine_matches_the_tree(engine: str) -> None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="bench.run", description=__doc__)
     parser.add_argument("--corpus", required=True,
-                        choices=["meals", "week", "prod", "bills", "all"])
+                        choices=["meals", "week", "prod", "bills", "typical", "all"])
     parser.add_argument("--engine", required=True, choices=["cursor", "pi"])
     parser.add_argument("--repeat", type=int, default=3,
                         help="runs per case (default 3; one run cannot separate a "

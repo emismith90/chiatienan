@@ -116,10 +116,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     model,
     thinkingLevel: req.thinking || "medium",
     customTools,
-    // Removing bash/read/edit/write makes money-safety structural rather than
-    // advisory: `money-safety.mdc` merely *asked* the model not to compute money
-    // ("KHÔNG chạy python/bash để tính tiền"). Now it cannot.
-    noTools: "builtin",
+    ...toolOptionsFor(req.builtin_tools, customTools.map((tool) => tool.name)),
     sessionManager: SessionManager.inMemory(cwd),
   });
 
@@ -134,6 +131,32 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
  * model invents the total — which is worse than an error, because it is wrong
  * money that looks right. Design §12: fail loudly, never silently drop the photo.
  */
+/**
+ * Turn a builtin-tool list into pi's tool options.
+ *
+ * **Empty means money-safety is structural.** `money-safety.mdc` only *asks* the
+ * model not to compute money ("KHÔNG chạy python/bash để tính tiền"); without
+ * `bash` it cannot. Enabling the builtins trades that guarantee for the model being
+ * able to work things out itself, and restores the mechanism behind a known
+ * production defect — `moneyguard`'s field note records the one non-image unbacked
+ * case as "a split it computed with bash", and the recorded prod corpus holds a
+ * reply with a hand-typed six-row balance table (`p30`).
+ *
+ * That trade is a configuration decision, and the benchmark measures its cost:
+ * `grade_prose`'s stage 1 is `moneyguard.unbacked_amounts`, which fails any reply
+ * stating a number no tool produced.
+ *
+ * pi treats `tools` as an **allowlist**, so the custom names must be repeated there
+ * or all 14 money tools vanish and the model is left holding only `bash` — the worst
+ * of both worlds.
+ */
+export function toolOptionsFor(builtins, customNames) {
+  const enabled = builtins || [];
+  if (!enabled.length) return { noTools: "builtin" };
+  return { tools: [...enabled, ...(customNames || [])] };
+}
+
+
 export function resolveModel(runtime, req) {
   const hasImages = Boolean(req.images && req.images.length);
   const wanted = hasImages ? req.vision_model : req.model;
