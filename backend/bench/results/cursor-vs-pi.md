@@ -143,7 +143,29 @@ python -m bench.run --corpus meals --engine pi --repeat 3 --case G4 --case G5 \
   --out bench/results/pi-G4G5-ranked.json
 ```
 
-G4 and G5 recovering to `++` is the test of whether a prompt can hold this line. If
-they do not, the honest options are `PI_BUILTIN_TOOLS=""` (which makes the guarantee
-structural again, at the cost of the flexibility bash was enabled for) or an
-allowlist without `bash` — `read,write` alone cannot do arithmetic.
+### ✅ Iteration 2: the ranking held
+
+Same two cases, same `PI_BUILTIN_TOOLS=read,write,bash`, only the prompt changed:
+
+| case | before (unranked) | after (ranked) |
+|---|---|---|
+| `G4` adjustment | `xxx` 120.0s — capped, all three failed | **`++`** 92.1s |
+| `G5` remainder | `xx.` 13.6s | **`++`** 19.5s |
+
+`++` is `tool_selection` and `ledger_state` both passing: the money is right *and*
+it went through the tool, which is the only way it reaches the ledger.
+
+So a prompt can hold this line — the tools stay available, and ranking them
+explicitly is what keeps the model from reaching past `propose_meal` to do the
+arithmetic itself. Two caveats before treating it as settled:
+
+- **G4 still takes 92.1s** against 120s of cap, versus ~13s for the same class of
+  case without the builtins. The line holds, but not cheaply, and a slower turn is
+  closer to the cap that turns a reply into a partial one.
+- **This is `--repeat 1`.** One observation per case cannot separate a fix from a
+  lucky sample. Re-run with `--repeat 3` before calling it closed:
+  `python -m bench.run --corpus typical --engine pi --repeat 3 --judge-model <pinned>`
+
+If it does not hold under repetition, the honest fallbacks are
+`PI_BUILTIN_TOOLS=""` (structural guarantee, no flexibility) or `read,write` without
+`bash` — file tools without the ability to compute.
