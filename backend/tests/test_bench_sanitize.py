@@ -665,3 +665,39 @@ def test_a_lowercase_name_after_a_kinship_pronoun_is_surfaced_for_review():
     from bench.export_prod import residual_name_candidates
     rows = [{"body": "@bot đã trả anh hưng rồi"}]
     assert "hưng" in residual_name_candidates(rows, allowed=set())
+
+
+def test_a_body_hiding_in_a_tool_result_is_dropped_with_the_others():
+    """`bodies_included: false` dropped `message` and kept `result.raw_input` — the
+    user's own sentence, stored so a draft card can show what it was built from. One
+    real message rode into a committed file that way."""
+    from bench.export_prod import build_baseline
+    rows = [_row(id=1, body="@bot I paid 335k, Someone, và khách"),
+            _bot(id=2, kind="expense_draft",
+                 attachments={"type": "expense_draft", "bill_total": 335000,
+                              "payer_member_id": 7, "member_participants": [7, 8],
+                              "raw_input": "@bot I paid 335k, Someone, và khách"})]
+    from bench.export_prod import build_cases
+    baseline = build_baseline(build_cases(rows, key_by_member_id={7: "A1", 8: "A2"}),
+                              room=3, keep_bodies=False)
+    blob = json.dumps(baseline, ensure_ascii=False)
+    assert "raw_input" not in blob
+    assert "335k" not in blob            # the sentence is gone, the amount arg stays
+    assert baseline["records"][0]["tools"][0]["args"]["total"] == 335000
+
+
+def test_verify_matches_a_name_on_word_boundaries_case_and_form():
+    """Three near-misses, each of which let a name through once: a substring match
+    flags "nhưng" for containing a name, a case-sensitive one misses a lowercase
+    given name, and an unnormalized one misses a decomposed vowel."""
+    import unicodedata
+    from pathlib import Path
+    import tempfile
+    from bench.export_prod import verify
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "out.json"
+        path.write_text('{"a": "nhưng giá cao hơn", "b": "'
+                        + unicodedata.normalize("NFD", "trả anh hưng rồi") + '"}',
+                        encoding="utf-8")
+        found = verify(path, [], ["Hưng"])
+    assert found == ["name 'Hưng'"]      # the decomposed, lowercase one — not "nhưng"

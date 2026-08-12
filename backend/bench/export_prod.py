@@ -764,6 +764,14 @@ def build_baseline(cases: list[dict], *, room: int, engine: str = "cursor",
             # own `reason` is a sentence *about* the reply, not the reply.
             record.pop("message", None)
             record["final_text"] = ""
+            # **And a body hiding inside a tool result is still a body.** A meal
+            # draft carries `raw_input` — the user's own sentence, stored so the card
+            # can show what it was built from — and dropping `message` while keeping
+            # that left one real message in a committed file. It is what a review of
+            # the *output* caught, months of `bodies_included: false` after the fact.
+            for call in record["tools"]:
+                if isinstance(call.get("result"), dict):
+                    call["result"].pop("raw_input", None)
         records.append(record)
     return {"version": 1, "engine": engine, "corpus": "prod", "repeat": 1,
             "judge_model": getattr(judge, "model", None),
@@ -836,13 +844,29 @@ def fetch_members(base_url: str, room_id: int, key: str) -> list[dict]:
     return members
 
 
-def verify(path: Path, secrets: list[str]) -> list[str]:
-    """Re-grep a written corpus for anything that must not be in it."""
-    blob = path.read_text(encoding="utf-8")
+def verify(path: Path, secrets: list[str], names: list[str] = ()) -> list[str]:
+    """Re-grep a written file for anything that must not be in it.
+
+    `names` are matched on **word boundaries, case-insensitively, over NFC-normalized
+    text** — the three things that each let a real name through once: a substring
+    match would flag "nhưng" for containing a name, a case-sensitive one misses a
+    lowercase given name, and an unnormalized one misses a decomposed vowel.
+
+    This runs over the corpus *and* the committed baseline. It is the check that
+    would have caught `raw_input`: `bodies_included: false` dropped `message` and
+    left the same sentence inside a draft's result payload.
+    """
+    blob = unicodedata.normalize("NFC", path.read_text(encoding="utf-8"))
     found = [s for s in secrets if s and s in blob]
     if "vietqr" in blob.lower():
         found.append("vietqr")
     found += [f"digit run {m}" for m in _LONG_DIGITS.findall(blob)]
+    for name in names:
+        if not name or len(name) < 2:
+            continue
+        pattern = rf"(?<!\w){re.escape(unicodedata.normalize('NFC', str(name)))}(?!\w)"
+        if re.search(pattern, blob, flags=re.IGNORECASE):
+            found.append(f"name {name!r}")
     return found
 
 
@@ -887,7 +911,8 @@ def main(argv=None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    leaks = verify(args.out, list(name_map) + holders)
+    real_names = [n for n in list(name_map) + holders if len(str(n)) >= 2]
+    leaks = verify(args.out, holders, real_names)
     digest = hashlib.sha256(args.out.read_bytes()).hexdigest()
     reviewable = sum(1 for c in cases if c.get("review"))
     print(f"wrote {args.out}: {len(cases)} cases, {reviewable} flagged review, "
@@ -909,6 +934,11 @@ def main(argv=None) -> int:
                      if r["grades"]["prose_quality"]["passed"] is not None)
         print(f'wrote {args.baseline}: {len(baseline["records"])} recorded turns, '
               f"{graded} with a prose verdict", file=sys.stderr)
+        # The baseline is **committed**, so it gets the same scan and its leaks are
+        # reported under its own name. `raw_input` is why: it carried a real message
+        # through a `bodies_included: false` export.
+        leaks += [f"{args.baseline.name}: {leak}"
+                  for leak in verify(args.baseline, holders, real_names)]
 
     if leaks:
         print(f"LEAKS FOUND — do not use this file: {sorted(set(leaks))[:10]}", file=sys.stderr)

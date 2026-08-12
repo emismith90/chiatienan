@@ -93,7 +93,6 @@
             "initiator": "A5",
             "note": "thứ 3",
             "per_head_preview": 61000,
-            "raw_input": "@bot thứ 3 ăn bún bò huế, A2 đinh rủ, anh A3 trả 305k chia 5 trừ A2",
             "turn_id": "608309c553c94b8aa912f29a3aa2931e",
             "committed_meal_id": 2
           }
@@ -159,7 +158,6 @@
             "initiator": "A6",
             "note": null,
             "per_head_preview": 75000,
-            "raw_input": "@bot thứ 4 A6 rủ đi ăn nem nướng + gà rán và trả 375k tất cả ăn trừ A4",
             "turn_id": "4eba16d46fd441aab75c08cb28eda1b1",
             "committed_meal_id": 3
           }
@@ -1151,7 +1149,6 @@
             "note": null,
             "per_head_preview": 40000,
             "occurred_on": null,
-            "raw_input": "@bot bún chả rửa xe 120k tính cho A6, A4 và A3. A3 trả tiền",
             "turn_id": "9d1c[REDACTED]d4d851081cc52af9297",
             "committed_meal_id": 4
           }
@@ -1525,7 +1522,6 @@
             "note": null,
             "per_head_preview": 83750,
             "occurred_on": null,
-            "raw_input": "@bot I paid 335k, A4 A6, hưng, và G3",
             "turn_id": "12dabbeff9904f[REDACTED]c95e7b",
             "committed_meal_id": 5
           }
@@ -2015,7 +2011,6 @@
             "note": "A1 bò, A5 gà, A6 mỳ cua, A3+A4 cơm tấm, A2 bò rim",
             "per_head_preview": 54000,
             "occurred_on": null,
-            "raw_input": "@bot i paid, 324k",
             "turn_id": "0e[REDACTED]bc5a2ff3a077a7eb"
           }
         }
@@ -2358,7 +2353,6 @@
             "note": "Theo món sau giảm delta: A1 bò, A5 gà, A6 mỳ cua, A3+A4 cơm tấm, A2 bò rim",
             "per_head_preview": 0,
             "occurred_on": null,
-            "raw_input": "@bot log",
             "turn_id": "dd83e2b8ba3c414bb04e0cbe537d080a",
             "committed_meal_id": 6
           }
@@ -3911,7 +3905,6 @@
             "note": null,
             "per_head_preview": 36666,
             "occurred_on": null,
-            "raw_input": "@bot ghi meal bánh mì cột điện. A6 30, a A3 40, A4 40. A4 trả",
             "turn_id": "a3a49601b275475b8490d847168c1412",
             "committed_meal_id": 7
           }
@@ -4151,7 +4144,6 @@
             "note": null,
             "per_head_preview": 184500,
             "occurred_on": null,
-            "raw_input": "@bot I paid 1107k chả cá ông già",
             "turn_id": "f70e7ec[REDACTED]eba2792b07ac668",
             "committed_meal_id": 8
           }
@@ -4963,7 +4955,7 @@
               "A6"
             ],
             "guests": [
-              "G5"
+              "G6"
             ]
           },
           "result": {
@@ -4978,7 +4970,7 @@
               9
             ],
             "guests": [
-              "G5"
+              "G6"
             ],
             "bill_total": 265000,
             "adjustments": [],
@@ -4989,7 +4981,6 @@
             "note": null,
             "per_head_preview": 53000,
             "occurred_on": null,
-            "raw_input": "@bot I paid 265k for Phở Tần; A1 A4 A3 A6 G5",
             "turn_id": "e9ed1628e3d[REDACTED]f2998d0970e8d",
             "committed_meal_id": 9
           }
@@ -5759,7 +5750,6 @@
             "note": null,
             "per_head_preview": 35714,
             "occurred_on": null,
-            "raw_input": "@bot I paid bún đậu mẹt 250k",
             "turn_id": "f064d0e83bf24a85bc8188479d458a9f",
             "committed_meal_id": 10
           }
@@ -5986,7 +5976,7 @@
               5
             ],
             "guests": [
-              "G6"
+              "G5"
             ],
             "bill_total": 930000,
             "adjustments": [],
@@ -5997,7 +5987,6 @@
             "note": null,
             "per_head_preview": 132857,
             "occurred_on": null,
-            "raw_input": "@bot A5 đã trả",
             "turn_id": "c1e31b600cba4354a47672e5a436454f",
             "committed_meal_id": 11
           }
@@ -6504,7 +6493,6 @@
             "note": null,
             "per_head_preview": 47500,
             "occurred_on": null,
-            "raw_input": "@bot I paid 95000 for bánh mì xôi, của anh A3 45000",
             "turn_id": "91c85894c5cf4fa2b22bb593bf734230",
             "committed_meal_id": 12
           }
