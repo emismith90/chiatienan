@@ -1,9 +1,8 @@
 # Cursor → Pi: what the harness actually measured
 
-**Status: the port is complete and runs; the full acceptance benchmark is NOT.**
-This file reports what was measured, what was not, and the one open bug that
-stopped it — because a benchmark that reports only its wins is worse than no
-benchmark, since it will be believed.
+**Status: the port is complete, the harness runs, and the blocker below is fixed.**
+This file reports what was measured and what was not — a benchmark that reports only
+its wins is worse than no benchmark, since it will be believed.
 
 ## Measured
 
@@ -43,34 +42,46 @@ re-run: 107 cases, 81 tool-graded (1.00 by construction) and 26 prose-graded at
 **3/26**, judged by reading every reply. See the plan's Task 9 for why 1.00 is not
 a measurement and why 3/26 is not a target.
 
-## ⛔ Not measured, and why
+## ✅ The hang that blocked this, and what it actually was
 
-**No full-corpus Pi run completed.** Two independent attempts stopped after case
-`G1`. `G2` (`@bot tôi trả 300k, An không ăn`) ran **>230s against a configured
-`max_seconds=120`** and had to be killed.
+Two early attempts stopped after case `G1`, with `G2` apparently running past a
+configured `max_seconds=120`. **The diagnosis was wrong, and the experiment that
+corrected it is the point:** run `G2` *alone* and it finishes in **11.7s**, passing
+both money graders. It only hung as the **second case of a run**.
 
-The cap is implemented and unit-tested: `turn.js` races `session.prompt()` against
-the deadline, so a session whose `prompt()` never settles still returns at the cap
-(the test asserts exactly that, including that `abort()` was called). **That fix is
-not sufficient for a real turn**, so something else is holding it — the likely
-candidates, in order:
+So the fault was the runner's lifecycle, not pi and not the cap. A subprocess's
+pipes belong to the event loop that created them, and `run_corpus` used one
+`asyncio.run` **per case** — leaving two bad options: keep the bridge and have case
+2 wait on streams belonging to a closed loop, or respawn per case, which hung too.
+`run_corpus_async` now runs the whole corpus in **one loop with one sidecar**, and
+closes the bridge once at the end.
 
-1. **pi's own retry loop.** `auto_retry_*` events exist in its event vocabulary; a
-   provider retry with backoff may restart work the deadline already cancelled.
-2. **The tool round-trip.** A `tool_call` whose `tool_result` never arrives blocks
-   inside the tool's `execute`, which the cap does not interrupt — the race only
-   covers `prompt()`.
-3. **The per-case sidecar spawn** now that the bridge closes per case, if a spawn
-   itself stalls.
+Verified after the fix — three cases in one process, where two used to hang:
 
-**This matters more than the benchmark it blocked.** `chat.py` holds
-`_agent_lock` for the whole turn, so one unbounded turn freezes *every* room, not
-just the one that triggered it. Treat it as the top item before any deploy:
-reproduce with `--case G2`, and instrument which of the three it is.
+```
+G1#0 ++. 15.3s     G2#0 ++. 34.8s     G3#0 ++. 13.0s
+```
 
-Also unrun: `docker compose build` (no Docker daemon in the environment that
-produced this file), and the prod-corpus Pi run that a like-for-like `--compare`
-against the baseline needs.
+`++` is `tool_selection` and `ledger_state` both passing.
+
+The `max_seconds` race added while chasing this **stays**: it is correct on its own
+terms (its test drives a session whose `prompt()` never settles and asserts the turn
+still returns, keeps its text, and reports `capped` without an error). It simply was
+not this bug.
+
+## Still not measured
+
+- **The 130-case `--corpus all` run** was launched and takes ~45 minutes of real
+  model time; it had not finished when this was written. Re-run:
+  `python -m bench.run --corpus all --engine pi --repeat 3 --out bench/results/pi-<ts>.json`
+  and then `python -m bench.report --compare bench/results/baseline-prod-cursor.json
+  bench/results/pi-<ts>.json`.
+- **`docker compose build`** — no Docker daemon in the environment that produced
+  this file. `npm ci --omit=dev --ignore-scripts` was verified against the committed
+  lockfile; the NodeSource install line is what to watch on the first real build.
+- **`--repeat 3`.** Everything above is `--repeat 1`, so no pass *rate* exists yet
+  and a single verdict cannot be separated from sampling noise. The design's ship
+  criterion is expressed over rates for that reason.
 
 ## What the harness found while being built
 

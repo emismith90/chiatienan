@@ -37,15 +37,20 @@ reply, with `error: None`.
 | Tasks 15–19 Python shim | ✅ `pi_bridge.py`, `agent.py` (408 → ~200 lines), `tools.py`, `summarize.py`, `pi_smoke.py`, `DATA_DIR` + migration |
 | Task 20 delete Cursor | ✅ 3 modules + 2 test files + the dependency gone; sweep clean |
 | Task 21 ship it | ⚠️ Dockerfile/CI/deploy updated; **`docker compose build` unverified — no Docker daemon here** |
-| Task 22 benchmark Pi | ⛔ **blocked on an open bug** — a real turn can exceed `max_seconds`. See `bench/results/cursor-vs-pi.md` |
+| Task 22 benchmark Pi | ⚠️ harness verified on real turns (`G1`–`G3` pass both money graders); the 130-case `--corpus all` run needs ~45 min of model time and is unfinished. See `bench/results/cursor-vs-pi.md` |
 
-### ⛔ Before anything else: a turn is not provably bounded
+### The hang is fixed, and the wrong diagnosis is worth remembering
 
-`G2` ran **>230s against `max_seconds=120`**, twice. The cap is implemented and
-unit-tested (a session whose `prompt()` never settles still returns), so something
-else holds a real turn — pi's `auto_retry_*` loop, a `tool_call` whose result never
-arrives, or a stalled spawn. `chat.py` holds `_agent_lock` for the whole turn, so
-one unbounded turn freezes every room. **Do not deploy until this is fixed.**
+Two early runs stopped after `G1` and it looked like `max_seconds` was not bounding
+a turn. It was not that: run `G2` alone and it finishes in **11.7s** passing both
+money graders — it only hung as the **second case of a run**. `run_corpus` used one
+`asyncio.run` per case, and a subprocess's pipes belong to the loop that created
+them. One loop and one sidecar for the whole run fixed it; three cases now run in
+one process where two used to hang.
+
+The lesson worth keeping: *"the cap is broken"* and *"the second case hangs"* look
+identical from the outside. Running the suspect case alone separated them in one
+command.
 
 ### Three things a real turn found that 59 stubbed tests did not
 
@@ -1980,20 +1985,18 @@ match the golden expectation exactly. `/internal/bridge-smoke` answers against t
 real process. Both models pass the schema probes, including the vision model reading
 the committed bill PNG.
 
-**Not measured: no full-corpus Pi run completed.** Two attempts stopped after `G1`
-because **`G2` ran >230s against a configured `max_seconds=120`**.
+**Not measured: the 130-case run.** It was launched and needs ~45 minutes of real
+model time. What *is* verified is that the harness drives real turns correctly:
+`G1`/`G2`/`G3` in one process all pass `tool_selection` and `ledger_state`
+(15.3s / 34.8s / 13.0s). Everything so far is `--repeat 1`, so no pass *rate* exists
+yet — the ship criterion is expressed over rates precisely because one verdict cannot
+be told from sampling noise.
 
-The cap is implemented and unit-tested — `turn.js` races `prompt()` against the
-deadline, and a session whose `prompt()` never settles still returns — but that is
-**not sufficient for a real turn**. The three candidates, in order: pi's own
-`auto_retry_*` loop restarting cancelled work; a `tool_call` whose result never
-arrives, since the race covers `prompt()` and not a tool's `execute`; or a stalled
-per-case sidecar spawn.
-
-**This outranks the benchmark it blocked.** `chat.py` holds `_agent_lock` for the
-whole turn, so one unbounded turn freezes *every* room. Reproduce with
-`python -m bench.run --corpus meals --engine pi --case G2` and instrument which of
-the three it is. **Do not deploy until a turn is provably bounded.**
+**Resolved.** Running `G2` alone finished it in 11.7s passing both money graders, so
+the fault was the runner's per-case `asyncio.run`, not pi and not the cap — a
+subprocess's pipes belong to the loop that created them. One loop and one sidecar per
+run fixed it, verified on three consecutive cases. The `max_seconds` race stays
+because it is independently correct.
 
 Step 7 is settled by the recorded baseline rather than by a Pi run:
 `_strip_narration` **stays and needs strengthening**. Its output is what production
