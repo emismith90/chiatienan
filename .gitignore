@@ -17,3 +17,9 @@ next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 .superpowers/
+
+# Real production conversations, pseudonymized but never committed. A leak here
+# would be an unrecoverable privacy incident, so the bodies stay off git
+# entirely; the case ids, the derived expectations and the file's SHA-256 are
+# what get committed. See backend/bench/export_prod.py.
+backend/bench/corpus/prod_conversations.json

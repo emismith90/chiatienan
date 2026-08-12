@@ -276,7 +276,7 @@ def _oracle(case):
     return run_turn
 
 
-@pytest.mark.parametrize("corpus_name", ["meals", "week"])
+@pytest.mark.parametrize("corpus_name", ["meals", "week", "bills"])
 def test_an_oracle_engine_passes_every_gradable_case(corpus_name):
     from bench.run import _run_one
     failures = []

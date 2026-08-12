@@ -1,0 +1,85 @@
+{
+  "_comment": [
+    "Synthetic bill-image cases. The golden corpora carry no images and prod",
+    "images are stripped, so without these the riskiest path in the system",
+    "(design §12 — deepseek-v4-flash is text-only, so every bill turn routes to",
+    "PI_VISION_MODEL) has zero benchmark coverage.",
+    "",
+    "The PNGs beside this file are rendered by a committed script, not photographed,",
+    "so the ground truth is exact: each expectation's `total` is the TỔNG CỘNG",
+    "printed on the bill, and `shares` / `tracked` / `balances` come from running",
+    "app.money's own split over that total. A vision model that misreads a digit",
+    "fails on the number, not on a judgement call.",
+    "",
+    "A bill turn ends in propose_meal, so these also cover the other half of the",
+    "Task 0 finding: a vision model that cannot call tools breaks the money path",
+    "just as thoroughly as one that cannot see."
+  ],
+  "members": [
+    {"key": "m1", "display_name": "An", "nickname": "an"},
+    {"key": "m2", "display_name": "Bình", "nickname": "binh"},
+    {"key": "m3", "display_name": "Cường", "nickname": "cuong"},
+    {"key": "m4", "display_name": "Dung", "nickname": "dung"}
+  ],
+  "cases": [
+    {
+      "id": "B1",
+      "day": "2026-07-20",
+      "actor": "m1",
+      "message": "@bot tôi trả bill này, cả nhóm ăn",
+      "images": ["bill-even.png"],
+      "expect": {
+        "tools": ["propose_meal"],
+        "args": {"propose_meal": {
+          "total": 215000,
+          "payer": "m1",
+          "participants": ["m1", "m2", "m3", "m4"]
+        }},
+        "shares": {"m1": 53750, "m2": 53750, "m3": 53750, "m4": 53750},
+        "tracked": 215000,
+        "balances": {"m1": 161250, "m2": -53750, "m3": -53750, "m4": -53750}
+      }
+    },
+    {
+      "id": "B2",
+      "day": "2026-07-20",
+      "actor": "m1",
+      "message": "@bot tôi trả bill này, tôi với Bình và Cường ăn",
+      "images": ["bill-discount.png"],
+      "expect": {
+        "tools": ["propose_meal"],
+        "args": {"propose_meal": {
+          "total": 261000,
+          "payer": "m1",
+          "participants": ["m1", "m2", "m3"]
+        }},
+        "shares": {"m1": 87000, "m2": 87000, "m3": 87000},
+        "tracked": 261000,
+        "balances": {"m1": 174000, "m2": -87000, "m3": -87000}
+      }
+    },
+    {
+      "id": "B3",
+      "day": "2026-07-20",
+      "actor": "m1",
+      "message": "@bot tôi trả bill này, ai ăn nấy trả nhé, tên ghi trên từng món",
+      "images": ["bill-itemized.png"],
+      "expect": {
+        "tools": ["propose_meal"],
+        "args": {"propose_meal": {
+          "total": 154000,
+          "payer": "m1",
+          "participants": ["m1", "m2", "m3"],
+          "items": [
+            {"member": "m1", "amount": 45000},
+            {"member": "m2", "amount": 55000},
+            {"member": "m3", "amount": 39000}
+          ]
+        }},
+        "shares": {"m1": 49856, "m2": 60935, "m3": 43209},
+        "tracked": 154000,
+        "balances": {"m1": 104144, "m2": -60935, "m3": -43209}
+      }
+    }
+  ]
+}

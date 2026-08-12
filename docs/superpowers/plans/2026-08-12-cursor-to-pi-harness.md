@@ -698,7 +698,7 @@ GET /internal/debug/conversation.csv?room_id=1&days=90
 > `@bot cập nhật stk của tôi 0071000123456 VCB NGUYEN VAN A`. A key-denylist over
 > `attachments` does not touch that, and `body` is exactly what the corpus keeps.
 
-- [ ] **Step 1: Write the failing test** — every one of these is a redaction
+- [x] **Step 1: Write the failing test** — every one of these is a redaction
       requirement, not a nice-to-have:
 
 ```python
@@ -752,9 +752,9 @@ def test_invite_tokens_and_pins_are_stripped():
     assert "abc123" not in blob and "4321" not in blob
 ```
 
-- [ ] **Step 2: Verify they fail.**
+- [x] **Step 2: Verify they fail.**
 
-- [ ] **Step 3: Implement `sanitize`.** Recursive key denylist:
+- [x] **Step 3: Implement `sanitize`.** Recursive key denylist:
       `account_number`, `account_holder`, `bank_code`, `invite_token`, `pin`,
       `qr_url`, `data`. Body-level: redact digit runs ≥8 (VND amounts here are ≤7
       digits or carry a `k`/`tr`/`đ` unit); replace names on **word boundaries**,
@@ -762,9 +762,9 @@ def test_invite_tokens_and_pins_are_stripped():
       `account_holder` variants (uppercase and de-diacriticized forms). Emit
       `had_images` and drop the bytes.
 
-- [ ] **Step 4: Verify they pass.**
+- [x] **Step 4: Verify they pass.**
 
-- [ ] **Step 5: Add the fetch + expectation bootstrap.** Derive `expect` from what
+- [x] **Step 5: Add the fetch + expectation bootstrap.** Derive `expect` from what
       prod actually did — the bot's own reply row and its `attachments` record the
       tool and the numbers. Any case whose expectation cannot be derived gets
       `"review": true`; `corpus.py` skips those until a human clears them.
@@ -780,13 +780,40 @@ def test_invite_tokens_and_pins_are_stripped():
       `account_number` and `account_holder` from the prod members table**, and for
       `vietqr`. The test suite is a net, not a substitute for looking.
 
-- [ ] **Step 7: Add 2–3 synthetic bill-image cases** as `bench/corpus/bills/` —
+> ### ⛔ Step 6 is NOT done, and Step 5 is only half-verifiable
+>
+> The export itself has not been run: it needs `DEBUG_KEY` and reachable prod,
+> neither of which exists in the dev container. So **`bench/corpus/prod_conversations.json`
+> does not exist**, `load("prod")` returns `[]`, and every figure below about prod
+> coverage is a prediction, not a measurement.
+>
+> What *is* done and CI-tested: `sanitize` (pure, 15 redaction tests),
+> `build_name_map`, `build_cases`, and a `verify` pass that re-greps the written
+> file for every known secret plus any surviving 8+ digit run. What is **not**
+> verified is the shape of real `attachments` JSON in the CSV — `build_cases`
+> reads `attachments.type` and `attachments.bill_total`, which match
+> `chat.render_bot_attachments` and the draft payload as committed, but only real
+> rows can confirm the CSV serializes them that way.
+>
+> Whoever runs the export must therefore treat `--verify`'s "no known secret
+> found" as the *start* of Step 6, read the file, and expect to adjust
+> `build_cases` once the real rows are in front of them. Until then the prod
+> corpus contributes nothing — which matters most for `prose_quality`, whose only
+> golden coverage is the single `s6` case (Task 4's note).
+>
+> **What the bootstrap deliberately will not derive:** any member reference. Prod
+> member ids mean nothing in a bench room and there is no reconstructable prod
+> ledger, so a prod case is graded on the tool name plus `total`. Anything it
+> cannot derive gets `review: true` rather than a guessed expectation — a wrong
+> expectation grades the next engine wrongly and looks like data.
+
+- [x] **Step 7: Add 2–3 synthetic bill-image cases** as `bench/corpus/bills/` —
       small hand-made PNGs of a bill with known totals, plus their expectations.
       The golden corpora have no images and prod images are stripped, so without
       these the riskiest path in the system (design §12) has zero benchmark
       coverage.
 
-- [ ] **Step 8: Commit** — `bench: sanitized production corpus and synthetic bill cases`
+- [x] **Step 8: Commit** — `bench: sanitized production corpus and synthetic bill cases`
 
 ---
 

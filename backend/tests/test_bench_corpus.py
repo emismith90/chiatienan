@@ -126,3 +126,36 @@ def test_an_unknown_corpus_name_raises():
     from bench.corpus import load
     with pytest.raises(ValueError, match="nope"):
         load("nope")
+
+
+def test_the_synthetic_bill_cases_load_with_their_images():
+    from bench.corpus import load
+    cases = load("bills")
+    assert [c.id for c in cases] == ["B1", "B2", "B3"]
+    for c in cases:
+        assert c.had_images and len(c.images) == 1
+        assert c.images[0]["mimeType"] == "image/png"
+        assert c.images[0]["data"].startswith("iVBOR")      # a real PNG, base64
+        assert c.expect["tools"] == ["propose_meal"]
+
+
+def test_every_bill_expectation_matches_what_the_money_engine_computes():
+    # The bills exist to test vision, so their arithmetic must not be the thing
+    # that fails. Recompute each expectation from app.money and compare.
+    from app.money import itemized_adjustments, prorate_items, split_with_guests
+    from bench.corpus import load
+    for case in load("bills"):
+        args = case.expect["args"]["propose_meal"]
+        keys = args["participants"]
+        index = {k: i + 1 for i, k in enumerate(keys)}
+        adjustments = {}
+        if "items" in args:
+            shares = prorate_items(args["total"],
+                                   {index[i["member"]]: i["amount"] for i in args["items"]},
+                                   discount_split="proportional")
+            adjustments = itemized_adjustments(args["total"], shares)
+        split = split_with_guests(args["total"], [index[k] for k in keys], 0,
+                                  adjustments, payer_id=index[args["payer"]])
+        want = {index[k]: v for k, v in case.expect["shares"].items()}
+        assert split["shares"] == want, case.id
+        assert sum(split["shares"].values()) == case.expect["tracked"], case.id
