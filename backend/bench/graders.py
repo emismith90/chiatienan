@@ -49,6 +49,15 @@ _MEMBER_AMOUNT_LISTS = ("items", "adjustments")
 #: Money args whose order carries no meaning.
 _UNORDERED = ("participants",)
 
+#: Args the schema says may be omitted when they equal the sender:
+#: `propose_meal.payer` — "member id of the payer; blank = the sender"
+#: `propose_payment.from` — "member id who paid; blank = the sender"
+#: Omitting one is correct behavior, not a missing argument, and the tool fills it
+#: in identically. Grading it as a failure marked a *correct* turn wrong — G1's
+#: first real Pi run passed `ledger_state` while failing `tool_selection` for
+#: exactly this.
+_SENDER_DEFAULTED = ("payer", "from")
+
 
 @dataclass
 class Verdict:
@@ -136,7 +145,11 @@ def grade_tool_selection(case, record: dict) -> Verdict:
             if key not in MONEY_ARGS:
                 continue
             if key not in got_args:
-                # An omitted money arg is a failure, not a comparison to skip.
+                if key in _SENDER_DEFAULTED and want == record.get("sender_member_id"):
+                    # The schema permits omitting it when it is the sender, and the
+                    # tool resolves it to the same id.
+                    continue
+                # Any other omitted money arg is a failure, not a comparison to skip.
                 problems.append(f"{tool_name}.{key}: expected {want!r}, absent")
                 continue
             problem = _args_differ(key, want, got_args[key])

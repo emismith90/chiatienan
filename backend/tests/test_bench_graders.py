@@ -635,3 +635,39 @@ def test_adjustments_compare_as_a_multiset():
     rec = _record(tools=[("propose_meal", {"adjustments": [
         {"member": 2, "amount": 50000}, {"member": 1, "amount": 20000}]})])
     assert grade_tool_selection(case, rec).passed
+
+
+def test_an_omitted_payer_that_is_the_sender_is_correct_not_missing():
+    from bench.graders import grade_tool_selection
+    # tools.py's schema: "payer: member id of the payer; blank = the sender". G1's
+    # first real Pi run omitted it, the tool filled in the same id, ledger_state
+    # passed — and tool_selection failed a correct turn.
+    case = _case(expect={"tools": ["propose_meal"],
+                         "args": {"propose_meal": {"total": 400000, "payer": 1}}})
+    rec = _record(tools=[("propose_meal", {"total": 400000})], sender_member_id=1)
+    assert grade_tool_selection(case, rec).passed
+
+
+def test_an_omitted_payer_that_is_NOT_the_sender_still_fails():
+    from bench.graders import grade_tool_selection
+    # Someone else fronted the bill, so omitting it charges the wrong person.
+    case = _case(expect={"tools": ["propose_meal"],
+                         "args": {"propose_meal": {"total": 400000, "payer": 2}}})
+    rec = _record(tools=[("propose_meal", {"total": 400000})], sender_member_id=1)
+    v = grade_tool_selection(case, rec)
+    assert not v.passed and "payer" in v.reason
+
+
+def test_an_omitted_from_on_a_payment_follows_the_same_rule():
+    from bench.graders import grade_tool_selection
+    case = _case(expect={"tools": ["propose_payment"],
+                         "args": {"propose_payment": {"from": 5, "to": 9, "amount": 1000}}})
+    rec = _record(tools=[("propose_payment", {"to": 9, "amount": 1000})], sender_member_id=5)
+    assert grade_tool_selection(case, rec).passed
+
+
+def test_an_omitted_total_is_still_a_failure():
+    from bench.graders import grade_tool_selection
+    case = _case(expect={"tools": ["propose_meal"], "args": {"propose_meal": {"total": 400000}}})
+    v = grade_tool_selection(case, _record(tools=[("propose_meal", {})], sender_member_id=1))
+    assert not v.passed and "total" in v.reason

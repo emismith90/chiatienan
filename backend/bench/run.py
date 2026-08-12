@@ -84,8 +84,12 @@ def _run_one(case, rep: int, run_turn, judge=None) -> dict:
         try:
             room_id, ids, _ = build_world(db, case)
             record["room_id"] = room_id
+            sender_member_id = ids.get(case.actor)
+            # Recorded because the graders need it: the schema lets `payer` and
+            # `from` be omitted when they are the sender.
+            record["sender_member_id"] = sender_member_id
             ctx = tools.ToolContext(db=db, room_id=room_id,
-                                    sender_member_id=ids.get(case.actor),
+                                    sender_member_id=sender_member_id,
                                     turn_mentions=[])
             with frozen_clock(case.day):
                 result = run_turn(case.message, ctx, images=case.images or None)

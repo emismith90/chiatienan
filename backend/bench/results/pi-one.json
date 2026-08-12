@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "engine": "pi",
+  "corpus": "meals",
+  "repeat": 1,
+  "judge_model": null,
+  "partial": true,
+  "cases_run": 1,
+  "records": [
+    {
+      "version": 1,
+      "case_id": "G1",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 400k cả nhóm",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 400000
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 400000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": null,
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              },
+              {
+                "member": 3,
+                "amount": 100000
+              },
+              {
+                "member": 4,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Đã tạo thẻ đề xuất: bạn trả 400k, cả nhóm 4 người chia đều mỗi người 100k. Bạn xác nhận trên thẻ giúp mình nhé!",
+      "error": null,
+      "elapsed_s": 31.719082953000907,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "propose_meal.payer: expected 1, absent"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    }
+  ]
+}
