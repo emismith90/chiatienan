@@ -3,7 +3,7 @@
   "engine": "cursor",
   "corpus": "prod",
   "repeat": 1,
-  "judge_model": "google/gemini-2.5-flash-lite",
+  "judge_model": "claude-opus-5 (agent)",
   "baseline_kind": "recorded-prod-log",
   "bodies_included": false,
   "source_room": 3,
@@ -666,7 +666,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot is narrating its own machinery by saying 'mình làm theo skill ghi trả tiền' and 'bỏ trống số tiền để công cụ tự tính đúng số nợ'."
+          "reason": "narrates its machinery twice: 'mình làm theo skill ghi trả tiền' and its tool-argument strategy ('bỏ trống số tiền để công cụ tự tính'). The answer underneath is correct."
         }
       }
     },
@@ -745,7 +745,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot narrated its own machinery by stating 'mình đọc skill phù hợp rồi xử lý' and 'làm theo skill ghi trả tiền'."
+          "reason": "opens with 'mình đọc skill phù hợp rồi xử lý' and then names the skill again; the answer and the follow-up offer are good."
         }
       }
     },
@@ -895,7 +895,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot is narrating its own machinery and asking clarifying questions instead of directly answering the user's request."
+          "reason": "'theo quy trình ghi trả tiền' narrates the procedure; the gross-vs-offset clarifying question itself is correct and well posed."
         }
       }
     },
@@ -1362,7 +1362,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A2 rồi cập nhật tên thành A2.' and 'Đã tìm thấy A2 — đang đổi tên thành A2.'."
+          "reason": "narrates each tool step: 'Mình sẽ tìm thành viên… Đã tìm thấy… đang đổi tên'. Only the last sentence is the answer."
         }
       }
     },
@@ -1390,7 +1390,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A5 rồi cập nhật tên thành A5.' and 'Đã tìm thấy A5 — đang đổi tên thành A5.'."
+          "reason": "same step-by-step tool narration as p70."
         }
       }
     },
@@ -1476,7 +1476,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A4 rồi cập nhật tên thành A4.' and describing the update process."
+          "reason": "opens by narrating the lookup it is about to do."
         }
       }
     },
@@ -1978,7 +1978,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot is narrating its own machinery by explaining the process and listing the missing information it needs."
+          "reason": "'mình làm theo quy trình ghi bữa ăn' is narration; the two-question clarification after it is exactly right."
         }
       }
     },
@@ -2603,7 +2603,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot is narrating its own machinery by stating 'mình đọc skill phù hợp rồi xử lý' and explaining its limitations instead of directly answering the user's request."
+          "reason": "'mình đọc skill phù hợp rồi xử lý' before a correct, useful answer about pressing the button."
         }
       }
     },
@@ -2678,7 +2678,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot narrated its own machinery by stating it would check for a suitable skill and explicitly mentioned it cannot confirm via chat, which violates rule 3."
+          "reason": "'Mình sẽ xem skill phù hợp để xử lý' narrates the machinery."
         }
       }
     },
@@ -2753,7 +2753,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot's reply is not in casual Vietnamese and contains formatting issues that make it difficult to read."
+          "reason": "content is right and narration-free, but the text is shredded mid-word ('Đ ề xuất # 101', 'X ác nhận', 'th ẻ nh áp') — unreadable Vietnamese, so it fails the register rule."
         }
       }
     },
@@ -2781,7 +2781,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot's reply is not in Vietnamese, it is a jumbled mess of characters and does not answer the user's question."
+          "reason": "same shredding: 'V ẫn không được đâu A4', 'H ệ thống'. The refusal is correct but the rendering is broken."
         }
       }
     },
@@ -4332,7 +4332,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot did not answer the user's request and instead asked for clarification, which is not the expected behavior for this type of bot."
+          "reason": "'mình xem schema bốc thăm' narrates internals; the missing-names question is otherwise good."
         }
       }
     },
@@ -4750,8 +4750,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot incorrectly states that it cannot exclude a person from the draw, when the user's request was to exclude A6 from the draw."
+          "passed": true,
+          "reason": "direct, casual Vietnamese, no narration, and accurate — pick_random takes only a label, so exclusion genuinely is not supported."
         }
       }
     },
@@ -5710,8 +5710,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot is asking for information that it should have already known or been able to infer from the user's input, rather than providing a direct answer or confirmation."
+          "passed": true,
+          "reason": "answers an English question in Vietnamese (allowed), no narration, asks for exactly the two missing facts."
         }
       }
     },
@@ -6170,7 +6170,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot did not answer the user's request and instead provided a system message."
+          "reason": "posts an infrastructure error to the room in English: 'Model Blocked … by your team admin settings'. Not an answer at all."
         }
       }
     },
@@ -6198,7 +6198,7 @@
         },
         "prose_quality": {
           "passed": false,
-          "reason": "The bot did not respond to the user's statement, instead providing a system error message."
+          "reason": "same blocked-model error surfaced as a chat reply."
         }
       }
     },
@@ -6380,7 +6380,7 @@
         },
         "prose_quality": {
           "passed": true,
-          "reason": "The bot correctly states it doesn't know what to eat because no one has logged it, and prompts users to share their choices, all in casual Vietnamese."
+          "reason": "honest 'I don't know, nobody has logged anything', casual register, no narration, and it invites the room to say."
         }
       }
     },

@@ -100,3 +100,67 @@ def test_the_prompt_shows_the_message_and_reply_but_not_the_answer_key():
     # Showing the expected tools would invite the judge to grade correctness it
     # is not being asked about.
     assert "propose_meal" not in prompt
+
+
+# --------------------------------------------------------------------------- #
+# the agent as judge
+# --------------------------------------------------------------------------- #
+
+def _results(*records, judge=None):
+    return {"version": 1, "engine": "cursor", "corpus": "prod", "repeat": 1,
+            "judge_model": judge, "records": list(records)}
+
+
+def _record_with(case_id, passed, reason):
+    return {"case_id": case_id, "rep": 0, "final_text": "x",
+            "grades": {"prose_quality": {"passed": passed, "reason": reason}}}
+
+
+def test_prepare_batch_offers_only_what_a_judge_could_decide():
+    from bench.judge import prepare_batch
+    results = _results(
+        _record_with("p1", None, "not graded: no judge configured"),
+        _record_with("p2", None, "not graded: the room saw an expense draft card, not the model's prose"),
+        _record_with("p3", False, "unbacked amounts in the reply: [40000]"),
+        _record_with("p4", True, "fine"),
+    )
+    # A card turn, a stage-1 failure and an already-decided case are all settled;
+    # re-judging them would let an opinion overrule moneyguard.
+    assert [c["case_id"] for c in prepare_batch(results)] == ["p1"]
+
+
+def test_prepare_batch_carries_the_bodies_from_the_corpus():
+    from bench.judge import prepare_batch
+    results = _results(_record_with("p1", None, "not graded: no judge configured"))
+    corpus = {"cases": [{"id": "p1", "message": "@bot ai nợ ai", "reply": "Không ai nợ ai."}]}
+    case = prepare_batch(results, corpus)[0]
+    assert case["message"] == "@bot ai nợ ai" and case["reply"] == "Không ai nợ ai."
+
+
+def test_apply_verdicts_records_who_judged():
+    from bench.judge import apply_verdicts
+    results = _results(_record_with("p1", None, "not graded: no judge configured"))
+    applied, unmatched = apply_verdicts(
+        results, {"p1": {"ok": False, "reason": "narrates its machinery"}},
+        "claude-opus-5 (agent)")
+    assert applied == 1 and unmatched == 0
+    assert results["judge_model"] == "claude-opus-5 (agent)"
+    assert results["records"][0]["grades"]["prose_quality"] == {
+        "passed": False, "reason": "narrates its machinery"}
+
+
+def test_apply_verdicts_never_overrules_a_decided_verdict():
+    from bench.judge import apply_verdicts
+    results = _results(_record_with("p3", False, "unbacked amounts in the reply: [40000]"))
+    applied, _ = apply_verdicts(results, {"p3": {"ok": True, "reason": "looks fine"}}, "agent")
+    # moneyguard is deterministic and owns amount provenance; an opinion must not
+    # be able to wave a D3 violation through.
+    assert applied == 0
+    assert results["records"][0]["grades"]["prose_quality"]["passed"] is False
+
+
+def test_a_verdict_for_an_unknown_case_is_reported():
+    from bench.judge import apply_verdicts
+    results = _results(_record_with("p1", None, "not graded: no judge configured"))
+    _, unmatched = apply_verdicts(results, {"p1": {"ok": True}, "p99": {"ok": True}}, "agent")
+    assert unmatched == 1

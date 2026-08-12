@@ -199,20 +199,51 @@ array** comes back with correct integer types — which is the exact shape Task 
 converter has to preserve. It also read `154k` → `154000` unprompted, so the
 `k`-suffix convention the prompt relies on survives.
 
-**⚠️ `meta/muse-glimmer-30b` is rate-limited upstream.** Two of three probes came
-back `429 Provider returned error … temporarily rate-limited upstream. Please
-retry shortly, or add your own key to accumulate your rate limit`, while
-`settle_period` passed. So the failures are **capacity, not capability** — but this
-is the model every bill photo routes to, and a 429 on that path means a dropped
-bill, which §12 says must never happen silently. Two consequences:
+### ⛔ BLOCKING, and a user decision: the configured vision model cannot call `propose_meal`
 
-- The probe now retries `429`/`5xx` with backoff, so a capacity blip cannot read as
-  a capability failure.
-- **Task 13 must treat a vision-path 429 as a retry-then-fail-loudly case, not a
-  generic error.** Design §12's "image turns must fail loudly, never silently drop
-  the photo" now has a specific, observed trigger. Worth also raising with the user
-  whether a paid/dedicated route for this model is available, since the upstream
-  message suggests shared capacity.
+The first probe of `meta/muse-glimmer-30b` returned `429 … temporarily rate-limited
+upstream`, so the probe gained retry/backoff. **With retries, the real answer is
+worse than rate limiting.** Measured twice, independently:
+
+```
+=== meta/muse-glimmer-30b
+  FAIL  propose_meal        no tool call; replied: ''
+  PASS  update_member       {"target": "binh", "nickname": "Bình Nguyễn"}
+  PASS  settle_period       {"keyword": "this_week"}
+=== meta/muse-glimmer-30b (vision, real bill image)
+  FAIL  propose_meal+vision no tool call; replied: ''
+```
+
+It calls the two simple schemas and **silently emits nothing** for `propose_meal` —
+no tool call, empty content — on both the text itemized case and the bill photo. A
+bill turn ends in `propose_meal`, so **the bill path does not work with this
+model**. This is exactly the case Step 3's stop-rule reserves for the user: the
+catalogue said `tools: true`, and that claim does not survive contact with our
+hardest schema.
+
+`PI_VISION_MODEL` is left as configured rather than changed unilaterally. Three
+alternatives were probed on the identical four checks so the choice is measured:
+
+| model | 3 schemas | bill image | in/out per M | ctx | note |
+|---|---|---|---|---|---|
+| **`qwen/qwen3-vl-30b-a3b-instruct`** | **3/3** | **PASS** | $0.15 / $0.60 | 262k | read `154000` and all three dish names correctly |
+| `google/gemini-2.5-flash-lite` | 2/3 | PASS | $0.10 / $0.40 | 1M | failed *text* `propose_meal`, passed the image; also read the bill's date into `day_word` |
+| `meta/muse-spark-1.2` | — | — | — | — | `404 No endpoints available matching your guardrail restrictions and data policy` — blocked by the account's OpenRouter privacy settings |
+
+**Recommendation: `qwen/qwen3-vl-30b-a3b-instruct`** — the only candidate that
+passed every check, with more than twice `muse-glimmer`'s context and correct
+Vietnamese OCR. `gemini-2.5-flash-lite` is cheaper and passed the path that
+matters, but a model that intermittently declines to call the same tool is a poor
+foundation for the money path. Changing this is one environment variable; nothing
+in the code depends on the choice.
+
+Two things to keep regardless of which model wins:
+
+- The probe retries `429`/`5xx` with backoff, so a capacity blip cannot read as a
+  capability failure — that distinction cost two runs to establish.
+- **Task 13 must treat a vision turn that produces no tool call as a loud failure**,
+  not a generic error. Design §12 says a dropped bill must never be silent, and
+  this is the observed shape of it: empty content, no call, no exception.
 
 **One consequence carried into Task 11.** Design §6's `StringEnum` requirement
 was written because pi's `docs/extensions.md` warns that `Type.Union`/
@@ -969,6 +1000,30 @@ different models; a single flip is indistinguishable from sampling noise.
       → **636 passed, 1 skipped** (the skip is `test_scenario_week_llm.py`, which
       is opt-in behind `RUN_LLM_EVAL`). 125 of those tests are new in Phase 1.
 
+> ### The judge is the agent, not a third-party flash model
+>
+> `bench/judge.py` keeps `openrouter_judge` for unattended runs, but it is no longer
+> the recommended path, and the first baseline showed why:
+> `gemini-2.5-flash-lite` failed correct replies for "restating an amount already
+> present in the user's message" when the message **contained no amount at all**. A
+> flash-tier model is the weakest link in a chain whose entire job is careful
+> reading.
+>
+> So the judge can be **the agent running the harness**, exchanged through files
+> because Python cannot call it:
+>
+> ```bash
+> python -m bench.judge --prepare RESULTS.json --corpus CORPUS.json --out batch.json
+> #   … read batch.json, write verdicts.json …
+> python -m bench.judge --apply RESULTS.json verdicts.json --judged-by "claude-opus-5 (agent)"
+> ```
+>
+> `--prepare` offers only what a judge could legitimately decide: a card turn, an
+> errored turn and a **stage-1 `moneyguard` failure** are already settled, and
+> `--apply` refuses to overrule a decided verdict — an opinion must never wave a D3
+> violation through. `judge_model` records who judged, so §11.5's "pinned across
+> both runs" is still enforced by `bench.report`'s mismatch warning.
+
 - [x] **Step 2: Pin the judge.** `BENCH_JUDGE_MODEL` and its key must be set for
       **this** run, identically to Task 22. A baseline graded without a judge
       against a Pi run graded with one is not a comparison (design §11.5). If no
@@ -1068,6 +1123,30 @@ superseded by `python -m bench.export_prod --baseline …`.
    clears the rubric where Cursor did not is flagged `IMPROVED`; a case both fail is
    `BASELINE-FAILED-TOO`, never `BOTH-FAILING`. Reproducing this would be
    reproducing a defect.
+
+   **Re-judged by the agent: 3/26.** The 17 undecided cases were read and graded by
+   hand (the 9 stage-1 failures stand as `moneyguard` decided them). Three pass:
+   `p210` correctly explains that `pick_random` cannot exclude anyone — it takes only
+   a `label`, so that is accurate rather than evasive; `p240` answers an English
+   question in Vietnamese and asks for exactly the two missing facts; `p284` says it
+   does not know what lunch is and invites the room to say. The other 14 fail, 12 of
+   them for narrating machinery.
+
+   **Two findings that are not about prose quality at all**, and both matter more
+   than the score:
+
+   - **The diacritic-shredding bug is live in production.** `p142` and `p144` render
+     as `Đ ề xuất # 101`, `X ác nhận`, `th ẻ nh áp`, `H ệ thống` — and `p144`'s
+     opening is literally `V ẫn không được đâu A4`, the *same string* design §14 and
+     Task 14's test quote as the incident that joining text fragments with a
+     separator caused. It is still happening. Task 14's "text fragments join with
+     empty string, never a separator" test is therefore not a regression guard for a
+     fixed bug — it is a fix that has not landed, and the corpus now carries two real
+     cases to verify it against.
+   - **An infrastructure error was posted into the room as a reply**, twice: `p271`
+     and `p273` both read `⚠️ Model Blocked This model has been blocked by your team
+     admin settings.` in English. Whatever the sidecar does with a provider refusal,
+     it must not surface the vendor's own error text as the bot's answer.
 
    One residual limitation, stated rather than hidden: for a **prose** case the log
    records no tool calls at all (a fallback turn stores no attachment), so
