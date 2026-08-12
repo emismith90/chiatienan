@@ -983,29 +983,56 @@ superseded by `python -m bench.export_prod --baseline …`.
 2. **It has `repeat=1`.** A log cannot be re-rolled. Repeat *Pi* instead — a fixed
    reference with a repeated candidate still separates a regression from sampling
    noise on the side that can vary.
-3. **Its `prose_quality` is inflated toward failure**, for two separate reasons
-   that were only visible once it ran, and both must be fixed before Task 22
-   compares anything:
+3. **Its `prose_quality` of 1/26 is real, and it is not a target.** The first
+   attempt read 15/45 = 0.33; both numbers were wrong, for reasons worth recording
+   because each was a harness bug rather than an engine fault:
 
-   - **The log records the produced attachment, not the tool calls.** So a baseline
-     record carries **one** tool invocation, while the real turn may have called
-     `find_members` and `get_period_summary` too — whose results would have
-     *backed* the amounts in the reply. `moneyguard.backed_amounts` is therefore
-     under-populated and stage 1 over-reports: 14 of the 30 prose failures are
-     `unbacked amounts`, some listing eight at once. A Pi run records its real tool
-     list and gets a fairer stage 1, so this asymmetry flatters **Pi**. Disclose it;
-     do not let it read as an improvement.
-   - **The judge over-applies rubric item 4.** 11 of the 30 failures are "restated
-     an amount already present in the user's message" — but the rubric says
-     *"amounts the card already shows"*. Echoing the user's own number back
-     ("ghi 305k nhé") is normal confirmation, not a fault. **Tighten the wording in
-     `graders.PROSE_RUBRIC` before the Pi run**, and re-grade this baseline with the
-     same rubric afterwards, or the two runs are not comparable (§11.5).
+   - **The recorded tool result was stubbed** as `{"ok": True}`. That broke two
+     graders at once: `posted_body_kind` could not see `type`, so the prose of
+     *card* turns — whose prose the room never reads — was judged anyway; and
+     `moneyguard.backed_amounts` had nothing to back the server-rendered numbers
+     with, so correct replies like `💸 A4 trả A3 61,000đ` were failed for inventing
+     money. Fixed by carrying the produced attachment through as the tool result,
+     which is what it is.
+   - **Rubric item 4 was unanswerable.** It asked whether the reply "restates
+     amounts the card already shows", but the judge is shown only the user's message
+     and the reply — never the card. It guessed, and failed correct replies for
+     "restating an amount already present in the user's message" when the user's
+     message contained **no amount at all**. Amount provenance is `moneyguard`'s
+     job, deterministically, so item 4 now only forbids obviously invented amounts.
+   - **The prose-gradable cases were being discarded.** Every attachment type that
+     yields a tool is a *card* type, so a tool-gradable turn is never
+     prose-gradable: the two populations are **disjoint**. The 27 turns flagged
+     `review` were not leftovers, they were the entire prose corpus. They are now
+     cases with no tool expectation (`tool_selection` → n/a) and a real prose grade,
+     and `review` is down to **0**.
+   - **Commit rows were being paired as turns.** A `meal` / `payment` attachment is
+     a human pressing Confirm; pairing one invented a case out of whatever text row
+     preceded the button press. `COMMIT_TYPES` was declared and never used.
 
-   Net: treat 0.33 as a *provisional* reference. The genuine signal underneath is
-   real — Cursor does type unbacked amounts into prose, which is exactly what
-   `moneyguard`'s own field note describes — but this number is not yet a clean
-   measurement of it.
+   After all four fixes: **107 cases, 0 flagged review — 81 tool-graded (1.00) and
+   26 prose-graded (1/26).** That 1/26 was then checked by reading the replies, and
+   it is correct. Cursor's fallback prose narrates its own machinery — "mình đọc
+   skill phù hợp rồi xử lý", "Mình sẽ tìm thành viên A2 rồi cập nhật tên", "mình làm
+   theo skill ghi trả tiền" — and one reply hand-types a six-row balance table,
+   which is `moneyguard`'s field note happening in production.
+
+   **So the prose bar is the rubric, not Cursor.** See design §1.1: a Pi reply that
+   clears the rubric where Cursor did not is flagged `IMPROVED`; a case both fail is
+   `BASELINE-FAILED-TOO`, never `BOTH-FAILING`. Reproducing this would be
+   reproducing a defect.
+
+   One residual limitation, stated rather than hidden: for a **prose** case the log
+   records no tool calls at all (a fallback turn stores no attachment), so
+   `moneyguard`'s backed set holds only the user's own words and its 9 findings on
+   the baseline cannot be verified in principle. `p30`'s hand-typed table is a true
+   positive by inspection. A Pi run records its real tool list and gets a sound
+   stage 1, so treat the baseline's stage-1 count as indicative only.
+
+   **And `_strip_narration` is leaking today.** Those bodies are what `chat.py`
+   posted — *after* stripping. Task 22 Step 7's decision is therefore settled
+   already, in the opposite direction from the one it anticipated: keep the
+   mechanism, and strengthen it.
 
 ### Privacy, and what human review actually caught
 

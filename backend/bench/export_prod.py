@@ -316,6 +316,11 @@ def _turns(rows: list[dict]) -> list[tuple[dict, list[dict]]]:
     for index, row in enumerate(rows):
         if row.get("kind") not in BOT_KINDS:
             continue
+        if _attachment_type(row) in COMMIT_TYPES:
+            # A `meal` / `payment` row is a human pressing Confirm, not a turn the
+            # LLM ran. Pairing one would invent a case out of whatever text row
+            # happened to precede the button press.
+            continue
         trigger = next((rows[j] for j in range(index - 1, -1, -1)
                         if rows[j].get("kind") == USER_KIND), None)
         if trigger is None:
@@ -402,11 +407,31 @@ def build_cases(rows: list[dict], *, image_lookback: int = 10,
             "message": trigger.get("body") or "",
             "had_images": bool(tainted),
             "reply": prose,
+            # The produced attachment IS what the tool returned, so it is carried
+            # through as the recorded tool result. Stubbing it broke two graders at
+            # once: `posted_body_kind` could not see `type` and so judged the prose
+            # of card turns whose prose the room never saw, and
+            # `moneyguard.backed_amounts` had nothing to back the server-rendered
+            # numbers with, flagging correct replies as inventing money.
+            "result": {"ok": True, **(payload or {})},
             "expect": {},
         }
         if tool is None:
-            case["review"] = True
-            cases.append(case)
+            # No card, but the bot did reply in prose — so the room read
+            # `final_text`, and this is a **prose case**: no tool expectation
+            # (`tool_selection` grades `None`), a real `prose_quality` grade.
+            #
+            # These are not leftovers. Every attachment type that yields a tool is
+            # a *card* type, so a tool-gradable turn is never prose-gradable and
+            # vice versa: the two populations are disjoint, and dropping these
+            # would leave `prose_quality` with no coverage anywhere in the harness
+            # (it is n/a on 19 of the 20 golden cases too).
+            if prose.strip():
+                cases.append(case)
+            else:
+                # No card and nothing said: nothing to grade either way.
+                case["review"] = True
+                cases.append(case)
             continue
 
         case["expect"]["tools"] = [tool]
@@ -446,13 +471,21 @@ def build_baseline(cases: list[dict], *, room: int, engine: str = "cursor",
     for case in cases:
         if case.get("review"):
             continue
-        tool = case["expect"]["tools"][0]
-        args = (case["expect"].get("args") or {}).get(tool) or {}
+        tools = (case.get("expect") or {}).get("tools") or []
+        tool = tools[0] if tools else None
+        args = ((case.get("expect") or {}).get("args") or {}).get(tool) or {}
         record = {
             "version": 1, "case_id": case["id"], "rep": 0, "source": "prod",
             "day": case["day"], "message": case["message"],
             "had_images": case["had_images"], "room_id": None,
-            "tools": [{"name": tool, "args": args, "result": {"ok": True}}],
+            # `ok: True` is injected because the *stored* attachment drops it —
+            # `expense_draft` and `payment_draft` rows carry no `ok` key — while the
+            # tool result the graders would have seen did have one. A prose case ran
+            # no money tool, so its list is empty and `moneyguard` has only the
+            # user's own message to back amounts with — which is the point: a
+            # computed number in a tool-less reply is the D3 violation.
+            "tools": ([{"name": tool, "args": args,
+                        "result": case.get("result") or {"ok": True}}] if tool else []),
             "final_text": case.get("reply") or "", "error": None,
             "elapsed_s": 0.0, "stats": None,
         }

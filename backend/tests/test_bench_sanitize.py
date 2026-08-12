@@ -203,20 +203,24 @@ def test_a_user_message_with_no_bot_reply_is_not_a_case_at_all():
     assert build_cases([_row(id=1, body="ăn gì trưa nay")]) == []
 
 
-def test_an_unrecognized_attachment_type_is_flagged_for_review():
+def test_an_unrecognized_attachment_type_yields_a_prose_case():
     from bench.export_prod import build_cases
+    # The room still read the reply, so it is gradeable as prose even though no
+    # tool can be derived from an attachment shape this code does not know.
     rows = [_row(id=1, body="@bot ?"),
-            _bot(id=2, body="hử", attachments={"type": "something_new"})]
-    assert build_cases(rows)[0]["review"] is True
+            _bot(id=2, body="hử, ý bạn là gì?", attachments={"type": "something_new"})]
+    case = build_cases(rows)[0]
+    assert not case.get("review") and case["expect"] == {}
 
 
-def test_a_commit_row_is_not_mistaken_for_a_turn():
+def test_a_commit_row_is_not_a_turn_at_all():
     from bench.export_prod import build_cases
-    # `meal` and `payment` attachments are Confirm presses, not LLM turns.
-    rows = [_row(id=1, body="@bot 300k cả nhóm"),
-            _bot(id=2, attachments={"type": "meal", "bill_total": 300000,
-                                    "tracked_total": 300000})]
-    assert build_cases(rows)[0]["review"] is True
+    # `meal` and `payment` attachments are a human pressing Confirm. Pairing one
+    # would invent a case out of whatever text row preceded the button press.
+    rows = [_row(id=1, body="chào cả nhà"),
+            _bot(id=2, body="🍜 Đã ghi", attachments={"type": "meal",
+                                                      "bill_total": 300000})]
+    assert build_cases(rows) == []
 
 
 def test_a_settlement_reply_derives_settle_period_with_no_member_args():
@@ -321,7 +325,9 @@ def test_the_recorded_baseline_records_what_prod_did():
 
 def test_review_flagged_cases_are_left_out_of_the_baseline():
     from bench.export_prod import build_baseline, build_cases
-    rows = [_row(id=1, body="@bot ?"), _bot(id=2, attachments={"type": "mystery"})]
+    # Nothing said and no card: nothing to grade either way.
+    rows = [_row(id=1, body="@bot ?"), _bot(id=2, body="", attachments={})]
+    assert build_cases(rows)[0]["review"] is True
     assert build_baseline(build_cases(rows), room=3)["records"] == []
 
 
@@ -375,3 +381,33 @@ def test_the_baseline_omits_message_bodies_because_it_is_committed():
     assert "message" not in rec and rec["final_text"] == ""
     assert baseline["bodies_included"] is False
     assert rec["grades"]["tool_selection"]["passed"] is True   # still gradeable
+
+
+def test_a_prose_only_turn_is_a_case_not_a_leftover():
+    from bench.export_prod import build_cases
+    # Every attachment type that yields a tool is a CARD type, so a tool-gradable
+    # turn is never prose-gradable. Discarding these would leave prose_quality with
+    # no coverage anywhere in the harness.
+    rows = [_row(id=1, body="@bot còn ai nợ ai không"),
+            _bot(id=2, body="Không ai nợ ai cả nhé.", attachments={})]
+    case = build_cases(rows)[0]
+    assert not case.get("review")
+    assert case["expect"] == {}          # tool_selection -> n/a
+    assert case["reply"] == "Không ai nợ ai cả nhé."
+
+
+def test_a_turn_with_no_card_and_no_words_is_still_flagged_for_review():
+    from bench.export_prod import build_cases
+    rows = [_row(id=1, body="@bot ?"), _bot(id=2, body="", attachments={})]
+    assert build_cases(rows)[0]["review"] is True
+
+
+def test_a_prose_case_is_graded_on_prose_and_not_on_tools():
+    from bench.export_prod import build_baseline, build_cases
+    rows = [_row(id=1, body="@bot còn ai nợ ai không"),
+            _bot(id=2, body="Không ai nợ ai cả nhé.", attachments={})]
+    grades = build_baseline(build_cases(rows), room=3,
+                            judge=lambda *_: {"ok": True, "reason": "fine"}
+                            )["records"][0]["grades"]
+    assert grades["tool_selection"]["passed"] is None
+    assert grades["prose_quality"]["passed"] is True

@@ -21,7 +21,15 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [],
+            "committed": false,
+            "message": "Không có gì để chốt trong kỳ này (mọi người đã cân bằng)."
           }
         }
       ],
@@ -67,7 +75,27 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 6,
+            "member_participants": [
+              4,
+              9,
+              6,
+              7,
+              8
+            ],
+            "guests": [],
+            "bill_total": 305000,
+            "adjustments": [],
+            "dish": "bún bò huế",
+            "initiator": "A5",
+            "note": "thứ 3",
+            "per_head_preview": 61000,
+            "raw_input": "@bot thứ 3 ăn bún bò huế, A2 đinh rủ, anh A3 trả 305k chia 5 trừ A2",
+            "turn_id": "608309c553c94b8aa912f29a3aa2931e",
+            "committed_meal_id": 2
           }
         }
       ],
@@ -113,7 +141,27 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 9,
+            "member_participants": [
+              5,
+              4,
+              9,
+              6,
+              8
+            ],
+            "guests": [],
+            "bill_total": 375000,
+            "adjustments": [],
+            "dish": "nem nướng + gà rán",
+            "initiator": "A6",
+            "note": null,
+            "per_head_preview": 75000,
+            "raw_input": "@bot thứ 4 A6 rủ đi ăn nem nướng + gà rán và trả 375k tất cả ăn trừ A4",
+            "turn_id": "4eba16d46fd441aab75c08cb28eda1b1",
+            "committed_meal_id": 3
           }
         }
       ],
@@ -149,7 +197,72 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 4,
+                "from_name": "A1",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 4,
+                "from_name": "A1",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "Chia tien an 2026-07-22"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "Chia tien an 2026-07-22"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -185,7 +298,24 @@
           "name": "propose_payment",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 4,
+                "to_member_id": 6,
+                "amount": 61000,
+                "note": null
+              },
+              {
+                "from_member_id": 4,
+                "to_member_id": 9,
+                "amount": 75000,
+                "note": null
+              }
+            ],
+            "turn_id": "6bc2b17b80b3407d848f24c91be9ba53"
           }
         }
       ],
@@ -203,8 +333,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [61000, 75000]"
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -221,7 +351,56 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "A3: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "[HOLDER]: T4 bun bo hue"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "A5: T4 bun bo hue"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A5: T4 nem nuong + ga ran"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -257,7 +436,24 @@
           "name": "propose_payment",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 8,
+                "to_member_id": 9,
+                "amount": 75000,
+                "note": null
+              },
+              {
+                "from_member_id": 8,
+                "to_member_id": 6,
+                "amount": 61000,
+                "note": null
+              }
+            ],
+            "turn_id": "1c4382b46bb74bc5886f340dcb7edcc7"
           }
         }
       ],
@@ -275,8 +471,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [61000, 75000]"
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -293,7 +489,40 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "A3: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "[HOLDER]: T4 bun bo hue"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -318,6 +547,34 @@
     },
     {
       "version": 1,
+      "case_id": "p30",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [47000, 61000, 75000, 89000]"
+        }
+      }
+    },
+    {
+      "version": 1,
       "case_id": "p32",
       "rep": 0,
       "source": "prod",
@@ -329,7 +586,40 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "A3: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 61000,
+                "note": "[HOLDER]: T4 bun bo hue"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -349,6 +639,34 @@
         "prose_quality": {
           "passed": null,
           "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p34",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot is narrating its own machinery by saying 'mình làm theo skill ghi trả tiền' and 'bỏ trống số tiền để công cụ tự tính đúng số nợ'."
         }
       }
     },
@@ -369,7 +687,18 @@
             "amount": 61000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 7,
+                "to_member_id": 6,
+                "amount": 61000,
+                "note": null
+              }
+            ],
+            "turn_id": "c7de450fbd264afda8155a9dd0896314"
           }
         }
       ],
@@ -387,8 +716,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p39",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-22",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
           "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "reason": "The bot narrated its own machinery by stating 'mình đọc skill phù hợp rồi xử lý' and 'làm theo skill ghi trả tiền'."
         }
       }
     },
@@ -405,7 +762,32 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "A3: T4 nem nuong + ga ran"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -441,7 +823,32 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-22"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 14000,
+                "note": "A3: T4 nem nuong + ga ran"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -466,6 +873,34 @@
     },
     {
       "version": 1,
+      "case_id": "p45",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot is narrating its own machinery and asking clarifying questions instead of directly answering the user's request."
+        }
+      }
+    },
+    {
+      "version": 1,
       "case_id": "p48",
       "rep": 0,
       "source": "prod",
@@ -481,7 +916,18 @@
             "amount": 61000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 6,
+                "amount": 61000,
+                "note": "bún bò huế"
+              }
+            ],
+            "turn_id": "15d8e9db815c[REDACTED]d6291770bd17"
           }
         }
       ],
@@ -499,8 +945,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -517,7 +963,32 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-23"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A2: T4 nem nuong + ga ran"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 75000,
+                "note": "A3: T4 nem nuong + ga ran"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -557,7 +1028,18 @@
             "amount": 75000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 5,
+                "to_member_id": 9,
+                "amount": 75000,
+                "note": null
+              }
+            ],
+            "turn_id": "b57172e[REDACTED]b07a5fa5c383a770"
           }
         }
       ],
@@ -575,8 +1057,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -597,7 +1079,18 @@
             "amount": 75000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 6,
+                "to_member_id": 9,
+                "amount": 75000,
+                "note": null
+              }
+            ],
+            "turn_id": "d940128baf4846a09c72c0f[REDACTED]e"
           }
         }
       ],
@@ -615,8 +1108,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated the amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -641,7 +1134,26 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 6,
+            "member_participants": [
+              9,
+              7,
+              6
+            ],
+            "guests": [],
+            "bill_total": 120000,
+            "adjustments": [],
+            "dish": "bún chả rửa xe",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 40000,
+            "occurred_on": null,
+            "raw_input": "@bot bún chả rửa xe 120k tính cho A6, A4 và A3. A3 trả tiền",
+            "turn_id": "9d1c[REDACTED]d4d851081cc52af9297",
+            "committed_meal_id": 4
           }
         }
       ],
@@ -681,7 +1193,18 @@
             "amount": 40000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 7,
+                "to_member_id": 6,
+                "amount": 40000,
+                "note": null
+              }
+            ],
+            "turn_id": "a12bb016ea794636b232c9b03146a8df"
           }
         }
       ],
@@ -699,8 +1222,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the payment and the sender/receiver in Vietnamese."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -717,7 +1240,24 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": "2026-07-20",
+              "to": "2026-07-26"
+            },
+            "transfers": [
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 40000,
+                "note": "A6: T4 bun bo hue, T5 bun cha rua xe"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -753,7 +1293,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-23"
+            },
+            "owe": [],
+            "owed": [
+              {
+                "debtor_id": 9,
+                "name": "A6",
+                "meal_id": 4,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              }
+            ],
+            "net": 40000
           }
         }
       ],
@@ -771,8 +1333,64 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p70",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
           "passed": false,
-          "reason": "unbacked amounts in the reply: [40000]"
+          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A2 rồi cập nhật tên thành A2.' and 'Đã tìm thấy A2 — đang đổi tên thành A2.'."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p72",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A5 rồi cập nhật tên thành A5.' and 'Đã tìm thấy A5 — đang đổi tên thành A5.'."
         }
       }
     },
@@ -789,7 +1407,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 9,
+              "name": "A6"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-24"
+            },
+            "owe": [
+              {
+                "creditor_id": 6,
+                "name": "A3",
+                "meal_id": 4,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -40000
           }
         }
       ],
@@ -807,8 +1447,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p76",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
           "passed": false,
-          "reason": "unbacked amounts in the reply: [40000]"
+          "reason": "The bot narrated its own machinery by stating 'Mình sẽ tìm thành viên A4 rồi cập nhật tên thành A4.' and describing the update process."
         }
       }
     },
@@ -837,7 +1505,29 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 6,
+            "member_participants": [
+              7,
+              9,
+              4,
+              6
+            ],
+            "guests": [
+              "G3"
+            ],
+            "bill_total": 335000,
+            "adjustments": [],
+            "dish": null,
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 83750,
+            "occurred_on": null,
+            "raw_input": "@bot I paid 335k, A4 A6, hưng, và G3",
+            "turn_id": "12dabbeff9904f[REDACTED]c95e7b",
+            "committed_meal_id": 5
           }
         }
       ],
@@ -877,7 +1567,18 @@
             "amount": 67000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 7,
+                "to_member_id": 6,
+                "amount": 67000,
+                "note": null
+              }
+            ],
+            "turn_id": "33ee3860d68e473bb307c562daf5b1d9"
           }
         }
       ],
@@ -895,8 +1596,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the payment and the amount from the user's input."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -913,7 +1614,47 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-24"
+            },
+            "owe": [],
+            "owed": [
+              {
+                "debtor_id": 9,
+                "name": "A6",
+                "meal_id": 4,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              },
+              {
+                "debtor_id": 9,
+                "name": "A6",
+                "meal_id": 5,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "amount": 67000,
+                "status": "unpaid"
+              },
+              {
+                "debtor_id": 4,
+                "name": "A1",
+                "meal_id": 5,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "amount": 67000,
+                "status": "unpaid"
+              }
+            ],
+            "net": 174000
           }
         }
       ],
@@ -931,8 +1672,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [40000, 67000, 174000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -953,7 +1694,18 @@
             "amount": 67000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 4,
+                "to_member_id": 6,
+                "amount": 67000,
+                "note": null
+              }
+            ],
+            "turn_id": "edc194b5dea64337bf0b4b073f4cbe90"
           }
         }
       ],
@@ -971,8 +1723,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -989,7 +1741,38 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 9,
+              "name": "A6"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 6,
+                "name": "A3",
+                "meal_id": 4,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              },
+              {
+                "creditor_id": 6,
+                "name": "A3",
+                "meal_id": 5,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "amount": 67000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -107000
           }
         }
       ],
@@ -1007,8 +1790,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [40000, 67000, 107000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1025,7 +1808,24 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 107000,
+                "note": "A6: T4 bun bo hue, T5 bun cha rua xe, T6"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1061,7 +1861,24 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 107000,
+                "note": "A6: T4 bun bo hue, T5 bun cha rua xe, T6"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1097,7 +1914,24 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 107000,
+                "note": "A6: T4 bun bo hue, T5 bun cha rua xe, T6"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1122,6 +1956,34 @@
     },
     {
       "version": 1,
+      "case_id": "p98",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot is narrating its own machinery by explaining the process and listing the missing information it needs."
+        }
+      }
+    },
+    {
+      "version": 1,
       "case_id": "p100",
       "rep": 0,
       "source": "prod",
@@ -1133,7 +1995,28 @@
           "name": "propose_meal",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "cancelled",
+            "payer_member_id": 4,
+            "member_participants": [
+              4,
+              8,
+              9,
+              6,
+              7,
+              5
+            ],
+            "guests": [],
+            "bill_total": 324000,
+            "adjustments": [],
+            "dish": null,
+            "initiator": null,
+            "note": "A1 bò, A5 gà, A6 mỳ cua, A3+A4 cơm tấm, A2 bò rim",
+            "per_head_preview": 54000,
+            "occurred_on": null,
+            "raw_input": "@bot i paid, 324k",
+            "turn_id": "0e[REDACTED]bc5a2ff3a077a7eb"
           }
         }
       ],
@@ -1153,6 +2036,230 @@
         "prose_quality": {
           "passed": null,
           "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p102",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [324000]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p104",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [324200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p107",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [324200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p109",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [42000, 69500, 94200, 324200, 414200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p112",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [324200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p114",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": true,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [42000, 69500, 94200, 324200, 414200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p116",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [324200]"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p118",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "unbacked amounts in the reply: [15000, 27000, 54500, 79200, 90000, 324200]"
         }
       }
     },
@@ -1206,7 +2313,54 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 4,
+            "member_participants": [
+              4,
+              8,
+              9,
+              6,
+              7,
+              5
+            ],
+            "guests": [],
+            "bill_total": 324200,
+            "adjustments": [
+              {
+                "member": 4,
+                "amount": 54500
+              },
+              {
+                "member": 8,
+                "amount": 54500
+              },
+              {
+                "member": 9,
+                "amount": 79200
+              },
+              {
+                "member": 6,
+                "amount": 54500
+              },
+              {
+                "member": 7,
+                "amount": 54500
+              },
+              {
+                "member": 5,
+                "amount": 27000
+              }
+            ],
+            "dish": "Grab Food",
+            "initiator": null,
+            "note": "Theo món sau giảm delta: A1 bò, A5 gà, A6 mỳ cua, A3+A4 cơm tấm, A2 bò rim",
+            "per_head_preview": 0,
+            "occurred_on": null,
+            "raw_input": "@bot log",
+            "turn_id": "dd83e2b8ba3c414bb04e0cbe537d080a",
+            "committed_meal_id": 6
           }
         }
       ],
@@ -1246,7 +2400,18 @@
             "amount": 107000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 6,
+                "amount": 107000,
+                "note": null
+              }
+            ],
+            "turn_id": "4a3a618ae95b41ada15cae322708ae24"
           }
         }
       ],
@@ -1264,8 +2429,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated the amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -1282,7 +2447,18 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settle_blocked",
+            "pending": [
+              {
+                "draft_id": 101,
+                "kind": "meal",
+                "payer_name": "A1",
+                "bill_total": 324000,
+                "participant_count": 6
+              }
+            ],
+            "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt."
           }
         }
       ],
@@ -1301,7 +2477,7 @@
         },
         "prose_quality": {
           "passed": null,
-          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+          "reason": "not graded: the room saw a server-rendered blocked-settle body, not the model's prose"
         }
       }
     },
@@ -1322,7 +2498,18 @@
             "amount": 27000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 5,
+                "to_member_id": 4,
+                "amount": 27000,
+                "note": null
+              }
+            ],
+            "turn_id": "f521c79918f546b5ad73d12e6a2e44c2"
           }
         }
       ],
@@ -1340,8 +2527,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -1358,7 +2545,18 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settle_blocked",
+            "pending": [
+              {
+                "draft_id": 101,
+                "kind": "meal",
+                "payer_name": "A1",
+                "bill_total": 324000,
+                "participant_count": 6
+              }
+            ],
+            "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt."
           }
         }
       ],
@@ -1377,7 +2575,35 @@
         },
         "prose_quality": {
           "passed": null,
-          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+          "reason": "not graded: the room saw a server-rendered blocked-settle body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p134",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot is narrating its own machinery by stating 'mình đọc skill phù hợp rồi xử lý' and explaining its limitations instead of directly answering the user's request."
         }
       }
     },
@@ -1394,7 +2620,18 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settle_blocked",
+            "pending": [
+              {
+                "draft_id": 101,
+                "kind": "meal",
+                "payer_name": "A1",
+                "bill_total": 324000,
+                "participant_count": 6
+              }
+            ],
+            "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt."
           }
         }
       ],
@@ -1413,7 +2650,35 @@
         },
         "prose_quality": {
           "passed": null,
-          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+          "reason": "not graded: the room saw a server-rendered blocked-settle body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p138",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot narrated its own machinery by stating it would check for a suitable skill and explicitly mentioned it cannot confirm via chat, which violates rule 3."
         }
       }
     },
@@ -1430,7 +2695,18 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settle_blocked",
+            "pending": [
+              {
+                "draft_id": 101,
+                "kind": "meal",
+                "payer_name": "A1",
+                "bill_total": 324000,
+                "participant_count": 6
+              }
+            ],
+            "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt."
           }
         }
       ],
@@ -1449,7 +2725,63 @@
         },
         "prose_quality": {
           "passed": null,
-          "reason": "not graded: the room saw a server-rendered settlement body, not the model's prose"
+          "reason": "not graded: the room saw a server-rendered blocked-settle body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p142",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot's reply is not in casual Vietnamese and contains formatting issues that make it difficult to read."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p144",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot's reply is not in Vietnamese, it is a jumbled mess of characters and does not answer the user's question."
         }
       }
     },
@@ -1466,7 +2798,48 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A3: T2 Grab Food"
+              },
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 79200,
+                "note": "A6: T2 Grab Food"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A4: T2 Grab Food"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A5: T2 Grab Food"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1506,7 +2879,18 @@
             "amount": 79200
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 4,
+                "amount": 79200,
+                "note": null
+              }
+            ],
+            "turn_id": "ea4b32c1e9db4428b8cd5adab40d2411"
           }
         }
       ],
@@ -1524,8 +2908,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the recipient and the amount to be transferred, adhering to all constraints."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -1542,7 +2926,48 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": "2026-07-27",
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A3: T2 Grab Food"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A4: T2 Grab Food"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A5: T2 Grab Food"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 107000,
+                "note": "Chia tien an 27/7"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1578,7 +3003,232 @@
           "name": "get_period_summary",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": "2026-07-20",
+              "to": "2026-07-26"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": "bún bò huế",
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  4,
+                  9,
+                  6,
+                  7,
+                  8
+                ],
+                "created_at": "2026-07-22T14:39:32.910039",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 9,
+                "dish": "nem nướng + gà rán",
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  5,
+                  4,
+                  9,
+                  6,
+                  8
+                ],
+                "created_at": "2026-07-22T14:41:11.761471",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.176119",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 4,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.198453",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 8,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.259609",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 8,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.273590",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:47:11.744865",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 9,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T09:38:19.666260",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 5,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T10:11:21.863647",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 6,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:23:00.690762",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 6,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  9,
+                  7,
+                  6
+                ],
+                "created_at": "2026-07-23T12:24:06.189997",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:24:42.055833",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 5,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  7,
+                  9,
+                  4,
+                  6
+                ],
+                "created_at": "2026-07-24T12:44:15.142608",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:46:45.539587",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:48:36.886280",
+                "from_name": "A1",
+                "to_name": "A3"
+              }
+            ],
+            "balances": [
+              {
+                "id": 9,
+                "name": "A6",
+                "balance": -107000
+              },
+              {
+                "id": 4,
+                "name": "A1",
+                "balance": 0
+              },
+              {
+                "id": 7,
+                "name": "A4",
+                "balance": 0
+              },
+              {
+                "id": 8,
+                "name": "A5",
+                "balance": 0
+              },
+              {
+                "id": 5,
+                "name": "A2",
+                "balance": 0
+              },
+              {
+                "id": 6,
+                "name": "A3",
+                "balance": 107000
+              }
+            ]
           }
         }
       ],
@@ -1596,8 +3246,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [40000, 61000, 67000, 75000, 120000, 268000, 305000, 375000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered summary body, not the model's prose"
         }
       }
     },
@@ -1614,7 +3264,232 @@
           "name": "get_period_summary",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": "2026-07-20",
+              "to": "2026-07-26"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": "bún bò huế",
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  4,
+                  9,
+                  6,
+                  7,
+                  8
+                ],
+                "created_at": "2026-07-22T14:39:32.910039",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 9,
+                "dish": "nem nướng + gà rán",
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  5,
+                  4,
+                  9,
+                  6,
+                  8
+                ],
+                "created_at": "2026-07-22T14:41:11.761471",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.176119",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 4,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.198453",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 8,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.259609",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 8,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.273590",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:47:11.744865",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 9,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T09:38:19.666260",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 5,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T10:11:21.863647",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 6,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:23:00.690762",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 6,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  9,
+                  7,
+                  6
+                ],
+                "created_at": "2026-07-23T12:24:06.189997",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:24:42.055833",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 5,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  7,
+                  9,
+                  4,
+                  6
+                ],
+                "created_at": "2026-07-24T12:44:15.142608",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:46:45.539587",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:48:36.886280",
+                "from_name": "A1",
+                "to_name": "A3"
+              }
+            ],
+            "balances": [
+              {
+                "id": 9,
+                "name": "A6",
+                "balance": -107000
+              },
+              {
+                "id": 4,
+                "name": "A1",
+                "balance": 0
+              },
+              {
+                "id": 7,
+                "name": "A4",
+                "balance": 0
+              },
+              {
+                "id": 8,
+                "name": "A5",
+                "balance": 0
+              },
+              {
+                "id": 5,
+                "name": "A2",
+                "balance": 0
+              },
+              {
+                "id": 6,
+                "name": "A3",
+                "balance": 107000
+              }
+            ]
           }
         }
       ],
@@ -1632,8 +3507,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [40000, 61000, 67000, 75000, 120000, 268000, 305000, 375000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered summary body, not the model's prose"
         }
       }
     },
@@ -1650,7 +3525,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 4,
+                "name": "A1",
+                "meal_id": 6,
+                "dish": "Grab Food",
+                "occurred_on": "2026-07-27",
+                "amount": 54500,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -54500
           }
         }
       ],
@@ -1668,8 +3565,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [54500]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1686,7 +3583,48 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": "2026-07-27",
+              "to": "2026-07-27"
+            },
+            "transfers": [
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A3: T2 Grab Food"
+              },
+              {
+                "from_id": 7,
+                "from_name": "A4",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A4: T2 Grab Food"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A5: T2 Grab Food"
+              },
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 9,
+                "to_name": "A6",
+                "amount": 107000,
+                "note": "Chia tien an 27/7"
+              }
+            ],
+            "warnings": [],
+            "committed": false
           }
         }
       ],
@@ -1722,7 +3660,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 4,
+                "name": "A1",
+                "meal_id": 6,
+                "dish": "Grab Food",
+                "occurred_on": "2026-07-27",
+                "amount": 54500,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -54500
           }
         }
       ],
@@ -1740,8 +3700,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [54500]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1758,7 +3718,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 4,
+                "name": "A1",
+                "meal_id": 6,
+                "dish": "Grab Food",
+                "occurred_on": "2026-07-27",
+                "amount": 54500,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -54500
           }
         }
       ],
@@ -1776,8 +3758,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [54500]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1794,7 +3776,19 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [],
+            "owed": [],
+            "net": 0
           }
         }
       ],
@@ -1812,8 +3806,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified that the user had no outstanding debts and communicated this clearly in Vietnamese."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1869,7 +3863,57 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 7,
+            "member_participants": [
+              9,
+              6,
+              7
+            ],
+            "guests": [],
+            "bill_total": 110000,
+            "adjustments": [
+              {
+                "member": 9,
+                "amount": -6666
+              },
+              {
+                "member": 6,
+                "amount": 3334
+              },
+              {
+                "member": 7,
+                "amount": 3334
+              }
+            ],
+            "items": [
+              {
+                "member": 9,
+                "amount": 30000,
+                "label": "bánh mì"
+              },
+              {
+                "member": 6,
+                "amount": 40000,
+                "label": "bánh mì"
+              },
+              {
+                "member": 7,
+                "amount": 40000,
+                "label": "bánh mì"
+              }
+            ],
+            "discount_split": "proportional",
+            "dish": "bánh mì cột điện",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 36666,
+            "occurred_on": null,
+            "raw_input": "@bot ghi meal bánh mì cột điện. A6 30, a A3 40, A4 40. A4 trả",
+            "turn_id": "a3a49601b275475b8490d847168c1412",
+            "committed_meal_id": 7
           }
         }
       ],
@@ -1905,7 +3949,29 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-28"
+            },
+            "owe": [
+              {
+                "creditor_id": 7,
+                "name": "A4",
+                "meal_id": 7,
+                "dish": "bánh mì cột điện",
+                "occurred_on": "2026-07-28",
+                "amount": 40000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": [],
+            "net": -40000
           }
         }
       ],
@@ -1923,8 +3989,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [40000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -1941,7 +4007,31 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-28"
+            },
+            "transfers": [
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A5: T2 Grab Food"
+              },
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 7,
+                "to_name": "A4",
+                "amount": 30000,
+                "note": "A6: T3 banh mi cot dien"
+              }
+            ],
+            "warnings": []
           }
         }
       ],
@@ -1981,7 +4071,18 @@
             "amount": 30000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 7,
+                "amount": 30000,
+                "note": null
+              }
+            ],
+            "turn_id": "9d5337d2cf0c[REDACTED]fd6d2c29e1b5"
           }
         }
       ],
@@ -1999,8 +4100,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the transaction and the amounts involved, and responded in Vietnamese casual register without unnecessary narration."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2028,7 +4129,31 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 6,
+            "member_participants": [
+              4,
+              9,
+              7,
+              6,
+              8,
+              5
+            ],
+            "guests": [],
+            "bill_total": 1107000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "chả cá ông già",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 184500,
+            "occurred_on": null,
+            "raw_input": "@bot I paid 1107k chả cá ông già",
+            "turn_id": "f70e7ec[REDACTED]eba2792b07ac668",
+            "committed_meal_id": 8
           }
         }
       ],
@@ -2064,7 +4189,39 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 8,
+              "name": "A5"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "rót trà"
           }
         }
       ],
@@ -2082,8 +4239,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the user's request and chose a person to pour tea in Vietnamese, without unnecessary narration or restating information."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2100,7 +4257,35 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 7,
+              "name": "A4"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "rót trà"
           }
         }
       ],
@@ -2118,8 +4303,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p194",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not answer the user's request and instead asked for clarification, which is not the expected behavior for this type of bot."
         }
       }
     },
@@ -2136,7 +4349,35 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 6,
+              "name": "A3"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "rót trà"
           }
         }
       ],
@@ -2154,8 +4395,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot did not answer the user's question about who sits outside."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2172,7 +4413,35 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 5,
+              "name": "A2"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "rót trà"
           }
         }
       ],
@@ -2190,8 +4459,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot did not answer the user's request to recalculate the split randomly."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2208,7 +4477,47 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-29"
+            },
+            "transfers": [
+              {
+                "from_id": 5,
+                "from_name": "A2",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 184500,
+                "note": "A2: T4 cha ca ong gia"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 54500,
+                "note": "A5: T2 Grab Food"
+              },
+              {
+                "from_id": 8,
+                "from_name": "A5",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 184500,
+                "note": "A5: T4 cha ca ong gia"
+              },
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 6,
+                "to_name": "A3",
+                "amount": 184500,
+                "note": "A6: T4 cha ca ong gia"
+              }
+            ],
+            "warnings": []
           }
         }
       ],
@@ -2248,7 +4557,18 @@
             "amount": 184500
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 6,
+                "amount": 184500,
+                "note": null
+              }
+            ],
+            "turn_id": "56a[REDACTED]f464a89b200bd3f3b7868"
           }
         }
       ],
@@ -2266,8 +4586,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's prompt."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2284,7 +4604,39 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 4,
+              "name": "A1"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "mai chọn đồ ăn"
           }
         }
       ],
@@ -2302,8 +4654,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the user's request and provided a random selection in Vietnamese, adhering to all constraints."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2320,7 +4672,39 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 5,
+              "name": "A2"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "mai chọn đồ ăn"
           }
         }
       ],
@@ -2338,8 +4722,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly selected a user and did not violate any other rules."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p210",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-29",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot incorrectly states that it cannot exclude a person from the draw, when the user's request was to exclude A6 from the draw."
         }
       }
     },
@@ -2356,7 +4768,39 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 7,
+              "name": "A4"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "mai chọn đồ ăn"
           }
         }
       ],
@@ -2374,8 +4818,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2396,7 +4840,18 @@
             "amount": 184500
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 5,
+                "to_member_id": 6,
+                "amount": 184500,
+                "note": null
+              }
+            ],
+            "turn_id": "c3005a3b6418486d8c15dc45fdf32b2b"
           }
         }
       ],
@@ -2414,8 +4869,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2432,7 +4887,39 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 4,
+              "name": "A1"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "chọn bừa 1 người"
           }
         }
       ],
@@ -2450,8 +4937,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2480,7 +4967,31 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 4,
+            "member_participants": [
+              4,
+              7,
+              6,
+              9
+            ],
+            "guests": [
+              "G5"
+            ],
+            "bill_total": 265000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "Phở Tần",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 53000,
+            "occurred_on": null,
+            "raw_input": "@bot I paid 265k for Phở Tần; A1 A4 A3 A6 G5",
+            "turn_id": "e9ed1628e3d[REDACTED]f2998d0970e8d",
+            "committed_meal_id": 9
           }
         }
       ],
@@ -2516,7 +5027,433 @@
           "name": "get_period_summary",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": null,
+              "to": "2026-07-30"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": "bún bò huế",
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  4,
+                  9,
+                  6,
+                  7,
+                  8
+                ],
+                "created_at": "2026-07-22T14:39:32.910039",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 9,
+                "dish": "nem nướng + gà rán",
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  5,
+                  4,
+                  9,
+                  6,
+                  8
+                ],
+                "created_at": "2026-07-22T14:41:11.761471",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.176119",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 4,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T15:43:02.198453",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 8,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.259609",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 8,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:40:19.273590",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-07-22T16:47:11.744865",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 9,
+                "to_id": 6,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T09:38:19.666260",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 5,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T10:11:21.863647",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 6,
+                "to_id": 9,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:23:00.690762",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 6,
+                "dish": "bún chả rửa xe",
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  9,
+                  7,
+                  6
+                ],
+                "created_at": "2026-07-23T12:24:06.189997",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-07-23T12:24:42.055833",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 5,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  7,
+                  9,
+                  4,
+                  6
+                ],
+                "created_at": "2026-07-24T12:44:15.142608",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:46:45.539587",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-07-24T12:48:36.886280",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 6,
+                "payer_id": 4,
+                "dish": "Grab Food",
+                "occurred_on": "2026-07-27",
+                "total": 324200,
+                "participant_ids": [
+                  4,
+                  8,
+                  9,
+                  6,
+                  7,
+                  5
+                ],
+                "created_at": "2026-07-27T13:43:41.219859",
+                "payer_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 12,
+                "from_id": 9,
+                "to_id": 6,
+                "amount": 107000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-07-27T13:44:48.286087",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 13,
+                "from_id": 5,
+                "to_id": 4,
+                "amount": 27000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-07-27T17:22:10.129895",
+                "from_name": "A2",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 14,
+                "from_id": 9,
+                "to_id": 4,
+                "amount": 79200,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-07-27T17:35:18.562210",
+                "from_name": "A6",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 15,
+                "from_id": 6,
+                "to_id": 4,
+                "amount": 54500,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-07-27T20:14:05.033816",
+                "from_name": "A3",
+                "to_name": "A1"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 7,
+                "payer_id": 7,
+                "dish": "bánh mì cột điện",
+                "occurred_on": "2026-07-28",
+                "total": 110000,
+                "participant_ids": [
+                  9,
+                  6,
+                  7
+                ],
+                "created_at": "2026-07-28T12:30:15.497233",
+                "payer_name": "A4"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 16,
+                "from_id": 6,
+                "to_id": 7,
+                "amount": 40000,
+                "occurred_on": "2026-07-28",
+                "created_at": "2026-07-28T12:35:19.189267",
+                "from_name": "A3",
+                "to_name": "A4"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 17,
+                "from_id": 7,
+                "to_id": 4,
+                "amount": 54500,
+                "occurred_on": "2026-07-28",
+                "created_at": "2026-07-28T13:34:16.917173",
+                "from_name": "A4",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 18,
+                "from_id": 9,
+                "to_id": 7,
+                "amount": 30000,
+                "occurred_on": "2026-07-28",
+                "created_at": "2026-07-28T13:56:01.863911",
+                "from_name": "A6",
+                "to_name": "A4"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 8,
+                "payer_id": 6,
+                "dish": "chả cá ông già",
+                "occurred_on": "2026-07-29",
+                "total": 1107000,
+                "participant_ids": [
+                  4,
+                  9,
+                  7,
+                  6,
+                  8,
+                  5
+                ],
+                "created_at": "2026-07-29T12:49:18.810273",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 19,
+                "from_id": 4,
+                "to_id": 6,
+                "amount": 184500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T12:59:13.580630",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 20,
+                "from_id": 7,
+                "to_id": 6,
+                "amount": 184500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T13:05:36.058886",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 21,
+                "from_id": 9,
+                "to_id": 6,
+                "amount": 184500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T13:29:08.906066",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 22,
+                "from_id": 5,
+                "to_id": 6,
+                "amount": 184500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T13:40:36.792925",
+                "from_name": "A2",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 23,
+                "from_id": 8,
+                "to_id": 4,
+                "amount": 54500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T13:42:18.092316",
+                "from_name": "A5",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 24,
+                "from_id": 8,
+                "to_id": 6,
+                "amount": 184500,
+                "occurred_on": "2026-07-29",
+                "created_at": "2026-07-29T13:42:54.309545",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 9,
+                "payer_id": 4,
+                "dish": "Phở Tần",
+                "occurred_on": "2026-07-30",
+                "total": 212000,
+                "participant_ids": [
+                  4,
+                  7,
+                  6,
+                  9
+                ],
+                "created_at": "2026-07-30T12:24:48.672018",
+                "payer_name": "A1"
+              }
+            ],
+            "outstanding": [
+              {
+                "debtor_id": 6,
+                "creditor_id": 4,
+                "amount": 53000,
+                "debtor_name": "A3",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 7,
+                "creditor_id": 4,
+                "amount": 53000,
+                "debtor_name": "A4",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 9,
+                "creditor_id": 4,
+                "amount": 53000,
+                "debtor_name": "A6",
+                "creditor_name": "A1"
+              }
+            ]
           }
         }
       ],
@@ -2534,8 +5471,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot did not answer the user's question about the current balance."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered summary body, not the model's prose"
         }
       }
     },
@@ -2556,7 +5493,18 @@
             "amount": 53000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 11,
+                "to_member_id": 4,
+                "amount": 53000,
+                "note": "Phở Tần"
+              }
+            ],
+            "turn_id": "3f81b47222f94adb8a52196dbf7011c9"
           }
         }
       ],
@@ -2574,8 +5522,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2596,7 +5544,18 @@
             "amount": 53000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 4,
+                "amount": 53000,
+                "note": "Phở Tần"
+              }
+            ],
+            "turn_id": "03346dd8aa4943708a96c[REDACTED]"
           }
         }
       ],
@@ -2614,8 +5573,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the user's request and provided the relevant information in Vietnamese without unnecessary narration or restating amounts."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2632,7 +5591,23 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-07-31"
+            },
+            "transfers": [
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 4,
+                "to_name": "A1",
+                "amount": 53000,
+                "note": "A3: T5 Pho Tan"
+              }
+            ],
+            "warnings": []
           }
         }
       ],
@@ -2668,7 +5643,28 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-31"
+            },
+            "owe": [
+              {
+                "creditor_id": 4,
+                "name": "A1",
+                "meal_id": 9,
+                "dish": "Phở Tần",
+                "occurred_on": "2026-07-30",
+                "amount": 53000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": []
           }
         }
       ],
@@ -2686,8 +5682,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p240",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
           "passed": false,
-          "reason": "unbacked amounts in the reply: [53000]"
+          "reason": "The bot is asking for information that it should have already known or been able to infer from the user's input, rather than providing a direct answer or confirmation."
         }
       }
     },
@@ -2714,7 +5738,30 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 6,
+            "member_participants": [
+              11,
+              9,
+              7,
+              6,
+              5
+            ],
+            "guests": [],
+            "bill_total": 250000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "bún đậu mẹt",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 35714,
+            "occurred_on": null,
+            "raw_input": "@bot I paid bún đậu mẹt 250k",
+            "turn_id": "f064d0e83bf24a85bc8188479d458a9f",
+            "committed_meal_id": 10
           }
         }
       ],
@@ -2754,7 +5801,18 @@
             "amount": 50000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 5,
+                "to_member_id": 6,
+                "amount": 50000,
+                "note": null
+              }
+            ],
+            "turn_id": "750b9575aa9f4e298fe515dc292ab979"
           }
         }
       ],
@@ -2772,8 +5830,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's message."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2790,7 +5848,46 @@
           "name": "member_statement",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A3"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-08-01"
+            },
+            "owe": [],
+            "owed": [
+              {
+                "debtor_id": 11,
+                "name": "A7",
+                "meal_id": 10,
+                "dish": "bún đậu mẹt",
+                "occurred_on": "2026-07-31",
+                "amount": 50000,
+                "status": "unpaid"
+              },
+              {
+                "debtor_id": 9,
+                "name": "A6",
+                "meal_id": 10,
+                "dish": "bún đậu mẹt",
+                "occurred_on": "2026-07-31",
+                "amount": 50000,
+                "status": "unpaid"
+              },
+              {
+                "debtor_id": 7,
+                "name": "A4",
+                "meal_id": 10,
+                "dish": "bún đậu mẹt",
+                "occurred_on": "2026-07-31",
+                "amount": 50000,
+                "status": "unpaid"
+              }
+            ]
           }
         }
       ],
@@ -2808,8 +5905,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "unbacked amounts in the reply: [50000]"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
         }
       }
     },
@@ -2830,7 +5927,18 @@
             "amount": 50000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 6,
+                "amount": 50000,
+                "note": null
+              }
+            ],
+            "turn_id": "0ba19c3d0ae3417da4589d7f58918cca"
           }
         }
       ],
@@ -2848,8 +5956,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's prompt."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -2866,7 +5974,32 @@
           "name": "propose_meal",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 8,
+            "member_participants": [
+              4,
+              9,
+              6,
+              8,
+              5
+            ],
+            "guests": [
+              "G6"
+            ],
+            "bill_total": 930000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "lẩu ếch Hà My",
+            "initiator": "A3",
+            "note": null,
+            "per_head_preview": 132857,
+            "occurred_on": null,
+            "raw_input": "@bot A5 đã trả",
+            "turn_id": "c1e31b600cba4354a47672e5a436454f",
+            "committed_meal_id": 11
           }
         }
       ],
@@ -2902,7 +6035,43 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 9,
+              "name": "A6"
+            },
+            "candidates": [
+              {
+                "id": 11,
+                "name": "A7"
+              },
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 7,
+                "name": "A4"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "rót trà"
           }
         }
       ],
@@ -2920,8 +6089,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "The bot correctly identified the user's request and provided a casual Vietnamese response without unnecessary narration or restating information."
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -2938,7 +6107,23 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-08-04"
+            },
+            "transfers": [
+              {
+                "from_id": 6,
+                "from_name": "A3",
+                "to_id": 8,
+                "to_name": "A5",
+                "amount": 155000,
+                "note": "A3: T3 lau ech Ha My"
+              }
+            ],
+            "requested": true
           }
         }
       ],
@@ -2963,6 +6148,62 @@
     },
     {
       "version": 1,
+      "case_id": "p271",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not answer the user's request and instead provided a system message."
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p273",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-04",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": false,
+          "reason": "The bot did not respond to the user's statement, instead providing a system error message."
+        }
+      }
+    },
+    {
+      "version": 1,
       "case_id": "p275",
       "rep": 0,
       "source": "prod",
@@ -2978,7 +6219,18 @@
             "amount": 155000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 5,
+                "to_member_id": 8,
+                "amount": 155000,
+                "note": null
+              }
+            ],
+            "turn_id": "93a6d8d52fc84fa196260a0932d79519"
           }
         }
       ],
@@ -2996,8 +6248,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated the amount which was already present in the user's input."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
         }
       }
     },
@@ -3014,7 +6266,23 @@
           "name": "settle_period",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "settlement",
+            "period": {
+              "from": null,
+              "to": "2026-08-05"
+            },
+            "transfers": [
+              {
+                "from_id": 9,
+                "from_name": "A6",
+                "to_id": 8,
+                "to_name": "A5",
+                "amount": 155000,
+                "note": "A6: T3 lau ech Ha My"
+              }
+            ],
+            "requested": true
           }
         }
       ],
@@ -3054,7 +6322,18 @@
             "amount": 155000
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "payment_draft",
+            "status": "committed",
+            "transfers": [
+              {
+                "from_member_id": 9,
+                "to_member_id": 8,
+                "amount": 155000,
+                "note": null
+              }
+            ],
+            "turn_id": "c7e4e871288d40e[REDACTED]b3d1e450"
           }
         }
       ],
@@ -3072,8 +6351,36 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": false,
-          "reason": "The bot restated an amount that was already present in the user's prompt."
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p284",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-05",
+      "had_images": false,
+      "room_id": null,
+      "tools": [],
+      "final_text": "",
+      "error": null,
+      "elapsed_s": 0.0,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "prod has no reconstructable ledger"
+        },
+        "prose_quality": {
+          "passed": true,
+          "reason": "The bot correctly states it doesn't know what to eat because no one has logged it, and prompts users to share their choices, all in casual Vietnamese."
         }
       }
     },
@@ -3090,7 +6397,35 @@
           "name": "pick_random",
           "args": {},
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "random_pick",
+            "chosen": {
+              "id": 5,
+              "name": "A2"
+            },
+            "candidates": [
+              {
+                "id": 4,
+                "name": "A1"
+              },
+              {
+                "id": 9,
+                "name": "A6"
+              },
+              {
+                "id": 6,
+                "name": "A3"
+              },
+              {
+                "id": 8,
+                "name": "A5"
+              },
+              {
+                "id": 5,
+                "name": "A2"
+              }
+            ],
+            "label": "chọn đồ ăn"
           }
         }
       ],
@@ -3108,8 +6443,8 @@
           "reason": "prod has no reconstructable ledger"
         },
         "prose_quality": {
-          "passed": true,
-          "reason": "judge gave no reason"
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered random-pick body, not the model's prose"
         }
       }
     },
@@ -3155,7 +6490,47 @@
             ]
           },
           "result": {
-            "ok": true
+            "ok": true,
+            "type": "expense_draft",
+            "status": "committed",
+            "payer_member_id": 9,
+            "member_participants": [
+              9,
+              6
+            ],
+            "guests": [],
+            "bill_total": 95000,
+            "adjustments": [
+              {
+                "member": 9,
+                "amount": 2500
+              },
+              {
+                "member": 6,
+                "amount": -2500
+              }
+            ],
+            "items": [
+              {
+                "member": 9,
+                "amount": 50000,
+                "label": "bánh mì xôi"
+              },
+              {
+                "member": 6,
+                "amount": 45000,
+                "label": "bánh mì xôi"
+              }
+            ],
+            "discount_split": "proportional",
+            "dish": "bánh mì xôi",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 47500,
+            "occurred_on": null,
+            "raw_input": "@bot I paid 95000 for bánh mì xôi, của anh A3 45000",
+            "turn_id": "91c85894c5cf4fa2b22bb593bf734230",
+            "committed_meal_id": 12
           }
         }
       ],

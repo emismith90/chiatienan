@@ -198,3 +198,29 @@ def test_compare_warns_when_the_base_run_is_a_recorded_log():
     # Its tool_selection rate is 1.0 by construction, so a delta is not a
     # measurement — the new run's absolute rate is.
     assert "by construction" in out and "absolute" in out
+
+
+def test_beating_a_failing_reference_is_flagged_as_an_improvement():
+    from bench.report import render_compare, ship_blockers
+    base = _results([_rec("p34", i, prose_quality=False) for i in range(1)])
+    new = _results([_rec("p34", i, prose_quality=True) for i in range(3)], engine="pi")
+    out = render_compare(base, new)
+    # Better is better — not a difference to explain away.
+    assert "IMPROVED" in out
+    assert ship_blockers(base, new) == []
+
+
+def test_a_quality_grader_the_reference_also_failed_is_not_both_failing():
+    from bench.report import render_compare
+    base = _results([_rec("p34", prose_quality=False)])
+    new = _results([_rec("p34", prose_quality=False)], engine="pi")
+    out = render_compare(base, new)
+    # The bar is the rubric, not what the old engine managed.
+    assert "BASELINE-FAILED-TOO" in out and "BOTH-FAILING (prose" not in out
+
+
+def test_money_graders_still_get_the_stricter_both_failing_flag():
+    from bench.report import render_compare
+    base = _results([_rec("s5", ledger_state=False)])
+    new = _results([_rec("s5", ledger_state=False)], engine="pi")
+    assert "BOTH-FAILING** (ledger_state)" in render_compare(base, new)

@@ -24,6 +24,38 @@ second deliverable of equal weight: a **benchmark harness** that replays the
 golden datasets *and real production conversations* through the engine and grades
 the outcome four ways, so the port ships with evidence instead of confidence.
 
+### 1.1 The bar is "no behavior change" for money, and quality everywhere else
+
+These are different bars, and conflating them would make the harness enforce the
+old engine's faults:
+
+| | bar | why |
+|---|---|---|
+| `tool_selection`, `ledger_state` | **equivalence** — must not regress | D3. The tool chosen and the amounts in it decide what people pay each other. |
+| `prose_quality`, latency, cost | **the rubric** — better is better | Nothing about Cursor's replies is a specification. |
+
+**Cursor is a reference, not a ceiling.** It was never good at the prose path, and
+the recorded baseline proves it rather than assuming it: on the 26 production turns
+whose reply the room actually read, Cursor scores **1/26** against the rubric,
+failing mostly by narrating its own machinery into the room — "mình đọc skill phù
+hợp rồi xử lý", "Mình sẽ tìm thành viên A2 rồi cập nhật", and in one case a
+hand-typed six-row balance table (exactly what `moneyguard`'s field note describes).
+
+Two consequences:
+
+- A Pi reply that clears the rubric where Cursor did not is an **improvement**, and
+  `bench.report` flags it `IMPROVED` rather than as a difference to explain away.
+  A case both failed is `BASELINE-FAILED-TOO`, never `BOTH-FAILING` — the latter is
+  reserved for money, where agreeing on zero means the case certified nothing.
+- The ship criterion (plan, Task 22) is expressed over the money graders only. A
+  prose change is written down and understood, never auto-blocking.
+
+**And `_strip_narration` is not doing its job today.** Those bodies are what
+`chat.py` posted, i.e. *after* stripping — so the narration above is leaking into
+the live room right now. §13's "measure, don't guess" is therefore settled in the
+opposite direction from the one it anticipated: the mechanism ports, but it needs
+strengthening, not deleting.
+
 ## 2. The constraint that shapes everything
 
 `cursor-sdk` ships a **Python** package, so the 14 tools are Python closures over

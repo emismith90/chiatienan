@@ -17,6 +17,14 @@ Three things this module refuses to let a report imply:
 * **Ungraded is not passed.** A `passed is None` repetition is excluded from the
   denominator and renders as `n/a`. A whole case that is `n/a` never contributes
   to any rate — least of all to a favourable one.
+
+**The reference is not a ceiling.** Equivalence is the bar for *money* — the tool
+chosen and the amounts in it (`MONEY_GRADERS`), where design D3 says behavior must
+not change. `prose_quality`, latency and cost are **quality** measures graded
+against a rubric, not against what the previous engine happened to do. So a case
+the reference itself failed is flagged `BASELINE-FAILED-TOO` rather than
+`BOTH-FAILING`, and beating a failing reference is flagged `IMPROVED`. The old
+engine's mistakes are not a specification to reproduce.
 """
 from __future__ import annotations
 
@@ -222,7 +230,15 @@ def render_compare(base: dict, new: dict) -> str:
                          f'{format_rate(new_rates[case_id][grader])} '
                          f'({after - before:+.2f})')
             if before == 0.0 and after == 0.0:
-                flags.append(f"**BOTH-FAILING** ({grader})")
+                # For money, agreeing on zero means the case certified nothing. For
+                # a quality grader it means the reference itself did not clear the
+                # bar — the bar is the rubric, not what the old engine managed.
+                flags.append(f"**BOTH-FAILING** ({grader})" if grader in MONEY_GRADERS
+                             else f"BASELINE-FAILED-TOO ({grader})")
+            elif before == 0.0 and after > 0.0:
+                # Better is better. An improvement over a reference that failed is
+                # a win, not a difference to explain away.
+                flags.append(f"**IMPROVED** ({grader})")
         lines.append(f'| `{case_id}` | {sources.get(case_id, "?")} | '
                      + " | ".join(cells) + f' | {" ".join(flags) or ""} |')
 

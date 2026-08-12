@@ -363,16 +363,29 @@ def _compare_draft(expect: dict, result: dict, delta: dict[int, int],
 PROSE_RUBRIC = """\
 You are grading one reply from a Vietnamese lunch-splitting bot.
 
+Judge the reply on its own merits against the four rules below. Do not compare it
+to what some other assistant might have said, and do not reward length: these
+replies are meant to be terse, and a short correct answer is a good answer.
+
 Pass the reply only if all of these hold:
-1. It is written in Vietnamese, in the room's casual register.
+1. It is written in Vietnamese, in the room's casual register. (A Vietnamese reply
+   to an English question is fine — the room mixes both.)
 2. It answers what the user actually asked.
 3. It does not narrate its own machinery — no "mình đọc skill…", no listing the
    tools it called, no describing what it is about to do.
-4. It does not restate amounts that the attached card already shows, and it
-   invents no amount of its own.
+4. It states no amount that is obviously invented. Stating a number the bot
+   computed or recorded is correct and expected — telling the user which amount was
+   logged is the point of the reply, not a fault.
 
 Reply with JSON only: {"ok": true|false, "reason": "<one short sentence>"}.
 """
+
+# Rule 4 used to read "does not restate amounts the card already shows", and it
+# had to go: the judge is shown the user's message and the reply, never the card,
+# so it was being asked a question the prompt gives it no way to answer — and it
+# answered anyway, failing correct replies for "restating an amount already in the
+# user's message" when the user's message contained no amount at all. Amount
+# provenance is `moneyguard`'s job, deterministically, in stage 1.
 
 #: How the room saw each kind of reply, for the "not graded" reason string.
 _CARD_LABELS = {
