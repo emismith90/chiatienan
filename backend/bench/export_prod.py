@@ -361,6 +361,94 @@ HISTORY_WINDOW = 30
 HISTORY_KINDS = ("text", "bot")
 
 
+def ledger_steps(ledger: dict, before: str, to_key) -> list[dict]:
+    """The ledger as it stood at `before`, as `bench.world` prior steps.
+
+    **A prod case replayed without these runs against an empty ledger**, and that
+    silently broke most of the corpus: `p20` ("@bot paid my part") answered *"bạn
+    không nợ ai"* — correctly, for a room where nothing had ever happened — and was
+    graded as failing to call `propose_payment`. The conversation was in the
+    history; the money was nowhere.
+
+    Read from the **ledger tables** (`meals`, `meal_shares`, `payments`), not from
+    the chat cards. The cards looked like the obvious source and are wrong twice
+    over: a committed `meal` attachment keeps `shares` but not the `adjustments`
+    behind them, and nothing in the conversation records a `void_meal` — so
+    reconstructing from cards split the Grab Food meal evenly (54,033 each, where
+    production had 54,500 / 79,200 / 27,000) and kept meals that had been voided,
+    which put 868,000đ of phantom credit on one member.
+
+    `total` is each meal's `total_amount`, which `ledger.record_meal` already
+    stores as the **tracked** member total (bill − guests), so `guests` is empty
+    here by construction. Shares are turned back into `adjustments` with
+    `money.itemized_adjustments`, the documented inverse of the split — one path
+    that covers equal, adjusted and itemized meals alike, and no per-person number
+    is ever copied into the seed (design D3).
+
+    Rows naming a member the corpus has no key for are skipped: a world that
+    cannot be built teaches nothing, and a `KeyError` mid-corpus loses every case
+    after it.
+    """
+    from app.money import MoneyError, itemized_adjustments
+
+    shares_by_meal: dict[str, dict[str, int]] = {}
+    for share in ledger.get("meal_shares") or []:
+        member = to_key(share.get("member_id"))
+        if isinstance(member, str):
+            shares_by_meal.setdefault(str(share.get("meal_id")), {})[member] = \
+                int(share.get("share_amount") or 0)
+
+    steps = []
+    for meal in ledger.get("meals") or []:
+        if _is_true(meal.get("voided")) or str(meal.get("created_at") or "") >= before:
+            continue
+        payer = to_key(meal.get("payer_member_id"))
+        shares = shares_by_meal.get(str(meal.get("id"))) or {}
+        total = int(meal.get("total_amount") or 0)
+        if not isinstance(payer, str) or not shares or total <= 0:
+            continue
+        if sum(shares.values()) != total:
+            # `total_amount` is the tracked total, so this means a share row is
+            # missing (a member the map does not cover) — seeding it would invent
+            # a different meal.
+            continue
+        try:
+            adjustments = itemized_adjustments(total, shares)
+        except MoneyError:
+            continue
+        steps.append({"id": f'm{meal.get("id")}', "kind": "meal_confirmed",
+                      "day": str(meal.get("occurred_on") or "")[:10],
+                      "created_at": str(meal.get("created_at") or ""),
+                      "actor": payer, "payer": payer, "participants": list(shares),
+                      "total": total, "guests": [],
+                      "adjustments": [{"member": member, "amount": amount}
+                                      for member, amount in adjustments.items()]})
+
+    for payment in ledger.get("payments") or []:
+        if _is_true(payment.get("voided")) or str(payment.get("created_at") or "") >= before:
+            continue
+        sender, payee = to_key(payment.get("from_member_id")), to_key(payment.get("to_member_id"))
+        amount = int(payment.get("amount") or 0)
+        if not isinstance(sender, str) or not isinstance(payee, str) or amount <= 0:
+            continue
+        steps.append({"id": f'p{payment.get("id")}', "kind": "payment",
+                      "day": str(payment.get("occurred_on") or "")[:10],
+                      "created_at": str(payment.get("created_at") or ""),
+                      "actor": sender, "from": sender, "to": payee, "amount": amount})
+
+    # Replay order is when the room recorded it, not the day it happened for: a
+    # payment logged late still pays down a debt booked earlier.
+    steps.sort(key=lambda step: step["created_at"])
+    for step in steps:
+        step.pop("created_at")
+    return [step for step in steps if step["day"]]
+
+
+def _is_true(value) -> bool:
+    """CSV booleans arrive as the strings `True` / `False`."""
+    return str(value).strip().lower() in ("true", "1", "t", "yes")
+
+
 def render_history(rows: list[dict], index: int, to_key, *,
                    window: int = HISTORY_WINDOW, clamp: int = 500) -> str:
     """The rows before `index`, rendered the way production renders history.
@@ -424,7 +512,8 @@ def _money_args_from_attachment(tool: str, attachments: dict) -> dict | None:
 
 
 def build_cases(rows: list[dict], *, image_lookback: int = 10,
-                key_by_member_id: dict | None = None) -> list[dict]:
+                key_by_member_id: dict | None = None,
+                ledger: dict | None = None) -> list[dict]:
     """One case per recorded bot turn, expecting what production actually did.
 
     The bot's reply records the tool: its `attachments.type` maps one-to-one onto
@@ -472,6 +561,10 @@ def build_cases(rows: list[dict], *, image_lookback: int = 10,
             # on every turn, so a replay without it is a harder task than the one
             # being measured.
             "history": render_history(rows, index, to_key),
+            # And the ledger those messages are about: every Confirm before this
+            # turn, replayed into the bench room by `bench.world`.
+            "prior_steps": ledger_steps(ledger or {},
+                                        str(trigger.get("created_at") or ""), to_key),
             "had_images": bool(tainted),
             "reply": prose,
             # The produced attachment IS what the tool returned, so it is carried
@@ -618,6 +711,29 @@ def fetch_rows(base_url: str, room_id: int, days: int, key: str) -> list[dict]:
     return _rows_from_csv(_get(base_url, f"/conversation.csv{query}", key))
 
 
+#: The ledger tables a prod world is seeded from. `meal_shares` has no `room_id`
+#: column — it is joined through `meal_id`, so it is fetched whole and filtered by
+#: the meals of this room.
+LEDGER_TABLES = ("meals", "meal_shares", "payments")
+
+
+def fetch_ledger(base_url: str, room_id: int, key: str) -> dict:
+    """`meals`, `meal_shares` and `payments` for one room.
+
+    The ledger, not the chat cards: it carries `voided`, the exact
+    `share_amount` per member, and `created_at`, none of which a conversation row
+    can be trusted for. See `ledger_steps`.
+    """
+    ledger = {}
+    for table in LEDGER_TABLES:
+        query = "" if table == "meal_shares" else f"?room_id={room_id}"
+        ledger[table] = _rows_from_csv(_get(base_url, f"/tables/{table}.csv{query}", key))
+    meal_ids = {str(meal.get("id")) for meal in ledger["meals"]}
+    ledger["meal_shares"] = [share for share in ledger["meal_shares"]
+                             if str(share.get("meal_id")) in meal_ids]
+    return ledger
+
+
 def fetch_members(base_url: str, room_id: int, key: str) -> list[dict]:
     members = _rows_from_csv(_get(base_url, f"/tables/members.csv?room_id={room_id}", key))
     for member in members:
@@ -666,7 +782,8 @@ def main(argv=None) -> int:
     clean = sanitize(rows, name_map=name_map, holders=holders)
     key_by_member_id = {m["id"]: name_map.get(m.get("display_name"), f'A{i}')
                         for i, m in enumerate(members, start=1)}
-    cases = build_cases(clean, key_by_member_id=key_by_member_id)
+    cases = build_cases(clean, key_by_member_id=key_by_member_id,
+                        ledger=fetch_ledger(args.base_url, args.room, key))
 
     pseudonyms = sorted({v for v in name_map.values() if v.startswith("A")})
     payload = {

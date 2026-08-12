@@ -488,3 +488,96 @@ def test_a_card_after_a_commit_belongs_to_the_commit_not_to_the_message_above():
     cases = {c["id"]: c for c in build_cases(rows)}
     assert cases["p266"]["expect"] == {}                  # a prose case, as it was
     assert cases["p266"]["reply"].startswith("Số lô")
+
+
+# --------------------------------------------------------------------------- #
+# prior_steps — the ledger the conversation is about
+# --------------------------------------------------------------------------- #
+
+def _ledger(meals=(), shares=(), payments=()):
+    return {"meals": list(meals), "meal_shares": list(shares), "payments": list(payments)}
+
+
+def _key(member_id):
+    return {"6": "A3", "4": "A1", "9": "A6", "7": "A4",
+            "5": "A2"}.get(str(member_id), member_id)
+
+
+def test_a_prod_world_is_seeded_from_the_ledger_tables():
+    """Without this a prod case replays against an empty ledger.
+
+    `p20` ("@bot paid my part") answered *"bạn không nợ ai"* — correct for a room
+    where nothing ever happened — and was graded as failing to call
+    `propose_payment`.
+    """
+    from bench.export_prod import ledger_steps
+    ledger = _ledger(
+        meals=[{"id": 2, "occurred_on": "2026-07-22", "payer_member_id": 6,
+                "total_amount": 305000, "voided": "False",
+                "created_at": "2026-07-22 14:39:32"}],
+        # five participants at 61,000 = the 305,000 total
+        shares=[{"meal_id": 2, "member_id": m, "share_amount": 61000}
+                for m in (4, 6, 9, 7, 5)],
+        payments=[{"id": 1, "from_member_id": 4, "to_member_id": 6, "amount": 61000,
+                   "occurred_on": "2026-07-22", "voided": "False",
+                   "created_at": "2026-07-22 15:43:02"}])
+    steps = ledger_steps(ledger, "2026-07-23 00:00:00", _key)
+    kinds = [s["kind"] for s in steps]
+    assert kinds == ["meal_confirmed", "payment"]      # and in recording order
+    assert steps[0]["payer"] == "A3" and steps[0]["total"] == 305000
+    assert steps[1] == {"id": "p1", "kind": "payment", "day": "2026-07-22",
+                        "actor": "A1", "from": "A1", "to": "A3", "amount": 61000}
+
+
+def test_only_the_ledger_as_of_the_turn_is_seeded():
+    from bench.export_prod import ledger_steps
+    ledger = _ledger(payments=[
+        {"id": 1, "from_member_id": 4, "to_member_id": 6, "amount": 10000,
+         "occurred_on": "2026-07-22", "voided": "False", "created_at": "2026-07-22 10:00:00"},
+        {"id": 2, "from_member_id": 4, "to_member_id": 6, "amount": 20000,
+         "occurred_on": "2026-07-22", "voided": "False", "created_at": "2026-07-22 18:00:00"}])
+    steps = ledger_steps(ledger, "2026-07-22 12:00:00", _key)
+    assert [s["amount"] for s in steps] == [10000]
+
+
+def test_a_voided_meal_is_not_seeded():
+    """Nothing in the conversation records a `void_meal`, which is why the cards
+    cannot be the source: seeding from them kept a voided meal and put 868,000đ of
+    phantom credit on one member."""
+    from bench.export_prod import ledger_steps
+    ledger = _ledger(
+        meals=[{"id": 3, "occurred_on": "2026-07-22", "payer_member_id": 6,
+                "total_amount": 100000, "voided": "True", "created_at": "2026-07-22 10:00:00"}],
+        shares=[{"meal_id": 3, "member_id": 6, "share_amount": 50000},
+                {"meal_id": 3, "member_id": 4, "share_amount": 50000}])
+    assert ledger_steps(ledger, "2026-07-30 00:00:00", _key) == []
+
+
+def test_unequal_shares_survive_as_adjustments():
+    """The Grab Food meal: 324,200đ over six, but 54,500 / 79,200 / 27,000 each.
+
+    A committed `meal` attachment keeps `shares` and drops the `adjustments` behind
+    them, so re-deriving from the bill split it evenly (54,033 each) and every
+    later balance in the corpus was wrong by a few thousand đồng.
+    """
+    from bench.export_prod import ledger_steps
+    shares = {6: 79200, 4: 54500, 9: 27000}
+    ledger = _ledger(
+        meals=[{"id": 6, "occurred_on": "2026-07-27", "payer_member_id": 4,
+                "total_amount": sum(shares.values()), "voided": "False",
+                "created_at": "2026-07-27 12:00:00"}],
+        shares=[{"meal_id": 6, "member_id": m, "share_amount": a} for m, a in shares.items()])
+    step = ledger_steps(ledger, "2026-07-28 00:00:00", _key)[0]
+    from app.money import split_shares
+    ids = {"A3": 6, "A1": 4, "A6": 9}
+    got = split_shares(step["total"], [ids[p] for p in step["participants"]],
+                       {ids[a["member"]]: a["amount"] for a in step["adjustments"]})
+    assert got == shares          # the split reproduces production exactly
+
+
+def test_a_member_the_corpus_cannot_name_is_skipped_not_crashed():
+    from bench.export_prod import ledger_steps
+    ledger = _ledger(payments=[{"id": 1, "from_member_id": 999, "to_member_id": 6,
+                                "amount": 10000, "occurred_on": "2026-07-22",
+                                "voided": "False", "created_at": "2026-07-22 10:00:00"}])
+    assert ledger_steps(ledger, "2026-07-30 00:00:00", _key) == []

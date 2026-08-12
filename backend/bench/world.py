@@ -65,15 +65,30 @@ def _seed_room(db, case) -> tuple[int, dict[str, int]]:
 
 
 def _draft_payload(step: dict, ids: dict[str, int]) -> dict:
-    return {
+    """The draft a prior step creates.
+
+    `items` / `adjustments` / `discount_split` are passed through when the step has
+    them — a production meal seeded without its `items` splits evenly instead of
+    per dish, so the ledger the next turn reads would be a *different* room's. The
+    shares themselves are never copied: `drafts.create_draft` recomputes them from
+    these inputs, which is the same code that produced the numbers being replayed.
+    """
+    payload = {
         "payer_member_id": ids[step["payer"]],
         "member_participants": [ids[p] for p in step["participants"]],
         "guests": step.get("guests", []),
         "bill_total": step["total"],
-        "adjustments": [],
+        "adjustments": [{**entry, "member": ids[entry["member"]]}
+                        for entry in step.get("adjustments") or []],
         "per_head_preview": 0,
         "raw_input": step.get("message") or f'bench:{step["id"]}',
     }
+    if step.get("items"):
+        payload["items"] = [{**entry, "member": ids[entry["member"]]}
+                            for entry in step["items"]]
+    if step.get("discount_split"):
+        payload["discount_split"] = step["discount_split"]
+    return payload
 
 
 def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
