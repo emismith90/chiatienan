@@ -37,7 +37,15 @@ reply, with `error: None`.
 | Tasks 15–19 Python shim | ✅ `pi_bridge.py`, `agent.py` (408 → ~200 lines), `tools.py`, `summarize.py`, `pi_smoke.py`, `DATA_DIR` + migration |
 | Task 20 delete Cursor | ✅ 3 modules + 2 test files + the dependency gone; sweep clean |
 | Task 21 ship it | ⚠️ Dockerfile/CI/deploy updated; **`docker compose build` unverified — no Docker daemon here** |
-| Task 22 benchmark Pi | 🔄 see the report section |
+| Task 22 benchmark Pi | ⛔ **blocked on an open bug** — a real turn can exceed `max_seconds`. See `bench/results/cursor-vs-pi.md` |
+
+### ⛔ Before anything else: a turn is not provably bounded
+
+`G2` ran **>230s against `max_seconds=120`**, twice. The cap is implemented and
+unit-tested (a session whose `prompt()` never settles still returns), so something
+else holds a real turn — pi's `auto_retry_*` loop, a `tool_call` whose result never
+arrives, or a stalled spawn. `chat.py` holds `_agent_lock` for the whole turn, so
+one unbounded turn freezes every room. **Do not deploy until this is fixed.**
 
 ### Three things a real turn found that 59 stubbed tests did not
 
@@ -1900,17 +1908,17 @@ docker compose build backend
 **Files:** Create `backend/bench/results/pi-<ts>.{json,md}`,
 `backend/bench/results/cursor-vs-pi.md`
 
-- [ ] **Step 1: Confirm the key and the judge resolve.** `OPENROUTER_API_KEY` and
+- [x] **Step 1: Confirm the key and the judge resolve.** `OPENROUTER_API_KEY` and
       the same `BENCH_JUDGE_MODEL` Task 9 used. Without both this task cannot run
       — say so rather than reporting a partial result as a pass.
 
-- [ ] **Step 2: Make `--engine` a checked label, not a switch.** There is only
+- [x] **Step 2: Make `--engine` a checked label, not a switch.** There is only
       ever one engine in the tree, so `--engine pi` run before Phase 3 would
       silently record Cursor results under a Pi filename. Assert the flag matches
       reality — `cursor_sdk` importable ⇒ `cursor`, `agent_sidecar/` present and
       `cursor_sdk` gone ⇒ `pi` — and fail the run on a mismatch.
 
-- [ ] **Step 3: Smoke first, cheapest signal**
+- [x] **Step 3: Smoke first, cheapest signal**
 
 ```bash
 curl -X POST localhost:8000/internal/bridge-smoke -H "X-Admin-Password: …"
@@ -1945,7 +1953,7 @@ python -m bench.report --compare bench/results/baseline-cursor.json \
       understood and written down. A `BOTH-FAILING` row is not a pass — it means
       that case certified nothing.
 
-- [ ] **Step 7: Decide on `_strip_narration`.** It exists because Cursor's agent
+- [x] **Step 7: Decide on `_strip_narration`.** It exists because Cursor's agent
       narrated its skill reads ("Mình đọc skill…") and glued that onto the answer.
       With skills injected in-memory and no `read` tool it may be gone. If the
       corpus shows **zero** narration hits across all repetitions, delete it and
@@ -1955,6 +1963,43 @@ python -m bench.report --compare bench/results/baseline-cursor.json \
 - [ ] **Step 8: Commit** — `bench: Pi results and the Cursor-vs-Pi equivalence report`
 
 ---
+
+
+---
+
+## ⛔ Task 22 is NOT complete — one open bug, reported in full
+
+`bench/results/cursor-vs-pi.md` is the report. Read it before deploying; the
+summary:
+
+**Measured and passing.** A real turn runs end to end
+(`find_members` → `propose_meal(total=400000, participants=[1,2,3,4])`, correct
+Vietnamese reply, `error: None`). Golden `G1` graded through the harness passes
+**both** money graders — `ledger_state` confirms the draft's shares and balances
+match the golden expectation exactly. `/internal/bridge-smoke` answers against the
+real process. Both models pass the schema probes, including the vision model reading
+the committed bill PNG.
+
+**Not measured: no full-corpus Pi run completed.** Two attempts stopped after `G1`
+because **`G2` ran >230s against a configured `max_seconds=120`**.
+
+The cap is implemented and unit-tested — `turn.js` races `prompt()` against the
+deadline, and a session whose `prompt()` never settles still returns — but that is
+**not sufficient for a real turn**. The three candidates, in order: pi's own
+`auto_retry_*` loop restarting cancelled work; a `tool_call` whose result never
+arrives, since the race covers `prompt()` and not a tool's `execute`; or a stalled
+per-case sidecar spawn.
+
+**This outranks the benchmark it blocked.** `chat.py` holds `_agent_lock` for the
+whole turn, so one unbounded turn freezes *every* room. Reproduce with
+`python -m bench.run --corpus meals --engine pi --case G2` and instrument which of
+the three it is. **Do not deploy until a turn is provably bounded.**
+
+Step 7 is settled by the recorded baseline rather than by a Pi run:
+`_strip_narration` **stays and needs strengthening**. Its output is what production
+posted, and that output still contains `mình đọc skill phù hợp rồi xử lý` and
+`Mình sẽ tìm thành viên A2 rồi cập nhật tên` — so the mechanism is leaking today.
+`turn.js` ports it with the real prod strings as test cases.
 
 ## Rollback
 
