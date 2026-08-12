@@ -22,45 +22,47 @@ Node ≥22.19 · plain ESM JavaScript (no build step) · `node --test`.
 
 ## State of play — 2026-08-12
 
-**Done: Phase 0, Phase 1 (all of it), and Tasks 10–11 of Phase 2.**
-686 backend tests + 14 sidecar tests green; `cursor_sdk` is still installed, so the
-tree is deliberately still the `cursor` engine as far as `bench.run --engine`
-is concerned.
+**Phases 0–5 are done. The engine is Pi; Cursor is gone from the tree.**
+689 backend tests + 61 sidecar tests green. A real turn runs end to end:
+`@bot tôi trả 400k cả nhóm` → `find_members(all_active)` →
+`propose_meal(total=400000, participants=[1,2,3,4], payer=1)` → a Vietnamese draft
+reply, with `error: None`.
 
 | | status |
 |---|---|
-| Task 0 vision/modality | ✅ measured; **see the blocking model finding below** |
-| Tasks 1–8 benchmark harness | ✅ complete, 100+ tests |
-| Task 9 GATE (baseline) | ✅ **passed differently** — `bench/results/baseline-prod-cursor.json`, derived from the production log instead of a Cursor re-run |
-| Tasks 10–11 sidecar schema | ✅ `agent_sidecar/{package.json,schema.js}`, fixture + 14 `node --test` cases |
-| Tasks 12–14 sidecar runtime | ⬜ `main.js`, `session.js`, `turn.js` not started |
-| Tasks 15–19 Python shim | ⬜ not started |
-| Tasks 20–21 delete Cursor, ship | ⬜ not started |
-| Task 22 benchmark Pi | ⬜ blocked on the above |
+| Task 0 vision/modality | ✅ measured, and both models probed against the real schemas |
+| Tasks 1–8 benchmark harness | ✅ complete |
+| Task 9 GATE (baseline) | ✅ passed via the production log, not a Cursor re-run |
+| Tasks 10–14 sidecar | ✅ `schema.js`, `main.js`, `session.js`, `turn.js` + 61 tests |
+| Tasks 15–19 Python shim | ✅ `pi_bridge.py`, `agent.py` (408 → ~200 lines), `tools.py`, `summarize.py`, `pi_smoke.py`, `DATA_DIR` + migration |
+| Task 20 delete Cursor | ✅ 3 modules + 2 test files + the dependency gone; sweep clean |
+| Task 21 ship it | ⚠️ Dockerfile/CI/deploy updated; **`docker compose build` unverified — no Docker daemon here** |
+| Task 22 benchmark Pi | 🔄 see the report section |
 
-### Two things the next session must read first
+### Three things a real turn found that 59 stubbed tests did not
 
-1. **The model pair is `~deepseek/deepseek-v4-flash-latest` +
-   `qwen/qwen3-vl-30b-a3b-instruct`**, both probed against the real tool schemas
-   (Task 0). `meta/muse-glimmer-30b` was rejected because it emits nothing for
-   `propose_meal`; `bench.probe_models` carries the rejected models in `KNOWN_BAD`.
-   Re-run that probe after any model change — the catalogue's `tools: true` is not
-   evidence.
-2. **Behind an HTTPS proxy, a Node child needs `NODE_USE_ENV_PROXY=1` and
-   `NODE_EXTRA_CA_CERTS`** or its outbound calls fail in a way that reads like a bad
-   key. This bit the Cursor bridge and will bite the Pi sidecar identically. See the
-   Task 9 section.
+Worth reading before trusting any future stub-only change:
 
-### Local setup this work assumed
+1. **`DefaultResourceLoader` needs both `cwd` and `agentDir`** — it resolves them
+   in its constructor and throws on `undefined`.
+2. **Pi reads the key from `OPENROUTER_API_KEY`** (`pi-ai/dist/env-api-keys.js:87`)
+   while our environment provides **`OPEN_ROUTER_KEY`**. `pi_bridge` maps the two at
+   the process boundary. Unmapped, the sidecar says "No API key found for
+   openrouter. Use /login…", which reads like a setup mistake.
+3. **Forwarded `agent.*` events must carry the run's `req_id`.** `pi_bridge` routes
+   by it, so unstamped events had no queue and were silently dropped: the turn
+   worked and the room's live timeline stayed empty. Every unit test asserted event
+   *order* rather than routing, so none caught it.
+
+### Local setup
 
 ```bash
 cd backend && uv venv --python 3.12 .venv && uv pip install -e ".[test]" && .venv/bin/python -m pytest -q
 cd backend/agent_sidecar && npm install && npm test
 ```
 
-Credentials, by their real names: `OPEN_ROUTER_KEY` (not `OPENROUTER_API_KEY`),
-`DEBUG_API_KEY` for the prod export API, `CURSOR_API_KEY` (still needed only if
-anyone re-runs the old engine, which also needs `api2.cursor.sh` allowlisted).
+Credentials, by their real names: **`OPEN_ROUTER_KEY`** (not `OPENROUTER_API_KEY` —
+the sidecar translates), `DEBUG_API_KEY` for the prod export API.
 
 ---
 
