@@ -67,6 +67,32 @@ Worth reading before trusting any future stub-only change:
    worked and the room's live timeline stayed empty. Every unit test asserted event
    *order* rather than routing, so none caught it.
 
+### Then the harness was pointed at itself, and most of the failures were its own
+
+The first full `--repeat 3` run scored `tool_selection` **0.66** and
+`ledger_state` **0.65** — and chasing the failures case by case found that the
+majority were **the benchmark asking questions production never asks**. Five
+harness defects and five engine/prompt defects, in the order they were found:
+
+| # | what was wrong | how it showed up |
+|---|---|---|
+| H1 | `bench.run` never passed `sender_name` (`chat.py:489` does) | `G4` asked *"bạn là ai trong nhóm nhỉ?"* and proposed nothing, 3/3 |
+| H2 | prod cases were replayed **without their conversation** | `p120` is "@bot log"; `p129` expects 27,000đ that appears nowhere in its message |
+| H3 | prod cases were replayed against an **empty ledger** | `p20` "@bot paid my part" → *"bạn không nợ ai"*, graded as failing to propose a payment |
+| H4 | the **roster** was today's, on every date | `p12` "chia 5 trừ A2" is ambiguous in a room of 7; it had 6 that day |
+| H5 | a card posted after a **Confirm** was paired to the message above it | `p266`, a joke about lottery numbers, expected `settle_period` |
+| H6 | the grader compared **argument shapes**, not the money recorded | `p120` passed `items`+`equal` and the tool prorated it to the expected adjustments |
+| H7 | `moneyguard` did not count the **history** as backing an amount | `p102`/`p104` "unbacked" for quoting a total the room had just stated |
+| E1 | the prompt named the sender but not their `member_id` | see H1 — a name is not actionable when every tool takes ids |
+| E2 | **images never reached the model** (nested Anthropic block vs pi's flat `ImageContent`) | `B1`–`B3`: no tools, no text, no error |
+| E3 | `items` invented when nobody said who ate what | `B2` charged Bình 80,308đ of a bill that splits to 87,000đ |
+| E4 | "tính tiền" answered with a statement/summary | `s5`, `s8`, `s10b`, `s12` — both directions listed uncancelled, nothing to transfer |
+| E5 | `keyword="explicit"` with no dates **raised**, and the raise reached the model | three wasted round trips in one run |
+
+The general lesson, which is worth more than the fixes: **when a benchmark and a
+model disagree, suspect the benchmark first.** Every one of H1–H7 looked exactly
+like a model failure in the results table.
+
 ### Local setup
 
 ```bash
