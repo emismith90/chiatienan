@@ -73,7 +73,13 @@ that is a headline feature. Resolve it before writing any sidecar code.
 test -n "$OPENROUTER_API_KEY" && echo "key present" || echo "KEY MISSING"
 ```
 
-→ `KEY MISSING` in the dev container. This did **not** block Step 2:
+→ `KEY MISSING` in the dev container — **because the probe used the wrong name.**
+The credential exists as **`OPEN_ROUTER_KEY`**; `OPENROUTER_API_KEY`, which design
+§10 assumed and the snippet above tests, is not set anywhere. The two commands in
+Steps 1–2 are left as originally run, for the record. Everywhere the harness reads
+the key it uses `OPEN_ROUTER_KEY` (`bench/judge.py`).
+
+This did **not** block Step 2 either way:
 `GET /api/v1/models` is a **public** endpoint, so the catalogue answered without
 a key, and `openrouter.ai` turned out to be reachable through the container's
 HTTPS proxy after all. The modality question is therefore settled by measurement,
@@ -916,7 +922,7 @@ different models; a single flip is indistinguishable from sampling noise.
       → **636 passed, 1 skipped** (the skip is `test_scenario_week_llm.py`, which
       is opt-in behind `RUN_LLM_EVAL`). 125 of those tests are new in Phase 1.
 
-- [ ] **Step 2: Pin the judge.** `BENCH_JUDGE_MODEL` and its key must be set for
+- [x] **Step 2: Pin the judge.** `BENCH_JUDGE_MODEL` and its key must be set for
       **this** run, identically to Task 22. A baseline graded without a judge
       against a Pi run graded with one is not a comparison (design §11.5). If no
       judge is available here, record that `prose_quality` is `n/a` for both runs
@@ -943,55 +949,86 @@ python -m bench.report bench/results/baseline-cursor.json > bench/results/baseli
 
 ---
 
-## ⛔ GATE NOT PASSED — the baseline cannot be captured in this environment
+## ⛔ GATE NOT PASSED — one host short
 
-Steps 3–5 are **blocked**, and the block is in the environment rather than in the
-code. Diagnosed rather than assumed:
+Steps 3–5 are still blocked, but the diagnosis is now exact and two of the three
+original obstacles are cleared. Everything below was measured, not inferred.
 
-- `CURSOR_API_KEY` **is** present.
-- The engine is wired correctly — `bench.run` reaches `cursor_runner._list_models`
-  on a real turn.
-- That call fails at the network layer:
+### Cleared
 
-  ```
-  cursor_sdk.errors.InternalServerError: internal: [unknown]
-    Host not in allowlist: api.cursor.com. Add this host to your network
-    egress settings to allow access.
-  ```
+- **`OPEN_ROUTER_KEY` is the credential's real name**, not design §10's
+  `OPENROUTER_API_KEY`. `bench/judge.py` reads `OPEN_ROUTER_KEY`; one canonical
+  name, no aliases, because Task 13's sidecar needs the same variable and a second
+  accepted spelling is how half a deployment ends up unauthenticated. **Design §10
+  and Task 21 Step 4 are corrected.**
 
-  The session's agent proxy confirms it: policy denials come back as a 403 to
-  `CONNECT`, and `api.cursor.com` is not permitted. (`openrouter.ai` **is**
-  reachable — that is how Task 0 was resolved.)
+- **The judge is verified working end to end** against the live API — not stubbed.
+  Three trials through `grade_prose` with `google/gemini-2.5-flash-lite`:
 
-- `OPENROUTER_API_KEY` is **absent** here, so even with Cursor egress the pinned
-  judge could not run and `prose_quality` would be `n/a` for the whole baseline.
-  Step 2 allows that, but only if the Pi run is equally unjudged — and an
-  unjudged baseline is a weaker artifact, since `prose_quality`'s only golden
-  coverage is `s6` (Task 4's note).
+  | reply | verdict |
+  |---|---|
+  | `Đã thêm A5 vào nhóm rồi nhé.` | **pass** |
+  | `Sure, I've added A5 to the group.` | fail — "in English, not Vietnamese" |
+  | `Mình đọc skill roster rồi gọi tool add_member. Đã thêm A5.` | fail — "narrated its own machinery" |
 
-**The harness behaved correctly under the failure**, which is worth recording: the
-errored turn was captured rather than crashing the run, and all three graders
-reported the transport error instead of passing. That is the Task 6 "one bad case
-is a data point" property doing its job on a real failure.
+  The third is worth noting for **Task 22 Step 7**: the judge detects exactly the
+  narration `_strip_narration` exists to remove, so the "measure, don't guess"
+  decision has a working instrument. The judge *model* is still an open choice —
+  `gemini-2.5-flash-lite` was the smoke-test pick, and whatever is chosen must be
+  pinned identically across the baseline and the Pi run (§11.5). Prefer a dated id
+  over a floating one, for the same reason Task 0 flags `~…-latest`.
 
-### To pass this gate
+- **`api.cursor.com` is reachable** (HTTP 200), and model resolution now succeeds:
+  the SDK lists models and resolves `grok-4.5-fast` → `effort=medium,fast=false`.
 
-1. **Preferred — allow the host.** Add `api.cursor.com` to the environment's
-   network egress settings (and set `OPENROUTER_API_KEY` for the judge), then run
-   Steps 3–5 unchanged. Nothing in the code needs to change.
-2. **Or capture it off-box.** Run Steps 3–5 from a machine with open egress and
-   both credentials, then commit `bench/results/baseline-cursor.{json,md}`. The
-   whole harness is engine-agnostic and needs no edits to run there.
-3. **Waiving it is a real cost, not a formality.** With no recorded baseline the
-   report after the port can only say "Pi passes the tests we wrote", never "Pi
-   behaves as Cursor did" — the weaker claim §11.5 exists to prevent. If the
-   baseline is waived deliberately, say so in Task 22's report rather than letting
-   its absence read as a clean comparison.
+### ⚠️ The Node-bridge proxy requirement — needed twice, so write it down
 
-**Phase 2 has not been started.** The plan gates it on this file existing, and
-that gate is being respected rather than worked around.
+`cursor_sdk` does not call Cursor from Python. It spawns a bundled **Node** binary
+(`_vendor/bridge/bin/cursor-sdk-bridge`, Node v24.5.0) on `127.0.0.1`, and *that*
+process makes every outbound request. Node's `fetch`/undici **ignores
+`HTTPS_PROXY`**, so behind this container's agent proxy the bridge went direct and
+was refused — while `curl` and `httpx`, which do use the proxy, succeeded against
+the same host. That is why the first diagnosis looked like a plain allowlist miss.
 
----
+Two variables fix it, and the bridge inherits them from the Python process:
+
+```bash
+export NODE_USE_ENV_PROXY=1                          # Node 24 --use-env-proxy
+export NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt  # trust the proxy's CA
+```
+
+**This applies to Phase 2 as well.** The Pi sidecar is also a Node process making
+outbound HTTPS calls, so any dev or CI environment behind an HTTPS proxy needs the
+same two variables or the sidecar will fail identically — with an error that looks
+like a bad key rather than a blocked route. Task 12's `fatal` path and Task 15's
+"missing key raises a clear error at spawn" should not be allowed to swallow it.
+(Production needs neither: the droplet has open egress.)
+
+### Still blocking: `api2.cursor.sh`
+
+Model listing goes to `api.cursor.com`, but the **API-key exchange** goes to a
+second host, and the gateway denies it:
+
+```
+[unknown] Failed to connect to API key exchange endpoint: fetch failed
+```
+
+```
+recentRelayFailures:
+  connect_rejected  api2.cursor.sh:443
+    gateway answered 403 to CONNECT (policy denial or upstream failure)
+```
+
+`curl https://api2.cursor.sh/` → `000`; `curl https://api.cursor.com/` → `200`.
+So the allowlist covers one of the two hosts the Cursor SDK needs.
+
+**To pass this gate:** add **`api2.cursor.sh`** to the environment's egress
+allowlist. Nothing in this repo needs to change — with that host open, Steps 3–5
+run as written, with `NODE_USE_ENV_PROXY=1` and `NODE_EXTRA_CA_CERTS` set. The
+alternative remains capturing the baseline off-box, where no proxy is involved.
+
+**Phase 2 has not been started**, and the plan's gate is being respected rather
+than worked around.
 
 ## Phase 2 — The TypeScript harness
 
@@ -1283,7 +1320,7 @@ that logic belongs in `turn.js`.
 - [ ] **Step 1: Write the failing test** — with a fake `node` that echoes canned
       JSONL: startup retries 3× with `1.5**attempt` backoff (the shape
       `_launch_bridge_resilient` uses today, because a child dying at startup is
-      not a Cursor-specific problem); a missing `OPENROUTER_API_KEY` raises a clear
+      not a Cursor-specific problem); a missing `OPEN_ROUTER_KEY` raises a clear
       error at spawn naming the variable; the parent env reaches the child; a dead
       child is restarted on the next `ensure_started`; **and two concurrent
       requests with different `req_id`s each receive only their own messages.**
@@ -1522,8 +1559,10 @@ cd backend && pytest -q
       `node --test`, with `cache-dependency-path: backend/agent_sidecar/package-lock.json`.
       The LLM eval stays opt-in and out of CI, same as `RUN_LLM_EVAL` today.
 
-- [ ] **Step 3: `deploy.yml`** — point at the **existing** `OPENROUTER_API_KEY`
-      secret instead of `CURSOR_API_KEY`; add the `PI_*` vars and `DATA_DIR`;
+- [ ] **Step 3: `deploy.yml`** — point at the **existing** `OPEN_ROUTER_KEY`
+      secret instead of `CURSOR_API_KEY` (confirm the GitHub secret's name matches;
+      design §10 originally guessed `OPENROUTER_API_KEY`, which is not the name the
+      runtime environment uses); add the `PI_*` vars and `DATA_DIR`;
       remove `CURSOR_API_BASE`, `CURSOR_SDK_MODEL`, `CURSOR_SDK_WORKSPACE`, and
       the `WORKSPACE_FALLBACK` guard block at L190-197. Task 19's startup
       migration handles the memory move, so no deploy-script copy step is needed —
@@ -1531,7 +1570,8 @@ cd backend && pytest -q
       non-empty.
 
 - [ ] **Step 4: `.env.example`** — rewrite the LLM block: `OPENROUTER_API_KEY`
-      (`(SECRET)`, empty, matching the file's convention),
+      — the variable is **`OPEN_ROUTER_KEY`**, not `OPENROUTER_API_KEY`
+      (`(SECRET)`, empty, matching the file's convention) —
       `PI_MODEL=~deepseek/deepseek-v4-flash-latest`,
       `PI_VISION_MODEL=meta/muse-glimmer-30b`, `PI_PROVIDER=openrouter`,
       `PI_THINKING`, `PI_MAX_TOOLS`, `PI_MAX_SECONDS`, `DATA_DIR`. **No base-URL

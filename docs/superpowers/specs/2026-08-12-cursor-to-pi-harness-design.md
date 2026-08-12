@@ -316,7 +316,7 @@ Those tests passing unedited is the proof the contract held.
 
 | Removed | Added |
 |---|---|
-| `CURSOR_API_KEY` | `OPENROUTER_API_KEY` (already in the cloud env + GitHub secrets) |
+| `CURSOR_API_KEY` | `OPEN_ROUTER_KEY` (the environment's actual name for it — an earlier draft of this table said `OPENROUTER_API_KEY`, which does not exist) |
 | `CURSOR_SDK_MODEL` | `PI_MODEL=~deepseek/deepseek-v4-flash-latest`, `PI_PROVIDER=openrouter` |
 | `CURSOR_API_BASE` | *(nothing — hard-coded, §5)* |
 | `CURSOR_SDK_WORKSPACE` | `DATA_DIR=/data`, `PI_THINKING=medium` |

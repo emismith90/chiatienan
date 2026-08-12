@@ -45,7 +45,19 @@ def test_a_fenced_or_chatty_reply_is_still_parsed():
 def test_a_missing_key_is_ungraded_not_passed():
     judge = openrouter_judge("m/1", api_key="", post=_reply('{"ok": true}'))
     v = grade_prose(_case(), _record(), judge=judge)
-    assert v.passed is None and "OPENROUTER_API_KEY" in v.reason
+    assert v.passed is None and "OPEN_ROUTER_KEY" in v.reason
+
+
+def test_the_key_is_read_from_the_environment_name_the_env_actually_uses(monkeypatch):
+    from bench.judge import KEY_ENV
+    assert KEY_ENV == "OPEN_ROUTER_KEY"
+    monkeypatch.setenv(KEY_ENV, "from-env")
+    seen = {}
+    def capture(url, payload, headers, timeout):
+        seen["auth"] = headers["Authorization"]
+        return {"choices": [{"message": {"content": '{"ok": true}'}}]}
+    grade_prose(_case(), _record(), judge=openrouter_judge("m/1", post=capture))
+    assert seen["auth"] == "Bearer from-env"
 
 
 def test_a_transport_failure_is_ungraded_not_passed():
