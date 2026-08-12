@@ -275,7 +275,7 @@ moment Task 7 produces a fixture, and nothing in Task 7 would fix it.
 
 **Interfaces:** `grade_tool_selection(case, record) -> Verdict(passed: bool, reason: str)`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 MONEY_ARGS = ("total", "payer", "participants", "from", "to", "amount", "items")
@@ -309,13 +309,28 @@ def test_non_money_args_are_ignored():
     assert grade_tool_selection(case, rec).passed
 ```
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Expected tool ∈ called (superset-tolerant, matching
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Expected tool ∈ called (superset-tolerant, matching
       `test_scenario_week_llm.py`'s current behavior), plus an arg-subset check
       restricted to `MONEY_ARGS`. Nothing else is compared: prose, dish names, and
       notes are the model's business.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `bench: tool-selection grader that checks the money args`
+
+> **`guests` was added to `MONEY_ARGS`, which the list above omits.** A guest
+> pays cash, so dropping one divides the bill by too few heads and overcharges
+> every member — golden `G6` is a 400k bill with a 300k tracked total for exactly
+> that reason, and the corpus carries guest expectations for `G6`/`G7`/`G8`/`s4`.
+> Grading only the plan's seven args would have let a real money regression
+> through. Only the guest **count** is compared: the names are the model reading
+> prose, the count is arithmetic.
+>
+> Two further decisions the plan left open, both resolved toward the strict
+> reading: a money arg the model **omitted** fails rather than being skipped as
+> "nothing to compare", and a case with **no** tool expectation grades as `None`
+> (n/a) rather than a free pass. When a tool is called more than once the **last**
+> call is graded, matching `TurnResult.last_result()` — a model that corrects
+> itself is judged on what the user ends up seeing.
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `bench: tool-selection grader that checks the money args`
 
 ---
 
