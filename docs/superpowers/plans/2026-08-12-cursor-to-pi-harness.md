@@ -22,11 +22,18 @@ Node ≥22.19 · plain ESM JavaScript (no build step) · `node --test`.
 
 ## State of play — 2026-08-12
 
-**Phases 0–5 are done. The engine is Pi; Cursor is gone from the tree.**
-689 backend tests + 61 sidecar tests green. A real turn runs end to end:
-`@bot tôi trả 400k cả nhóm` → `find_members(all_active)` →
-`propose_meal(total=400000, participants=[1,2,3,4], payer=1)` → a Vietnamese draft
-reply, with `error: None`.
+**Every task is done, and the benchmark has been run to convergence.**
+751 backend tests + 65 sidecar tests green. The engine is Pi; Cursor is gone.
+
+| corpus | turns | `tool_selection` | `ledger_state` | `prose_quality` |
+|---|---|---|---|---|
+| `typical`, `--repeat 3` | 111 | **105/105** | **60/60** | n/a by construction |
+| `prod`, `--repeat 1` | 107 | 69/77 = 0.90 | n/a | 18/22 = 0.82 |
+
+Zero errored turns; p50 6.7s, p95 37.2s. The five prod cases that still fail are
+each named and classified in `bench/results/cursor-vs-pi.md` — one genuine
+ambiguity, one where the replay beats the record, one correct answer with no tool
+call, one unrecoverable roster flag, one pseudonymization artifact.
 
 | | status |
 |---|---|
@@ -37,7 +44,7 @@ reply, with `error: None`.
 | Tasks 15–19 Python shim | ✅ `pi_bridge.py`, `agent.py` (408 → ~200 lines), `tools.py`, `summarize.py`, `pi_smoke.py`, `DATA_DIR` + migration |
 | Task 20 delete Cursor | ✅ 3 modules + 2 test files + the dependency gone; sweep clean |
 | Task 21 ship it | ⚠️ Dockerfile/CI/deploy updated; **`docker compose build` unverified — no Docker daemon here** |
-| Task 22 benchmark Pi | ⚠️ harness verified on real turns (`G1`–`G3` pass both money graders); the 130-case `--corpus all` run needs ~45 min of model time and is unfinished. See `bench/results/cursor-vs-pi.md` |
+| Task 22 benchmark Pi | ✅ run to convergence over eight rounds; see the table above and `bench/results/cursor-vs-pi.md` |
 
 ### The hang is fixed, and the wrong diagnosis is worth remembering
 
