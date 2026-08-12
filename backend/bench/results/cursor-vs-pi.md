@@ -20,10 +20,14 @@ python -m bench.report --compare bench/results/baseline-prod-cursor.json bench/r
 | corpus | turns | `tool_selection` | `ledger_state` | `prose_quality` | latency p50 / p95 |
 |---|---|---|---|---|---|
 | `typical` (golden meals + week + bills + prod representatives), `--repeat 3` | 111 | **105/105 = 1.00** | **60/60 = 1.00** | n/a by construction | 6.7s / 37.2s |
+| the same corpus again, after the last two fixes | 111 | **105/105 = 1.00** | **60/60 = 1.00** | n/a | 9.7s / 59.3s |
 | the same corpus, first full run | 111 | 69/105 = 0.66 | 39/60 = 0.65 | — | 16.0s / 114.9s |
 | `prod` (107 real turns), `--repeat 1` | 107 | 69/77 = 0.90 | n/a | **18/22 = 0.82** | — |
 
-Zero errored turns in any of them. `prose_quality` is judged by reading every reply
+Zero errored turns in any of them. The `typical` result is **two consecutive
+`--repeat 3` runs at 1.00**, the second one after the last two prompt changes
+landed — 222 turns with no money grader failing, which is what makes it a rate
+rather than a lucky sample. `prose_quality` is judged by reading every reply
 against the rubric in `bench/graders.py` (`judge_model: "claude-opus-5 (agent)"`),
 the same way the baseline's 26 were.
 
