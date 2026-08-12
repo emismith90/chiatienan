@@ -13,3 +13,7 @@ Dùng `propose_payment` (KHÔNG dùng `propose_meal`). Nó chỉ ĐỀ XUẤT �
 - `payment_settled` = thật sự không còn nợ → báo lại, không tạo thẻ.
 - `nothing_owed` = người trả không nợ người kia (mà ngược lại) → giải thích, không tạo thẻ.
 - Nhiều người trả trong một câu → gọi `propose_payment` MỘT LẦN CHO MỖI người.
+- "Tôi trả phần của tôi rồi" / "paid my part" / "đã trả hết" mà KHÔNG nói trả cho ai:
+  người nhắn đang nợ những ai thì gọi `propose_payment` một lần cho MỖI người đó
+  (bỏ trống `amount`). ĐỪNG hỏi "trả cho ai" — thẻ nháp sửa và huỷ được, nên đề xuất
+  đủ các khoản tốt hơn là bắt người dùng liệt kê lại.

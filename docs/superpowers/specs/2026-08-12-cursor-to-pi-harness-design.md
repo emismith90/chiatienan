@@ -526,6 +526,16 @@ one that cannot see. If the primary is text-only and no tool-capable vision mode
 is configured, image turns must **fail loudly**, never silently drop the photo —
 a dropped bill means the model invents the total.
 
+**And the silent drop happened anyway, one layer below this.** The model and the
+routing were both right; the *content block* was not. `buildPromptOptions` sent
+Anthropic's nested `{source: {type: "base64", mediaType, data}}` while `pi-ai`'s
+`ImageContent` is flat `{type, data, mimeType}` (`types.d.ts:241`), so `data` and
+`mimeType` arrived `undefined` and every bill turn came back with **no tools, no
+text and no error at all**. The sidecar unit test asserted the shape the function
+emitted rather than the shape pi accepts, which is exactly the test that cannot
+catch this. The synthetic bill cases are what caught it: `B1`–`B3` failed every
+grader on every repeat, and they are the reason this section asks for them.
+
 The benchmark cannot cover this path from the existing corpora (no images in the
 golden data; prod images are stripped), so it gains 2–3 **synthetic bill-image
 cases with known totals**. Otherwise the riskiest path in the system ships on one

@@ -79,6 +79,24 @@ def _last_call(record: dict, name: str) -> dict | None:
     return None
 
 
+def _result_amount(call: dict):
+    """The amount the tool itself put in the draft, if it says one.
+
+    A `payment_draft` carries `amount` directly; a multi-transfer one carries
+    `transfers`, and a single transfer among them is still one amount.
+    """
+    result = call.get("result")
+    if not isinstance(result, dict):
+        return None
+    if isinstance(result.get("amount"), int):
+        return result["amount"]
+    transfers = result.get("transfers")
+    if isinstance(transfers, list) and len(transfers) == 1 \
+            and isinstance(transfers[0], dict):
+        return transfers[0].get("amount")
+    return None
+
+
 def _item_key(entry) -> tuple:
     """An `items` entry reduced to its money: who ate it and what it cost.
 
@@ -148,6 +166,15 @@ def grade_tool_selection(case, record: dict) -> Verdict:
                 if key in _SENDER_DEFAULTED and want == record.get("sender_member_id"):
                     # The schema permits omitting it when it is the sender, and the
                     # tool resolves it to the same id.
+                    continue
+                if key == "amount" and _result_amount(call) == want:
+                    # **Omitting `amount` is the preferred behavior, not a gap.**
+                    # `record-payment` says so: with no amount in the message, leave
+                    # it out and the tool works out what is owed from the ledger. The
+                    # model then never transcribes a number (design D3), and the
+                    # draft carries the same amount the expectation asked for — which
+                    # is checked here rather than assumed. `p129` ("tôi đã trả tiền
+                    # A1", expecting 27,000đ) was failed for doing this correctly.
                     continue
                 # Any other omitted money arg is a failure, not a comparison to skip.
                 problems.append(f"{tool_name}.{key}: expected {want!r}, absent")

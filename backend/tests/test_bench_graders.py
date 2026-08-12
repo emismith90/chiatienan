@@ -671,3 +671,37 @@ def test_an_omitted_total_is_still_a_failure():
     case = _case(expect={"tools": ["propose_meal"], "args": {"propose_meal": {"total": 400000}}})
     v = grade_tool_selection(case, _record(tools=[("propose_meal", {})], sender_member_id=1))
     assert not v.passed and "total" in v.reason
+
+
+def test_an_omitted_amount_passes_when_the_tool_computed_the_expected_one():
+    """Leaving `amount` out is the *preferred* behavior, not a missing argument.
+
+    `record-payment` says so: with no amount in the message, omit it and the tool
+    works out what is owed from the ledger, so the model never transcribes a number
+    (design D3). `p129` ("tôi đã trả tiền A1", expecting 27,000đ) called
+    `propose_payment(to=A1)` and was failed for exactly that.
+    """
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="x", source="prod", day="2026-07-27", actor="A2",
+                expect={"tools": ["propose_payment"],
+                        "args": {"propose_payment": {"from": 2, "to": 1, "amount": 27000}}})
+    record = {"sender_member_id": 2, "tools": [
+        {"name": "propose_payment", "args": {"to": 1},
+         "result": {"ok": True, "type": "payment_draft", "amount": 27000}}]}
+    verdict = grade_tool_selection(case, record)
+    assert verdict.passed is True, verdict.reason
+
+
+def test_an_omitted_amount_still_fails_when_the_tool_computed_a_different_one():
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="x", source="prod", day="2026-07-27", actor="A2",
+                expect={"tools": ["propose_payment"],
+                        "args": {"propose_payment": {"from": 2, "to": 1, "amount": 27000}}})
+    record = {"sender_member_id": 2, "tools": [
+        {"name": "propose_payment", "args": {"to": 1},
+         "result": {"ok": True, "type": "payment_draft", "amount": 54000}}]}
+    verdict = grade_tool_selection(case, record)
+    assert verdict.passed is False
+    assert "amount" in verdict.reason
