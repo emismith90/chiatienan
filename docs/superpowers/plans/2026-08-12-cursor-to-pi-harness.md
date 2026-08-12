@@ -1394,7 +1394,7 @@ because `/internal/bridge-smoke` (`main.py:676`) is **not** under
 `chat._agent_lock`, so a `ping` can legitimately arrive mid-turn and interleave on
 one stdout.
 
-- [ ] **Step 1: Write the failing test** — drive the process with a stubbed
+- [x] **Step 1: Write the failing test** — drive the process with a stubbed
       session so no API key is needed. This is the cheapest possible test of the
       protocol and it must exist before `session.js`:
   - `ping` → `{"type":"pong","req_id":…}` with the same `req_id`
@@ -1411,11 +1411,11 @@ one stdout.
   - a malformed line yields a `fatal` for that `req_id` and does **not** kill the
     process — one bad turn must not take the bot down until the next deploy
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Correlate `tool_call`/`tool_result` by `call_id` and
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Correlate `tool_call`/`tool_result` by `call_id` and
       every command/reply by `req_id`, with a pending-promise map for each.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `sidecar: JSONL RPC loop with a tool-call round-trip`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `sidecar: JSONL RPC loop with a tool-call round-trip`
 
 ---
 
@@ -1426,7 +1426,7 @@ one stdout.
 
 **Interfaces:** `buildSession(req, { onEvent, callTool }) -> { session, dispose }`
 
-- [ ] **Step 1: Write the failing tests** — the `ok:false` semantics get first
+- [x] **Step 1: Write the failing tests** — the `ok:false` semantics get first
       billing, because getting them backwards is a corpus-wide regression that no
       other test catches:
 
@@ -1473,9 +1473,9 @@ test("a skill BODY reaches the model with the built-in toolset empty", async () 
 });
 ```
 
-- [ ] **Step 2: Verify they fail.**
+- [x] **Step 2: Verify they fail.**
 
-- [ ] **Step 3: Implement.** Per design §5:
+- [x] **Step 3: Implement.** Per design §5:
   - `const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";` — a module
     constant, no env override.
   - `ResourceLoader` with `systemPromptOverride`, `agentsFilesOverride`,
@@ -1496,8 +1496,30 @@ test("a skill BODY reaches the model with the built-in toolset empty", async () 
     four skill bodies as extra `context_files` entries (~8KB, always in the system
     prompt) and drop the skill mechanism. Record which path was taken.
 
-- [ ] **Step 4: Verify they pass.**
-- [ ] **Step 5: Commit** — `sidecar: session construction and the Python tool proxy`
+- [x] **Step 4: Verify they pass.**
+- [x] **Step 5: Commit** — `sidecar: session construction and the Python tool proxy`
+
+> ### §5.1 resolved: skills ship as context files, and the API is simpler than assumed
+>
+> Read against the installed package (`docs/sdk.md`, `dist/*.d.ts`) rather than
+> inferred:
+>
+> - **`customTools: [defineTool({...})]` is passed straight to
+>   `createAgentSession`.** The design's `extensionFactories` → `pi.registerTool`
+>   dance is unnecessary; the whole `extensionFactories` layer is gone.
+> - **`noTools: "builtin"`** is the real spelling of the design's `tools: []`: it
+>   drops `read`/`bash`/`edit`/`write` while keeping custom tools. Same security
+>   upgrade, one documented flag.
+> - **Skills cannot be injected in memory.** `skillsOverride` takes a descriptor
+>   with a `filePath` pointing at a real file on disk, and pi puts only a skill's
+>   name and description in the system prompt, expecting the agent to `read` the
+>   body. With the built-ins gone there *is* no `read`. So §5.1's warning was
+>   correct and its fallback is what shipped: every skill body goes out as an
+>   **`agentsFiles`** entry, which does take inline `content` and lands in every
+>   system prompt. `skills.py` and its `_prune` bug class die exactly as intended,
+>   and nothing is written to disk.
+> - `session.prompt(text, {images: [{type:"image", source:{type:"base64", …}}]})`
+>   carries the bill photo.
 
 ---
 
@@ -1512,7 +1534,7 @@ This is where the Python logic being deleted lands. Port `_final_answer`,
 **including their comments** — they document production incidents, and a comment
 that explains a bug is worth more than the code it sits above.
 
-- [ ] **Step 1: Write the failing test** — port the assertions from
+- [x] **Step 1: Write the failing test** — port the assertions from
       `backend/tests/test_agent.py`, plus:
 
 ```js
@@ -1546,16 +1568,32 @@ test("a max_tools breach is a PARTIAL ANSWER, not an error", async () => {
 test("a max_seconds breach behaves the same way", async () => { /* same shape */ });
 ```
 
-- [ ] **Step 2: Verify it fails.**
+- [x] **Step 2: Verify it fails.**
 
-- [ ] **Step 3: Implement.** Normalize pi's `message_update` / `tool_execution_*`
+- [x] **Step 3: Implement.** Normalize pi's `message_update` / `tool_execution_*`
       / `agent_*` / `auto_retry_*` events to the frozen `agent.*` names (design
       §4.2). Enforce caps → `session.abort()`, setting `capped: true` and leaving
       `error: null` (design §8). Collect `stats` from `get_session_stats`. Format
       only genuine failures into the single `error` string `chat.py` expects.
 
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `sidecar: event normalization, turn caps, answer assembly`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `sidecar: event normalization, turn caps, answer assembly`
+
+> **The narration and shredding tests are guarding live bugs, not historical ones.**
+> `turn.js` carries the real prod strings: `isNarration` is asserted against five
+> replies that actually reached the room (`mình đọc skill phù hợp rồi xử lý`,
+> `Mình sẽ tìm thành viên A2 rồi cập nhật…`), and the join test reconstructs
+> `p144`'s `V ẫn không được đâu A4`. `formatError` also exists because of the
+> corpus: prod posted `Model Blocked … by your team admin settings` **in English**
+> as the bot's reply twice, so a provider refusal now becomes a short Vietnamese
+> message of ours instead of the vendor's text.
+>
+> pi's event vocabulary, mapped from `dist/core/extensions/types.d.ts`:
+> `agent_start` → `agent.run.started`; `message_update` +
+> `assistantMessageEvent.type === "text_delta"` → `agent.text.delta`;
+> `tool_execution_start/end` → `agent.tool.start/result`; `agent_end` →
+> `agent.run.finished`. Stats come from `session.getSessionStats()`, and report
+> `null` rather than `0` when unknown.
 
 ---
 
