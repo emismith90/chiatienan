@@ -297,3 +297,11 @@ def test_the_oracle_is_actually_being_graded_not_skipped():
         rec = _run_one(case, 0, _oracle(case), judge=lambda *_: {"ok": True, "reason": "-"})
         passed += sum(1 for v in rec["grades"].values() if v["passed"] is True)
     assert passed >= 20, passed
+
+
+def test_limit_and_case_filters_narrow_the_run():
+    from bench.run import run_corpus
+    assert {r["case_id"] for r in run_corpus("meals", repeat=1, run_turn=_stub, limit=2)} \
+        == {"G1", "G2"}
+    assert {r["case_id"] for r in run_corpus("meals", repeat=1, run_turn=_stub,
+                                             cases=["G5", "G12"])} == {"G5", "G12"}

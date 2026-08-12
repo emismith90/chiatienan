@@ -116,7 +116,7 @@ async def _await(awaitable):
 
 
 def run_corpus(name: str, *, repeat: int = 3, run_turn=None, judge=None,
-               on_record=None) -> list[dict]:
+               on_record=None, limit: int | None = None, cases: list[str] | None = None) -> list[dict]:
     """Replay every case in `name`, `repeat` times each, and return the records.
 
     `run_turn` is injected so the tests can drive this offline; production passes
@@ -127,8 +127,15 @@ def run_corpus(name: str, *, repeat: int = 3, run_turn=None, judge=None,
         from app.agent import run_turn as real_run_turn
         run_turn = real_run_turn
 
+    selected = corpus.load(name)
+    if cases:
+        wanted = set(cases)
+        selected = [c for c in selected if c.id in wanted]
+    if limit is not None:
+        selected = selected[:limit]
+
     records = []
-    for case in corpus.load(name):
+    for case in selected:
         for rep in range(repeat):
             record = _run_one(case, rep, run_turn, judge=judge)
             records.append(record)
@@ -172,6 +179,13 @@ def main(argv=None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--judge-model", default=None,
                         help="pin the prose judge; without it prose_quality is n/a")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="run only the first N cases. A partial run is honest "
+                             "only if the report says so: `bench.report --compare` "
+                             "flags every case the other run has as MISSING, which is "
+                             "exactly the right reading of a truncated run.")
+    parser.add_argument("--case", action="append", dest="cases",
+                        help="repeatable; run only these case ids")
     args = parser.parse_args(argv)
 
     _assert_engine_matches_the_tree(args.engine)
@@ -182,6 +196,10 @@ def main(argv=None) -> int:
         judge = openrouter_judge(args.judge_model)
 
     cases = corpus.load(args.corpus)
+    if args.cases:
+        cases = [c for c in cases if c.id in set(args.cases)]
+    if args.limit is not None:
+        cases = cases[:args.limit]
     if not cases:
         print(f"corpus {args.corpus!r} is empty — nothing to run", file=sys.stderr)
         return 1
@@ -194,12 +212,17 @@ def main(argv=None) -> int:
         print(f'  {record["case_id"]}#{record["rep"]} {marks} '
               f'{record["elapsed_s"]:.1f}s {record["error"] or ""}', file=sys.stderr)
 
-    records = run_corpus(args.corpus, repeat=args.repeat, judge=judge, on_record=progress)
+    records = run_corpus(args.corpus, repeat=args.repeat, judge=judge, on_record=progress,
+                         limit=args.limit, cases=args.cases)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({
         "version": RECORD_VERSION, "engine": args.engine, "corpus": args.corpus,
         "repeat": args.repeat, "judge_model": args.judge_model,
+        # A truncated run must say so in the artifact, not just in the shell that
+        # produced it.
+        "partial": bool(args.limit or args.cases),
+        "cases_run": len(cases),
         "records": records,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote {args.out}", file=sys.stderr)
