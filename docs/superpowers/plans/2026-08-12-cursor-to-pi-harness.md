@@ -487,18 +487,25 @@ def test_a_missing_judge_is_an_error_not_a_pass():
 **Files:** Modify `backend/bench/graders.py`; add to `backend/tests/test_bench_graders.py`
 
 **Interfaces:** `summarize_cost_latency(records) -> dict` with
-`{p50_s, p95_s, mean_tool_calls, total_tokens, total_cost_usd, n}`
+`{p50_s, p95_s, mean_tool_calls, total_tokens, total_cost_usd, n}`, plus two
+fields the plan did not name but the report needs to stay honest: `stats_n` (how
+many records actually carried `stats`, so a partial token/cost total can never
+be mistaken for a full one) and `error_n`. Percentiles are **nearest-rank**, no
+interpolation — with corpora this small an interpolated p95 would invent a
+latency no turn took, and the figure is read as "how slow does this get".
+Errored turns keep their `elapsed_s` in the distribution: a turn that failed
+after 60s is a latency fact, not a gap in the data.
 
 Reported, **never** pass/fail — a slower engine that is correct is a business
 decision, not a test failure.
 
-- [ ] **Step 1: Write the failing test** — assert p50/p95 on a known list, and
+- [x] **Step 1: Write the failing test** — assert p50/p95 on a known list, and
       that missing `stats` (Cursor exposes no cost) yields `None` rather than `0`.
       Conflating "unknown" with "free" would make the comparison lie.
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `bench: aggregate latency and cost`
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `bench: aggregate latency and cost`
 
 ---
 

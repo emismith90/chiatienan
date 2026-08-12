@@ -552,3 +552,63 @@ def test_the_rubric_reaches_the_judge():
         return {"ok": True, "reason": "-"}
     grade_prose(_case(), _record(final_text="Xong nhé"), judge=judge)
     assert seen["rubric"] is PROSE_RUBRIC
+
+
+# --------------------------------------------------------------------------- #
+# cost_latency — reported, never pass/fail
+# --------------------------------------------------------------------------- #
+
+def test_percentiles_use_nearest_rank_on_a_known_list():
+    from bench.graders import summarize_cost_latency
+    recs = [_record(elapsed_s=float(i)) for i in range(1, 11)]
+    s = summarize_cost_latency(recs)
+    assert s["n"] == 10
+    assert s["p50_s"] == 5.0          # ceil(0.5*10) - 1 -> index 4
+    assert s["p95_s"] == 10.0         # ceil(0.95*10) - 1 -> index 9
+
+
+def test_percentiles_on_an_even_short_list():
+    from bench.graders import summarize_cost_latency
+    s = summarize_cost_latency([_record(elapsed_s=x) for x in (4.0, 1.0, 3.0, 2.0)])
+    assert s["p50_s"] == 2.0 and s["p95_s"] == 4.0
+
+
+def test_missing_stats_yields_none_not_zero():
+    from bench.graders import summarize_cost_latency
+    # Cursor exposes no cost. Reporting 0 would say "free" where the truth is
+    # "unknown", and a Pi cost compared against that would look like a rise from
+    # nothing.
+    s = summarize_cost_latency([_record(elapsed_s=1.0), _record(elapsed_s=2.0)])
+    assert s["total_cost_usd"] is None
+    assert s["total_tokens"] is None
+    assert s["stats_n"] == 0
+
+
+def test_stats_are_summed_and_the_denominator_is_reported():
+    from bench.graders import summarize_cost_latency
+    recs = [_record(elapsed_s=1.0, stats={"tokens": 100, "cost": 0.001}),
+            _record(elapsed_s=2.0, stats={"tokens": 250, "cost": 0.002}),
+            _record(elapsed_s=3.0)]          # no stats at all
+    s = summarize_cost_latency(recs)
+    assert s["total_tokens"] == 350
+    assert abs(s["total_cost_usd"] - 0.003) < 1e-9
+    assert s["stats_n"] == 2 and s["n"] == 3   # 2 of 3 contributed
+
+
+def test_mean_tool_calls_counts_every_invocation():
+    from bench.graders import summarize_cost_latency
+    recs = [_record(tools=[("a", {}), ("b", {})]), _record(tools=[("a", {})])]
+    assert summarize_cost_latency(recs)["mean_tool_calls"] == 1.5
+
+
+def test_errored_turns_count_in_latency_and_are_reported_separately():
+    from bench.graders import summarize_cost_latency
+    # A turn that failed after 60s is a latency fact, not a gap in the data.
+    s = summarize_cost_latency([_record(elapsed_s=60.0, error="boom"), _record(elapsed_s=2.0)])
+    assert s["n"] == 2 and s["error_n"] == 1 and s["p95_s"] == 60.0
+
+
+def test_an_empty_record_list_is_reported_not_crashed():
+    from bench.graders import summarize_cost_latency
+    s = summarize_cost_latency([])
+    assert s["n"] == 0 and s["p50_s"] is None and s["mean_tool_calls"] is None

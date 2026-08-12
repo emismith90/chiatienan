@@ -456,3 +456,55 @@ def grade_prose(case, record: dict, judge=None) -> Verdict:
         return Verdict(None, f"not graded: judge returned {answer!r}")
     reason = str(answer.get("reason") or "")
     return Verdict(bool(answer["ok"]), reason or "judge gave no reason")
+
+
+# --------------------------------------------------------------------------- #
+# cost_latency — reported, never pass/fail
+# --------------------------------------------------------------------------- #
+
+def _percentile(sorted_values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile: index `ceil(p * n) - 1`.
+
+    No interpolation. With corpora this small an interpolated p95 would invent a
+    latency no turn actually took, and the report is read as "how slow does this
+    get", not as a distribution fit.
+    """
+    if not sorted_values:
+        return None
+    import math
+    index = max(0, math.ceil(p * len(sorted_values)) - 1)
+    return sorted_values[index]
+
+
+def summarize_cost_latency(records: list[dict]) -> dict:
+    """Latency, tool volume, tokens and cost across a run.
+
+    **Reported, never pass/fail.** A slower engine that is correct is a business
+    decision, not a test failure.
+
+    `total_tokens` and `total_cost_usd` are `None` when nothing reported `stats`
+    — Cursor exposes no cost, and printing `0` would claim "free" where the truth
+    is "unknown", making any Pi figure look like a rise from nothing. When only
+    some records carry stats the known ones are summed and `stats_n` says how
+    many contributed, so a partial total can never be mistaken for a full one.
+    """
+    n = len(records)
+    if not n:
+        return {"n": 0, "error_n": 0, "p50_s": None, "p95_s": None,
+                "mean_tool_calls": None, "total_tokens": None,
+                "total_cost_usd": None, "stats_n": 0}
+
+    # An errored turn's elapsed time is a latency fact, not a gap in the data.
+    elapsed = sorted(float(r.get("elapsed_s") or 0.0) for r in records)
+    stats = [r["stats"] for r in records if isinstance(r.get("stats"), dict)]
+
+    return {
+        "n": n,
+        "error_n": sum(1 for r in records if r.get("error")),
+        "p50_s": _percentile(elapsed, 0.50),
+        "p95_s": _percentile(elapsed, 0.95),
+        "mean_tool_calls": sum(len(r.get("tools") or []) for r in records) / n,
+        "total_tokens": sum(int(s.get("tokens") or 0) for s in stats) if stats else None,
+        "total_cost_usd": sum(float(s.get("cost") or 0.0) for s in stats) if stats else None,
+        "stats_n": len(stats),
+    }
