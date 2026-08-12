@@ -438,3 +438,117 @@ def test_an_errored_tool_result_fails_rather_than_being_ignored(db, monkeypatch)
                   room_id=room_id)
     v = grade_ledger_state(case, rec, db, ids)
     assert not v.passed and "Ngày nào?" in v.reason
+
+
+# --------------------------------------------------------------------------- #
+# prose_quality
+# --------------------------------------------------------------------------- #
+
+def test_unbacked_amount_in_the_reply_fails_without_calling_the_judge():
+    from bench.graders import grade_prose
+    called = []
+    case = _case(message="@bot 300k cả nhóm", expect={"tools": ["random_pick"]})
+    rec = _record(final_text="Đã ghi, mỗi người 75.000đ",
+                  tools=[("random_pick", {}, {"ok": True})])
+    v = grade_prose(case, rec, judge=lambda *_: called.append(1))
+    assert not v.passed
+    assert "75000" in v.reason.replace(",", "").replace(".", "")
+    assert called == []          # stage 1 short-circuits; no judge spend
+
+
+def test_tool_backed_amounts_reach_the_judge():
+    from bench.graders import grade_prose
+    rec = _record(final_text="Đã ghi bữa trưa nhé", tools=[("random_pick", {}, {"ok": True})])
+    v = grade_prose(_case(), rec, judge=lambda *_: {"ok": True, "reason": "fine"})
+    assert v.passed
+
+
+def test_an_amount_a_tool_result_produced_is_backed():
+    from bench.graders import grade_prose
+    # moneyguard reads `.args`/`.result` off its argument with getattr, so the
+    # runner's plain dicts have to be adapted or nothing counts as backed.
+    rec = _record(final_text="Mỗi người 75.000đ nhé",
+                  tools=[("random_pick", {}, {"ok": True, "per_head": 75000})])
+    v = grade_prose(_case(message="@bot chia đi"), rec, judge=lambda *_: {"ok": True, "reason": "ok"})
+    assert v.passed, v.reason
+
+
+def test_a_missing_judge_is_an_error_not_a_pass():
+    from bench.graders import grade_prose
+    # An unjudged run must not silently count as passing — that would make the
+    # Cursor baseline and the Pi run incomparable (design §11.5).
+    v = grade_prose(_case(), _record(final_text="ok"), judge=None)
+    assert v.reason and "judge" in v.reason.lower()
+    assert v.passed is None      # tri-state: not graded
+
+
+def test_a_judge_that_rejects_the_reply_fails_the_case():
+    from bench.graders import grade_prose
+    v = grade_prose(_case(), _record(final_text="I logged your lunch."),
+                    judge=lambda *_: {"ok": False, "reason": "replied in English"})
+    assert not v.passed and "English" in v.reason
+
+
+def test_a_malformed_judge_reply_is_ungraded_not_passed():
+    from bench.graders import grade_prose
+    v = grade_prose(_case(), _record(final_text="ok"), judge=lambda *_: "yes please")
+    assert v.passed is None and "judge" in v.reason.lower()
+
+
+def test_an_errored_turn_fails_prose():
+    from bench.graders import grade_prose
+    v = grade_prose(_case(), _record(final_text="", error="bridge died"),
+                    judge=lambda *_: {"ok": True, "reason": "-"})
+    assert not v.passed and "bridge died" in v.reason
+
+
+# `chat.py` only posts `final_text` on its fallback path. A proposal turn posts a
+# draft card and a settle turn posts a server-rendered body, so their prose never
+# reaches the room — grading it would judge text nobody reads, and would flag
+# "unbacked" amounts in a reply that was discarded.
+
+def test_a_proposal_turn_is_not_graded_because_its_prose_is_never_posted():
+    from bench.graders import grade_prose
+    called = []
+    rec = _record(final_text="Mỗi người 75.000đ",
+                  tools=[("propose_meal", {}, {"ok": True, "type": "expense_draft",
+                                               "payer_member_id": 1,
+                                               "shares_preview": []})])
+    v = grade_prose(_case(), rec, judge=lambda *_: called.append(1))
+    assert v.passed is None and "card" in v.reason.lower()
+    assert called == []
+
+
+def test_a_settlement_turn_is_not_graded_either():
+    from bench.graders import grade_prose
+    rec = _record(final_text="An chuyển cho Bình 125.000đ",
+                  tools=[("settle_period", {}, {"ok": True, "type": "settlement",
+                                                "transfers": []})])
+    assert grade_prose(_case(), rec, judge=lambda *_: {"ok": True, "reason": "-"}).passed is None
+
+
+def test_a_payment_draft_turn_is_not_graded_either():
+    from bench.graders import grade_prose
+    rec = _record(final_text="Ghi nhận 125.000đ",
+                  tools=[("propose_payment", {}, {"ok": True, "type": "payment_draft",
+                                                  "from_member_id": 1, "to_member_id": 2,
+                                                  "amount": 125000})])
+    assert grade_prose(_case(), rec, judge=lambda *_: {"ok": True, "reason": "-"}).passed is None
+
+
+def test_an_add_member_turn_is_graded_because_it_posts_prose():
+    from bench.graders import grade_prose
+    rec = _record(final_text="Đã thêm A5 vào nhóm.",
+                  tools=[("add_member", {"display_name": "A5"}, {"ok": True})])
+    v = grade_prose(_case(), rec, judge=lambda *_: {"ok": True, "reason": "fine"})
+    assert v.passed is True, v.reason
+
+
+def test_the_rubric_reaches_the_judge():
+    from bench.graders import PROSE_RUBRIC, grade_prose
+    seen = {}
+    def judge(case, record, rubric):
+        seen["rubric"] = rubric
+        return {"ok": True, "reason": "-"}
+    grade_prose(_case(), _record(final_text="Xong nhé"), judge=judge)
+    assert seen["rubric"] is PROSE_RUBRIC

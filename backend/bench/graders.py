@@ -339,3 +339,120 @@ def _compare_draft(expect: dict, result: dict, delta: dict[int, int],
                 f"{k} expected {want:,} got {got:,}" for k, (want, got) in mismatches.items()))
 
     return problems
+
+
+# --------------------------------------------------------------------------- #
+# prose_quality
+# --------------------------------------------------------------------------- #
+
+#: What the judge is asked to check. A module constant so the baseline run and
+#: the Pi run are graded against identical wording — a rubric that drifted
+#: between the two would make the comparison meaningless (design §11.5).
+PROSE_RUBRIC = """\
+You are grading one reply from a Vietnamese lunch-splitting bot.
+
+Pass the reply only if all of these hold:
+1. It is written in Vietnamese, in the room's casual register.
+2. It answers what the user actually asked.
+3. It does not narrate its own machinery — no "mình đọc skill…", no listing the
+   tools it called, no describing what it is about to do.
+4. It does not restate amounts that the attached card already shows, and it
+   invents no amount of its own.
+
+Reply with JSON only: {"ok": true|false, "reason": "<one short sentence>"}.
+"""
+
+#: Tool results that make `chat.py` build the room's reply itself, so the model's
+#: `final_text` is never posted. Two produce a draft card (`chat.py:511-538`) and
+#: five a server-rendered body (`chat.py:544-556`).
+_CARD_TYPES = {
+    "expense_draft": "an expense draft card",
+    "payment_draft": "a payment draft card",
+    "settlement": "a server-rendered settlement body",
+    "settle_blocked": "a server-rendered blocked-settle body",
+    "statement": "a server-rendered statement body",
+    "summary": "a server-rendered summary body",
+    "random_pick": "a server-rendered random-pick body",
+}
+
+
+class _Invocation:
+    """Adapter for `app.moneyguard`, which reads `.args`/`.result` via getattr.
+
+    Handing it the runner's plain dicts would leave `backed_amounts` with only
+    the user's own text, so every tool-produced amount would read as unbacked —
+    a grader that fails almost everything is as useless as one that passes it.
+    """
+
+    __slots__ = ("name", "args", "result")
+
+    def __init__(self, call: dict):
+        self.name = call.get("name")
+        self.args = call.get("args")
+        self.result = call.get("result")
+
+
+def posted_body_kind(record: dict) -> str | None:
+    """Which card `chat.py` would post for this turn, or None for plain prose.
+
+    Mirrors the selection at `chat.py:511-558`: a `propose_meal` proposal or a
+    `propose_payment` draft becomes a card, five other result types become a
+    server-rendered body, and only what is left posts `TurnResult.final_text`.
+    """
+    for call in record.get("tools") or []:
+        result = call.get("result")
+        if not isinstance(result, dict) or result.get("ok") is False:
+            continue
+        kind = result.get("type")
+        if kind in _CARD_TYPES:
+            return kind
+    return None
+
+
+def grade_prose(case, record: dict, judge=None) -> Verdict:
+    """Was the reply the room actually saw a good reply?
+
+    Two stages, cheap first:
+
+    1. `app.moneyguard.unbacked_amounts` — deterministic, offline, and already
+       production code (wired as a report-only warning at `chat.py:562`). An
+       amount neither the user nor any tool produced is a D3 violation, and it
+       short-circuits before any judge spend.
+    2. An **injected** LLM judge. Never constructed here, so this stays offline
+       and the caller pins the model (`BENCH_JUDGE_MODEL`).
+
+    Turns whose reply `chat.py` builds itself are **not graded**: their
+    `final_text` is discarded before it reaches the room, so judging it would
+    grade text nobody reads and would flag "unbacked" amounts in a reply that was
+    never posted. On the golden corpora that is nearly every case — see the
+    plan's Task 4 note.
+    """
+    from app import moneyguard
+
+    if record.get("error"):
+        return Verdict(False, f"turn errored: {record['error']}")
+
+    card = posted_body_kind(record)
+    if card:
+        return Verdict(None, f"not graded: the room saw {_CARD_TYPES[card]}, "
+                             "not the model's prose")
+
+    body = record.get("final_text") or ""
+    if not body.strip():
+        return Verdict(False, "empty reply")
+
+    stray = moneyguard.unbacked_amounts(
+        body, case.message, [_Invocation(c) for c in record.get("tools") or []])
+    if stray:
+        return Verdict(False, f"unbacked amounts in the reply: {stray}")
+
+    if judge is None:
+        # Not a pass. A baseline graded with no judge against a Pi run graded
+        # with one is not a comparison (design §11.5).
+        return Verdict(None, "not graded: no judge configured")
+
+    answer = judge(case, record, PROSE_RUBRIC)
+    if not isinstance(answer, dict) or "ok" not in answer:
+        return Verdict(None, f"not graded: judge returned {answer!r}")
+    reason = str(answer.get("reason") or "")
+    return Verdict(bool(answer["ok"]), reason or "judge gave no reason")

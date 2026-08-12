@@ -410,7 +410,36 @@ production code: `app.moneyguard.unbacked_amounts(body, user_text, tools)`. It i
 wired today as a report-only warning at `chat.py:562`; here it becomes a grade.
 Stage 2 is an LLM judge, only reached if stage 1 passes.
 
-- [ ] **Step 1: Write the failing test**
+> ### ⚠️ `final_text` is not the reply for most of this corpus
+>
+> `chat.py` posts the model's prose on **one** path only. Read
+> `chat.py:511-558`: a `propose_meal` proposal posts a **draft card** and a
+> `propose_payment` draft posts a **payment card** — in both branches `final_text`
+> is never read at all. Five more result types (`settlement`, `settle_blocked`,
+> `statement`, `summary`, `random_pick`) get a body built server-side "so the
+> visible text can never disagree with the QR/attachment numbers". Only what falls
+> through posts `final_text`.
+>
+> Grading prose on those turns would judge text the room never sees, and stage 1
+> would flag "unbacked amounts" in a reply that was discarded — noise on both
+> engines. So `grade_prose` mirrors chat's own selection via `posted_body_kind`
+> and returns **not graded** for a card turn.
+>
+> **State the consequence in the report rather than discovering it later:** on the
+> golden corpora this leaves prose almost entirely ungraded. Of the 20 golden
+> cases, 19 end in a card or a rendered body — the nine meal cases and week
+> `s1`–`s5`, `s7`–`s10b`, `s12` — and **`s6` (`add_member`) is the only one whose
+> prose the room actually reads.** `prose_quality` therefore lives or dies on the
+> prod corpus (Task 7), where chit-chat, questions that produce no card, and
+> clarifying-question turns are the norm. Task 22's honest-reporting step must say
+> so explicitly instead of presenting a 1-case grader as corpus-wide coverage.
+>
+> One mechanical detail worth keeping: `moneyguard.backed_amounts` reads
+> `.args`/`.result` off its argument with `getattr`, so handing it the runner's
+> plain dicts would leave nothing backed and fail nearly every reply. The grader
+> adapts them (`_Invocation`) rather than changing production code.
+
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_unbacked_amount_in_the_reply_fails_without_calling_the_judge():
@@ -441,15 +470,15 @@ def test_a_missing_judge_is_an_error_not_a_pass():
     assert v.passed is None      # tri-state: not graded
 ```
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Judge is injected, never constructed inside the
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Judge is injected, never constructed inside the
       grader — that keeps the test offline and lets Tasks 9/22 pin the model via
       `BENCH_JUDGE_MODEL`. `passed` is **tri-state** (`True`/`False`/`None`): a
       case with no judge is *not graded*, never *passed*. The judge rubric: replies
       in Vietnamese, answers what was asked, no narration of skill/tool selection,
       does not restate amounts the card already shows.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `bench: prose grader — moneyguard pre-check, then an LLM judge`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `bench: prose grader — moneyguard pre-check, then an LLM judge`
 
 ---
 
