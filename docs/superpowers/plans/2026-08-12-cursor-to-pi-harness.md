@@ -67,13 +67,19 @@ that is a headline feature. Resolve it before writing any sidecar code.
 > web-sourced "text-only" report as the working assumption, which makes
 > `PI_VISION_MODEL` mandatory rather than optional.
 
-- [ ] **Step 1: Confirm the key resolves**
+- [x] **Step 1: Confirm the key resolves**
 
 ```bash
 test -n "$OPENROUTER_API_KEY" && echo "key present" || echo "KEY MISSING"
 ```
 
-- [ ] **Step 2: Query the catalogue**
+→ `KEY MISSING` in the dev container. This did **not** block Step 2:
+`GET /api/v1/models` is a **public** endpoint, so the catalogue answered without
+a key, and `openrouter.ai` turned out to be reachable through the container's
+HTTPS proxy after all. The modality question is therefore settled by measurement,
+not by the web-sourced assumption the plan was prepared to fall back on.
+
+- [x] **Step 2: Query the catalogue**
 
 ```bash
 curl -sS https://openrouter.ai/api/v1/models \
@@ -87,9 +93,50 @@ for m in json.load(sys.stdin)["data"]:
               "tools" in (m.get("supported_parameters") or []), m.get("pricing"))'
 ```
 
-- [ ] **Step 3: Record the finding and decide `PI_VISION_MODEL`**
+- [x] **Step 3: Record the finding and decide `PI_VISION_MODEL`**
 
-Write the actual output into this plan under this task. Then:
+**Finding — `deepseek/deepseek-v4-flash` is text-only and does support tools.**
+Catalogue output, 2026-08-12 (406 models total), for every `deepseek-v4` id:
+
+```
+~deepseek/deepseek-v4-flash-latest  ['text'] ['text'] tools=True  in $0.080/M  out $0.252/M
+deepseek/deepseek-v4-flash-0731     ['text'] ['text'] tools=True  in $0.080/M  out $0.180/M
+deepseek/deepseek-v4-pro            ['text'] ['text'] tools=True  in $1.168/M  out $2.336/M
+deepseek/deepseek-v4-flash          ['text'] ['text'] tools=True  in $0.140/M  out $0.280/M
+```
+
+So the web-sourced report was right: `input_modalities` is `['text']` — **no
+`image`**. `tools` and `tool_choice` are both in `supported_parameters`, so the
+primary clears the non-negotiable bar and the model choice stands. `PI_VISION_MODEL`
+is therefore **mandatory, not inert**, and the §12 vision branch is live code.
+
+**Decision — `PI_VISION_MODEL=google/gemini-2.5-flash-lite.`** Of the 213
+catalogue entries carrying both `image` input and `tools`, this is the cheapest
+that is a real synchronous endpoint from a first-party vendor (the cheaper rows
+are `:free` tiers, `:batch` variants of an async API, or `openrouter/auto`):
+
+```
+google/gemini-2.5-flash-lite
+  input_modalities  ['text','image','file','audio','video']   output ['text']
+  tools True   tool_choice True   reasoning True
+  pricing  prompt $0.10/M   completion $0.40/M   image $0.0001/img
+           input_cache_read $0.01/M
+  context_length 1,048,576
+```
+
+Image cost is $0.0001 per bill photo — negligible against the turn's token cost.
+The 1M context matches the primary's, so a long room history does not need a
+second budget for image turns.
+
+**One consequence worth carrying into Task 11.** The vision model is a **Google**
+model, and pi's `docs/extensions.md` warns specifically that
+`Type.Union`/`Type.Literal` breaks Google's API. Design §6's `StringEnum`
+requirement was written as a precaution; with this model choice it is a live
+runtime constraint on every bill-photo turn, which ends in `propose_meal` — a tool
+whose schema carries the `discount_split` enum. The `schema.js` enum test is
+load-bearing, not defensive.
+
+Then:
 
 - `input_modalities` includes `image` → set `PI_VISION_MODEL` = `PI_MODEL`; the
   vision branch stays but is inert.
@@ -101,7 +148,10 @@ Write the actual output into this plan under this task. Then:
   calling is non-negotiable; the model choice has to change and that is a user
   decision.
 
-- [ ] **Step 4: Commit the finding**
+*(Second branch taken: text-only primary, so a tool-capable vision model was
+picked and its cost recorded above.)*
+
+- [x] **Step 4: Commit the finding**
 
 ```bash
 git add docs/superpowers/plans/2026-08-12-cursor-to-pi-harness.md
