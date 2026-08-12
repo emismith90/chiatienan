@@ -184,8 +184,22 @@ export async function runTurn(session, req, emit) {
   });
 
   try {
-    deadline = setTimeout(() => cap(`max_seconds=${maxSeconds}`), maxSeconds * 1000);
-    await session.prompt(req.message, buildPromptOptions(req));
+    // The deadline **resolves the race**, it does not merely call `abort()`.
+    // `session.abort()` stops the provider request but does not necessarily settle
+    // the promise `prompt()` returned, so awaiting `prompt()` alone can hang past
+    // the cap forever — which is what happened on the first real corpus run: one
+    // case sat for minutes with `max_seconds=120` configured. A cap that does not
+    // bound the turn is not a cap, and in production that is a hung bot rather
+    // than a slow one.
+    await Promise.race([
+      session.prompt(req.message, buildPromptOptions(req)),
+      new Promise((resolve) => {
+        deadline = setTimeout(() => {
+          cap(`max_seconds=${maxSeconds}`);
+          resolve();
+        }, maxSeconds * 1000);
+      }),
+    ]);
   } catch (err) {
     // A cap aborts the run, and the abort surfaces here. That is not an error.
     if (!capped) error = formatError(err);

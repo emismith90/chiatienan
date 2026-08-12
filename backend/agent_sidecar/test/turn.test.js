@@ -243,3 +243,30 @@ test("images become base64 content blocks, and no images means no option", () =>
   assert.equal(options.images[0].source.mediaType, "image/jpeg");
   assert.equal(options.images[0].source.data, "aGk=");
 });
+
+test("the deadline bounds the turn even when prompt never settles", async () => {
+  // session.abort() stops the provider request but does not necessarily settle the
+  // promise prompt() returned. Awaiting prompt() alone hung a real corpus run for
+  // minutes with max_seconds=120 set. A cap that does not bound the turn is not a
+  // cap — in production that is a hung bot, not a slow one.
+  const listeners = [];
+  let aborted = false;
+  const session = {
+    subscribe(l) { listeners.push(l); return () => {}; },
+    abort() { aborted = true; return Promise.resolve(); },
+    prompt() {
+      listeners.forEach((l) => l({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "Đang tính…" },
+      }));
+      return new Promise(() => {});          // never settles, even after abort
+    },
+  };
+  const started = Date.now();
+  const r = await runTurn(session, { turn_id: "t", message: "x", max_seconds: 0.05 }, () => {});
+  assert.ok(Date.now() - started < 3000, "runTurn must return at the cap");
+  assert.equal(r.capped, true);
+  assert.equal(r.error, null);
+  assert.equal(r.final_text, "Đang tính…");
+  assert.ok(aborted, "and it must still cancel the provider request");
+});
