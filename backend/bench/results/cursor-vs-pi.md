@@ -101,3 +101,49 @@ Five defects, none of which a stubbed test caught, all now covered by one:
 The pattern worth keeping: (5) surfaced because `ledger_state` passed while
 `tool_selection` failed. When the two money graders disagree, suspect the
 expectation before the engine.
+
+---
+
+## Iteration 1: enabling `bash` broke the arithmetic-heavy cases
+
+`PI_BUILTIN_TOOLS=read,write,bash`, golden meals, `--repeat 1`, *before* the prompt
+was hardened:
+
+```
+G1 ++  9.5s      G2 ++ 57.4s     G3 ++ 17.3s     G6 ++ 45.0s
+G4 xxx 120.0s    ← hit the max_seconds cap and failed all three graders
+G5 xx. 13.6s     ← failed tool_selection AND ledger_state
+```
+
+**G4 is the adjustment case (`+50k` on one member) and G5 the remainder case
+(100k over three people).** They are the two most arithmetic-heavy cases in the
+golden set, and they are the two that broke — G4 burning the entire 120s cap. The
+cases that need no arithmetic beyond a plain division all passed.
+
+That is the predicted cost of the trade, measured rather than argued: given `bash`,
+the model works the split out itself instead of handing the numbers to
+`propose_meal`, and the result never reaches the ledger. `ledger_state` failing
+alongside `tool_selection` is what distinguishes this from the grader artifacts
+found earlier — here the money itself is wrong, not the expectation.
+
+Note also the latency: 45–57s on cases that took 13–17s without the builtins.
+
+**Response:** the prompt now ranks the tools explicitly — the 14 room tools first,
+`read`/`write`/`bash` as a last resort for work no tool covers and that is not about
+money, with the forbidden operations named individually (split a bill, compute a
+balance, work out a discount, decide who owes whom, build a QR) and the reason
+stated: computing it yourself is wrong even when the arithmetic is right, because
+that number never reaches the books. Both `money-safety.mdc` and
+`build_system_prompt` carry it.
+
+**Re-run to close the loop:**
+
+```bash
+python -m bench.run --corpus meals --engine pi --repeat 3 --case G4 --case G5 \
+  --out bench/results/pi-G4G5-ranked.json
+```
+
+G4 and G5 recovering to `++` is the test of whether a prompt can hold this line. If
+they do not, the honest options are `PI_BUILTIN_TOOLS=""` (which makes the guarantee
+structural again, at the cost of the flexibility bash was enabled for) or an
+allowlist without `bash` — `read,write` alone cannot do arithmetic.
