@@ -345,19 +345,57 @@ The transfer/balance/QR comparison already exists inside
 the test import it back**, so there is exactly one implementation. If the
 extraction is correct, `test_scenario_week.py` still passes unchanged in behavior.
 
-- [ ] **Step 1: Write the failing test** — assert `grade_ledger_state` rejects a
+> ### ⚠️ A third instance of the false-equivalence trap, found while implementing
+>
+> The plan's premise for this grader — compare the ledger against the step's
+> expectation — **cannot work for a meal or a payment case**, for the same reason
+> Task 6's world reconstruction exists. Verified against the source:
+>
+> * `propose_meal` "never writes at all" (`tools.py:8`); it returns an
+>   `expense_draft` payload for the user to confirm.
+> * `propose_payment` returns a `payment_draft` (`tools.py:655-664`) — it does not
+>   call `ledger.record_payment` either.
+>
+> A benchmark turn calls `run_turn` and stops. Nothing confirms the draft, so the
+> post-turn ledger is byte for byte the pre-turn ledger. Comparing database
+> balances against `s1`–`s4`'s expectations, or against all nine golden meal
+> cases', would fail **every one of them — identically on Cursor and on Pi** — so
+> `--compare` would report "no change" over a grader that never graded anything.
+> That is the third member of the family the two blocker fixes in `30bed0c`
+> belong to, and it would have been invisible: the report would have shown a
+> consistent column of failures on both sides and read as equivalence.
+>
+> **Resolution: grade the draft by projection.** `_draft_delta` computes what the
+> draft *would* do — for an expense, each participant `−share` and the payer
+> `+Σshares`; for a payment, `from +amount` / `to −amount` — and the grader adds
+> that to the balances `bench.world` built, then compares the sum against the
+> step's expectation. This is exact, not approximate, and it checks strictly more
+> than the plan asked for: it validates the model's numbers against the golden
+> ledger arithmetic, not merely against the tool call it made.
+>
+> The payer is credited the **tracked** total (Σ shares), never the bill total —
+> a cash guest's share is never tracked, which is why golden `G6` is a 400k bill
+> with a 300k tracked total. Verified by hand against `s1`–`s4` and `G6` before
+> being written down, and `s4` (a 500k bill with one guest) is the case that
+> distinguishes the two readings: crediting the bill total gives a2 400,000 where
+> the golden expectation says 300,000.
+>
+> Settlement cases need none of this — `settle_period` is read-only, so its
+> result is compared directly, exactly as the plan describes.
+
+- [x] **Step 1: Write the failing test** — assert `grade_ledger_state` rejects a
       transfer list that differs in **order**, rejects a missing `qr_url`, accepts
       the real `s5` expectation from `scenario_week.STEPS`, and handles the
       `settle_blocked` / `blocked_pending` branch (`s8`).
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Extract `_balances`, the ordered-transfer comparison,
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Extract `_balances`, the ordered-transfer comparison,
       the `f'{amount:,}' in body` render check against `chat._settlement_body`, and
       the `qr_payees` check.
-- [ ] **Step 4: Verify both pass** —
+- [x] **Step 4: Verify both pass** —
       `pytest tests/test_bench_graders.py tests/test_scenario_week.py -v`.
       `test_scenario_week` passing after the extraction is the real assertion here.
-- [ ] **Step 5: Commit** — `bench: extract the ledger-state comparison out of the week scenario test`
+- [x] **Step 5: Commit** — `bench: extract the ledger-state comparison out of the week scenario test`
 
 ---
 

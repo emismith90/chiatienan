@@ -1,14 +1,18 @@
 """Deterministic end-to-end eval: plays scenario_week.STEPS through the real
 money engine with the clock frozen per day, asserting balances/transfers/QR and
 rendered bodies at each step. No LLM involved — the correct tool calls are
-encoded by `kind`."""
+encoded by `kind`.
+
+The settlement comparison itself lives in `bench.graders` and is imported back
+here, so the deterministic eval and the LLM benchmark judge money with exactly
+one implementation. This test passing is what proves the extraction was faithful.
+"""
 from datetime import date, datetime, time
 
-import pytest
-
-from app import chat, drafts, ledger, tools
+from app import drafts, ledger, tools
 from app.clock import ICT
 from app.models import Member, Room
+from bench.graders import balances_by_member, compare_settlement
 from tests.golden.scenario_week import MEMBERS, STEPS
 
 
@@ -29,17 +33,6 @@ def _freeze(monkeypatch, day_iso):
     d = date.fromisoformat(day_iso)
     frozen = datetime.combine(d, time(12, 0), tzinfo=ICT)
     monkeypatch.setattr("app.clock.now_ict", lambda: frozen)
-
-
-def _balances(db, room_id):
-    with db.session() as s:
-        last = ledger.last_settlement(s, room_id)
-        from app.periods import resolve_period
-        from app.clock import today_ict
-        period = resolve_period("since_last", today=today_ict(),
-                                last_settlement_to=last.period_to if last else None)
-        return {mid: v["balance"] for mid, v in
-                ledger.period_balances(s, room_id, period["from"], period["to"]).items()}
 
 
 def test_scenario_week(db, monkeypatch):
@@ -86,30 +79,14 @@ def test_scenario_week(db, monkeypatch):
             ctx = tools.ToolContext(db=db, room_id=room_id, sender_member_id=actor)
             res = tools.build_tools(ctx)["settle_period"].execute({"keyword": "since_last"})
             exp = step.get("expect", {})
+            problems = compare_settlement(res, exp, ids)
+            assert problems == [], f'{step["id"]}: {problems}'
             if exp.get("blocked_pending") is not None:
-                assert res["type"] == "settle_blocked", step["id"]
-                assert len(res["pending"]) == exp["blocked_pending"], step["id"]
                 continue
-            assert res.get("type") != "settle_blocked", step["id"]
-            if exp.get("empty"):
-                assert res["transfers"] == [], step["id"]
-            if "transfers" in exp:
-                got = [{"from": t["from_id"], "to": t["to_id"], "amount": t["amount"]}
-                       for t in res["transfers"]]
-                want = [{"from": ids[t["from"]], "to": ids[t["to"]], "amount": t["amount"]}
-                        for t in exp["transfers"]]
-                assert got == want, f'{step["id"]}: {got} != {want}'
-                body = chat._settlement_body({"type": "settlement", **res})
-                for t in exp["transfers"]:
-                    assert f'{t["amount"]:,}' in body, step["id"]
-            for payee_key in exp.get("qr_payees", []):
-                payee_id = ids[payee_key]
-                rows = [t for t in res["transfers"] if t["to_id"] == payee_id]
-                assert rows and all(t["qr_url"] for t in rows), f'{step["id"]} qr {payee_key}'
 
         # Balance assertion (when the step declares expected balances).
         exp = step.get("expect", {})
         if "balances" in exp:
-            bal = _balances(db, room_id)
+            bal = balances_by_member(db, room_id)
             for key, want in exp["balances"].items():
                 assert bal.get(ids[key], 0) == want, f'{step["id"]} {key}: {bal.get(ids[key])} != {want}'
