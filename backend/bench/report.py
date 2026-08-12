@@ -99,6 +99,13 @@ def _cost_line(summary: dict) -> str:
             f'({summary["stats_n"]}/{summary["n"]} turns reported stats)')
 
 
+def _judged_alternatives(records: list[dict]) -> set[str]:
+    """Cases that passed `tool_selection` on a judged alternative tool."""
+    return {r["case_id"] for r in records
+            if "judged alternative" in
+            ((r.get("grades") or {}).get("tool_selection") or {}).get("reason", "")}
+
+
 def render(results: dict) -> str:
     """A per-case grid, per-grader totals, latency, cost, and every error."""
     rates = case_rates(results)
@@ -131,6 +138,15 @@ def render(results: dict) -> str:
     for case_id in sorted(rates, key=lambda c: (sources.get(c, ""), c)):
         cells = " | ".join(format_rate(rates[case_id][g]) for g in GRADERS)
         lines.append(f'| `{case_id}` | {sources.get(case_id, "?")} | {cells} |')
+
+    judged = _judged_alternatives(records)
+    if judged:
+        # A pass rate that leans on human judgement has to say so where it is read,
+        # not only in the file the judgements live in.
+        lines += ["", f"**{len(judged)} case(s) passed on a judged alternative tool** "
+                      f"(`{'`, `'.join(sorted(judged))}`) — a read-only tool a human "
+                      "decided answers the question as well as production's choice. "
+                      "Reasons in `bench/corpus/prod_judgements.py`."]
 
     lines += ["", "## Per grader", "", "| grader | passed | graded | rate |", "|---|---|---|---|"]
     for grader, (passed, graded) in _grader_totals(rates).items():

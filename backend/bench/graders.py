@@ -153,6 +153,16 @@ def grade_tool_selection(case, record: dict) -> Verdict:
     called = [c.get("name") for c in record.get("tools") or []]
     missing = [name for name in expected if name not in called]
     if missing:
+        # `tools_ok` — a read-only tool a human judged to answer the same question.
+        # Prod cases expect what production did, and production was the engine being
+        # replaced: "@bot how much do I owe" answered with the whole group's
+        # settlement is *an* answer, and `member_statement` is a better one. The
+        # alternatives live in `corpus/prod_judgements.py` with a reason each, may
+        # never name a money-writing tool, and are counted in the report.
+        alternatives = [t for t in (case.expect or {}).get("tools_ok") or [] if t in called]
+        if alternatives:
+            return Verdict(True, f"called {alternatives} — a judged alternative to "
+                                 f"{expected} (see corpus/prod_judgements.py)")
         return Verdict(False, f"expected {missing} to be called, got {called or 'no tools'}")
 
     problems = []

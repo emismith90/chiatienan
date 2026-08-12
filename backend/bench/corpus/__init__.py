@@ -36,7 +36,7 @@ import mimetypes
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from bench.corpus import meal_messages
+from bench.corpus import meal_messages, prod_judgements
 
 _HERE = Path(__file__).resolve().parent
 
@@ -198,7 +198,11 @@ def _case_from_json(raw: dict, source: str, members: list[dict],
                 message=raw.get("message") or "", history=raw.get("history") or "",
                 images=images,
                 had_images=bool(raw.get("had_images") or images),
-                expect=copy.deepcopy(raw.get("expect") or {}))
+                # A prod expectation records what production did, not the only right
+                # answer; `prod_judgements` adds the read-only alternatives a human
+                # judged equivalent, with the reason.
+                expect=prod_judgements.apply_to(
+                    raw["id"], copy.deepcopy(raw.get("expect") or {})))
 
 
 def _load_json_corpus(path: Path, source: str) -> list[Case]:

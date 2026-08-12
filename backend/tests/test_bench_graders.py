@@ -743,3 +743,51 @@ def test_a_tool_result_that_disagrees_with_the_expectation_still_fails():
         {"name": "propose_meal", "args": {"total": 100000},
          "result": {"ok": True, "adjustments": [{"member": 1, "amount": 10000}]}}]}
     assert grade_tool_selection(case, record).passed is False
+
+
+def test_a_judged_alternative_tool_passes_and_says_so():
+    """Prod cases expect what production did, and production is not the ceiling.
+
+    "@bot how much do I owe" answered with the whole group's settlement is *an*
+    answer; `member_statement` — per creditor, for the asker — is a better one, and
+    the system prompt has always routed first-person debt questions there.
+    """
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="p23", source="prod", day="2026-07-22", actor="A5",
+                expect={"tools": ["settle_period"], "tools_ok": ["member_statement"]})
+    record = {"tools": [{"name": "member_statement", "args": {}, "result": {"ok": True}}]}
+    verdict = grade_tool_selection(case, record)
+    assert verdict.passed is True
+    assert "judged alternative" in verdict.reason
+
+
+def test_an_unjudged_tool_still_fails():
+    from bench.corpus import Case
+    from bench.graders import grade_tool_selection
+    case = Case(id="x", source="prod", day="2026-07-22", actor="A5",
+                expect={"tools": ["settle_period"], "tools_ok": ["member_statement"]})
+    record = {"tools": [{"name": "get_period_summary", "args": {}, "result": {"ok": True}}]}
+    assert grade_tool_selection(case, record).passed is False
+
+
+def test_a_judgement_may_never_widen_a_money_writing_tool():
+    """`p20` is why: the model asked which creditor instead of proposing a payment,
+    and the answer was to teach `record-payment` to propose one per creditor — not
+    to accept the question."""
+    import pytest
+    from bench.corpus import prod_judgements
+    original = dict(prod_judgements.JUDGEMENTS)
+    prod_judgements.JUDGEMENTS["zz"] = {"tools_ok": ["propose_payment"], "why": "no"}
+    try:
+        with pytest.raises(ValueError, match="writes money"):
+            prod_judgements.check()
+    finally:
+        prod_judgements.JUDGEMENTS.clear()
+        prod_judgements.JUDGEMENTS.update(original)
+
+
+def test_every_committed_judgement_carries_a_reason():
+    from bench.corpus import prod_judgements
+    prod_judgements.check()          # raises if a reason is missing
+    assert prod_judgements.JUDGEMENTS, "the file documents its own rules; keep an example"

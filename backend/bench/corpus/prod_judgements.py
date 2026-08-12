@@ -1,0 +1,74 @@
+"""Prod cases where production's tool choice is **not** the only right answer.
+
+The prod corpus derives every expectation from what production did, and production
+was the engine being replaced — so an expectation here is *evidence of one working
+answer*, never proof that it is the answer. Where a different read-only tool answers
+the same question as well or better, that alternative is recorded here with the
+reason, and `grade_tool_selection` accepts it.
+
+Three rules keep this from becoming a way to make numbers look good:
+
+1. **Read-only tools only** (`_WIDENABLE`). A judgement may never widen a tool that
+   writes money — `propose_meal`, `propose_payment`, `add_member`, `void_meal`. If a
+   money-writing turn was wrong, it was wrong, and the fix belongs in the prompt.
+   `p20` ("paid my part") is the worked example: the model asked which creditor
+   instead of proposing, and the answer was to teach `record-payment` to propose one
+   payment per creditor — not to accept the question.
+2. **Every entry carries `why`,** written after reading the conversation around it.
+3. **`bench.report` prints the count,** so nobody reads a pass rate without knowing
+   how many cases carry a judgement.
+
+Money arguments are never touched. An entry only ever adds to the accepted tool set.
+"""
+from __future__ import annotations
+
+#: Tools a judgement may add. All read-only: `settle_period` computes a settlement
+#: preview and writes nothing (`tools.py` — "Nothing is written… a running total"),
+#: and the other three are pure queries.
+_WIDENABLE = frozenset(("settle_period", "get_period_summary", "member_statement",
+                        "pick_random"))
+
+#: `case_id -> {"tools_ok": [...], "why": "..."}`
+JUDGEMENTS: dict[str, dict] = {
+    "p10": {
+        "tools_ok": ["get_period_summary"],
+        "why": "'@bot room balance now' asks for the room's state, and prod happened "
+               "to answer it with a settlement preview. `get_period_summary` is the "
+               "state query — it is what `balances.SKILL.md` routes group-state "
+               "questions to, and on an empty ledger both replies say the same "
+               "thing. Either tool answers the question.",
+    },
+    "p23": {
+        "tools_ok": ["member_statement"],
+        "why": "'@bot how much do I owe' is first person. `member_statement` answers "
+               "exactly that — per creditor, per meal, for the asker — and the "
+               "system prompt has always routed first-person debt questions to it. "
+               "Prod answered with the whole group's settlement, which is more than "
+               "was asked for.",
+    },
+}
+
+
+def check() -> None:
+    """Fail loudly if a judgement breaks its own rules."""
+    for case_id, entry in JUDGEMENTS.items():
+        if not entry.get("why", "").strip():
+            raise ValueError(f"{case_id}: a judgement needs a reason")
+        stray = [t for t in entry.get("tools_ok") or [] if t not in _WIDENABLE]
+        if stray:
+            raise ValueError(
+                f"{case_id}: {stray} writes money — a judgement may only widen "
+                f"read-only tools ({sorted(_WIDENABLE)})")
+
+
+def apply_to(case_id: str, expect: dict) -> dict:
+    """Return `expect` with this case's accepted alternatives, if it has any."""
+    entry = JUDGEMENTS.get(case_id)
+    if not entry:
+        return expect
+    widened = dict(expect)
+    widened["tools_ok"] = list(entry["tools_ok"])
+    return widened
+
+
+check()
