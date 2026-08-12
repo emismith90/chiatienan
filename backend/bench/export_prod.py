@@ -511,9 +511,33 @@ def _money_args_from_attachment(tool: str, attachments: dict) -> dict | None:
     return None
 
 
+def members_at(members: list[dict], key_by_member_id: dict, before: str) -> list[dict]:
+    """The roster as it stood at `before`, in corpus-key form.
+
+    **A member who had not joined yet must not be in the room.** `p12` says "chia 5
+    trừ A2" — split five ways, excluding A2 — in a room that had six members on
+    2026-07-22. Seeding all seven (A7 joined on 07-31) makes "five of them, not A2"
+    genuinely ambiguous, and the model did the reasonable thing: it stopped and
+    asked which five. Production never had that question to ask.
+
+    `default_participant` is deliberately **not** carried. It is current state, not
+    history: two members are flagged out of group activities today, while the log
+    shows both inside "cả nhóm" meals and a `pick_random` drawing "trong 7 người"
+    at the time. Copying today's flags would model a room that never existed.
+    """
+    roster = []
+    for member in members:
+        key = key_by_member_id.get(str(member.get("id")))
+        if not key or str(member.get("created_at") or "") >= before:
+            continue
+        roster.append({"key": key, "display_name": key, "nickname": key.lower()})
+    return roster
+
+
 def build_cases(rows: list[dict], *, image_lookback: int = 10,
                 key_by_member_id: dict | None = None,
-                ledger: dict | None = None) -> list[dict]:
+                ledger: dict | None = None,
+                members: list[dict] | None = None) -> list[dict]:
     """One case per recorded bot turn, expecting what production actually did.
 
     The bot's reply records the tool: its `attachments.type` maps one-to-one onto
@@ -565,6 +589,10 @@ def build_cases(rows: list[dict], *, image_lookback: int = 10,
             # turn, replayed into the bench room by `bench.world`.
             "prior_steps": ledger_steps(ledger or {},
                                         str(trigger.get("created_at") or ""), to_key),
+            # And the roster at that moment — a member who had not joined yet
+            # changes what "the whole group" means.
+            "members": members_at(members or [], key_by_member_id,
+                                  str(trigger.get("created_at") or "")),
             "had_images": bool(tainted),
             "reply": prose,
             # The produced attachment IS what the tool returned, so it is carried
@@ -783,7 +811,8 @@ def main(argv=None) -> int:
     key_by_member_id = {m["id"]: name_map.get(m.get("display_name"), f'A{i}')
                         for i, m in enumerate(members, start=1)}
     cases = build_cases(clean, key_by_member_id=key_by_member_id,
-                        ledger=fetch_ledger(args.base_url, args.room, key))
+                        ledger=fetch_ledger(args.base_url, args.room, key),
+                        members=members)
 
     pseudonyms = sorted({v for v in name_map.values() if v.startswith("A")})
     payload = {

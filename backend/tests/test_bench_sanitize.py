@@ -581,3 +581,28 @@ def test_a_member_the_corpus_cannot_name_is_skipped_not_crashed():
                                 "amount": 10000, "occurred_on": "2026-07-22",
                                 "voided": "False", "created_at": "2026-07-22 10:00:00"}])
     assert ledger_steps(ledger, "2026-07-30 00:00:00", _key) == []
+
+
+def test_a_member_who_had_not_joined_yet_is_not_in_the_room():
+    """`p12` says "chia 5 trừ A2" in a room that had six members that day.
+
+    A7 joined nine days later. Seeding all seven makes "five of them, not A2"
+    genuinely ambiguous, and the model stopped to ask which five — a question
+    production never had to ask.
+    """
+    from bench.export_prod import members_at
+    members = [{"id": 4, "created_at": "2026-07-22 10:31:23"},
+               {"id": 6, "created_at": "2026-07-22 10:33:37"},
+               {"id": 11, "created_at": "2026-07-31 10:07:44"}]
+    key_by_id = {"4": "A1", "6": "A3", "11": "A7"}
+    early = members_at(members, key_by_id, "2026-07-22 14:39:00")
+    assert [m["key"] for m in early] == ["A1", "A3"]
+    later = members_at(members, key_by_id, "2026-08-04 12:00:00")
+    assert [m["key"] for m in later] == ["A1", "A3", "A7"]
+    assert early[0] == {"key": "A1", "display_name": "A1", "nickname": "a1"}
+
+
+def test_the_roster_skips_members_the_name_map_does_not_cover():
+    from bench.export_prod import members_at
+    assert members_at([{"id": 99, "created_at": "2026-07-01"}], {"4": "A1"},
+                      "2026-08-01") == []
