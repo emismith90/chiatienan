@@ -164,6 +164,7 @@ def _name_forms(form: str) -> set[str]:
     * **Per token.** A display name is often two words while a memo or a message
       uses one of them, so each token of length ≥4 maps to the same pseudonym.
     """
+    form = unicodedata.normalize("NFC", form)
     forms = {form, _deaccent(form)}
     for variant in tuple(forms):
         for token in variant.split():
@@ -172,8 +173,38 @@ def _name_forms(form: str) -> set[str]:
     return {f for f in forms if len(f) >= 2 and f.lower() not in _NOT_A_NAME}
 
 
+#: Names the member table cannot supply, one `KEY = name` per line, `#` comments.
+#: **Gitignored** — it holds real names, which is exactly why it is a file and not a
+#: constant in this module. Absent is the normal state (CI has no prod data).
+#:
+#: This exists because human review found two given names the map could not know:
+#: the room calls one member "anh <given name>" and another by a lowercase
+#: nickname, and neither form is in `display_name`, `nickname` or `aliases`. The
+#: same gap failed benchmark case `p148` ("@bot đã trả anh <name>") — the bench room
+#: has no member by that name, so the turn could not resolve who was paid.
+EXTRA_ALIASES_PATH = Path(__file__).resolve().parent / "corpus" / "extra_aliases.txt"
+
+
+def load_extra_aliases(path: Path | None = None) -> dict[str, str]:
+    """`{alias: member key}` from the local file, or `{}` if it is not there."""
+    path = path or EXTRA_ALIASES_PATH
+    if not path.exists():
+        return {}
+    aliases: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or "=" not in line:
+            continue
+        key, alias = (part.strip() for part in line.split("=", 1))
+        if key and alias:
+            aliases[alias] = key
+    return aliases
+
+
 def build_name_map(members: list[dict],
-                   guests: list[str] = ()) -> tuple[dict[str, str], list[str]]:
+                   guests: list[str] = (),
+                   extra_aliases: dict[str, str] | None = None
+                   ) -> tuple[dict[str, str], list[str]]:
     """`({real form: pseudonym}, [account holders])`.
 
     Members become `A1…`, and every form a body might use gets an entry:
@@ -199,6 +230,11 @@ def build_name_map(members: list[dict],
     for index, guest in enumerate(guests, start=1):
         for spelling in _name_forms(str(guest)):
             name_map.setdefault(spelling, f"G{index}")
+    # Hand-added aliases win over nothing but are added last, so a real member form
+    # already in the map keeps its pseudonym.
+    for alias, key in (extra_aliases or {}).items():
+        for spelling in _name_forms(str(alias)):
+            name_map.setdefault(spelling, key)
     return name_map, sorted(set(holders), key=len, reverse=True)
 
 
@@ -219,7 +255,17 @@ def _replace_names(text: str, name_map: dict[str, str], holders: list[str]) -> s
 
 
 def _clean_text(text: str, name_map: dict[str, str], holders: list[str]) -> str:
-    return _replace_names(_LONG_DIGITS.sub(_REDACTED, text or ""), name_map, holders)
+    """Redact, pseudonymize, and **normalize to NFC first**.
+
+    The normalization is not cosmetic. Production stores whatever the client sent,
+    and one real message body arrived decomposed (NFD): "Nhím" as `N h i ◌́ m`. The
+    member table holds the composed form, so `re.escape("Nhím")` matched nothing and
+    a member's nickname sailed through the sanitizer into the corpus. Both sides are
+    normalized now — the map's forms in `_name_forms`, the text here — so the
+    comparison is between the same characters.
+    """
+    normalized = unicodedata.normalize("NFC", text or "")
+    return _replace_names(_LONG_DIGITS.sub(_REDACTED, normalized), name_map, holders)
 
 
 def _clean_value(value, name_map: dict[str, str], holders: list[str]):
@@ -272,6 +318,12 @@ def sanitize(rows: list[dict], name_map: dict[str, str] | None = None,
 #: review list under "được", "ăn" and "đã".
 _WORD = re.compile(r"(?<![\w@])([^\W\d_][\w]*)")
 
+#: `anh|chị|em|… <word>` — a kinship pronoun followed by what is almost always a
+#: name, in either case. This is how a lowercase given name gets surfaced.
+_AFTER_PRONOUN = re.compile(
+    r"(?:\banh|\bch[iị]|\bem|\bb[aá]c|\bch[uú]|\bc[oô]|\b[oô]ng|\bb[aà])\s+"
+    r"([^\W\d_][\w]*)", re.IGNORECASE)
+
 
 def residual_name_candidates(clean_rows: list[dict], allowed: set[str]) -> dict[str, int]:
     """Capitalized tokens left in sanitized bodies, for a human to skim.
@@ -284,12 +336,24 @@ def residual_name_candidates(clean_rows: list[dict], allowed: set[str]) -> dict[
     """
     counts: dict[str, int] = {}
     for row in clean_rows:
-        for token in _WORD.findall(row.get("body") or ""):
-            # Title-case only: an all-caps token is shouting, not a name, and a
-            # lowercase one is a word.
-            if len(token) < 2 or not token[0].isupper() or token.isupper():
+        body = row.get("body") or ""
+        for token in _WORD.findall(body):
+            if len(token) < 2 or token in allowed or token.lower() in allowed:
                 continue
-            if token in allowed or token.lower() in allowed:
+            # Title-case is the usual signal: an all-caps token is shouting and a
+            # lowercase one is a word.
+            titled = token[0].isupper() and not token.isupper()
+            if titled:
+                counts[token] = counts.get(token, 0) + 1
+        # **A name after a kinship pronoun counts even in lowercase.** Two real given
+        # names reached the corpus past the title-case filter — one written "anh
+        # <Name>" (title-case but rare enough to fall off the printed list) and one
+        # written entirely in lowercase inside a list of participants. "anh"/"chị"/
+        # "em" + a word is the strongest name signal Vietnamese offers, so it is
+        # surfaced regardless of case.
+        for match in _AFTER_PRONOUN.finditer(body):
+            token = match.group(1)
+            if len(token) < 2 or token in allowed or token.lower() in allowed:
                 continue
             counts[token] = counts.get(token, 0) + 1
     return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
@@ -805,7 +869,7 @@ def main(argv=None) -> int:
     members = fetch_members(args.base_url, args.room, key)
     rows = fetch_rows(args.base_url, args.room, args.days, key)
     guests = collect_person_names(rows)
-    name_map, holders = build_name_map(members, guests)
+    name_map, holders = build_name_map(members, guests, load_extra_aliases())
 
     clean = sanitize(rows, name_map=name_map, holders=holders)
     key_by_member_id = {m["id"]: name_map.get(m.get("display_name"), f'A{i}')
@@ -854,11 +918,16 @@ def main(argv=None) -> int:
     print("\nno known secret found in the output. NOW READ IT YOURSELF — the "
           "sanitizer only redacts names it was told about.", file=sys.stderr)
     if residual:
-        top = list(residual.items())[:20]
-        print(f"capitalized tokens left in bodies, most frequent first "
-              f"({len(residual)} distinct) — skim for anything that is a person:",
-              file=sys.stderr)
-        print("  " + ", ".join(f"{t}×{n}" for t, n in top), file=sys.stderr)
+        # **The whole list, not the top 20.** A name that appears twice sits in the
+        # tail, and truncating the list is how two real given names got past review
+        # the first time — the frequent entries are sentence-initial words.
+        print(f"name candidates left in bodies ({len(residual)} distinct) — skim ALL "
+              f"of it; a real name is usually rare, so the tail matters most. Add "
+              f"anything real to {EXTRA_ALIASES_PATH.name} (gitignored) as "
+              f"`A<n> = <name>` and re-export:", file=sys.stderr)
+        for line_start in range(0, len(residual), 12):
+            chunk = list(residual.items())[line_start:line_start + 12]
+            print("  " + ", ".join(f"{t}×{n}" for t, n in chunk), file=sys.stderr)
     return 0
 
 

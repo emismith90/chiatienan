@@ -23,3 +23,4 @@ next-env.d.ts
 # entirely; the case ids, the derived expectations and the file's SHA-256 are
 # what get committed. See backend/bench/export_prod.py.
 backend/bench/corpus/prod_conversations.json
+backend/bench/corpus/extra_aliases.txt

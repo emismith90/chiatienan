@@ -606,3 +606,62 @@ def test_the_roster_skips_members_the_name_map_does_not_cover():
     from bench.export_prod import members_at
     assert members_at([{"id": 99, "created_at": "2026-07-01"}], {"4": "A1"},
                       "2026-08-01") == []
+
+
+def test_a_decomposed_name_is_still_replaced():
+    """One real message body arrived NFD: "Nhím" as `N h i ◌́ m`.
+
+    The member table holds the composed form, so the pattern matched nothing and a
+    member's nickname went into the corpus unredacted. Both sides normalize now.
+    """
+    import unicodedata
+    decomposed = unicodedata.normalize("NFD", "tôi đã trả tiền cho Nhím")
+    assert decomposed != "tôi đã trả tiền cho Nhím"          # genuinely NFD
+    out = sanitize([_row(body=decomposed)], name_map={"Nhím": "A5"})
+    assert "A5" in out[0]["body"]
+    assert "Nh" not in out[0]["body"]
+
+
+def test_a_decomposed_member_name_still_builds_its_forms():
+    import unicodedata
+    from bench.export_prod import build_name_map
+    name_map, _ = build_name_map([
+        {"id": 8, "display_name": unicodedata.normalize("NFD", "Nhím")}])
+    assert name_map.get("Nhím") == "A1"          # composed lookup works
+    assert name_map.get("Nhim") == "A1"          # and the folded form
+
+
+def test_extra_aliases_are_read_from_the_local_file():
+    """Human review found two given names the member table cannot supply. The
+    mechanism is committed; the names live in a gitignored file."""
+    import textwrap
+    from pathlib import Path
+    import tempfile
+    from bench.export_prod import build_name_map, load_extra_aliases
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "extra_aliases.txt"
+        path.write_text(textwrap.dedent("""\
+            # a comment
+            A1 = Someone
+            A2 = Another Person
+            not-a-line
+        """), encoding="utf-8")
+        aliases = load_extra_aliases(path)
+    assert aliases == {"Someone": "A1", "Another Person": "A2"}
+    name_map, _ = build_name_map([{"id": 4, "display_name": "Emi"}], [], aliases)
+    assert name_map["Someone"] == "A1"
+    assert name_map["Emi"] == "A1"                # a real member form still wins
+
+
+def test_a_missing_alias_file_is_the_normal_state():
+    from pathlib import Path
+    from bench.export_prod import load_extra_aliases
+    assert load_extra_aliases(Path("/nonexistent/extra_aliases.txt")) == {}
+
+
+def test_a_lowercase_name_after_a_kinship_pronoun_is_surfaced_for_review():
+    """Title-case only missed a given name written in lowercase, and truncating the
+    list to the top 20 hid another. "anh <word>" is the strongest signal there is."""
+    from bench.export_prod import residual_name_candidates
+    rows = [{"body": "@bot đã trả anh hưng rồi"}]
+    assert "hưng" in residual_name_candidates(rows, allowed=set())
