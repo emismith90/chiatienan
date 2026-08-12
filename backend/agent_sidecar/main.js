@@ -25,6 +25,17 @@ const pendingToolCalls = new Map();
 export function createDispatcher({ write, buildSessionFn = buildSession, runTurnFn = runTurn } = {}) {
   const emit = (message) => write(message);
 
+  /**
+   * Forward an `agent.*` event, stamped with the `req_id` it belongs to.
+   *
+   * The stamp is not optional: `pi_bridge` routes every line by `req_id`, so an
+   * unstamped event has no queue to land in and is dropped. The symptom is a turn
+   * that works perfectly and a room whose live timeline stays empty — which is
+   * exactly what happened, and no stubbed unit test noticed because they asserted
+   * event *order* rather than routing.
+   */
+  const emitEvent = (reqId) => (event) => write({ ...event, req_id: reqId });
+
   /** Ask Python to run a tool, and block this call until `tool_result` arrives. */
   const callTool = (reqId) => (callId, name, args) =>
     new Promise((resolve, reject) => {
@@ -65,12 +76,12 @@ export function createDispatcher({ write, buildSessionFn = buildSession, runTurn
         let built = null;
         try {
           built = await buildSessionFn(command, { callTool: callTool(reqId) });
-          const result = await runTurnFn(built.session, command, (event) => emit(event));
+          const result = await runTurnFn(built.session, command, emitEvent(reqId));
           emit({ type: "turn_done", req_id: reqId, turn_id: command.turn_id, ...result });
         } catch (err) {
           // Setup failure still has to close the turn, or `chat.py` waits forever
           // and the room sees nothing at all.
-          emit({
+          emitEvent(reqId)({
             type: "agent.run.error",
             turn_id: command.turn_id,
             message: String((err && err.message) || err),

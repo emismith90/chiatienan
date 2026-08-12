@@ -206,3 +206,29 @@ test("blank lines are ignored", () => {
   feed('\n\n{"type":"ping","req_id":"r"}\n\n');
   assert.equal(lines.length, 1);
 });
+
+test("every forwarded agent.* event carries the run's req_id", async () => {
+  // pi_bridge routes each line by req_id, so an unstamped event has no queue to
+  // land in and is dropped: the turn works and the room's live timeline stays
+  // empty. Asserting order alone did not catch that.
+  const { out, dispatcher } = harness({
+    runTurnFn: async (_s, req, emit) => {
+      emit({ type: "agent.run.started", turn_id: req.turn_id });
+      emit({ type: "agent.text.delta", turn_id: req.turn_id, delta: "Đã" });
+      emit({ type: "agent.run.finished", turn_id: req.turn_id });
+      return { final_text: "Đã", tools: [], error: null, capped: false, stats: null };
+    },
+  });
+  await dispatcher.handle({ type: "run", req_id: "run-7", turn_id: "t7", message: "x" });
+  const events = out.filter((m) => String(m.type).startsWith("agent."));
+  assert.equal(events.length, 3);
+  assert.ok(events.every((e) => e.req_id === "run-7"), JSON.stringify(events));
+});
+
+test("a setup failure's error event is stamped too", async () => {
+  const { out, dispatcher } = harness({
+    buildSessionFn: async () => { throw new Error("no model"); },
+  });
+  await dispatcher.handle({ type: "run", req_id: "run-8", turn_id: "t", message: "x" });
+  assert.equal(out.find((m) => m.type === "agent.run.error").req_id, "run-8");
+});

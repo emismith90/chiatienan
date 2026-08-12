@@ -152,3 +152,30 @@ async def test_a_node_child_behind_a_proxy_is_opted_into_it(tmp_path, monkeypatc
 
 def test_the_sidecar_entry_point_exists():
     assert pi_bridge.SIDECAR_ENTRY.is_file(), pi_bridge.SIDECAR_ENTRY
+
+
+async def test_the_app_shutdown_hook_closes_the_sidecar(monkeypatch):
+    # Without it the Node child outlives the event loop and a restarted backend
+    # leaves an orphan holding a pipe nobody reads.
+    from app import main
+    closed = []
+    monkeypatch.setattr("app.pi_bridge.close_bridge",
+                        lambda: _record(closed))
+    await main._stop_sidecar()
+    assert closed == [True]
+
+
+async def _record(sink):
+    sink.append(True)
+
+
+def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
+    # Two names for one secret: we standardise on OPEN_ROUTER_KEY, pi reads
+    # OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:87). Without the mapping the
+    # sidecar says "No API key found for openrouter. Use /login…", which reads
+    # like a setup mistake rather than a naming mismatch.
+    monkeypatch.setenv(pi_bridge.KEY_ENV, "sk-real")
+    monkeypatch.delenv(pi_bridge.PI_KEY_ENV, raising=False)
+    bridge = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})
+    child = bridge._child_env()
+    assert child[pi_bridge.PI_KEY_ENV] == "sk-real"

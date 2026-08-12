@@ -34,9 +34,16 @@ _LAUNCH_BACKOFF = 1.5
 SIDECAR_DIR = Path(__file__).resolve().parent.parent / "agent_sidecar"
 SIDECAR_ENTRY = SIDECAR_DIR / "main.js"
 
-#: The credential the sidecar needs. Named here so a missing key fails at spawn
-#: with the variable's real name rather than as an opaque provider 401 mid-turn.
+#: The credential *we* use. Named here so a missing key fails at spawn with the
+#: variable's real name rather than as an opaque provider 401 mid-turn.
 KEY_ENV = "OPEN_ROUTER_KEY"
+
+#: The name **pi** reads it from (`pi-ai/dist/env-api-keys.js:87`). Two names for
+#: one secret, so the boundary translates: one canonical variable in our env and
+#: deploy config, mapped to pi's expectation for the child process only. Without
+#: this the sidecar reports "No API key found for openrouter. Use /login…", which
+#: reads like a setup mistake rather than a naming mismatch.
+PI_KEY_ENV = "OPENROUTER_API_KEY"
 
 
 class BridgeError(RuntimeError):
@@ -64,6 +71,7 @@ class PiBridge:
                 f"{KEY_ENV} is not set — the sidecar cannot reach OpenRouter. "
                 "See .env.example."
             )
+        env[PI_KEY_ENV] = env[KEY_ENV]
         env.setdefault("PI_MODEL", settings.pi_model)
         if settings.pi_vision_model:
             env.setdefault("PI_VISION_MODEL", settings.pi_vision_model)

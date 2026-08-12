@@ -8,6 +8,10 @@
 import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, SessionManager }
   from "@earendil-works/pi-coding-agent";
 
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { toTypeBox } from "./schema.js";
 
 /** Constant, not configurable. One less knob to get wrong in prod. */
@@ -88,8 +92,17 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const runtime = modelRuntime || (await ModelRuntime.create());
   const model = resolveModel(runtime, req);
 
+  // Both paths are required and must exist: `DefaultResourceLoader` resolves them
+  // in its constructor and throws on undefined. `agentDir` is pi's own config
+  // directory — nothing of ours lives there, but keeping it stable (under
+  // DATA_DIR, passed by Python) lets pi cache its model catalogue instead of
+  // refetching it every turn.
+  const cwd = ensureDir(req.cwd || join(tmpdir(), "chiatienan-pi-cwd"));
+  const agentDir = ensureDir(req.agent_dir || join(tmpdir(), "chiatienan-pi-agent"));
+
   const loader = new DefaultResourceLoader({
-    cwd: req.cwd || process.cwd(),
+    cwd,
+    agentDir,
     systemPromptOverride: () => req.system || "",
     agentsFilesOverride: () => ({ agentsFiles: buildAgentsFiles(req) }),
   });
@@ -107,7 +120,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     // advisory: `money-safety.mdc` merely *asked* the model not to compute money
     // ("KHÔNG chạy python/bash để tính tiền"). Now it cannot.
     noTools: "builtin",
-    sessionManager: SessionManager.inMemory(req.cwd || process.cwd()),
+    sessionManager: SessionManager.inMemory(cwd),
   });
 
   return { session, model, dispose: () => session.dispose() };
@@ -167,4 +180,10 @@ function findModel(runtime, id) {
   // No catalogue to check against — providers accept a bare id, so let it through
   // rather than refusing to run on a version whose API we could not read.
   return id;
+}
+
+
+function ensureDir(path) {
+  mkdirSync(path, { recursive: true });
+  return path;
 }

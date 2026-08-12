@@ -98,6 +98,19 @@ _warn_if_workspace_is_ephemeral()
 app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)
 
+
+@app.on_event("shutdown")
+async def _stop_sidecar() -> None:
+    """Terminate the agent sidecar with the app.
+
+    Without this the Node child outlives the event loop and asyncio complains at
+    interpreter exit ("Event loop is closed"), and a restarted backend would leave
+    an orphan holding a pipe nobody reads.
+    """
+    from app.pi_bridge import close_bridge
+
+    await close_bridge()
+
 # Strong refs to in-flight bot-turn tasks so they aren't GC'd mid-run.
 _BG: set[asyncio.Task] = set()
 

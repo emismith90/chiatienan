@@ -145,6 +145,11 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         "tools": tool_manifest(),
         "skills": _read_skills(),
         "context_files": _read_context_files(),
+        # pi needs a real cwd and its own config dir. Keeping the latter under
+        # DATA_DIR lets it cache the model catalogue across turns instead of
+        # refetching it every time.
+        "cwd": str(Path(settings.data_dir) / "pi-cwd"),
+        "agent_dir": str(Path(settings.data_dir) / "pi-agent"),
         "model": settings.pi_model,
         "vision_model": settings.pi_vision_model,
         "thinking": settings.pi_thinking,
