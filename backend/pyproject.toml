@@ -1,10 +1,9 @@
 [project]
 name = "chiatienan"
 version = "0.1.0"
-description = "PWA lunch-splitting bot (Cursor SDK agent + deterministic ledger)"
+description = "PWA lunch-splitting bot (Pi agent sidecar + deterministic ledger)"
 requires-python = ">=3.11"
 dependencies = [
-    "cursor-sdk>=0.1.7",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2",

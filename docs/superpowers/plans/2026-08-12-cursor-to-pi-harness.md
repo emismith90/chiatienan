@@ -1610,7 +1610,7 @@ Subprocess and framing **only**. No model logic, no event logic, no pi vocabular
 beyond the message `type` strings. If this file starts branching on pi semantics,
 that logic belongs in `turn.js`.
 
-- [ ] **Step 1: Write the failing test** — with a fake `node` that echoes canned
+- [x] **Step 1: Write the failing test** — with a fake `node` that echoes canned
       JSONL: startup retries 3× with `1.5**attempt` backoff (the shape
       `_launch_bridge_resilient` uses today, because a child dying at startup is
       not a Cursor-specific problem); a missing `OPEN_ROUTER_KEY` raises a clear
@@ -1618,10 +1618,10 @@ that logic belongs in `turn.js`.
       child is restarted on the next `ensure_started`; **and two concurrent
       requests with different `req_id`s each receive only their own messages.**
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `Bridge to the Pi sidecar subprocess`
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `Bridge to the Pi sidecar subprocess`
 
 ---
 
@@ -1635,7 +1635,7 @@ that logic belongs in `turn.js`.
 All 14 registrations and **every executor body stay byte-identical**. This task
 must not touch a single line of arithmetic.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_tool_manifest_covers_every_tool_with_a_schema():
@@ -1650,14 +1650,14 @@ def test_tools_module_no_longer_imports_cursor_sdk():
     assert "cursor_sdk" not in Path("app/tools.py").read_text()
 ```
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Replace the import with the dataclass; add
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Replace the import with the dataclass; add
       `tool_manifest()`. Nothing else changes.
-- [ ] **Step 4: Verify the whole tools suite passes** —
+- [x] **Step 4: Verify the whole tools suite passes** —
       `pytest tests/test_tools.py tests/test_tools_payment.py tests/test_itemized_split.py -q`.
       All of it must be green with zero edits to the assertions; that is the proof
       the tools were untouched.
-- [ ] **Step 5: Commit** — `Drop cursor_sdk from tools for a local CustomTool dataclass`
+- [x] **Step 5: Commit** — `Drop cursor_sdk from tools for a local CustomTool dataclass`
 
 ---
 
@@ -1668,7 +1668,7 @@ def test_tools_module_no_longer_imports_cursor_sdk():
 **Interfaces:** unchanged — `run_turn`, `TurnResult`, `ToolInvocation`,
 `last_result`, `all_results`.
 
-- [ ] **Step 1: Write the failing test** — rewrite `test_agent.py`'s fakes as a
+- [x] **Step 1: Write the failing test** — rewrite `test_agent.py`'s fakes as a
       fake JSONL bridge (feed it lines; simpler than the old
       `_FakeClient/_FakeAgents/_FakeAgent/_FakeRun` stack). Keep the existing
       assertions about prompt assembly order (`# Bộ nhớ dài hạn` →
@@ -1677,9 +1677,9 @@ def test_tools_module_no_longer_imports_cursor_sdk():
       `capped: true` `turn_done` yields `error is None`. Delete the MCP envelope
       tests — that envelope no longer exists.
 
-- [ ] **Step 2: Verify it fails.**
+- [x] **Step 2: Verify it fails.**
 
-- [ ] **Step 3: Implement**, ~80 lines:
+- [x] **Step 3: Implement**, ~80 lines:
   1. Build the `run` command — `build_system_prompt()` as `system`,
      `_render_prompt` for the message (memory / history / image-count sections kept
      verbatim; the system prompt is **no longer prepended**), `tool_manifest()`,
@@ -1691,11 +1691,11 @@ def test_tools_module_no_longer_imports_cursor_sdk():
   3. Keep the one-line-per-turn `logger.info` summary — it is the only persisted
      record of where a 20–80s turn went, and `/internal/debug/logs` serves it.
 
-- [ ] **Step 4: Verify the whole suite passes.** The **14 monkeypatch sites across
+- [x] **Step 4: Verify the whole suite passes.** The **14 monkeypatch sites across
       4 files** must pass with **zero edits** — that is the real assertion that
       the contract held.
 
-- [ ] **Step 5: Commit** — `Run turns through the Pi sidecar`
+- [x] **Step 5: Commit** — `Run turns through the Pi sidecar`
 
 ---
 
@@ -1712,20 +1712,20 @@ sidecar's `summarize` command must reproduce that: **empty `tools`, empty
 message.** If it silently inherited the `run` session's construction, every
 room's long-term memory would change flavor with no test catching it.
 
-- [ ] **Step 1: Write the failing test** — `summarize_messages` returns the text
+- [x] **Step 1: Write the failing test** — `summarize_messages` returns the text
       the sidecar sent; **any** failure returns `""` (a failed summary must never
       crash a turn); the sidecar's summarize session is built with no system
       prompt, no skills, and no context files; `/internal/bridge-smoke` keeps its
       path, its admin guard, and its `{ok, elapsed_s, messages_seen, text}` shape.
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** `summarize` becomes send-text/receive-text; smoke
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** `summarize` becomes send-text/receive-text; smoke
       becomes `{"type":"ping"}` → `pong`. **`messages_seen` carries the count of
       JSONL messages the sidecar emitted for that `req_id`** (1 for a healthy
       ping) — the field is kept for `deploy/DEBUGGING.md` compatibility, so it has
       to mean something rather than be fabricated.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `Summarize and smoke-check through the sidecar`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `Summarize and smoke-check through the sidecar`
 
 ---
 
@@ -1745,7 +1745,7 @@ room's long-term memory would change flavor with no test catching it.
 > (`chat.py:603-619`) re-summarizes the room's entire >10-week history into a
 > fresh `memory.md` using the new model.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_legacy_room_memory_is_migrated_on_first_access(tmp_path, monkeypatch):
@@ -1770,8 +1770,8 @@ def test_defaults_and_no_cursor_attributes_remain():
     assert not [a for a in vars(s) if a.startswith("cursor_")]
 ```
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Add the `PI_*` / `DATA_DIR` settings and drop every
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Add the `PI_*` / `DATA_DIR` settings and drop every
       `cursor_*`. Give `memory.py` an **idempotent startup migration**: if
       `DATA_DIR/rooms/{id}` is absent and `_LEGACY_BASE/rooms/{id}` exists, copy
       it. Mark it with a comment naming the release it can be deleted in — the repo
@@ -1780,8 +1780,8 @@ def test_defaults_and_no_cursor_attributes_remain():
       before-import assignment block (those are **assigned**, not
       `setdefault`-ed, on purpose — an ambient prod `.env` once made the suite
       write to the real ledger).
-- [ ] **Step 4: Verify the full suite passes.**
-- [ ] **Step 5: Commit** — `Rename the workspace setting to DATA_DIR, migrate room memory`
+- [x] **Step 4: Verify the full suite passes.**
+- [x] **Step 5: Commit** — `Rename the workspace setting to DATA_DIR, migrate room memory`
 
 ---
 
@@ -1795,21 +1795,21 @@ def test_defaults_and_no_cursor_attributes_remain():
 `deploy/README.md`, `deploy/DEBUGGING.md`, `README.md`, `PRIVACY.md`,
 `.gitignore`, `.claude/skills/run-chiatienan/{SKILL.md,run.sh}`
 
-- [ ] **Step 1: Delete the three modules and their tests.** `agui.py` goes because
+- [x] **Step 1: Delete the three modules and their tests.** `agui.py` goes because
       the sidecar emits its output format directly; `skills.py` because
       `ResourceLoader` takes skills programmatically.
 
-- [ ] **Step 2: Drop `cursor-sdk>=0.1.7`** from `pyproject.toml` and update the
+- [x] **Step 2: Drop `cursor-sdk>=0.1.7`** from `pyproject.toml` and update the
       project description.
 
-- [ ] **Step 3: Sweep the prose and config.** `README.md` needs real edits, not
+- [x] **Step 3: Sweep the prose and config.** `README.md` needs real edits, not
       just find-and-replace: the architecture diagram's `agent.py Cursor SDK`
       line, and the module table rows for `agent.py / cursor_runner.py` and
       `agui.py`. Add `agent_sidecar/` to the table. `.gitignore` loses
       `.cursor-store/`, gains `agent_sidecar/node_modules/` and
       `bench/corpus/prod_conversations.json`.
 
-- [ ] **Step 4: Verify nothing is left in code or config**
+- [x] **Step 4: Verify nothing is left in code or config**
 
 ```bash
 cd /home/user/chiatienan
@@ -1824,13 +1824,13 @@ grep -rniE "cursor_sdk|cursor-sdk|CURSOR_(API|SDK|AGENT)" \
 cd backend && pytest -q
 ```
 
-- [ ] **Step 5: Raise `reference/sample-cursor-sdk-with-image/` with the user.**
+- [x] **Step 5: Raise `reference/sample-cursor-sdk-with-image/` with the user.**
       **58 files** of dead Cursor sample whose only purpose was as this port's
       source (it also carries 4 licensed Gilroy `.ttf` files). Recommend deleting
       it; **do not delete it silently** — it is explicitly kept as reference
       material and that call is the user's.
 
-- [ ] **Step 6: Commit** — `Remove the Cursor SDK engine and every reference to it`
+- [x] **Step 6: Commit** — `Remove the Cursor SDK engine and every reference to it`
 
 ---
 
@@ -1841,18 +1841,18 @@ cd backend && pytest -q
 **Files:** Modify `backend/Dockerfile`, `.github/workflows/ci.yml`,
 `.github/workflows/deploy.yml`, `.env.example`
 
-- [ ] **Step 1: `backend/Dockerfile`** — install Node ≥22.19 (NodeSource on
+- [x] **Step 1: `backend/Dockerfile`** — install Node ≥22.19 (NodeSource on
       `python:3.12-slim`), `COPY agent_sidecar`, then
       `npm ci --omit=dev --ignore-scripts` (the install flags specified for this
       package). Drop the `git`+`curl` comment about the cursor bridge toolchain.
       **Keep the single-worker `CMD` and its warning verbatim** — `_agent_lock`
       and `realtime.hub` still assume one process owns the app.
 
-- [ ] **Step 2: `ci.yml`** — add a `sidecar` job: `node-version: 22`, `npm ci`,
+- [x] **Step 2: `ci.yml`** — add a `sidecar` job: `node-version: 22`, `npm ci`,
       `node --test`, with `cache-dependency-path: backend/agent_sidecar/package-lock.json`.
       The LLM eval stays opt-in and out of CI, same as `RUN_LLM_EVAL` today.
 
-- [ ] **Step 3: `deploy.yml`** — point at the **existing** `OPEN_ROUTER_KEY`
+- [x] **Step 3: `deploy.yml`** — point at the **existing** `OPEN_ROUTER_KEY`
       secret instead of `CURSOR_API_KEY` (confirm the GitHub secret's name matches;
       design §10 originally guessed `OPENROUTER_API_KEY`, which is not the name the
       runtime environment uses); add the `PI_*` vars and `DATA_DIR`;
@@ -1862,7 +1862,7 @@ cd backend && pytest -q
       but verify on the first deploy that `/data/rooms/1/memory.md` exists and is
       non-empty.
 
-- [ ] **Step 4: `.env.example`** — rewrite the LLM block: `OPENROUTER_API_KEY`
+- [x] **Step 4: `.env.example`** — rewrite the LLM block: `OPENROUTER_API_KEY`
       — the variable is **`OPEN_ROUTER_KEY`**, not `OPENROUTER_API_KEY`
       (`(SECRET)`, empty, matching the file's convention) —
       `PI_MODEL=~deepseek/deepseek-v4-flash-latest`,
@@ -1870,7 +1870,7 @@ cd backend && pytest -q
       `PI_THINKING`, `PI_MAX_TOOLS`, `PI_MAX_SECONDS`, `DATA_DIR`. **No base-URL
       entry** — it is a constant.
 
-- [ ] **Step 5: Verify** — each command from the repo root, so the `cd`s don't
+- [x] **Step 5: Verify** — each command from the repo root, so the `cd`s don't
       compound:
 
 ```bash
@@ -1880,7 +1880,14 @@ docker compose build backend
 (cd frontend && npx tsc --noEmit && npm test)    # SSE contract must be untouched
 ```
 
-- [ ] **Step 6: Commit** — `Node runtime in the backend image, a sidecar CI job, OpenRouter env`
+> **`docker compose build backend` was NOT run** — this container has no Docker
+> daemon (`/var/run/docker.sock` absent). The one genuinely new step was verified
+> directly instead: `npm ci --omit=dev --ignore-scripts` reproduces from the
+> committed lockfile and installs `pi-ai`, `pi-coding-agent` and `pi-telemetry`.
+> The NodeSource install line is unverified and is the thing to watch on the first
+> real build.
+
+- [x] **Step 6: Commit** — `Node runtime in the backend image, a sidecar CI job, OpenRouter env`
 
 ---
 

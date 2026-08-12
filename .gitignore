@@ -8,10 +8,10 @@ uv.lock
 *.db
 *.db-wal
 *.db-shm
-.cursor-store/
 .pytest_cache/
 data/
 node_modules/
+backend/agent_sidecar/node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo

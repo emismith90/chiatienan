@@ -144,15 +144,21 @@ def _assert_engine_matches_the_tree(engine: str) -> None:
     flag-gated — so `--engine` is a claim to check, not a switch to honour.
     """
     import importlib.util
-    has_cursor = importlib.util.find_spec("cursor_sdk") is not None
-    has_sidecar = (Path(__file__).resolve().parent.parent / "agent_sidecar").is_dir()
-    actual = "cursor" if has_cursor else ("pi" if has_sidecar else None)
+    # Ask the **app**, not the environment: `cursor_sdk` can linger in a virtualenv
+    # long after nothing imports it, and it did. What decides the engine is which
+    # bridge `app.agent` talks to.
+    has_pi = (importlib.util.find_spec("app.pi_bridge") is not None
+              and (Path(__file__).resolve().parent.parent / "agent_sidecar" / "main.js").is_file())
+    imports_cursor = "cursor_sdk" in (
+        Path(__file__).resolve().parent.parent / "app" / "agent.py"
+    ).read_text(encoding="utf-8")
+    actual = "cursor" if imports_cursor else ("pi" if has_pi else None)
     if actual is None:
-        raise SystemExit("cannot tell which engine this tree has: neither cursor_sdk "
-                         "is importable nor agent_sidecar/ present")
+        raise SystemExit("cannot tell which engine this tree has: app/agent.py does not "
+                         "import cursor_sdk and agent_sidecar/main.js is absent")
     if actual != engine:
         raise SystemExit(f"--engine {engine} but this tree is {actual} "
-                         f"(cursor_sdk importable={has_cursor}, agent_sidecar={has_sidecar})")
+                         f"(agent.py imports cursor_sdk={imports_cursor}, sidecar={has_pi})")
 
 
 def main(argv=None) -> int:

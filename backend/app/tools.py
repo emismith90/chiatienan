@@ -19,7 +19,6 @@ import random
 from dataclasses import dataclass, field
 from datetime import date
 
-from cursor_sdk import CustomTool
 
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
@@ -37,6 +36,20 @@ from app.periods import resolve_date, resolve_period
 from app.qr import QRError, make_qr_url
 
 logger = logging.getLogger("chiatienan")
+
+
+@dataclass
+class CustomTool:
+    """The LLM-facing tool shape, owned here now that the vendor SDK is gone.
+
+    Same three fields the SDK's class carried, so all 14 registrations below and
+    every executor body are byte-identical to what they were. Nothing about
+    arithmetic changed with the engine.
+    """
+
+    execute: object
+    description: str
+    input_schema: dict
 
 
 @dataclass
@@ -881,3 +894,19 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             input_schema=_PROPOSE_PAYMENT_SCHEMA,
         ),
     }
+
+
+def tool_manifest() -> list[dict]:
+    """`[{name, description, schema}]` for the sidecar's `run` command.
+
+    Built from `build_tools` against a throwaway context so the manifest can never
+    drift from the tools that actually execute — the model must be told about
+    exactly the schema the tool will validate against.
+    """
+    from app.db import Database
+
+    ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
+    return [
+        {"name": name, "description": tool.description, "schema": tool.input_schema}
+        for name, tool in build_tools(ctx).items()
+    ]

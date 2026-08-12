@@ -86,9 +86,9 @@ cd backend && .venv/bin/pytest -q
 - **`DATABASE_URL` default is `/data/...`** (the container volume) and isn't
   writable locally. `run.sh` overrides it to `data/chiatienan.db` under the repo
   (gitignored). Delete `data/` to reset state.
-- **`@bot` mentions need `CURSOR_API_KEY`.** Without it the bot turn errors and
+- **`@bot` mentions need `OPEN_ROUTER_KEY`.** Without it the bot turn errors and
   posts "⚠️ Bot gặp lỗi"; plain messages, drafts, profile, and live updates all
-  work. To run the bot locally: `CURSOR_API_KEY=… bash .claude/skills/run-chiatienan/run.sh`.
+  work. To run the bot locally: `OPEN_ROUTER_KEY=… bash .claude/skills/run-chiatienan/run.sh`.
 - **Only the demo room is auto-created.** `run.sh` creates one room ("Lunch
   (local)") via the admin endpoint (password `devpass`) and prints its invite.
   More rooms: `POST /api/rooms` with header `X-Admin-Password: devpass`.

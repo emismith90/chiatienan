@@ -10,25 +10,25 @@
 # Leaves both servers running after it exits. Stop them with stop.sh.
 # Re-running run.sh stops any instance it previously started, then starts fresh.
 #
-# Env overrides: ADMIN_PASSWORD (default "devpass"), CURSOR_API_KEY (default empty;
+# Env overrides: ADMIN_PASSWORD (default "devpass"), OPEN_ROUTER_KEY (default empty;
 # without it @bot replies error out, everything else works).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"      # .claude/skills/run-chiatienan -> repo root
 DATA="$ROOT/data"
-mkdir -p "$DATA" "$DATA/cursor-agent"
+mkdir -p "$DATA"
 
 # Load .env if present, exporting each var so the backend inherits it
-# (CURSOR_API_KEY, CURSOR_SDK_MODEL, ADMIN_PASSWORD, QR_*, …). The local-only
-# paths DATABASE_URL and CURSOR_SDK_WORKSPACE are overridden below to writable
+# (OPEN_ROUTER_KEY, PI_MODEL, ADMIN_PASSWORD, QR_*, …). The local-only
+# paths DATABASE_URL and DATA_DIR are overridden below to writable
 # spots, since .env points them at the container's /data volume.
 if [ -f "$ROOT/.env" ]; then
   set -a; . "$ROOT/.env"; set +a
 fi
 
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-devpass}"
-CURSOR_API_KEY="${CURSOR_API_KEY:-}"
+OPEN_ROUTER_KEY="${OPEN_ROUTER_KEY:-}"
 
 log() { printf '\033[36m» %s\033[0m\n' "$*"; }
 
@@ -72,8 +72,8 @@ FRONTEND_PORT="$(free_port 3000)"
 # --- backend --------------------------------------------------------------
 log "Starting backend on :$BACKEND_PORT"
 DATABASE_URL="sqlite:///$DATA/chiatienan.db" \
-CURSOR_SDK_WORKSPACE="$DATA/cursor-agent" \
-CURSOR_API_KEY="$CURSOR_API_KEY" \
+DATA_DIR="$DATA" \
+OPEN_ROUTER_KEY="$OPEN_ROUTER_KEY" \
 ADMIN_PASSWORD="$ADMIN_PASSWORD" \
 TZ="Asia/Ho_Chi_Minh" \
 nohup "$ROOT/backend/.venv/bin/uvicorn" app.main:app \
@@ -102,7 +102,7 @@ TOKEN="$(printf '%s' "$ROOM_JSON" | python3 -c 'import sys,json;print(json.load(
 
 # Don't echo a real secret from .env; only show the dev default in the clear.
 ADMIN_SHOWN=$([ "$ADMIN_PASSWORD" = "devpass" ] && echo "devpass (dev default)" || echo "(from .env)")
-MODEL_SHOWN="${CURSOR_SDK_MODEL:-composer-2.5 (default)}"
+MODEL_SHOWN="${PI_MODEL:-~deepseek/deepseek-v4-flash-latest (default)}"
 
 cat <<EOF
 
@@ -118,8 +118,8 @@ cat <<EOF
 
   Logs : $DATA/backend.log   $DATA/frontend.log
   Stop : bash $HERE/stop.sh
-$( [ -z "$CURSOR_API_KEY" ] && echo "
-  NOTE: CURSOR_API_KEY unset -> @bot mentions will error. Everything
+$( [ -z "$OPEN_ROUTER_KEY" ] && echo "
+  NOTE: OPEN_ROUTER_KEY unset -> @bot mentions will error. Everything
         else (join, chat, drafts, profile, live updates) works." )
 ────────────────────────────────────────────────────────────
 EOF

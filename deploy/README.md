@@ -32,7 +32,7 @@ cd /opt/chiatienan
 
 ```bash
 cp .env.example .env
-nano .env          # set CADDY_DOMAIN, CURSOR_API_KEY, ADMIN_PASSWORD
+nano .env          # set CADDY_DOMAIN, OPEN_ROUTER_KEY, ADMIN_PASSWORD
 ```
 
 ## 3. Bring it up
@@ -107,7 +107,7 @@ Merging to `main` runs `.github/workflows/deploy.yml`: it builds both images **o
 runner**, pushes them to GHCR, then SSHes in to regenerate `.env` and `docker compose pull &&
 up -d`. Because the image is built off-box, this side-steps M8 entirely — the droplet never runs
 `next build`. See the workflow header for the required repo secrets/variables
-(`DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `CURSOR_API_KEY`, `ADMIN_PASSWORD`, `CADDY_DOMAIN`, …).
+(`DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `OPEN_ROUTER_KEY`, `ADMIN_PASSWORD`, `CADDY_DOMAIN`, …).
 
 `.env` is regenerated from GitHub secrets on each deploy (the previous file is backed up to
 `.env.bak.<timestamp>`), so GitHub is the source of truth for production config. If the app

@@ -14,7 +14,10 @@ import pytest
 _TMP = tempfile.mkdtemp(prefix="chiatienan-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/default.db"
 os.environ["ADMIN_PASSWORD"] = "test-admin-pw"
-os.environ["CURSOR_SDK_WORKSPACE"] = f"{_TMP}/ws"
+os.environ["DATA_DIR"] = f"{_TMP}/ws"
+# The sidecar credential. Assigned, like the rest: a real key here would have
+# the suite talking to a live provider.
+os.environ["OPEN_ROUTER_KEY"] = "test-openrouter-key"
 
 from app.db import Database  # noqa: E402
 
