@@ -829,20 +829,33 @@ Because `--repeat` produces N records per case, the unit of comparison is a
 **pass rate**, not a verdict. Both engines are nondeterministic and they are
 different models; a single flip is indistinguishable from sampling noise.
 
-- [ ] **Step 1: Write the failing test** — the compare mode must surface a case
+- [x] **Step 1: Write the failing test** — the compare mode must surface a case
       whose pass rate **dropped**, a case that improved, a case present in one run
       but missing from the other (an explicit `MISSING` row — a silently dropped
       case reads as "no change", the exact failure this harness exists to
       prevent), and a case where both runs scored 0/3 (an explicit
       `BOTH-FAILING` row, so a vacuous grader cannot masquerade as equivalence).
 
-- [ ] **Step 2: Verify it fails.**
-- [ ] **Step 3: Implement.** Per-case grid with `passed/n` per grader, per-grader
+- [x] **Step 2: Verify it fails.**
+- [x] **Step 3: Implement.** Per-case grid with `passed/n` per grader, per-grader
       aggregate, latency percentiles, cost total. Compare mode: pass-rate delta
       per case per grader, `MISSING` and `BOTH-FAILING` rows, latency/cost delta.
       Ungraded (`passed is None`) is reported as `n/a`, never folded into a rate.
-- [ ] **Step 4: Verify it passes.**
-- [ ] **Step 5: Commit** — `bench: markdown report and pass-rate comparison`
+- [x] **Step 4: Verify it passes.**
+- [x] **Step 5: Commit** — `bench: markdown report and pass-rate comparison`
+
+> **Two additions the plan implies but does not name.** `ship_blockers` returns
+> the criterion's verdict as structured rows rather than leaving it to be eyeballed
+> off the grid, and it treats a `MISSING` **or** `BOTH-FAILING` case as a blocker
+> in its own right, not merely as a row to notice — a case that failed on both
+> engines compared nothing, however tidy its `0.00` delta looks. The drop
+> threshold is *strictly* more than 1/3, so a 3/3 → 2/3 dip is a note rather than
+> a block. `prose_quality` is shown but never blocks: the criterion names the two
+> money graders, and a prose change has to be "understood and written down".
+>
+> `--compare` also refuses to imply that two differently-judged runs are
+> comparable — a mismatched `judge_model` prints a warning above the table and
+> marks the prose column not comparable (design §11.5).
 
 ---
 
