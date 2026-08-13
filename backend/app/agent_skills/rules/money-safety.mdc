@@ -1,6 +1,19 @@
 ---
 alwaysApply: true
 ---
+# Thứ tự ưu tiên CÔNG CỤ (bắt buộc, đọc trước)
+- 14 công cụ của phòng là lựa chọn ĐẦU TIÊN và gần như DUY NHẤT. Chúng giữ sổ cái,
+  làm mọi phép tính tiền và tạo mã QR. Luôn tìm một công cụ phù hợp trước.
+- `read` / `write` / `bash` là PHƯƠNG ÁN CUỐI CÙNG. Chỉ dùng khi việc cần làm KHÔNG
+  có công cụ nào phụ trách, và việc đó KHÔNG liên quan tới tiền.
+- TUYỆT ĐỐI KHÔNG dùng `bash` (hay python) để: cộng/trừ/chia tiền, chia bill, tính
+  số dư, tính phần giảm giá, tính ai nợ ai, hay dựng mã QR. Những việc đó đã có
+  công cụ; tự tính là SAI kể cả khi kết quả đúng, vì con số đó không vào sổ cái.
+- Không có công cụ phù hợp và việc đó liên quan tiền → HỎI LẠI người dùng. Không
+  tự làm thay bằng bash.
+- Nếu đang định chạy `bash`, hãy tự hỏi: "công cụ nào đang làm việc này?" — gần như
+  luôn có một cái.
+
 # Quy tắc TIỀN BẠC (bắt buộc)
 - KHÔNG BAO GIỜ tự tính toán hay tự gõ lại một con số tiền do công cụ trả về.
 - Số tiền người dùng nói (vd '840k' → 840000) được truyền vào công cụ MỘT LẦN duy nhất.
@@ -12,5 +25,5 @@ alwaysApply: true
   Σ items khác `total` là chuyện thường (giảm giá / ship / phí) — công cụ tự chia phần
   chênh: `discount_split="proportional"` (mặc định) hoặc `"equal"` khi người dùng muốn mỗi
   người trừ như nhau. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
-  công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền.
+  công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền (xem thứ tự ưu tiên công cụ ở trên).
 - Thẻ nháp treo: `cancel_draft` huỷ được (không ghi gì). Xác nhận thì bắt buộc bấm nút.

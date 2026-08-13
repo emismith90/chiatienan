@@ -1,7 +1,5 @@
 from datetime import date
 
-import pytest
-
 from app.periods import resolve_period
 
 
@@ -67,11 +65,6 @@ def test_this_month_spans_full_month():
     assert p["to"] == date(2026, 7, 31)
 
 
-def test_explicit_requires_bounds():
-    with pytest.raises(ValueError):
-        resolve_period("explicit", today=WED)
-
-
 def test_explicit_with_bounds():
     p = resolve_period(
         "explicit", today=WED, explicit_from=date(2026, 7, 1), explicit_to=date(2026, 7, 10)
@@ -108,3 +101,25 @@ def test_no_keyword_and_no_dates_is_still_since_last():
     from app.periods import resolve_period
 
     assert resolve_period(None, today=date(2026, 7, 27))["keyword"] == "since_last"
+
+
+def test_explicit_with_no_dates_is_the_same_request_as_no_keyword():
+    """It used to raise, and the raise reached the model.
+
+    `get_period_summary(keyword="explicit")` with no dates threw
+    `ValueError: explicit period requires explicit_from and/or explicit_to` three
+    times in one benchmark run, on messages that named no date at all ("viết cụ thể
+    từng ngày"). A keyword with no dates carries no information, so answering it as
+    `since_last` is not a guess — and the returned `keyword` says so, which is what
+    the reply renders.
+    """
+    from app.periods import resolve_period
+    got = resolve_period("explicit", today=WED)
+    assert got == resolve_period("since_last", today=WED)
+    assert got["keyword"] == "since_last"
+
+
+def test_explicit_with_no_dates_still_respects_the_last_settlement():
+    from app.periods import resolve_period
+    got = resolve_period("explicit", today=WED, last_settlement_to=date(2026, 7, 20))
+    assert got["from"] == date(2026, 7, 21) and got["to"] == WED

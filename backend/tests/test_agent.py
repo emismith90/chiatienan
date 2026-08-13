@@ -1,385 +1,215 @@
-import json
-import types
-from types import SimpleNamespace
+"""`run_turn` against a fake sidecar.
 
+The contract under test is the frozen one: `run_turn(user_text, ctx, images, emit,
+memory, history) -> TurnResult`. The fake feeds JSONL messages the way the real
+bridge would, which is a far simpler stand-in than the old
+`_FakeClient/_FakeAgents/_FakeAgent/_FakeRun` stack — because the sidecar now
+returns a ready-made result instead of a stream to reassemble.
+"""
 import pytest
 
-import app.agent as agent_mod
-from app import agui
-from app.agent import (
-    ToolInvocation,
-    TurnResult,
-    _render_prompt,
-    _unwrap_tool_args,
-    _unwrap_tool_name,
-    _unwrap_tool_result,
-    run_turn,
-)
-from app.prompt import build_system_prompt
+from app import agent
 from app.tools import ToolContext
-from tests.test_ledger import _seed_room
 
 
-# --- pure helpers ---------------------------------------------------------- #
+class FakeBridge:
+    """Yields canned replies; records what Python sent back."""
 
-def test_unwrap_tool_name_from_mcp_wrapper():
-    assert _unwrap_tool_name("mcp", {"toolName": "record_meal"}) == "record_meal"
-    assert _unwrap_tool_name("record_meal", {}) == "record_meal"
-    assert _unwrap_tool_name(None, None) == "tool"
+    def __init__(self, script):
+        self._script = script
+        self.sent = []
 
+    async def request(self, command):
+        self.command = command
+        for message in self._script:
+            yield dict(message, req_id=command["req_id"])
 
-def test_unwrap_tool_args_from_wrapper():
-    assert _unwrap_tool_args({"toolName": "x", "args": {"a": 1}}) == {"a": 1}
-    assert _unwrap_tool_args({"a": 1}) == {"a": 1}
-
-
-def test_unwrap_result_direct_dict():
-    assert _unwrap_tool_result({"ok": True, "meal_id": 1}) == {"ok": True, "meal_id": 1}
-
-
-def test_unwrap_result_from_mcp_envelope():
-    payload = {"ok": True, "amount": 100}
-    envelope = {"value": {"content": [{"text": {"text": json.dumps(payload)}}]}}
-    assert _unwrap_tool_result(envelope) == payload
+    async def send(self, message):
+        self.sent.append(message)
 
 
-def test_turn_result_last_result_picks_last_ok():
-    tr = TurnResult()
-    tr.tools = [
-        ToolInvocation("settle_period", {}, {"ok": False, "error": "x"}),
-        ToolInvocation("settle_period", {}, {"ok": True, "transfers": []}),
-    ]
-    assert tr.last_result("settle_period") == {"ok": True, "transfers": []}
-    assert tr.last_result("missing") is None
+@pytest.fixture
+def bridge(monkeypatch):
+    def install(script):
+        fake = FakeBridge(script)
+        monkeypatch.setattr("app.pi_bridge.get_bridge", lambda: fake)
+        return fake
+    return install
 
 
-def test_turn_result_all_results_returns_ok_in_order():
-    tr = TurnResult()
-    tr.tools = [
-        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 100}),
-        ToolInvocation("propose_payment", {}, {"ok": False, "error": "x"}),
-        ToolInvocation("propose_payment", {}, {"ok": True, "amount": 200}),
-    ]
-    assert tr.all_results("propose_payment") == [
-        {"ok": True, "amount": 100},
-        {"ok": True, "amount": 200},
-    ]
-    assert tr.all_results("missing") == []
+def _ctx(db):
+    return ToolContext(db=db, room_id=1, sender_name="An")
 
 
-def test_system_prompt_keeps_money_invariant_and_points_to_skills():
-    p = build_system_prompt()
-    # Money-safety invariant stays in the always-sent prompt itself.
-    assert "KHÔNG BAO GIỜ tự tính toán" in p
-    # Detailed procedures moved to workspace skills; the slim prompt points at them.
-    assert "record-payment" in p
-    assert "balances" in p
-    # The removed monolithic guidance (old record_payment tool name) is gone.
-    assert "record_payment" not in p
-
-
-def test_render_prompt_baseline_unchanged():
-    # No memory/history → identical to the pre-memory assembly.
-    expected = f"{build_system_prompt(sender_name='An')}\n\n# Tin nhắn người dùng\nxin chào"
-    assert _render_prompt("  xin chào  ", sender_name="An") == expected
-
-
-def test_render_prompt_includes_sections_in_order():
-    out = _render_prompt("ai trả", sender_name="An",
-                         memory="- An hay trả", history="«An»: hôm qua 100k")
-    assert "# Bộ nhớ dài hạn\n- An hay trả" in out
-    assert "# Lịch sử hội thoại (gần đây)\n«An»: hôm qua 100k" in out
-    # order: memory before history before the user message
-    assert out.index("Bộ nhớ dài hạn") < out.index("Lịch sử hội thoại") < out.index("Tin nhắn người dùng")
-
-
-# --- mocked run_turn ------------------------------------------------------- #
-
-class _FakeAgent:
-    def __init__(self, run):
-        self._run = run
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-    async def send(self, message, opts):
-        return self._run
-
-
-class _FakeAgents:
-    def __init__(self, run):
-        self._run = run
-
-    async def create(self, options):
-        return _FakeAgent(self._run)
-
-
-class _FakeClient:
-    def __init__(self, run):
-        self.agents = _FakeAgents(run)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-
-class _FakeRun:
-    def __init__(self, messages):
-        self._messages = messages
-
-    async def messages(self):
-        for m in self._messages:
-            yield m
-
-    def supports(self, _op):
-        return False
-
-
-def _text_msg(text):
-    block = types.SimpleNamespace(type="text", text=text)
-    return types.SimpleNamespace(type="assistant", message=types.SimpleNamespace(content=[block]))
-
-
-def _tool_msg(tool_name, args, result):
-    return types.SimpleNamespace(
-        type="tool_call",
-        status="completed",
-        name="mcp",
-        args={"toolName": tool_name, "args": args},
-        result=result,
-    )
-
-
-@pytest.mark.asyncio
-async def test_run_turn_collects_text_and_tool_results(monkeypatch, db):
-    fake_run = _FakeRun([
-        _tool_msg("settle_period", {"keyword": "since_last"}, {"ok": True, "transfers": [], "committed": False}),
-        _text_msg("Mọi người đã cân bằng ✅"),
+async def test_a_plain_turn_hydrates_the_result(db, bridge):
+    bridge([
+        {"type": "agent.run.started", "turn_id": "t"},
+        {"type": "turn_done", "final_text": "Đã ghi.", "tools": [], "error": None,
+         "capped": False, "stats": {"tokens": 100}},
     ])
+    result = await agent.run_turn("@bot ghi bữa trưa", _ctx(db))
+    assert result.final_text == "Đã ghi."
+    assert result.error is None and result.turn_id
 
-    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_cursor_api_key", lambda *a, **k: "k", raising=False
-    )
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_model_selection", lambda *a, **k: types.SimpleNamespace(id="composer-2.5", params=None), raising=False
-    )
 
-    async def _fake_launch(AsyncClient, workspace, local):
-        return _FakeClient(fake_run)
+async def test_agent_events_are_forwarded_untouched(db, bridge):
+    # The sidecar emits the frontend's format; agui.py's translation is deleted.
+    bridge([
+        {"type": "agent.run.started", "turn_id": "t"},
+        {"type": "agent.text.delta", "turn_id": "t", "delta": "Đã"},
+        {"type": "agent.run.finished", "turn_id": "t"},
+        {"type": "turn_done", "final_text": "Đã", "error": None},
+    ])
+    seen = []
+    await agent.run_turn("x", _ctx(db), emit=lambda e: _collect(seen, e))
+    assert [e["type"] for e in seen] == [
+        "agent.run.started", "agent.text.delta", "agent.run.finished"]
+    assert seen[1]["delta"] == "Đã"
 
-    monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _fake_launch)
 
-    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="An")
-    result = await run_turn("ai trả tuần này", ctx)
+async def _collect(sink, event):
+    sink.append(event)
 
+
+async def test_a_tool_call_round_trips_through_the_real_tool(db, bridge):
+    from tests.test_ledger import _seed_room
+    room_id, ids = _seed_room(db, 3)
+    fake = bridge([
+        {"type": "tool_call", "call_id": "c1", "name": "propose_meal",
+         "args": {"payer": ids[0], "participants": ids, "total": 300000}},
+        {"type": "turn_done", "final_text": "Đã ghi.", "error": None},
+    ])
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=ids[0])
+    result = await agent.run_turn("@bot 300k cả nhóm", ctx)
+
+    # The tool executed in Python, over the real DB — no arithmetic crossed the wire.
+    assert result.tools[0].name == "propose_meal"
+    assert result.tools[0].result["type"] == "expense_draft"
+    assert result.tools[0].result["per_head_preview"] == 100000
+    # …and the result went back to the sidecar as a tool_result.
+    assert fake.sent[0]["type"] == "tool_result"
+    assert fake.sent[0]["call_id"] == "c1"
+    assert "expense_draft" in fake.sent[0]["content"]
+
+
+async def test_an_unknown_tool_is_an_ok_false_not_a_crash(db, bridge):
+    fake = bridge([
+        {"type": "tool_call", "call_id": "c", "name": "nope", "args": {}},
+        {"type": "turn_done", "final_text": "?", "error": None},
+    ])
+    result = await agent.run_turn("x", _ctx(db))
+    assert result.tools[0].result["ok"] is False
+    assert fake.sent[0]["type"] == "tool_result"
+
+
+async def test_a_tool_that_raises_becomes_ok_false_and_the_turn_continues(db, bridge, monkeypatch):
+    def boom(_args):
+        raise RuntimeError("db on fire")
+    monkeypatch.setattr(agent, "build_tools",
+                        lambda ctx: {"propose_meal": type("T", (), {"execute": staticmethod(boom)})()})
+    bridge([
+        {"type": "tool_call", "call_id": "c", "name": "propose_meal", "args": {}},
+        {"type": "turn_done", "final_text": "Có lỗi.", "error": None},
+    ])
+    result = await agent.run_turn("x", _ctx(db))
+    assert result.tools[0].result["ok"] is False
+    assert "db on fire" in result.tools[0].result["error"]
+    assert result.error is None            # the turn still produced a reply
+
+
+async def test_a_capped_turn_is_not_an_error(db, bridge):
+    # agent.py:374-384 always treated a cap as a partial answer; chat.py:558 posts
+    # it as a normal reply. An error here would flip it to a ⚠️ in the room.
+    bridge([{"type": "turn_done", "final_text": "một phần", "capped": True, "error": None}])
+    result = await agent.run_turn("x", _ctx(db))
     assert result.error is None
-    assert "cân bằng" in result.final_text
-    settle = result.last_result("settle_period")
-    assert settle is not None and settle["transfers"] == []
+    assert result.final_text == "một phần"
 
 
-# --- emit contract ---------------------------------------------------------- #
-
-@pytest.mark.asyncio
-async def test_emit_receives_events_for_messages():
-    # Exercise the same loop shape run_turn uses: translate + await emit.
+async def test_a_fatal_becomes_an_error_and_a_finish_event(db, bridge):
+    bridge([{"type": "fatal", "message": "sidecar exited"}])
     seen = []
-    async def emit(ev): seen.append(ev)
-    msgs = [
-        SimpleNamespace(type="assistant",
-                        message=SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")])),
-        SimpleNamespace(type="tool_call", call_id="c1", name="propose_meal",
-                        status="completed", args={"total": 1}, result={"ok": True}),
-    ]
-    turn_id = "t1"
-    for ev in agui.start(turn_id):
-        await emit(ev)
-    for m in msgs:
-        for ev in agui.translate(m, turn_id):
-            await emit(ev)
-    for ev in agui.finish(turn_id):
-        await emit(ev)
-    kinds = [e["type"] for e in seen]
-    assert kinds[0] == "agent.run.started" and kinds[-1] == "agent.run.finished"
-    assert "agent.text.delta" in kinds and "agent.tool.result" in kinds
+    result = await agent.run_turn("x", _ctx(db), emit=lambda e: _collect(seen, e))
+    assert "sidecar exited" in result.error
+    assert seen[-1]["type"] == "agent.run.error"
 
 
-@pytest.mark.asyncio
-async def test_run_turn_emits_finish_on_setup_failure(monkeypatch, db):
-    """A setup-time failure (e.g. resolve_cursor_api_key raising because
-    CURSOR_API_KEY is unset) must still reach agui.finish — otherwise a
-    consumer sees agent.run.started with no terminal event and the timeline
-    UI hangs forever."""
-
-    def _boom(*a, **k):
-        raise RuntimeError("CURSOR_API_KEY is not set")
-
-    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_cursor_api_key", _boom, raising=False
-    )
-
-    room_id, member_ids = _seed_room(db, 1)
-    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_ids[0], sender_name="An")
-
+async def test_a_bridge_that_raises_still_returns_a_result(db, monkeypatch):
+    class Exploding:
+        async def request(self, command):
+            raise RuntimeError("no node binary")
+            yield  # pragma: no cover
+    monkeypatch.setattr("app.pi_bridge.get_bridge", lambda: Exploding())
     seen = []
-
-    async def emit(ev):
-        seen.append(ev)
-
-    result = await run_turn("ai trả tuần này", ctx, emit=emit)
-
-    kinds = [e["type"] for e in seen]
-    assert "agent.run.started" in kinds
-    assert kinds[-1] in ("agent.run.finished", "agent.run.error")
-    turn_ids = {e["turn_id"] for e in seen}
-    assert len(turn_ids) == 1  # same turn_id on start and finish
-    assert result.error is not None
+    result = await agent.run_turn("x", _ctx(db), emit=lambda e: _collect(seen, e))
+    assert "no node binary" in result.error
+    assert seen and seen[-1]["type"] == "agent.run.error"
 
 
-# --- final answer assembly -------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# the command we build
+# --------------------------------------------------------------------------- #
 
-def test_pre_tool_narration_is_dropped_from_the_reply():
-    """Production: 'Mình đọc quy trình ghi bữa ăn rồi xử lý câu hỏi của Emi.'
-    was glued to the actual answer. Once tools have run, the block after the
-    last one is the reply."""
-    out = agent_mod._final_answer(
-        ["Mình đọc quy trình ghi bữa rồi xử lý.", "Được — ghi theo từng người."], 1
-    )
-    assert out == "Được — ghi theo từng người."
-
-
-def test_token_fragments_concatenate_without_separators():
-    """Production 17:29: the reply reached the room as
-    'V  ẫn  không  được  đâu  Kun' because every streamed token was joined with
-    a blank line. Fragments are a stream, not messages — they concatenate."""
-    tokens = ["Không", " —", " hiện", " không", " hỗ", " trợ", " xác", " nhận"]
-    assert agent_mod._final_answer(tokens, 0) == "Không — hiện không hỗ trợ xác nhận"
+async def test_the_prompt_keeps_its_section_order(db, bridge):
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("cho tôi xem số dư", _ctx(db),
+                         memory="- An trả 300k", history="An: chào", images=[{"data": "x"}])
+    message = fake.command["message"]
+    assert message.index("# Bộ nhớ dài hạn") < message.index("# Lịch sử hội thoại (gần đây)")
+    assert message.index("# Lịch sử hội thoại (gần đây)") < message.index("# Ảnh kèm theo")
+    assert message.index("# Ảnh kèm theo") < message.index("# Tin nhắn người dùng")
 
 
-def test_fragment_join_preserves_the_models_own_paragraph_breaks():
-    parts = ["Đã ghi xong nhé.", "\n\n", "Cần sửa gì thì nhắn mình."]
-    assert agent_mod._final_answer(parts, 0) == "Đã ghi xong nhé.\n\nCần sửa gì thì nhắn mình."
+async def test_the_system_prompt_is_no_longer_prepended_to_the_message(db, bridge):
+    # The sidecar has a real systemPromptOverride, so it travels as `system`.
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("xin chào", _ctx(db))
+    assert fake.command["system"]
+    assert fake.command["system"] not in fake.command["message"]
+    assert fake.command["message"].startswith("# Tin nhắn người dùng")
 
 
-def test_glued_narration_is_dropped_when_it_arrives_in_one_fragment():
-    """Production 17:23 stored one fragment holding both the scaffolding and the
-    answer: '…mình đọc skill phù hợp rồi xử lý.Mình **không xác nhận qua chat**…'
-    — answer_from cannot split that, so the seam is where we cut."""
-    glued = (
-        "Emi muốn xác nhận đề xuất đang treo — mình đọc skill phù hợp rồi xử lý."
-        "Mình **không xác nhận qua chat** được — đề xuất #101 cần Emi bấm "
-        "**Xác nhận** (hoặc Huỷ) trên thẻ nháp."
-    )
-    assert agent_mod._final_answer([glued], 0) == (
-        "Mình **không xác nhận qua chat** được — đề xuất #101 cần Emi bấm "
-        "**Xác nhận** (hoặc Huỷ) trên thẻ nháp."
-    )
+async def test_the_image_count_is_announced_in_the_text(db, bridge):
+    # Production attached the bill and the model still asked for the total in it.
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("ghi đi", _ctx(db), images=[{"data": "a"}, {"data": "b"}])
+    assert "2 ảnh" in fake.command["message"]
+    assert len(fake.command["images"]) == 2
 
 
-def test_several_stacked_narrations_are_all_dropped():
-    """Production 13:20: three plan sentences stacked ahead of the answer."""
-    glued = (
-        "Mình sẽ đọc quy trình ghi bữa và lấy giá từng món từ ảnh hoá đơn."
-        "Đã thấy lần trước đọc hoá đơn — mình lấy lại ảnh và schema để ghi theo món."
-        "Mình dùng giá món đã đọc từ hoá đơn Grab và đề xuất bữa theo từng người."
-        "Giá món trên ảnh mình đọc được:"
-    )
-    assert agent_mod._final_answer([glued], 0) == "Giá món trên ảnh mình đọc được:"
+async def test_the_command_carries_every_tool_skill_and_rules_file(db, bridge):
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("x", _ctx(db))
+    assert len(fake.command["tools"]) == 14
+    names = {s["name"] for s in fake.command["skills"]}
+    assert {"record-meal", "record-payment", "balances", "pick-random"} <= names
+    # every skill BODY ships, because the sidecar has no `read` tool
+    assert all(s["body"].strip() for s in fake.command["skills"])
+    assert any(f["path"] == "money-safety" for f in fake.command["context_files"])
 
 
-def test_an_answer_that_mentions_the_tools_is_not_mistaken_for_narration():
-    """'công cụ' and 'quy tắc' show up in real answers — only skill/process
-    reading phrasings are scaffolding."""
-    real = (
-        "Cộng các món = **414.200đ**, trong khi Emi trả **324.200đ** (có giảm/ship) "
-        "— công cụ không cho ghi thẳng giá món vì vượt tổng."
-    )
-    assert agent_mod._final_answer([real], 0) == real
+async def test_the_command_carries_both_models_and_the_caps(db, bridge):
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("x", _ctx(db))
+    assert fake.command["model"] and fake.command["vision_model"]
+    assert fake.command["max_tools"] == 40 and fake.command["max_seconds"] == 120
 
 
-def test_a_seam_between_two_real_sentences_only_gains_a_space():
-    glued = "Đã ghi #6 — Grab Food.Cần sửa gì thì nhắn mình."
-    assert agent_mod._final_answer([glued], 0) == (
-        "Đã ghi #6 — Grab Food. Cần sửa gì thì nhắn mình."
-    )
-
-
-def test_narration_survives_when_it_is_the_only_text():
-    """Better a little narration than an empty bubble."""
-    assert agent_mod._final_answer(["Mình đang xem thử."], 1) == "Mình đang xem thử."
-
-
-def test_blank_trailing_block_falls_back_to_what_there_is():
-    assert agent_mod._final_answer(["Có 3 bữa chưa chốt.", "   "], 1) == "Có 3 bữa chưa chốt."
-
-
-def test_no_text_at_all_is_empty():
-    assert agent_mod._final_answer([], 0) == ""
-
-
-# --- the timing instrument must actually fire ------------------------------- #
-
-@pytest.mark.asyncio
-async def test_turn_completion_is_logged_with_its_tool_names(monkeypatch, db, caplog):
-    """The per-turn line is what /internal/debug/logs has to show to answer
-    "where did 80 seconds go" — and a log line nobody asserts is a log line that
-    quietly stops being emitted."""
-    fake_run = _FakeRun([
-        _tool_msg("find_members", {"names": ["Emi"]}, {"ok": True}),
-        _tool_msg("propose_meal", {"total": 324_200}, {"ok": True}),
-        _text_msg("Đã đề xuất nhé"),
+def test_turn_result_helpers_still_filter_on_ok():
+    r = agent.TurnResult(tools=[
+        agent.ToolInvocation("propose_meal", {}, {"ok": False, "error": "x"}),
+        agent.ToolInvocation("propose_meal", {}, {"ok": True, "n": 1}),
+        agent.ToolInvocation("propose_meal", {}, {"ok": True, "n": 2}),
     ])
-
-    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_cursor_api_key", lambda *a, **k: "k", raising=False)
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_model_selection",
-        lambda *a, **k: types.SimpleNamespace(id="composer-2.5", params=None), raising=False)
-
-    async def _fake_launch(AsyncClient, workspace, local):
-        return _FakeClient(fake_run)
-
-    monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _fake_launch)
-
-    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="Emi")
-    with caplog.at_level("INFO", logger="chiatienan"):
-        result = await run_turn("@bot log đi", ctx, images=[{"data": "x", "mimeType": "image/png"}])
-
-    line = next(r.getMessage() for r in caplog.records if "[agent] turn" in r.getMessage())
-    assert result.turn_id in line
-    assert "tools=2" in line
-    assert "find_members,propose_meal" in line
-    assert "images=1" in line
+    assert r.last_result("propose_meal") == {"ok": True, "n": 2}
+    assert [x["n"] for x in r.all_results("propose_meal")] == [1, 2]
+    assert r.last_result("settle_period") is None
 
 
-@pytest.mark.asyncio
-async def test_the_turn_line_reports_a_failure(monkeypatch, db, caplog):
-    """Silence on a crash looks the same as a fast, healthy turn."""
-    monkeypatch.setattr(agent_mod, "_ensure_workspace", lambda: "/tmp/chiatienan-test")
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_cursor_api_key", lambda *a, **k: "k", raising=False)
-    # Patch the model lookup too: without it this test reaches the real Cursor
-    # API before it ever gets to the bridge.
-    monkeypatch.setattr(
-        "app.cursor_runner.resolve_model_selection",
-        lambda *a, **k: types.SimpleNamespace(id="composer-2.5", params=None), raising=False)
-
-    async def _boom(*a, **k):
-        raise RuntimeError("bridge died")
-
-    monkeypatch.setattr(agent_mod, "_launch_bridge_resilient", _boom)
-
-    ctx = ToolContext(db=db, room_id=1, sender_member_id=1, sender_name="Emi")
-    with caplog.at_level("INFO", logger="chiatienan"):
-        await run_turn("@bot số dư", ctx)
-
-    line = next(r.getMessage() for r in caplog.records if "[agent] turn" in r.getMessage())
-    assert "tools=0" in line and "ERROR=" in line
+async def test_the_command_carries_the_builtin_tool_list(db, bridge):
+    # read/write/bash let the model work things out itself, at the cost of the
+    # structural money-safety guarantee. It travels as configuration so a run can
+    # be compared with and without it.
+    fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
+    await agent.run_turn("x", _ctx(db))
+    assert fake.command["builtin_tools"] == ["read", "write", "bash"]

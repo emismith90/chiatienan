@@ -22,7 +22,7 @@ from app import accounts, chat, debug_api, drafts, ledger, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
-from app.bridge_smoke import run_bridge_smoke
+from app.pi_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
@@ -68,20 +68,21 @@ def _mirror_logs_to_file() -> None:
 
 
 def _warn_if_workspace_is_ephemeral() -> None:
-    """Say so at boot when the agent workspace won't survive a restart.
+    """Say so at boot when the data directory won't survive a restart.
 
-    ``/data`` is the only mounted volume in docker-compose.yml, so a workspace
-    outside it (production ran on ``/tmp/chiatienan-agent`` for weeks) loses the
-    materialized skills and the ``.cursor-store`` conversation state on every
-    deploy — silently, because nothing errors. Local runs point elsewhere on
+    ``/data`` is the only mounted volume in docker-compose.yml, so a directory
+    outside it (production ran on ``/tmp/chiatienan-agent`` for weeks) loses every
+    room's ``memory.md`` on each deploy — silently, because nothing errors. That
+    was always this warning's real subject: with the sidecar there is no
+    materialized workspace left to lose, only memory. Local runs point elsewhere on
     purpose, so this stays a warning and never a failure.
     """
-    workspace = settings.cursor_workspace
-    if not workspace.startswith("/data"):
+    data_dir = settings.data_dir
+    if not data_dir.startswith("/data"):
         log.warning(
-            "CURSOR_SDK_WORKSPACE=%s is outside the mounted /data volume — the agent "
-            "workspace and .cursor-store will be lost on restart",
-            workspace,
+            "DATA_DIR=%s is outside the mounted /data volume — every room's "
+            "long-term memory will be lost on restart",
+            data_dir,
         )
 
 
@@ -96,6 +97,19 @@ _warn_if_workspace_is_ephemeral()
 
 app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)
+
+
+@app.on_event("shutdown")
+async def _stop_sidecar() -> None:
+    """Terminate the agent sidecar with the app.
+
+    Without this the Node child outlives the event loop and asyncio complains at
+    interpreter exit ("Event loop is closed"), and a restarted backend would leave
+    an orphan holding a pipe nobody reads.
+    """
+    from app.pi_bridge import close_bridge
+
+    await close_bridge()
 
 # Strong refs to in-flight bot-turn tasks so they aren't GC'd mid-run.
 _BG: set[asyncio.Task] = set()
@@ -675,7 +689,7 @@ async def stream(room_id: int, since: int = 0, ctx: AuthCtx = Depends(require_se
 
 @app.post("/internal/bridge-smoke")
 async def bridge_smoke(x_admin_password: str | None = Header(default=None)):
-    """Guarded Cursor SDK bridge validation (B3) — see app.bridge_smoke."""
+    """Guarded sidecar liveness check — see app.pi_smoke."""
     if not settings.admin_password or x_admin_password != settings.admin_password:
         raise HTTPException(status_code=401, detail="unauthorized")
     return await run_bridge_smoke()

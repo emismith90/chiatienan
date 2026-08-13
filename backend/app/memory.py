@@ -1,6 +1,6 @@
 """Per-room long-term memory files (no LLM here).
 
-Two files live under ``{cursor_workspace}/rooms/{room_id}/``:
+Two files live under ``{DATA_DIR}/rooms/{room_id}/``:
 
 - ``memory.md``       — human-readable summary sections, appended over time.
 - ``memory.meta.json``— ``{"summarized_through_id": int, "summarized_through_at": str}``.
@@ -12,6 +12,8 @@ rollover advance it. All writes happen under ``chat._agent_lock`` (single writer
 from __future__ import annotations
 
 import json
+import logging
+import shutil
 from pathlib import Path
 
 from sqlalchemy import select
@@ -19,18 +21,52 @@ from sqlalchemy import select
 from app.config import settings
 from app.models import RoomMessage
 
+logger = logging.getLogger("chiatienan")
+
 _META_NAME = "memory.meta.json"
 _MD_NAME = "memory.md"
 
 
+#: Where room memory lived before the DATA_DIR rename. Production's Cursor
+#: workspace was `/data/cursor-agent` (deploy.yml:164), so pointing memory at
+#: `/data/rooms/{id}` without moving anything would make `load_memory` return ""
+#: and `_maybe_rollover` re-summarize every room's entire >10-week history into a
+#: fresh memory.md on the first post-deploy turn — silent, expensive, user-visible
+#: data loss dressed up as a rename.
+#:
+#: DELETE THIS AND `_migrate_legacy_room` one release after the Pi cutover ships.
+_LEGACY_BASE = Path("/data/cursor-agent")
+
+
 def _base_dir() -> Path:
     """Workspace root; indirection so tests can redirect memory files."""
-    return Path(settings.cursor_workspace)
+    return Path(settings.data_dir)
+
+
+def _migrate_legacy_room(room_id: int, target: Path) -> None:
+    """Copy a room's memory over from the pre-DATA_DIR location, once.
+
+    Idempotent and non-destructive: it runs only when the new directory holds no
+    `memory.md`, and it **copies** rather than moves, so a rollback to the Cursor
+    engine still finds the originals. The repo already does startup migrations of
+    this shape (commit `aa1f992`).
+    """
+    legacy = _LEGACY_BASE / "rooms" / str(room_id)
+    if not legacy.is_dir() or legacy.resolve() == target.resolve():
+        return
+    if (target / _MD_NAME).exists():
+        return                      # newer memory already lives here; never clobber
+    for name in (_MD_NAME, _META_NAME):
+        source = legacy / name
+        if source.exists():
+            shutil.copy2(source, target / name)
+            logger.info("[memory] migrated %s for room %s from %s", name, room_id, legacy)
 
 
 def room_memory_dir(room_id: int) -> Path:
     d = _base_dir() / "rooms" / str(room_id)
     d.mkdir(parents=True, exist_ok=True)
+    _migrate_legacy_room(room_id, d)
     return d
 
 

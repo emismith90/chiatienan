@@ -10,6 +10,14 @@ import os
 from dataclasses import dataclass
 
 
+def _csv_env(name: str, default: str) -> tuple[str, ...]:
+    """Comma-separated env var → tuple. An explicitly empty value means empty."""
+    raw = os.environ.get(name)
+    if raw is None:
+        raw = default
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 def _int_env(name: str, default: int) -> int:
     raw = (os.environ.get(name) or "").strip()
     if raw == "":
@@ -23,12 +31,14 @@ def _int_env(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     # Cursor SDK
-    cursor_api_key: str
-    cursor_model: str
-    cursor_workspace: str
-    cursor_api_base: str
-    max_tools: int
-    max_seconds: int
+    data_dir: str
+    pi_model: str
+    pi_vision_model: str
+    pi_provider: str
+    pi_thinking: str
+    pi_max_tools: int
+    pi_max_seconds: int
+    pi_builtin_tools: tuple[str, ...]
     memory_window_weeks: int
     history_max_messages: int
     # How far back to look for a bill image when the @bot message itself has
@@ -62,13 +72,29 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            cursor_api_key=(os.environ.get("CURSOR_API_KEY") or "").strip(),
-            cursor_model=(os.environ.get("CURSOR_SDK_MODEL") or "").strip() or "grok-4.5",
-            cursor_workspace=(os.environ.get("CURSOR_SDK_WORKSPACE") or "").strip()
-            or "/data/cursor-agent",
-            cursor_api_base=((os.environ.get("CURSOR_API_BASE") or "").strip() or "https://api.cursor.com").rstrip("/"),
-            max_tools=_int_env("CURSOR_AGENT_MAX_TOOLS", 40),
-            max_seconds=_int_env("CURSOR_AGENT_MAX_SECONDS", 120),
+            data_dir=(os.environ.get("DATA_DIR") or "").strip() or "/data",
+            # Probed against the real tool schemas, not taken from a catalogue's
+            # `supported_parameters` — see bench/probe_models.py.
+            pi_model=(os.environ.get("PI_MODEL") or "").strip()
+            or "~deepseek/deepseek-v4-flash-latest",
+            # Mandatory in practice: the primary is text-only, so every bill photo
+            # routes here. An image turn with this unset fails loudly rather than
+            # dropping the photo.
+            pi_vision_model=(os.environ.get("PI_VISION_MODEL") or "").strip()
+            or "qwen/qwen3-vl-30b-a3b-instruct",
+            pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "openrouter",
+            pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
+            pi_max_tools=_int_env("PI_MAX_TOOLS", 40),
+            pi_max_seconds=_int_env("PI_MAX_SECONDS", 120),
+            # Built-in pi tools available alongside the 14 money tools. Empty makes
+            # money-safety structural (no `bash` = the model cannot compute money);
+            # non-empty lets it work things out itself and re-enables the mechanism
+            # behind a known prod defect. `grade_prose`'s moneyguard stage measures
+            # the cost — see agent_sidecar/session.js::toolOptionsFor.
+            # `is None` rather than `or`: an explicitly empty PI_BUILTIN_TOOLS
+            # means "none", and falling back to the default there would silently
+            # re-enable bash for anyone trying to turn it off.
+            pi_builtin_tools=_csv_env("PI_BUILTIN_TOOLS", "read,write,bash"),
             memory_window_weeks=_int_env("MEMORY_WINDOW_WEEKS", 10),
             history_max_messages=_int_env("HISTORY_MAX_MESSAGES", 200),
             image_lookback_messages=_int_env("IMAGE_LOOKBACK_MESSAGES", 10),

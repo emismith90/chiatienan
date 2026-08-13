@@ -3,19 +3,29 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DATABASE_URL=sqlite:////data/chiatienan.db \
-    CURSOR_SDK_WORKSPACE=/data/cursor-agent
+    DATA_DIR=/data
 
 WORKDIR /app
 
-# git + curl: the cursor-sdk bridge subprocess expects a normal toolchain in its
-# workspace (design §8 — a plain, non-gVisor container).
+# Node runs the agent sidecar (agent_sidecar/main.js). >=22.19 is what its
+# package.json requires; NodeSource is used because Debian slim ships an older one.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && node --version \
+    && apt-get purge -y gnupg && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
 COPY app ./app
 RUN pip install .
+
+# The sidecar, installed from the committed lockfile so a deploy is reproducible.
+# --omit=dev because node --test needs no extra packages; --ignore-scripts because
+# nothing here has a legitimate postinstall.
+COPY agent_sidecar ./agent_sidecar
+RUN cd agent_sidecar && npm ci --omit=dev --ignore-scripts
 
 RUN mkdir -p /data
 EXPOSE 8000

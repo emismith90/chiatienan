@@ -5,11 +5,27 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
 # Ghi một bữa ăn
 
 1. `find_members` để xác định người trả + người tham gia (`all_active:true` cho 'cả nhóm').
+   - «tôi»/«mình»/«tớ» = NGƯỜI ĐANG NHẮN. `member_id` của họ đã ghi trong prompt hệ thống,
+     nên không cần tìm và **TUYỆT ĐỐI không hỏi "bạn là ai"**. "Tôi trả" → để trống `payer`
+     (công cụ tự lấy người nhắn) hoặc truyền đúng id đó.
+   - "Tôi với Bình ăn" = `participants` có CẢ HAI id. Người nhắn cũng là một người ăn —
+     đừng bỏ họ ra khỏi `participants` chỉ vì họ là người trả.
 2. `propose_meal` với payer, participants (id), total (tổng hoá đơn), và `items` HOẶC `adjustments`,
    cùng guests/dish/initiator/note nếu có.
    - 'trừ An' = An KHÔNG nằm trong participants.
+   - Chỉ nói "trừ An" / "An không ăn" mà không kể ai ăn → mặc định là **CẢ NHÓM trừ An**
+     (`find_members all_active:true` rồi bỏ An ra). ĐỪNG hỏi "vậy những ai ăn".
+   - KHÔNG nói ai ăn cả ("I paid 1107k chả cá ông già") → mặc định **CẢ NHÓM**
+     (`all_active:true`), đề xuất luôn, và nói rõ trong câu trả lời là đã giả định cả
+     nhóm để họ sửa trên thẻ nếu sai. Thẻ nháp sửa được; hỏi lại thì lượt nào cũng phải
+     hỏi hai lần.
    - 'An trả nhưng không ăn' = An là payer nhưng không nằm trong participants.
    - 'Bình +50k' = adjustment {member: <id Bình>, amount: 50000}.
+   - "X rủ đi" / "X rủ" = `initiator` (người khởi xướng), KHÔNG phải người ăn: chỉ thêm X
+     vào `participants` khi người dùng nói X cũng ăn.
+   - Có người ngoài nhóm ăn cùng ("+ 1 khách", "2 đứa bạn nữa", "có khách") → truyền
+     `guests` (tên nếu biết, không thì "khách 1", "khách 2"). Khách làm giảm suất mỗi người
+     nhưng KHÔNG bị ghi nợ; bỏ `guests` là chia sai cho tất cả mọi người.
    - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
 - Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
 - Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), truyền nguyên văn vào `day_word` của `propose_meal` — công cụ tự tính ngày (giờ VN), TUYỆT ĐỐI không tự suy ra ngày. Không nói ngày → bỏ trống (mặc định hôm nay).
@@ -20,7 +36,16 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 "ghi theo từng người được không" → **dùng `items`**, KHÔNG chia đều và KHÔNG nhét thông tin
 đó vào `note`.
 
+**Chỉ dùng `items` khi BIẾT ai ăn món nào** — người dùng nói ra, hoặc trên hoá đơn có ghi tên
+cạnh từng món. Hoá đơn liệt kê nhiều món nhưng KHÔNG ghi tên, và người dùng chỉ nói ai cùng ăn
+("tôi với Bình và Cường ăn") → **CHIA ĐỀU**, bỏ `items`. Tự gán món cho người là bịa: nó đổi
+số tiền từng người phải trả, và không ai phát hiện được vì con số trông vẫn hợp lý.
+
 - Mỗi participant đúng MỘT dòng `{member, amount, label}`; `amount` là **giá trên hoá đơn**.
+- `member` là **id của người ăn món đó**. Tên viết trên hoá đơn (hoặc trong tin nhắn) phải
+  đi qua `find_members` để lấy id trước — đọc được tên trên ảnh KHÔNG có nghĩa là biết id.
+  TUYỆT ĐỐI không dồn mọi món cho một người rồi để tên trong `label`: làm vậy là cả bill
+  ghi nợ cho một người. `participants` cũng phải gồm đủ những người đó.
 - Một dòng "2x cơm tấm 138.000đ" cho Linh và Kun → mỗi người 69.000đ.
 - **Σ items không cần bằng `total`.** Giảm giá / phí ship / phí dịch vụ là chuyện bình thường —
   công cụ tự chia phần chênh lệch. ĐỪNG tự tính "số sau giảm", đừng bắt người
@@ -35,6 +60,10 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 
 - Ảnh hoá đơn trong ngữ cảnh lượt này (kể cả người dùng dán ở tin nhắn ngay trước rồi mới
   `@bot`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
+- Đọc được ảnh KHÔNG thay thế bước xác định người ăn: vẫn phải `find_members`
+  (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người") rồi mới
+  `propose_meal`. Bỏ bước đó thì `participants` chỉ còn mình người nhắn — cả cái bill
+  ghi nợ cho một người, và con số nhìn vẫn "đúng" nên không ai thấy sai.
 - Đọc từ ảnh: tổng thực trả → `total`; giá từng dòng → `items` (nhớ nhân số lượng, và giá
   đã gạch ngang là giá gốc — lấy giá đang áp dụng).
 - Trong lịch sử hội thoại, `[ảnh: N]` nghĩa là tin nhắn đó có ảnh. Nếu cần ảnh mà lượt này
@@ -42,7 +71,11 @@ Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun
 
 ## Hỏi lại — tối đa một lần
 
-Chỉ hỏi khi thiếu thứ KHÔNG thể suy ra: ai trả, hoặc tổng tiền khi không có hoá đơn.
+Chỉ hỏi khi thiếu thứ KHÔNG thể suy ra: người trả là một người thứ ba không tra được
+tên, hoặc tổng tiền khi không có hoá đơn.
+
+- «tôi trả» KHÔNG BAO GIỜ là thiếu thông tin: người nhắn là ai đã nằm trong prompt.
+  Hỏi lại "bạn là ai trong nhóm" là lỗi — cứ đề xuất với người nhắn là payer.
 
 - Đã có đủ để đề xuất → gọi `propose_meal` ngay. Thẻ nháp sửa được, nên đề xuất tốt hơn hỏi.
 - KHÔNG hỏi lại thông tin người dùng đã nói ở tin nhắn trước trong lượt/lịch sử này.

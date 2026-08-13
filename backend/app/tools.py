@@ -19,7 +19,6 @@ import random
 from dataclasses import dataclass, field
 from datetime import date
 
-from cursor_sdk import CustomTool
 
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
@@ -37,6 +36,20 @@ from app.periods import resolve_date, resolve_period
 from app.qr import QRError, make_qr_url
 
 logger = logging.getLogger("chiatienan")
+
+
+@dataclass
+class CustomTool:
+    """The LLM-facing tool shape, owned here now that the vendor SDK is gone.
+
+    Same three fields the SDK's class carried, so all 14 registrations below and
+    every executor body are byte-identical to what they were. Nothing about
+    arithmetic changed with the engine.
+    """
+
+    execute: object
+    description: str
+    input_schema: dict
 
 
 @dataclass
@@ -101,7 +114,12 @@ _PROPOSE_SCHEMA = {
     "properties": {
         "payer": {"type": "integer", "description": "member id of the payer; blank = the sender."},
         "participants": {"type": "array", "items": {"type": "integer"},
-                         "description": "member ids of those who ate (split the bill)."},
+                         # "tôi với Bình ăn" listed only Bình on one run, which
+                         # charges a two-person bill to one person. The sender is
+                         # a participant like anyone else — being the payer does
+                         # not put them in, and saying "tôi" does not leave them out.
+                         "description": "member ids of EVERYONE who ate, the sender included"
+                                        " when they ate ('tôi với Bình ăn' = both ids)."},
         "total": {"type": "integer", "description": "Bill total, integer VND (840k → 840000)."},
         "guests": {"type": "array", "items": {"type": "string"},
                    "description": "Guest names (non-members who pay cash)."},
@@ -117,6 +135,10 @@ _PROPOSE_SCHEMA = {
                 " difference yourself. One entry per participant, every participant exactly"
                 " once. The tool prorates the gap between Σ items and `total` (promo, ship,"
                 " service fee) across the items. Omit this to split the bill evenly."
+                " **Only when you KNOW who ate what** — the user said so, or the bill writes a"
+                " name next to each line. A bill that merely lists dishes does not say who"
+                " ordered them: guessing changes what each person owes and looks correct while"
+                " being invented. Split evenly instead."
             ),
             "items": {
                 "type": "object",
@@ -881,3 +903,19 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             input_schema=_PROPOSE_PAYMENT_SCHEMA,
         ),
     }
+
+
+def tool_manifest() -> list[dict]:
+    """`[{name, description, schema}]` for the sidecar's `run` command.
+
+    Built from `build_tools` against a throwaway context so the manifest can never
+    drift from the tools that actually execute — the model must be told about
+    exactly the schema the tool will validate against.
+    """
+    from app.db import Database
+
+    ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
+    return [
+        {"name": name, "description": tool.description, "schema": tool.input_schema}
+        for name, tool in build_tools(ctx).items()
+    ]

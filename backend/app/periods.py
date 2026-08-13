@@ -77,7 +77,16 @@ def resolve_period(
 
     # explicit
     if explicit_from is None and explicit_to is None:
-        raise ValueError("explicit period requires explicit_from and/or explicit_to")
+        # `keyword="explicit"` with no dates carries **no information**, so this is
+        # not a guess about intent: it is the same request as no keyword at all.
+        # It used to raise, and the raise reached the model as
+        # `ValueError: explicit period requires explicit_from and/or explicit_to`
+        # — three times in one benchmark run, from `get_period_summary` on messages
+        # that named no date ("viết cụ thể từng ngày"). Each cost a wasted round
+        # trip on a turn that then took 59–120s. The returned `keyword` says
+        # `since_last`, so the reply still reports the window it actually used.
+        return resolve_period("since_last", today=today,
+                              last_settlement_to=last_settlement_to)
     return {
         "from": explicit_from,
         "to": explicit_to or today,

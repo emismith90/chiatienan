@@ -46,6 +46,27 @@ jobs:
         # admin password, so no secrets are required for the deterministic suite.
         run: pytest -q
 
+  sidecar:
+    name: Sidecar · node --test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/agent_sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/agent_sidecar/package-lock.json
+
+      - run: npm ci
+
+      # No key needed: every test drives a stubbed session. The LLM eval stays
+      # opt-in and out of CI, same as RUN_LLM_EVAL on the Python side.
+      - run: node --test
+
   frontend:
     name: Frontend · typecheck + vitest
     runs-on: ubuntu-latest

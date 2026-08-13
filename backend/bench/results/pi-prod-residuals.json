@@ -1,0 +1,1533 @@
+{
+  "version": 1,
+  "engine": "pi",
+  "corpus": "prod",
+  "repeat": 1,
+  "judge_model": null,
+  "partial": true,
+  "cases_run": 9,
+  "records": [
+    {
+      "version": 1,
+      "case_id": "p72",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-23",
+      "message": "@bot cập nhật thông tin:\nA5 -> A5",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "A5"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 5,
+                "display_name": "A5"
+              }
+            ],
+            "unresolved": []
+          }
+        },
+        {
+          "name": "update_member",
+          "args": {
+            "target": 5,
+            "display_name": "A5",
+            "nickname": "A5"
+          },
+          "result": {
+            "ok": true,
+            "member_id": 5,
+            "nickname": "A5",
+            "display_name": "A5",
+            "active": true,
+            "default_participant": true
+          }
+        }
+      ],
+      "final_text": "Đã cập nhật **A5** → **A5** (nickname + tên hiển thị).",
+      "error": null,
+      "elapsed_s": 5.028032869999151,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": null,
+          "reason": "no tool expectation for this case"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: no judge configured"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p78",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-24",
+      "message": "@bot I paid 335k, A4 A6, A1, và G3",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "A1"
+              },
+              {
+                "id": 2,
+                "display_name": "A2"
+              },
+              {
+                "id": 3,
+                "display_name": "A3"
+              },
+              {
+                "id": 4,
+                "display_name": "A4"
+              },
+              {
+                "id": 5,
+                "display_name": "A5"
+              },
+              {
+                "id": 6,
+                "display_name": "A6"
+              }
+            ],
+            "unresolved": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              4,
+              6
+            ],
+            "total": 335000,
+            "guests": [
+              "G3"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 3,
+            "member_participants": [
+              1,
+              4,
+              6
+            ],
+            "guests": [
+              "G3"
+            ],
+            "bill_total": 335000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": null,
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 83750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 83750
+              },
+              {
+                "member": 4,
+                "amount": 83750
+              },
+              {
+                "member": 6,
+                "amount": 83750
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Đã ghi #5 — A3 trả tổng 335,000đ, chia cho A1, A4, A6 (và khách G3). Mỗi người ~83,750đ. Mình để A3 là người trả, không tính vào phần ăn vì bạn không nêu mình. Nếu A3 cũng ăn thì báo để thêm vào, không thì bấm xác nhận trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 37.43072441500044,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "propose_meal.participants: expected ['1', '3', '4', '6'], got ['1', '4', '6']"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 3,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p93",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "message": "@bot sai mẹ nội A4 chuyển khoản r",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {
+            "keyword": "since_last"
+          },
+          "result": {
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 1,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  1,
+                  6,
+                  3,
+                  4,
+                  5
+                ],
+                "created_at": "2026-08-13T04:54:57.410351",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  2,
+                  1,
+                  6,
+                  3,
+                  5
+                ],
+                "created_at": "2026-08-13T04:54:57.416080",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:54:57.420692",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 1,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:54:57.422324",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 5,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:54:57.423703",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 5,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:54:57.425262",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:54:57.426681",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 6,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:54:57.428143",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 2,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:54:57.429831",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 3,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:54:57.431590",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  6,
+                  4,
+                  3
+                ],
+                "created_at": "2026-08-13T04:54:57.434775",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:54:57.437758",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  4,
+                  6,
+                  1,
+                  3
+                ],
+                "created_at": "2026-08-13T04:54:57.440835",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:54:57.443737",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:54:57.445580",
+                "from_name": "A1",
+                "to_name": "A3"
+              }
+            ],
+            "outstanding": [
+              {
+                "debtor_id": 6,
+                "creditor_id": 3,
+                "amount": 107000,
+                "debtor_name": "A6",
+                "creditor_name": "A3"
+              }
+            ]
+          }
+        },
+        {
+          "name": "member_statement",
+          "args": {
+            "member": 6,
+            "keyword": "since_last"
+          },
+          "result": {
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A6"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 3,
+                "name": "A3",
+                "meal_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              },
+              {
+                "creditor_id": 3,
+                "name": "A3",
+                "meal_id": 4,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "amount": 67000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": []
+          }
+        },
+        {
+          "name": "member_statement",
+          "args": {
+            "member": 4,
+            "keyword": "since_last"
+          },
+          "result": {
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 4,
+              "name": "A4"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [],
+            "owed": []
+          }
+        }
+      ],
+      "final_text": "Mình cần làm rõ chút để ghi cho đúng nhé: **A4 đã chuyển khoản cho ai, số tiền bao nhiêu?** Bạn đang nói khoản A6→A3 107k đã được A4 chuyển khoản trả hộ rồi à? Nói rõ giúp mình để ghi nhận vào sổ cho chính xác, tránh ghi sai nợ của hai người.",
+      "error": null,
+      "elapsed_s": 80.0817713409997,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary', 'member_statement'] — a judged alternative to ['settle_period'] (see corpus/prod_judgements.py)"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered statement body, not the model's prose"
+        }
+      },
+      "sender_member_id": 6,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p95",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "message": "@bot vẫn sai, trả t5 t6 mà",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "member_statement",
+          "args": {
+            "member": 6
+          },
+          "result": {
+            "ok": true,
+            "type": "statement",
+            "member": {
+              "id": 6,
+              "name": "A6"
+            },
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "owe": [
+              {
+                "creditor_id": 3,
+                "name": "A3",
+                "meal_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-23",
+                "amount": 40000,
+                "status": "unpaid"
+              },
+              {
+                "creditor_id": 3,
+                "name": "A3",
+                "meal_id": 4,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "amount": 67000,
+                "status": "unpaid"
+              }
+            ],
+            "owed": []
+          }
+        },
+        {
+          "name": "get_period_summary",
+          "args": {},
+          "result": {
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 1,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  1,
+                  6,
+                  3,
+                  4,
+                  5
+                ],
+                "created_at": "2026-08-13T04:56:17.511638",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  2,
+                  1,
+                  6,
+                  3,
+                  5
+                ],
+                "created_at": "2026-08-13T04:56:17.518119",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:56:17.524199",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 1,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:56:17.525736",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 5,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:56:17.526943",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 5,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:56:17.528116",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:56:17.529331",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 6,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:56:17.530545",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 2,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:56:17.531679",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 3,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:56:17.532995",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  6,
+                  4,
+                  3
+                ],
+                "created_at": "2026-08-13T04:56:17.535749",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:56:17.538519",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  4,
+                  6,
+                  1,
+                  3
+                ],
+                "created_at": "2026-08-13T04:56:17.541685",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:56:17.544256",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:56:17.545458",
+                "from_name": "A1",
+                "to_name": "A3"
+              }
+            ],
+            "outstanding": [
+              {
+                "debtor_id": 6,
+                "creditor_id": 3,
+                "amount": 107000,
+                "debtor_name": "A6",
+                "creditor_name": "A3"
+              }
+            ]
+          }
+        },
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": 6,
+            "to": 3,
+            "amount": 40000
+          },
+          "result": {
+            "ok": true,
+            "type": "payment_draft",
+            "from_member_id": 6,
+            "to_member_id": 3,
+            "amount": 40000,
+            "note": null,
+            "from_name": "A6",
+            "to_name": "A3"
+          }
+        },
+        {
+          "name": "propose_payment",
+          "args": {
+            "from": 6,
+            "to": 3,
+            "amount": 67000
+          },
+          "result": {
+            "ok": true,
+            "type": "payment_draft",
+            "from_member_id": 6,
+            "to_member_id": 3,
+            "amount": 67000,
+            "note": null,
+            "from_name": "A6",
+            "to_name": "A3"
+          }
+        }
+      ],
+      "final_text": "Mình đã tạo 2 thẻ đề xuất **A6 trả A3**: - 40,000đ (bữa bún chả rửa xe thứ 5) - 67,000đ (bữa ăn thứ 6) Bạn bấm **Xác nhận** trên thẻ để ghi vào sổ nhé. Nếu có nhầm lẫn về số tiền hay ngày, sửa trên thẻ trước khi xác nhận. 👍",
+      "error": null,
+      "elapsed_s": 113.01423401300053,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "expected ['settle_period'] to be called, got ['member_statement', 'get_period_summary', 'propose_payment', 'propose_payment']"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a payment draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 6,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p140",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "message": "@bot xin lại thẻ nháp",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [],
+      "final_text": "Mình không đẩy lại được thẻ nháp qua chat — thẻ là giao diện bấm nút, xuất hiện ngay trong hội thoại của bạn (dùng phím **Xác nhận / Huỷ** trên thẻ). Khoản đang treo là **#101** (A1 trả, 6 người). Nhưng lưu ý: bữa theo món đã ghi xong ở mục **#6** (A1 trả tổng 324,200đ, từng người) rồi, nên #101 trông như bản **trùng/nháp cũ** — không nên xác nhận kẻo tính đúp. Bạn muốn mình **huỷ #101** để hết kẹt và chạy tạm tính / xin QR không?",
+      "error": null,
+      "elapsed_s": 40.05214309499934,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "expected ['settle_period'] to be called, got no tools"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: no judge configured"
+        }
+      },
+      "sender_member_id": 6,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p152",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "message": "@bot hôm nay ai trả tiền",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {
+            "keyword": "today"
+          },
+          "result": {
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": "2026-07-27",
+              "to": "2026-07-27"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 5,
+                "payer_id": 1,
+                "dish": null,
+                "occurred_on": "2026-07-27",
+                "total": 324200,
+                "participant_ids": [
+                  1,
+                  5,
+                  6,
+                  3,
+                  4,
+                  2
+                ],
+                "created_at": "2026-08-13T04:58:50.655612",
+                "payer_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 12,
+                "from_id": 6,
+                "to_id": 3,
+                "amount": 107000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:50.658305",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 13,
+                "from_id": 2,
+                "to_id": 1,
+                "amount": 27000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:50.659503",
+                "from_name": "A2",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 14,
+                "from_id": 6,
+                "to_id": 1,
+                "amount": 79200,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:50.660729",
+                "from_name": "A6",
+                "to_name": "A1"
+              }
+            ],
+            "outstanding": [
+              {
+                "debtor_id": 3,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A3",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 4,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A4",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 5,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A5",
+                "creditor_name": "A1"
+              }
+            ]
+          }
+        }
+      ],
+      "final_text": "Hôm nay bữa ăn Grab Food do **A1** trả (324,200đ, 6 người ăn). Các khoản còn lại chỉ là A2, A6 chuyển lại tiền cho A1/A3 thôi.",
+      "error": null,
+      "elapsed_s": 5.945224695999059,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary'] — a judged alternative to ['settle_period'] (see corpus/prod_judgements.py)"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered summary body, not the model's prose"
+        }
+      },
+      "sender_member_id": 3,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p160",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-27",
+      "message": "@bot grab food hôm nay à",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "get_period_summary",
+          "args": {
+            "keyword": "since_last"
+          },
+          "result": {
+            "ok": true,
+            "type": "summary",
+            "period": {
+              "from": null,
+              "to": "2026-07-27"
+            },
+            "timeline": [
+              {
+                "kind": "meal",
+                "meal_id": 1,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 305000,
+                "participant_ids": [
+                  1,
+                  6,
+                  3,
+                  4,
+                  5
+                ],
+                "created_at": "2026-08-13T04:58:56.587916",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 2,
+                "payer_id": 6,
+                "dish": null,
+                "occurred_on": "2026-07-22",
+                "total": 375000,
+                "participant_ids": [
+                  2,
+                  1,
+                  6,
+                  3,
+                  5
+                ],
+                "created_at": "2026-08-13T04:58:56.593192",
+                "payer_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 1,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:58:56.596243",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 2,
+                "from_id": 1,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:58:56.597777",
+                "from_name": "A1",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 3,
+                "from_id": 5,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:58:56.599060",
+                "from_name": "A5",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 4,
+                "from_id": 5,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:58:56.600458",
+                "from_name": "A5",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 5,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-22",
+                "created_at": "2026-08-13T04:58:56.601832",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 6,
+                "from_id": 6,
+                "to_id": 3,
+                "amount": 61000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:58:56.603044",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 7,
+                "from_id": 2,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:58:56.604249",
+                "from_name": "A2",
+                "to_name": "A6"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 8,
+                "from_id": 3,
+                "to_id": 6,
+                "amount": 75000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:58:56.605503",
+                "from_name": "A3",
+                "to_name": "A6"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 3,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-23",
+                "total": 120000,
+                "participant_ids": [
+                  6,
+                  4,
+                  3
+                ],
+                "created_at": "2026-08-13T04:58:56.608749",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 9,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 40000,
+                "occurred_on": "2026-07-23",
+                "created_at": "2026-08-13T04:58:56.612528",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 4,
+                "payer_id": 3,
+                "dish": null,
+                "occurred_on": "2026-07-24",
+                "total": 268000,
+                "participant_ids": [
+                  4,
+                  6,
+                  1,
+                  3
+                ],
+                "created_at": "2026-08-13T04:58:56.616644",
+                "payer_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 10,
+                "from_id": 4,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:58:56.620441",
+                "from_name": "A4",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 11,
+                "from_id": 1,
+                "to_id": 3,
+                "amount": 67000,
+                "occurred_on": "2026-07-24",
+                "created_at": "2026-08-13T04:58:56.622293",
+                "from_name": "A1",
+                "to_name": "A3"
+              },
+              {
+                "kind": "meal",
+                "meal_id": 5,
+                "payer_id": 1,
+                "dish": null,
+                "occurred_on": "2026-07-27",
+                "total": 324200,
+                "participant_ids": [
+                  1,
+                  5,
+                  6,
+                  3,
+                  4,
+                  2
+                ],
+                "created_at": "2026-08-13T04:58:56.625544",
+                "payer_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 12,
+                "from_id": 6,
+                "to_id": 3,
+                "amount": 107000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:56.628300",
+                "from_name": "A6",
+                "to_name": "A3"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 13,
+                "from_id": 2,
+                "to_id": 1,
+                "amount": 27000,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:56.629461",
+                "from_name": "A2",
+                "to_name": "A1"
+              },
+              {
+                "kind": "payment",
+                "payment_id": 14,
+                "from_id": 6,
+                "to_id": 1,
+                "amount": 79200,
+                "occurred_on": "2026-07-27",
+                "created_at": "2026-08-13T04:58:56.630690",
+                "from_name": "A6",
+                "to_name": "A1"
+              }
+            ],
+            "outstanding": [
+              {
+                "debtor_id": 3,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A3",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 4,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A4",
+                "creditor_name": "A1"
+              },
+              {
+                "debtor_id": 5,
+                "creditor_id": 1,
+                "amount": 54500,
+                "debtor_name": "A5",
+                "creditor_name": "A1"
+              }
+            ]
+          }
+        }
+      ],
+      "final_text": "Đúng rồi — bữa **Grab Food** (A1 trả 324,200đ, 6 người) diễn ra hôm nay **27/07** đó A3. 👍",
+      "error": null,
+      "elapsed_s": 14.741004563002207,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['get_period_summary'] — a judged alternative to ['settle_period'] (see corpus/prod_judgements.py)"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw a server-rendered summary body, not the model's prose"
+        }
+      },
+      "sender_member_id": 3,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p242",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-07-31",
+      "message": "@bot I paid bún đậu mẹt 250k",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "A1"
+              },
+              {
+                "id": 2,
+                "display_name": "A2"
+              },
+              {
+                "id": 3,
+                "display_name": "A3"
+              },
+              {
+                "id": 4,
+                "display_name": "A4"
+              },
+              {
+                "id": 5,
+                "display_name": "A5"
+              },
+              {
+                "id": 6,
+                "display_name": "A6"
+              },
+              {
+                "id": 7,
+                "display_name": "A7"
+              }
+            ],
+            "unresolved": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "total": 250000,
+            "dish": "bún đậu mẹt"
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 3,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "guests": [],
+            "bill_total": 250000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "bún đậu mẹt",
+            "initiator": null,
+            "note": null,
+            "per_head_preview": 35714,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 35714
+              },
+              {
+                "member": 2,
+                "amount": 35714
+              },
+              {
+                "member": 3,
+                "amount": 35716
+              },
+              {
+                "member": 4,
+                "amount": 35714
+              },
+              {
+                "member": 5,
+                "amount": 35714
+              },
+              {
+                "member": 6,
+                "amount": 35714
+              },
+              {
+                "member": 7,
+                "amount": 35714
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Đã tạo thẻ nháp — bún đậu mẹt 250k, A3 trả, chia đều cả nhóm (7 người). Bạn ấn **Xác nhận** trên thẻ là xong nhé.",
+      "error": null,
+      "elapsed_s": 8.421402881998802,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "propose_meal.participants: expected ['2', '3', '4', '6', '7'], got ['1', '2', '3', '4', '5', '6', '7']"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 3,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6,
+        "A7": 7
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "p281",
+      "rep": 0,
+      "source": "prod",
+      "day": "2026-08-05",
+      "message": "@bot đã trả chị A2",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "propose_payment",
+          "args": {
+            "to": 2
+          },
+          "result": {
+            "ok": true,
+            "type": "payment_settled",
+            "from": {
+              "id": 6,
+              "name": "A6"
+            },
+            "to": {
+              "id": 2,
+              "name": "A2"
+            }
+          }
+        }
+      ],
+      "final_text": "A6 đã trả xong cho A2 rồi nha — giờ A6 không còn nợ A2 gì nữa. 👍",
+      "error": null,
+      "elapsed_s": 3.3263963680001325,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": false,
+          "reason": "propose_payment.to: expected 5, got 2; propose_payment.amount: expected 155000, absent"
+        },
+        "ledger_state": {
+          "passed": null,
+          "reason": "no ledger expectation for this case"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: no judge configured"
+        }
+      },
+      "sender_member_id": 6,
+      "member_ids": {
+        "A1": 1,
+        "A2": 2,
+        "A3": 3,
+        "A4": 4,
+        "A5": 5,
+        "A6": 6,
+        "A7": 7
+      }
+    }
+  ]
+}

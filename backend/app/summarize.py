@@ -1,17 +1,15 @@
 """Summarize a chunk of room conversation into durable ``memory.md`` text.
 
-One minimal Cursor call (no custom tools). Advisory only: the summary is context
-for future turns, NEVER a source of money numbers (design D3) — the prompt says
-so explicitly. Reuses :mod:`app.agent`'s workspace + resilient-launch helpers so
-tests mock it exactly like ``run_turn``.
+One RPC command: send text, get text. Advisory only — the summary is context for
+future turns, NEVER a source of money numbers (design D3), and the prompt says so
+explicitly.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
+import uuid
 
-from app.agent import _assistant_text, _ensure_workspace, _launch_bridge_resilient
+from app.config import settings
 
 logger = logging.getLogger("chiatienan")
 
@@ -26,45 +24,43 @@ _SUMMARY_PROMPT = (
 
 
 async def summarize_messages(rendered_history: str, *, kind: str = "clear") -> str:
+    """Fold a rendered conversation into a memory summary. One RPC command.
+
+    **The summarize session is specified, not inherited.** The old implementation
+    ran with ``custom_tools=[]``, no ``setting_sources`` and the summary prompt as
+    the entire message — no system prompt, no skills, no rules. ``main.js``'s
+    ``summarize`` handler reproduces exactly that, because if it silently inherited
+    the ``run`` session's construction every room's long-term memory would change
+    flavor with no test catching it.
+
+    **Any** failure returns ``""``: a failed summary must never crash a turn, and
+    :func:`app.chat._maybe_rollover` leaves the watermark untouched on a blank
+    result so the aged messages are retried next turn rather than silently dropped.
+    """
     if not rendered_history.strip():
         return ""
-    from cursor_sdk import (
-        AgentOptions,
-        AsyncClient,
-        LocalAgentOptions,
-        LocalSendOptions,
-        SendOptions,
-    )
-    from app.cursor_runner import (
-        default_cursor_model,
-        resolve_cursor_api_key,
-        resolve_model_selection,
-    )
 
+    from app.pi_bridge import get_bridge
+
+    req_id = f"sum-{uuid.uuid4().hex[:8]}"
     try:
-        workspace = _ensure_workspace()
-        api_key = resolve_cursor_api_key()
-        selection = await asyncio.to_thread(
-            resolve_model_selection, api_key, default_cursor_model(), "medium"
-        )
-        message_text = _SUMMARY_PROMPT + rendered_history
-        local = LocalAgentOptions(
-            cwd=workspace,
-            custom_tools=[],
-            store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
-        )
-        options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
-        parts: list[str] = []
-        client = await _launch_bridge_resilient(AsyncClient, workspace, local)
-        async with client:
-            async with await client.agents.create(options) as agent:
-                run = await agent.send(
-                    message_text, SendOptions(model=selection, local=LocalSendOptions(force=True))
-                )
-                async for msg in run.messages():
-                    if getattr(msg, "type", None) == "assistant":
-                        parts.append(_assistant_text(msg))
-        return "".join(parts).strip()
-    except Exception:  # noqa: BLE001 — a failed summary must degrade, never crash a turn
-        logger.exception("[summarize] kind=%s failed", kind)
-        return ""
+        bridge = get_bridge()
+        async for message in bridge.request({
+            "type": "summarize",
+            "req_id": req_id,
+            "text": _SUMMARY_PROMPT + rendered_history,
+            "model": settings.pi_model,
+            "thinking": settings.pi_thinking,
+            "max_seconds": settings.pi_max_seconds,
+        }):
+            if message.get("type") == "summarize_done":
+                text = (message.get("text") or "").strip()
+                if message.get("error"):
+                    logger.warning("[summarize] %s failed: %s", kind, message["error"])
+                return text
+            if message.get("type") == "fatal":
+                logger.warning("[summarize] %s fatal: %s", kind, message.get("message"))
+                return ""
+    except Exception as exc:  # noqa: BLE001 — never let a summary crash a turn
+        logger.warning("[summarize] %s failed: %s", kind, exc)
+    return ""

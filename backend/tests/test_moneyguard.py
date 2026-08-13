@@ -68,3 +68,18 @@ def test_the_bash_computed_shares_are_flagged():
 def test_nothing_to_flag_in_a_reply_with_no_money():
     body = "Mình không xác nhận qua chat được — bấm Xác nhận trên thẻ nháp nhé."
     assert unbacked_amounts(body, "@bot xác nhận", []) == []
+
+
+def test_the_history_backs_an_amount_the_room_already_stated():
+    """A number from the conversation is not invented money.
+
+    The benchmark's `p102` / `p104` replies quote "tổng 324k" — which the room said
+    a message earlier and the model was handed as history — and were reported as
+    unbacked. `chat.py` passes the history to this function for the same reason, so
+    the alerts that survive are the ones worth acting on.
+    """
+    from app.moneyguard import unbacked_amounts
+    history = "«A1»: hết 324k anh A3 trả"
+    assert unbacked_amounts("Tổng 324k nhé", f"@bot log\n{history}", []) == []
+    # and an amount from nowhere is still unbacked
+    assert unbacked_amounts("Tổng 500k nhé", f"@bot log\n{history}", []) == [500000]

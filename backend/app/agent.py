@@ -1,34 +1,40 @@
-"""Cursor SDK orchestration — run one PWA room-chat turn to completion.
+"""Run one PWA room-chat turn to completion, through the Pi sidecar.
 
-Unlike the reference sample (which streams AG-UI/SSE to a web chat), this runs the
-agent to completion and assembles ONE result: the final assistant text plus the
-**structured results of every tool call**. :mod:`app.chat` renders the bot's
-reply in the room from those structured results (never from LLM-transcribed
-numbers), so a ``settle_period`` payload's amounts + QR URLs reach the user
-exactly as the tool computed them (design D3).
+Assembles ONE result: the final assistant text plus the **structured results of
+every tool call**. :mod:`app.chat` renders the bot's reply from those structured
+results (never from LLM-transcribed numbers), so a ``settle_period`` payload's
+amounts and QR URLs reach the user exactly as the tool computed them (design D3).
 
-Bridge lifecycle: per-turn ``launch_bridge`` (design §8) with a launch-retry
-because the bridge is transiently flaky ("exited before discovery").
+**This module is a shim, deliberately.** It builds a command, forwards events,
+executes tools, and hydrates a dataclass. Everything about how pi behaves — model
+resolution, event shapes, turn caps, answer assembly, narration stripping, error
+formatting — lives in ``agent_sidecar/`` (design §3.1). If a change to this file
+needs to know something about pi, it belongs in ``turn.js``.
+
+``run_turn``'s signature and ``TurnResult``'s shape are **frozen**: 14
+``monkeypatch.setattr`` sites across 4 test files depend on them, and
+``chat.py:503`` is the only production caller.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.config import settings
 from app.prompt import build_system_prompt
-from app.skills import materialize
-from app.tools import ToolContext, build_tools
+from app.tools import ToolContext, build_tools, tool_manifest
 
 logger = logging.getLogger("chiatienan")
 
-_LAUNCH_RETRIES = 3
-_LAUNCH_BACKOFF = 1.5  # seconds, exponential
+#: Skill bodies and the always-on rules file ship as text, so nothing is written
+#: to disk. See ``session.js``: pi's skill mechanism needs a real file and defers
+#: the body to ``read``, which the sidecar disables — so bodies go out as context
+#: files instead.
+_SKILLS_DIR = Path(__file__).resolve().parent / "agent_skills" / "skills"
+_RULES_DIR = Path(__file__).resolve().parent / "agent_skills" / "rules"
 
 
 @dataclass
@@ -58,181 +64,21 @@ class TurnResult:
                 if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok")]
 
 
-# --------------------------------------------------------------------------- #
-# Cursor message unwrapping (custom/MCP tools surface under name=='mcp')
-# --------------------------------------------------------------------------- #
-
-def _unwrap_tool_name(name, args) -> str:
-    if name == "mcp" and isinstance(args, dict) and args.get("toolName"):
-        return str(args["toolName"])
-    return name or "tool"
-
-
-def _unwrap_tool_args(args):
-    if isinstance(args, dict) and "args" in args and args.get("toolName"):
-        return args["args"]
-    return args
-
-
-def _unwrap_tool_result(result):
-    """Flatten Cursor's result into a Python object.
-
-    A local ``CustomTool`` returns a dict; depending on the bridge it may arrive
-    as that dict directly or wrapped in an MCP envelope
-    ``{value:{content:[{text:{text:"<json>"}}]}}``. Return a dict when we can
-    recover one, else the raw value.
-    """
-    if result is None:
-        return None
-    if isinstance(result, dict) and "value" not in result and "content" not in result:
-        return result  # already the tool's dict
-    text = _flatten_envelope(result)
-    if isinstance(text, str):
-        try:
-            return json.loads(text)
-        except (ValueError, TypeError):
-            return text
-    return result
-
-
-def _flatten_envelope(result):
-    if isinstance(result, str):
-        return result
-    if isinstance(result, dict):
-        value = result.get("value", result)
-        if isinstance(value, dict):
-            content = value.get("content")
-            if isinstance(content, list):
-                texts = []
-                for block in content:
-                    if isinstance(block, dict):
-                        t = block.get("text")
-                        if isinstance(t, dict) and isinstance(t.get("text"), str):
-                            texts.append(t["text"])
-                        elif isinstance(t, str):
-                            texts.append(t)
-                if texts:
-                    return "\n".join(texts)
-    return None
-
-
-# Sentence-final punctuation, then the next sentence with NO whitespace between
-# them: "…rồi xử lý.Mình **không xác nhận…". The model never types that — it is
-# the seam where two separate assistant fragments were concatenated, so it is a
-# reliable place to look for a narration prefix (and a missing space).
-_SENTENCE_END = ".!?…:"
-
-# Scaffolding openers — the model announcing what it is about to do. Matched at
-# the START of a seam-delimited segment only.
-_NARRATION_OPENERS = (
-    "mình sẽ",
-    "mình đọc",
-    "mình đang",
-    "mình lấy",
-    "mình dùng",
-    "mình kiểm tra",
-    "đang kiểm tra",
-    "đang đọc",
-    "đã thấy",
-    "đã tìm thấy",
-    "tin nhắn",
-)
-
-# Scaffolding phrases that give it away anywhere in the segment. Deliberately
-# specific: bare "công cụ"/"quy trình" appear in real answers ("công cụ không
-# cho ghi thẳng giá món vì vượt tổng"), so only skill/process-reading phrasings
-# count.
-_NARRATION_PHRASES = (
-    "đọc skill",
-    "xem skill",
-    "theo skill",
-    "skill phù hợp",
-    "đọc quy trình",
-    "xem quy trình",
-    "theo quy trình",
-    "lấy schema",
-    "và schema",
-)
-
-
-def _split_at_seams(text: str) -> list[str]:
-    """Split ``text`` where a sentence ends and the next starts with no space."""
-    cuts = [
-        i for i in range(1, len(text))
-        if text[i - 1] in _SENTENCE_END and text[i].isupper()
-    ]
-    bounds = [0, *cuts, len(text)]
-    return [text[a:b] for a, b in zip(bounds, bounds[1:]) if text[a:b]]
-
-
-def _is_narration(segment: str) -> bool:
-    s = segment.strip().lower()
-    if not s:
-        return False
-    return s.startswith(_NARRATION_OPENERS) or any(p in s for p in _NARRATION_PHRASES)
-
-
-def _strip_narration(text: str) -> str:
-    """Drop leading scaffolding segments, and space out any remaining seam.
-
-    The prompt already forbids narration ("KHÔNG thuật lại việc bạn đang chọn
-    skill/công cụ nào") and the model does it anyway, gluing it onto the answer.
-    Only *leading* segments are dropped and never the last one — a reply that is
-    all narration still beats an empty bubble.
-    """
-    segments = _split_at_seams(text)
-    while len(segments) > 1 and _is_narration(segments[0]):
-        segments.pop(0)
-    return " ".join(s.strip() for s in segments).strip()
-
-
-def _final_answer(text_parts: list[str], answer_from: int) -> str:
-    """Assemble the user-visible reply from the turn's assistant text fragments.
-
-    ``text_parts`` are **stream fragments**, not messages. Depending on the
-    transport the SDK hands us one entry per token ("Không", "—", "hiện", …) or
-    one per paragraph, so they concatenate with ``""`` — exactly what the SDK's
-    own ``run.iter_text()`` does. Joining them with a separator instead put a
-    blank line between every token and shredded Vietnamese diacritics into
-    "V ẫn không được đâu Kun" in production.
-
-    ``answer_from`` is the fragment count at the last completed tool call: once
-    tools have run, what follows is the answer and the plan-narration before it
-    is dropped. With no tool calls, or nothing after the last one, everything is
-    kept and :func:`_strip_narration` takes a second pass at the scaffolding.
-    """
-    tail = "".join(text_parts[answer_from:])
-    answer = tail if tail.strip() else "".join(text_parts)
-    return _strip_narration(answer.strip())
-
-
-def _assistant_text(msg) -> str:
-    message = getattr(msg, "message", None)
-    content = getattr(message, "content", None)
-    if isinstance(content, str):
-        return content
-    out = []
-    for block in content or []:
-        if getattr(block, "type", None) == "text":
-            text = getattr(block, "text", None)
-            if isinstance(text, str):
-                out.append(text)
-    return "".join(out)
-
-
 def _render_prompt(user_text: str, *, sender_name: str | None = None,
                    memory: str | None = None, history: str | None = None,
                    image_count: int = 0) -> str:
-    """Assemble the turn preamble. With no memory/history/images this is
-    byte-identical to the pre-memory assembly (system prompt + user message).
+    """Assemble the turn's user message.
 
-    ``image_count`` is announced in the text because the images themselves ride
-    on the ``UserMessage``, invisible to the prompt: in production the bill was
-    attached and the model still asked for the total that was in it, then read
-    that same total off the image one turn later. The history renders past images
-    as ``[ảnh: N]`` for the same reason — this covers the current turn.
+    ``image_count`` is announced in the text because the images themselves ride on
+    the message, invisible to the prompt: in production the bill was attached and
+    the model still asked for the total that was in it, then read that same total
+    off the image one turn later. The history renders past images as ``[ảnh: N]``
+    for the same reason — this covers the current turn.
+
+    The system prompt is **no longer prepended** here: the sidecar has a real
+    ``systemPromptOverride``, so ``build_system_prompt`` goes out as ``system``.
     """
-    sections = [build_system_prompt(sender_name=sender_name)]
+    sections = []
     if memory:
         sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
     if history:
@@ -246,163 +92,134 @@ def _render_prompt(user_text: str, *, sender_name: str | None = None,
     return "\n\n".join(sections)
 
 
-def _ensure_workspace() -> str:
-    workspace = settings.cursor_workspace
-    Path(workspace).mkdir(parents=True, exist_ok=True)
-    Path(os.path.join(workspace, ".cursor-store")).mkdir(parents=True, exist_ok=True)
-    return workspace
+def _read_skills() -> list[dict]:
+    """The four ``SKILL.md`` bodies, as text. Their frontmatter is already
+    ``name`` + ``description``, which is exactly what pi wants."""
+    skills = []
+    if not _SKILLS_DIR.is_dir():
+        return skills
+    for directory in sorted(_SKILLS_DIR.iterdir()):
+        path = directory / "SKILL.md"
+        if path.is_file():
+            skills.append({"name": directory.name, "description": "",
+                           "body": path.read_text(encoding="utf-8")})
+    return skills
 
 
-async def _launch_bridge_resilient(AsyncClient, workspace, local):
-    """Retry ``launch_bridge`` — the bridge occasionally exits before discovery."""
-    last_exc: Exception | None = None
-    for attempt in range(1, _LAUNCH_RETRIES + 1):
-        try:
-            return await AsyncClient.launch_bridge(workspace=workspace, local=local)
-        except Exception as exc:  # noqa: BLE001 — transient launch flake
-            last_exc = exc
-            logger.warning("[agent] launch_bridge attempt %d/%d failed: %s", attempt, _LAUNCH_RETRIES, exc)
-            if attempt < _LAUNCH_RETRIES:
-                await asyncio.sleep(_LAUNCH_BACKOFF ** attempt)
-    raise RuntimeError(f"launch_bridge failed after {_LAUNCH_RETRIES} attempts") from last_exc
-
-
-def _build_message(text: str, images):
-    if not images:
-        return text
-    from cursor_sdk import SDKImage, UserMessage
-
-    return UserMessage(
-        text=text,
-        images=[SDKImage.data_image(img["data"], img["mimeType"]) for img in images],
-    )
+def _read_context_files() -> list[dict]:
+    """``money-safety.mdc`` had no pi always-apply equivalent, so it ships as a
+    context file — which pi loads into every system prompt."""
+    files = []
+    for path in sorted(_RULES_DIR.glob("*.mdc")) if _RULES_DIR.is_dir() else []:
+        files.append({"path": path.stem, "content": path.read_text(encoding="utf-8")})
+    return files
 
 
 async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
-                    memory=None, history=None) -> TurnResult:
+                   memory=None, history=None) -> TurnResult:
     """Run one turn to completion and return the assembled :class:`TurnResult`.
 
-    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the
-    live ``agent.*`` timeline events (:mod:`app.agui`) for this turn's SSE
-    stream. When ``emit is None`` this function's behavior is unchanged from
-    before streaming was added.
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the live
+    ``agent.*`` timeline events for this turn's SSE stream. The sidecar emits them
+    already in the app's wire format, so they are forwarded untouched; the
+    74-line translator ``app/agui.py`` used to be is deleted.
     """
-    from cursor_sdk import (
-        AgentOptions,
-        AsyncClient,
-        LocalAgentOptions,
-        LocalSendOptions,
-        SendOptions,
-    )
+    from app.pi_bridge import get_bridge
 
-    from app.cursor_runner import (
-        default_cursor_model,
-        format_cursor_agent_failure,
-        resolve_cursor_api_key,
-        resolve_model_selection,
-    )
-
-    import uuid
-
-    from app import agui
-
-    turn_id = uuid.uuid4().hex
-    result = TurnResult()
-    max_tools, max_seconds = settings.max_tools, settings.max_seconds
+    turn_id = uuid.uuid4().hex[:12]
     started = time.monotonic()
-    completed_tools = 0
-    text_parts: list[str] = []
-    answer_from = 0  # index of the first text block after the last completed tool call
+    result = TurnResult(turn_id=turn_id)
 
-    async def _emit(events) -> None:
+    async def _emit(event: dict) -> None:
         if emit:
-            for ev in events:
-                await emit(ev)
+            await emit(event)
+
+    command = {
+        "type": "run",
+        "req_id": f"run-{turn_id}",
+        "turn_id": turn_id,
+        "system": build_system_prompt(sender_name=ctx.sender_name,
+                                      sender_id=ctx.sender_member_id),
+        "message": _render_prompt(user_text, sender_name=ctx.sender_name, memory=memory,
+                                  history=history, image_count=len(images or [])),
+        "images": list(images or []),
+        "tools": tool_manifest(),
+        "skills": _read_skills(),
+        "context_files": _read_context_files(),
+        # pi needs a real cwd and its own config dir. Keeping the latter under
+        # DATA_DIR lets it cache the model catalogue across turns instead of
+        # refetching it every time.
+        "cwd": str(Path(settings.data_dir) / "pi-cwd"),
+        "agent_dir": str(Path(settings.data_dir) / "pi-agent"),
+        "model": settings.pi_model,
+        "vision_model": settings.pi_vision_model,
+        "thinking": settings.pi_thinking,
+        "builtin_tools": list(settings.pi_builtin_tools),
+        "max_tools": settings.pi_max_tools,
+        "max_seconds": settings.pi_max_seconds,
+    }
+
+    tools = build_tools(ctx)
+    bridge = get_bridge()
+    capped = False
 
     try:
-        await _emit(agui.start(turn_id))
+        async for message in bridge.request(command):
+            kind = message.get("type", "")
 
-        workspace = _ensure_workspace()
-        materialize(workspace)
-        api_key = resolve_cursor_api_key()
-        selection = await asyncio.to_thread(
-            resolve_model_selection, api_key, default_cursor_model(), reasoning="medium"
-        )
+            if kind.startswith("agent."):
+                # Already the frontend's format. Forward, do not interpret.
+                await _emit(message)
 
-        message_text = _render_prompt(user_text, sender_name=ctx.sender_name,
-                                       memory=memory, history=history,
-                                       image_count=len(images or []))
+            elif kind == "tool_call":
+                name = message.get("name") or ""
+                args = message.get("args") or {}
+                tool = tools.get(name)
+                if tool is None:
+                    payload = {"ok": False, "error": f"unknown tool {name}"}
+                else:
+                    try:
+                        payload = tool.execute(args)
+                    except Exception as exc:  # noqa: BLE001 — a tool must not kill the turn
+                        logger.exception("[agent] tool %s raised", name)
+                        payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                result.tools.append(ToolInvocation(name=name, args=args, result=payload))
+                await bridge.send({
+                    "type": "tool_result", "req_id": command["req_id"],
+                    "call_id": message.get("call_id"),
+                    "content": _json_dumps(payload),
+                })
 
-        local = LocalAgentOptions(
-            cwd=workspace,
-            custom_tools=build_tools(ctx),
-            setting_sources=["project"],
-            store={"type": "sqlite", "root_dir": os.path.join(workspace, ".cursor-store")},
-        )
-        options = AgentOptions(model=selection, api_key=api_key, local=local, mcp_servers={})
-        message = _build_message(message_text, images)
+            elif kind == "turn_done":
+                result.final_text = message.get("final_text") or ""
+                result.error = message.get("error")
+                capped = bool(message.get("capped"))
+                # `tools` is already accumulated from the round-trips above, which
+                # is the authoritative list: those results came from the real DB.
 
-        client = await _launch_bridge_resilient(AsyncClient, workspace, local)
-        async with client:
-            async with await client.agents.create(options) as agent:
-                run = await agent.send(
-                    message, SendOptions(model=selection, local=LocalSendOptions(force=True))
-                )
-                async for msg in run.messages():
-                    await _emit(agui.translate(msg, turn_id))
-                    mtype = getattr(msg, "type", None)
-                    if mtype == "assistant":
-                        text_parts.append(_assistant_text(msg))
-                    elif mtype == "tool_call":
-                        status = (getattr(msg, "status", "") or "").lower()
-                        if status in ("completed", "error"):
-                            raw_args = getattr(msg, "args", None)
-                            name = _unwrap_tool_name(getattr(msg, "name", None), raw_args)
-                            result.tools.append(
-                                ToolInvocation(
-                                    name=name,
-                                    args=_unwrap_tool_args(raw_args),
-                                    result=_unwrap_tool_result(getattr(msg, "result", None)),
-                                )
-                            )
-                            completed_tools += 1
-                            answer_from = len(text_parts)
-                    elif mtype == "status":
-                        if (getattr(msg, "status", "") or "").upper() == "ERROR":
-                            result.error = getattr(msg, "message", "") or "Cursor agent run failed"
+            elif kind == "fatal":
+                result.error = message.get("message") or "sidecar failed"
+                await _emit({"type": "agent.run.error", "turn_id": turn_id,
+                             "message": result.error})
+    except Exception as exc:  # noqa: BLE001 — a failed turn must still be a reply
+        logger.exception("[agent] turn %s failed", turn_id)
+        result.error = f"{type(exc).__name__}: {exc}"
+        await _emit({"type": "agent.run.error", "turn_id": turn_id, "message": result.error})
 
-                    elapsed = time.monotonic() - started
-                    if (max_tools and completed_tools >= max_tools) or (max_seconds and elapsed >= max_seconds):
-                        logger.warning(
-                            "[agent] turn cap hit tools=%d elapsed=%.0fs", completed_tools, elapsed
-                        )
-                        if hasattr(run, "supports") and run.supports("cancel"):
-                            try:
-                                run.cancel()
-                            except Exception:  # noqa: BLE001
-                                logger.warning("[agent] run.cancel() failed", exc_info=True)
-                        break
-    except Exception as exc:  # noqa: BLE001 — bridge death / API failure
-        logger.error("[agent] run_turn failed: %s", exc, exc_info=True)
-        try:
-            result.error = format_cursor_agent_failure(exc)
-        except Exception:  # noqa: BLE001
-            result.error = str(exc)
-
-    result.final_text = _final_answer(text_parts, answer_from)
-
-    # One line per turn so the log mirror (and /internal/debug/logs) shows where
-    # a 20–80s turn actually went: how many tool round-trips, and which. The
-    # agent.* timeline has this live but never persists it.
+    # One line per turn so the log mirror (and /internal/debug/logs) shows where a
+    # 20–80s turn actually went: how many tool round-trips, and which. The agent.*
+    # timeline has this live but never persists it.
     logger.info(
-        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch%s",
-        turn_id, time.monotonic() - started, completed_tools,
+        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch%s%s",
+        turn_id, time.monotonic() - started, len(result.tools),
         ",".join(inv.name for inv in result.tools) or "-",
         len(images or []), len(result.final_text),
+        " CAPPED" if capped else "",
         f" ERROR={result.error}" if result.error else "",
     )
-
-    await _emit(agui.finish(turn_id, error=result.error))
-    result.turn_id = turn_id
-
     return result
+
+
+def _json_dumps(payload) -> str:
+    import json
+    return json.dumps(payload, ensure_ascii=False, default=str)

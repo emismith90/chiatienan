@@ -34,7 +34,7 @@ Caddy (auto-TLS)
                                    │
    room chat ── @bot ─────────────┤  chat.py     @bot detect + dispatch (serialized)
    live updates ◀── SSE ──────────┤  realtime.py in-process RoomHub pub/sub
-                                   │  agent.py    Cursor SDK (LLM + tools), run-to-completion
+                                   │  agent.py    shim → agent_sidecar (Node, Pi on OpenRouter)
                                    │  tools.py    CustomTools (all arithmetic + QR)
                                    │  drafts.py   editable expense-draft lifecycle
                                    │  ledger/roster/accounts/qr/money/periods
@@ -79,10 +79,11 @@ Caddy (auto-TLS)
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
-| `agent.py` / `cursor_runner.py` | Cursor SDK wiring + per-turn bridge launch (with retry), run-to-completion |
-| `agui.py` | Cursor run-message → `agent.*` SSE event translator (live-only) |
+| `agent.py` | ~200-line shim: builds the run command, forwards `agent.*` events, executes tools, hydrates `TurnResult` |
+| `pi_bridge.py` | the sidecar subprocess: JSONL framing and `req_id` demultiplexing. No pi semantics |
+| `agent_sidecar/` | **Node.** Owns the whole Pi harness: provider, session, event normalization, turn caps, answer assembly |
 | `realtime.py` | In-process `RoomHub` pub/sub feeding the SSE streams |
-| `bridge_smoke.py` | Guarded Cursor-bridge validation (B3) |
+| `pi_smoke.py` | Guarded sidecar liveness check (B3) |
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
@@ -131,9 +132,9 @@ Run the full stack locally — the Next.js dev server rewrites `/api/*` and
 `/internal/*` to the backend (mirroring Caddy), so the browser only talks to `:3000`:
 
 ```bash
-# terminal 1 — backend (CURSOR_API_KEY only needed for actual @bot turns)
+# terminal 1 — backend (OPEN_ROUTER_KEY only needed for actual @bot turns)
 cd backend && cp ../.env.example ../.env   # then edit ../.env
-CURSOR_API_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
+OPEN_ROUTER_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
 
 # terminal 2 — frontend
 cd frontend && npm install && npm run dev   # http://localhost:3000
@@ -157,9 +158,10 @@ Copy `.env.example` → `.env` and fill it in. Key vars:
 
 | Var | Purpose |
 |-----|---------|
-| `CURSOR_API_KEY` | Cursor SDK (a **user/service-account** key — not a Team Admin key) |
-| `CURSOR_SDK_MODEL` | default `composer-2.5` (vision-capable) |
-| `CURSOR_AGENT_MAX_TOOLS` / `CURSOR_AGENT_MAX_SECONDS` | per-turn runaway caps (40 / 120 s) |
+| `OPEN_ROUTER_KEY` | OpenRouter key for the sidecar (note the name — not `OPENROUTER_API_KEY`) |
+| `PI_MODEL` | default `~deepseek/deepseek-v4-flash-latest` (text-only) |
+| `PI_VISION_MODEL` | default `qwen/qwen3-vl-30b-a3b-instruct`. Mandatory in practice: every bill photo routes here |
+| `PI_MAX_TOOLS` / `PI_MAX_SECONDS` | per-turn runaway caps (40 / 120 s). A breach is a partial answer, not an error |
 | `BOT_HANDLE` | the `@`-handle the bot answers to in chat (default `bot`) |
 | `DATABASE_URL` | `sqlite:////data/chiatienan.db` (absolute, on the volume) |
 | `TZ` | `Asia/Ho_Chi_Minh` |
@@ -181,7 +183,7 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
    docker compose up -d --build
    ```
 
-4. Validate the Cursor SDK bridge runs in-container (B3):
+4. Validate the agent sidecar runs in-container (B3):
    `curl -X POST https://<CADDY_DOMAIN>/internal/bridge-smoke -H "X-Admin-Password: <ADMIN_PASSWORD>"`.
 5. Create the first room and share its invite link:
    `curl -X POST https://<CADDY_DOMAIN>/api/rooms -H "X-Admin-Password: <ADMIN_PASSWORD>" -H "content-type: application/json" -d '{"name":"Lunch"}'`.
@@ -218,5 +220,5 @@ eval (`RUN_LLM_EVAL`) is not run in CI.
 
 Auth/RBAC beyond invite-link + PIN and the admin room-create password;
 per-dish itemization; multi-currency / e-wallets; fixed weekly cadence/cron;
-push notifications; a warm persistent Cursor bridge / horizontal scaling
+push notifications; horizontal scaling
 (the single-process ledger writer + in-process SSE hub would need a redesign).
