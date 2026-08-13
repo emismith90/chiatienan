@@ -436,7 +436,7 @@ def test_a_case_carries_the_conversation_that_came_before_it():
 
 def test_history_renders_exactly_as_production_renders_it():
     from bench.export_prod import render_history
-    # chat._render_messages: «Name» for a member, `chiatienan` for the bot,
+    # chat._render_messages: «Name» for a member, `phoenix` for the bot,
     # [ảnh: N] for a photo, oldest→newest. A replay fed a different history is
     # not a replay.
     rows = [_row(id=1, body="ai trả tiền hôm qua"),
@@ -445,7 +445,7 @@ def test_history_renders_exactly_as_production_renders_it():
             _row(id=4, body="@bot log")]
     rendered = render_history(rows, 3, lambda mid: "A1")
     assert rendered == ("«A1»: ai trả tiền hôm qua\n"
-                        "chiatienan: A1 trả 200k.\n"
+                        "phoenix: A1 trả 200k.\n"
                         "«A1»: [ảnh: 2]")
 
 

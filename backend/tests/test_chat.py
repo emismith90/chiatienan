@@ -13,6 +13,9 @@ from tests.test_ledger import _seed_room
 
 
 def test_mentions_bot():
+    assert chat.mentions_bot("@phoenix ai trả tuần này")
+    assert chat.mentions_bot("hey @Phoenix log 100k")
+    # `@bot` predates the Phoenix rebrand and stays a working alias.
     assert chat.mentions_bot("@bot ai trả tuần này")
     assert chat.mentions_bot("hey @Bot log 100k")
     assert not chat.mentions_bot("just chatting")
@@ -384,7 +387,7 @@ def test_build_history_renders_window(db):
         chat.post_message(s, room_id, None, "reset", kind="context_reset")  # skipped
         cur = chat.post_message(s, room_id, m[1], "@bot ai trả")            # excluded (before_id)
         out = chat.build_history(s, room_id, watermark=0, before_id=cur.id, limit=200)
-    assert out == "«M1»: 840k cả nhóm\nchiatienan: Đã ghi #1"
+    assert out == "«M1»: 840k cả nhóm\nphoenix: Đã ghi #1"
 
 
 def test_build_history_respects_watermark_and_limit(db):

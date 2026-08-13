@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Composer } from "../composer";
 
 // Composer fetches the bot handle on mount; stub it so tests don't hit the network.
-vi.mock("@/lib/api", () => ({ botHandle: () => Promise.resolve("bot") }));
+vi.mock("@/lib/api", () => ({ botHandle: () => Promise.resolve("phoenix") }));
 
 afterEach(() => vi.unstubAllGlobals());
 

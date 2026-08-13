@@ -11,7 +11,9 @@
 //                                 the stream must not be buffered by a cache).
 //
 // Bump CACHE to invalidate everything on the next activate.
-const CACHE = "chiatienan-v1";
+// "phoenix-v1": the Phoenix rebrand shipped new icons + manifest, and installed
+// PWAs would otherwise keep serving the cached old ones forever.
+const CACHE = "phoenix-v1";
 const SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {

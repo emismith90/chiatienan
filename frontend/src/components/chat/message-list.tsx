@@ -114,7 +114,7 @@ export function MessageList({
         ) : m.kind === "expense_draft" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
-              Bot
+              Phoenix
             </span>
             {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
             <ExpenseDraftCard message={m} members={members} roomId={roomId} />
@@ -122,7 +122,7 @@ export function MessageList({
         ) : m.kind === "payment_draft" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
-              Bot
+              Phoenix
             </span>
             {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
             <PaymentDraftCard message={m} members={members} roomId={roomId} />
@@ -130,7 +130,7 @@ export function MessageList({
         ) : m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">
             <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
-              Bot
+              Phoenix
             </span>
             <BotMessage body={m.body} attachments={m.attachments} roomId={roomId}
                         members={members} onOpenLedger={onOpenLedger} />

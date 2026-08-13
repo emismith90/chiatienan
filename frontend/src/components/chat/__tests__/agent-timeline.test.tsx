@@ -11,7 +11,7 @@ const steps: TimelineStep[] = [
 describe("AgentTimeline", () => {
   it("shows the expanded step list when live", () => {
     render(<AgentTimeline steps={steps} live={true} />);
-    expect(screen.getByText("Bot is working…")).toBeInTheDocument();
+    expect(screen.getByText("Phoenix is working…")).toBeInTheDocument();
     expect(screen.getByText("done")).toBeInTheDocument();
   });
 

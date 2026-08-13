@@ -30,7 +30,7 @@ export function Composer({ onSend }: ComposerProps) {
   const [sending, setSending] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [notice, setNotice] = useState("");
-  const [handles, setHandles] = useState<string[]>(["bot"]);
+  const [handles, setHandles] = useState<string[]>(["phoenix"]);
   const [mention, setMention] = useState<MentionState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -277,7 +277,7 @@ export function Composer({ onSend }: ComposerProps) {
             onClick={(e) => recomputeMention(e.currentTarget)}
             onBlur={() => setMention(null)}
             rows={1}
-            placeholder="Message… (@bot)"
+            placeholder="Message… (@phoenix)"
             aria-label="Compose message"
             aria-expanded={mention !== null && mentionItems.length > 0}
             aria-haspopup="listbox"

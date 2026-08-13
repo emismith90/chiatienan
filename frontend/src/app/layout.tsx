@@ -9,7 +9,10 @@ const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-inter"
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: "chiatienan",
+  // The app keeps its name — only the bot is Phoenix. "Reborn:" marks the
+  // new-engine relaunch; the home-screen label (short_name / apple title)
+  // stays the plain "chiatienan" people already have.
+  title: "Reborn: chiatienan",
   applicationName: "chiatienan",
   manifest: "/manifest.webmanifest",
   // iOS doesn't read the web manifest for "Add to Home Screen"; these give it a

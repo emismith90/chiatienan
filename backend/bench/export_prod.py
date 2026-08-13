@@ -518,7 +518,7 @@ def render_history(rows: list[dict], index: int, to_key, *,
     """The rows before `index`, rendered the way production renders history.
 
     Mirrors `chat._render_messages` exactly — `«Name»: body` for a member,
-    `chiatienan: body` for the bot, `[ảnh: N]` for an image, oldest→newest, each
+    `phoenix: body` for the bot, `[ảnh: N]` for an image, oldest→newest, each
     body clamped — because a replay fed a *different* history is not a replay.
 
     **Without this the prod corpus was unanswerable in places, and graded the
@@ -539,7 +539,7 @@ def render_history(rows: list[dict], index: int, to_key, *,
             body = (f"{body} " if body else "") + f"[ảnh: {count}]"
         author_id = row.get("author_member_id")
         if author_id in (None, "", 0):
-            lines.append(f"chiatienan: {body}")
+            lines.append(f"phoenix: {body}")
         else:
             lines.append(f"«{to_key(author_id)}»: {body}")
     return "\n".join(lines)

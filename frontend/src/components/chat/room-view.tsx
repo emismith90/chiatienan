@@ -503,7 +503,7 @@ export function RoomView({ roomId }: { roomId: number }) {
           )}
           {messages.length === 0 && !hasMore && !typing && (
             <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">
-              No messages yet. Tap a suggestion below or message @bot.
+              No messages yet. Tap a suggestion below or message @phoenix.
             </p>
           )}
           <MessageList messages={messages} members={members} roomId={roomId} timelines={timelines}
@@ -527,7 +527,7 @@ export function RoomView({ roomId }: { roomId: number }) {
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)] [animation-delay:-0.15s]" />
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-primary)]" />
                   </span>
-                  bot is replying…
+                  Phoenix is replying…
                 </div>
               )}
             </>

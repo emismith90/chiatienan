@@ -1,7 +1,7 @@
 {
-  "name": "chiatienan",
+  "name": "Reborn: chiatienan",
   "short_name": "chiatienan",
-  "description": "Chia tiền ăn trưa nhóm — nhắn @bot để ghi bữa ăn và chốt tiền.",
+  "description": "Chia tiền ăn trưa nhóm — nhắn @phoenix để ghi bữa ăn và chốt tiền.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -24,7 +24,7 @@ def test_defaults_when_env_absent(monkeypatch):
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 120
     assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]
-    assert s.bot_handle == "bot"
+    assert s.bot_handle == "phoenix"
     assert s.database_url == "sqlite:////data/chiatienan.db"
     assert s.timezone == "Asia/Ho_Chi_Minh"
     assert s.qr_base_url == "https://img.vietqr.io/image"

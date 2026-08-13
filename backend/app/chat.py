@@ -37,13 +37,16 @@ _agent_lock = asyncio.Lock()  # serialize agent runs (ledger single-writer)
 def mentions_bot(text: str) -> bool:
     handle = re.escape(settings.bot_handle)
     # Negative lookbehind so an email/handle like `user@bot.com` doesn't count
-    # as a mention — only a `@bot`/`@<handle>` preceded by a non-word, non-dot
-    # boundary (e.g. start of string or whitespace) matches.
-    return re.search(rf"(?<![\w.])@(bot|{handle})\b", text or "", re.IGNORECASE) is not None
+    # as a mention — only a `@phoenix`/`@<handle>` preceded by a non-word,
+    # non-dot boundary (e.g. start of string or whitespace) matches. Both names
+    # are hardcoded alongside the configured handle: `@bot` is the pre-rebrand
+    # legacy alias (months of muscle memory), and `@phoenix` must keep working
+    # even on a deployment whose .env still pins BOT_HANDLE=bot.
+    return re.search(rf"(?<![\w.])@(bot|phoenix|{handle})\b", text or "", re.IGNORECASE) is not None
 
 
 _CLEAR_RE = re.compile(
-    rf"^\s*(?:@(?:bot|{re.escape(settings.bot_handle)})\s+)?/clear\s*$",
+    rf"^\s*(?:@(?:bot|phoenix|{re.escape(settings.bot_handle)})\s+)?/clear\s*$",
     re.IGNORECASE,
 )
 
@@ -228,7 +231,7 @@ def list_messages_page(session: Session, room_id: int, *, days: int | None = Non
 
 
 def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) -> str:
-    """Render chat rows as ``«Name»: body`` / ``chiatienan: body`` lines,
+    """Render chat rows as ``«Name»: body`` / ``phoenix: body`` lines,
     oldest→newest, each body clamped. Empty rows → ``""``.
 
     An image attachment is rendered as a ``[ảnh: N]`` marker. The bytes cannot
@@ -248,7 +251,9 @@ def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) 
         if n_images:
             body = (f"{body} " if body else "") + f"[ảnh: {n_images}]"
         if r.author_member_id is None:
-            lines.append(f"chiatienan: {body}")
+            # The label must match the persona name in prompt.py so the model
+            # recognises its own past replies in the history it is handed.
+            lines.append(f"phoenix: {body}")
         else:
             author = authors.get(r.author_member_id)
             lines.append(f"«{author.display_name if author else '?'}»: {body}")
