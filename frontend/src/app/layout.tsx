@@ -9,12 +9,15 @@ const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-inter"
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: "Phoenix",
-  applicationName: "Phoenix",
+  // The app keeps its name — only the bot is Phoenix. "Reborn:" marks the
+  // new-engine relaunch; the home-screen label (short_name / apple title)
+  // stays the plain "chiatienan" people already have.
+  title: "Reborn: chiatienan",
+  applicationName: "chiatienan",
   manifest: "/manifest.webmanifest",
   // iOS doesn't read the web manifest for "Add to Home Screen"; these give it a
   // standalone launch, a titled icon, and a crisp home-screen glyph.
-  appleWebApp: { capable: true, title: "Phoenix", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "chiatienan", statusBarStyle: "default" },
   icons: {
     icon: "/icon-192.png",
     apple: [{ url: "/icon-192.png", sizes: "180x180" }],
