@@ -161,8 +161,28 @@ def test_every_bill_expectation_matches_what_the_money_engine_computes():
         assert sum(split["shares"].values()) == case.expect["tracked"], case.id
 
 
-def test_typical_keeps_every_golden_case_and_samples_prod():
+def test_typical_keeps_every_golden_case_and_samples_prod(tmp_path, monkeypatch):
+    # The real prod corpus is gitignored (Task 7) and absent on a fresh
+    # checkout, where `typical` and `all` would trivially have the same
+    # cardinality. A synthetic fixture with more cases per cluster than
+    # `TYPICAL_PER_CLUSTER` is the only way to exercise the actual shrinking.
+    from bench import corpus
     from bench.corpus import TYPICAL_PER_CLUSTER, load
+
+    clusters_in = ("propose_meal", "propose_payment", "prose")
+    cases = [
+        {"id": f"synthetic-{cluster}-{i}", "day": "2026-07-20", "actor": "A1",
+         "message": "@bot ...",
+         "expect": {"tools": [cluster]} if cluster != "prose" else {}}
+        for cluster in clusters_in
+        for i in range(TYPICAL_PER_CLUSTER + 1)
+    ]
+    path = tmp_path / "prod.json"
+    path.write_text(json.dumps({
+        "members": [{"key": "A1", "display_name": "A1"}], "cases": cases,
+    }), encoding="utf-8")
+    monkeypatch.setattr(corpus, "PROD_PATH", path)
+
     typical = load("typical")
     ids = {c.id for c in typical}
     # the golden corpora are the only cases with exact money expectations, so all
@@ -173,6 +193,7 @@ def test_typical_keeps_every_golden_case_and_samples_prod():
     clusters = {}
     for c in prod_picked:
         clusters.setdefault((c.expect.get("tools") or ["prose"])[0], []).append(c)
+    assert set(clusters) == set(clusters_in)
     assert all(len(v) <= TYPICAL_PER_CLUSTER for v in clusters.values())
     assert len(typical) < len(load("all"))
 

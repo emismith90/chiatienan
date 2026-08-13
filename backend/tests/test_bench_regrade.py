@@ -24,7 +24,26 @@ def _results(**overrides):
     return {"version": 1, "engine": "pi", "corpus": "prod", "records": [record]}
 
 
-def test_a_judged_alternative_flips_a_stored_verdict_without_a_rerun():
+def _p10_prod_fixture(tmp_path):
+    # The real prod corpus is gitignored and absent on a fresh checkout, so
+    # `corpus.load("prod")` would never find "p10" there. A synthetic fixture
+    # with p10's real expectation (settle_period) lets `prod_judgements`'
+    # committed widening for p10 (get_period_summary) do its job.
+    path = tmp_path / "prod.json"
+    path.write_text(json.dumps({
+        "members": [{"key": "A1", "display_name": "A1"}, {"key": "A2", "display_name": "A2"}],
+        "cases": [
+            {"id": "p10", "day": "2026-07-22", "actor": "A1",
+             "message": "@bot room balance now",
+             "expect": {"tools": ["settle_period"]}},
+        ],
+    }), encoding="utf-8")
+    return path
+
+
+def test_a_judged_alternative_flips_a_stored_verdict_without_a_rerun(tmp_path, monkeypatch):
+    from bench import corpus
+    monkeypatch.setattr(corpus, "PROD_PATH", _p10_prod_fixture(tmp_path))
     results = _results()
     changed, skipped, notes = regrade(results, "prod")
     grades = results["records"][0]["grades"]
