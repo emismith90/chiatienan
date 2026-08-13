@@ -483,7 +483,11 @@ export function RoomView({ roomId }: { roomId: number }) {
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      {/* overflow-x must be pinned here too: leaving it "visible" alongside
+          overflow-y-auto lets the UA promote it to "auto" as well (the two
+          axes can't have one `visible` and one not), turning any message
+          that overflows horizontally into a swipe-scrollable strip. */}
+      <div ref={scrollRef} className="flex-1 overflow-x-hidden overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
           {hasMore && (
             <div className="mb-4 flex justify-center">
