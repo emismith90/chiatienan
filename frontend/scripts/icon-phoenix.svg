@@ -26,12 +26,12 @@
     <path d="M 250 128 C 246 108, 254 94, 268 84 C 262 100, 266 112, 276 122 Z"/>
     <!-- beak -->
     <path d="M 278 144 L 306 152 L 278 162 Z"/>
-    <!-- body: teardrop from below the head down -->
-    <path d="M 256 168
-             C 286 200, 296 246, 288 296
-             C 282 330, 270 352, 256 368
-             C 242 352, 230 330, 224 296
-             C 216 246, 226 200, 256 168
+    <!-- body: teardrop from below the head down, wide enough to carry the đ -->
+    <path d="M 256 164
+             C 294 198, 308 244, 300 296
+             C 293 332, 276 354, 256 370
+             C 236 354, 219 332, 212 296
+             C 204 244, 218 198, 256 164
              Z"/>
     <!-- tail: three flame streamers flowing out of the body, reborn-from-fire -->
     <path d="M 256 344
@@ -46,5 +46,12 @@
              C 280 366, 292 390, 314 404
              C 302 386, 300 370, 306 356
              C 294 352, 284 346, 278 336 Z"/>
+  </g>
+  <!-- đ (dong sign, no font dependency): bowl + right stem + crossbar, drawn
+       in the background color over the chest so it reads as a cutout -->
+  <g stroke="#CC4E33" stroke-width="10" stroke-linecap="round" fill="none">
+    <circle cx="247" cy="302" r="16"/>
+    <path d="M 263 256 L 263 318"/>
+    <path d="M 247 264 L 281 264"/>
   </g>
 </svg>

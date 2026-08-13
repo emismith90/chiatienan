@@ -2,9 +2,11 @@
 """Generate PWA icons (icon-192.png, icon-512.png) for the Phoenix rebrand.
 
 Rasterizes ``icon-phoenix.svg`` (same directory) — a white phoenix rising from
-flame, on the app's #CC4E33 terracotta — chosen when the bot was reborn on a
-new engine. The glyph stays inside the central ~70% so the maskable variants
-survive Android's circle/squircle crops.
+flame, on the app's #CC4E33 terracotta, with the đ (dong sign, kept from the
+pre-rebrand icon) cut into its chest — chosen when the bot was reborn on a new
+engine. The đ is drawn as strokes, not text, so no font is needed. The glyph
+stays inside the central ~70% so the maskable variants survive Android's
+circle/squircle crops.
 
 Requires cairosvg:  pip install cairosvg
 """
