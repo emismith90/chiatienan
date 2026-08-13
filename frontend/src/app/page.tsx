@@ -11,7 +11,7 @@ export default function Home() {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[var(--bg-base)] p-8">
         <div className="max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-8 py-8 text-center shadow-sm">
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">chiatienan</h1>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Phoenix</h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Join a room with an invite link, or start a new one.
           </p>

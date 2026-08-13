@@ -4,7 +4,7 @@ import { Composer } from "../composer";
 import { SUGGESTIONS } from "../suggestion-chips";
 
 // Composer fetches the bot handle on mount; stub it so tests don't hit the network.
-vi.mock("@/lib/api", () => ({ botHandle: () => Promise.resolve("bot") }));
+vi.mock("@/lib/api", () => ({ botHandle: () => Promise.resolve("phoenix") }));
 
 describe("Composer suggestion chips", () => {
   it("shows capability chips while the composer is empty", () => {
@@ -25,7 +25,7 @@ describe("Composer suggestion chips", () => {
     render(<Composer onSend={() => {}} />);
     const textarea = screen.getByLabelText("Compose message");
 
-    fireEvent.change(textarea, { target: { value: "@bot hi" } });
+    fireEvent.change(textarea, { target: { value: "@phoenix hi" } });
 
     expect(screen.queryByRole("button", { name: new RegExp(SUGGESTIONS[0].label) })).not.toBeInTheDocument();
   });

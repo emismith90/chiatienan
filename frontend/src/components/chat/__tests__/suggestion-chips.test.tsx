@@ -19,9 +19,9 @@ describe("SuggestionChips", () => {
     expect(onPick).toHaveBeenCalledWith(SUGGESTIONS[0].text);
   });
 
-  it("suggests capabilities that address @bot in English", () => {
+  it("suggests capabilities that address @phoenix in English", () => {
     for (const s of SUGGESTIONS) {
-      expect(s.text.startsWith("@bot ")).toBe(true);
+      expect(s.text.startsWith("@phoenix ")).toBe(true);
     }
   });
 });

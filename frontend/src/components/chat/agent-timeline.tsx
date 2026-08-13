@@ -17,7 +17,7 @@ export function AgentTimeline({ steps, live }: { steps: TimelineStep[]; live: bo
     <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)]">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 text-left">
         <span className="font-medium text-[var(--accent-text)]">
-          {live ? "Bot is working…" : `▸ ${steps.length} steps`}
+          {live ? "Phoenix is working…" : `▸ ${steps.length} steps`}
         </span>
       </button>
       {!collapsed && (

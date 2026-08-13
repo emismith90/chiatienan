@@ -99,7 +99,7 @@ class Settings:
             history_max_messages=_int_env("HISTORY_MAX_MESSAGES", 200),
             image_lookback_messages=_int_env("IMAGE_LOOKBACK_MESSAGES", 10),
             image_lookback_minutes=_int_env("IMAGE_LOOKBACK_MINUTES", 120),
-            bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "bot",
+            bot_handle=(os.environ.get("BOT_HANDLE") or "").strip() or "phoenix",
             database_url=(os.environ.get("DATABASE_URL") or "").strip() or "sqlite:////data/chiatienan.db",
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",
             admin_password=(os.environ.get("ADMIN_PASSWORD") or "").strip(),

@@ -34,13 +34,13 @@ export function RoomSwitcher() {
     <div ref={ref} className="relative min-w-0">
       <button
         type="button"
-        aria-label={`Room menu: ${roomName || "chiatienan"}`}
+        aria-label={`Room menu: ${roomName || "Phoenix"}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="flex min-w-0 items-center gap-1 text-base font-semibold text-[var(--text-primary)]"
       >
-        <span className="truncate">{roomName || "chiatienan"}</span>
+        <span className="truncate">{roomName || "Phoenix"}</span>
         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="h-4 w-4 shrink-0 text-[var(--text-secondary)]">
           <path
             fillRule="evenodd"

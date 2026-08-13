@@ -1,10 +1,10 @@
 "use client";
 
 /** Capability suggestions surfaced as tappable chips above the composer.
- * Tapping one prefills the composer with an editable `@bot …` message (it never
- * auto-sends), so newcomers discover what the bot can do. `text` is the exact
- * prefill inserted; a trailing space (e.g. "@bot I paid ") invites completion,
- * while a full phrase is ready to send as-is. */
+ * Tapping one prefills the composer with an editable `@phoenix …` message (it
+ * never auto-sends), so newcomers discover what the bot can do. `text` is the
+ * exact prefill inserted; a trailing space (e.g. "@phoenix I paid ") invites
+ * completion, while a full phrase is ready to send as-is. */
 export interface Suggestion {
   label: string;
   icon: string;
@@ -12,9 +12,9 @@ export interface Suggestion {
 }
 
 export const SUGGESTIONS: Suggestion[] = [
-  { label: "Log an expense", icon: "🍜", text: "@bot I paid " },
-  { label: "Who pays this week", icon: "🧮", text: "@bot who pays this week" },
-  { label: "Who do I owe", icon: "💰", text: "@bot how much do I owe" },
+  { label: "Log an expense", icon: "🍜", text: "@phoenix I paid " },
+  { label: "Who pays this week", icon: "🧮", text: "@phoenix who pays this week" },
+  { label: "Who do I owe", icon: "💰", text: "@phoenix how much do I owe" },
 ];
 
 export function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {

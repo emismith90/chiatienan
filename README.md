@@ -4,10 +4,12 @@
 
 A self-hosted chat app (installable PWA) for a group of ~6–7 colleagues who eat
 lunch together. Everyone joins a shared **room** and chats in Vietnamese. When
-someone pays, they `@mention` the bot with a short natural-language message
+someone pays, they `@mention` the bot — named **Phoenix**, because it was
+reborn on a new LLM engine (`@bot` still works as a legacy alias) — with a
+short natural-language message
 (optionally a bill photo). The bot interprets it with an LLM and posts an
 **editable expense-draft card**; a human confirms it, and only then is the meal
-written to an append-only ledger. On demand (*"@bot ai trả tuần này"*) it nets
+written to an append-only ledger. On demand (*"@phoenix ai trả tuần này"*) it nets
 everyone's balances over the requested period, produces the minimal set of
 transfers, and returns a **VietQR** code per transfer so people pay by scanning.
 
@@ -32,7 +34,7 @@ Caddy (auto-TLS)
    │  /api/*, /internal/*  ──▶  FastAPI backend (single uvicorn process)
    └  everything else      ──▶  Next.js (standalone)
                                    │
-   room chat ── @bot ─────────────┤  chat.py     @bot detect + dispatch (serialized)
+   room chat ── @phoenix ────────┤  chat.py     @phoenix detect + dispatch (serialized)
    live updates ◀── SSE ──────────┤  realtime.py in-process RoomHub pub/sub
                                    │  agent.py    shim → agent_sidecar (Node, Pi on OpenRouter)
                                    │  tools.py    CustomTools (all arithmetic + QR)
@@ -46,7 +48,7 @@ Caddy (auto-TLS)
   nickname + PIN and gets a bearer-token session. Accounts the bot/admin add
   ahead of time are *unclaimed* (no PIN) and get claimed on first sign-in.
 - **Chat + realtime:** human messages are persisted; a message that mentions
-  `@bot` fires a **background agent turn**. Clients subscribe to
+  `@phoenix` fires a **background agent turn**. Clients subscribe to
   `GET /api/rooms/{id}/stream` (SSE): it replays missed messages (`?since=`),
   streams live `agent.*` progress and new messages, heartbeats every 25 s, and
   drops slow clients so they reconnect.
@@ -73,7 +75,7 @@ Caddy (auto-TLS)
 | `accounts.py` | Join / identify (claim unclaimed) / profile, unclaimed placeholders, soft-delete + restore, device sessions |
 | `auth.py` | Bearer-session (`require_session`) + admin-password (`require_admin`) guards |
 | `rooms.py` | Room create + lookup by invite token / id |
-| `chat.py` | Persist/list messages, `@bot` detection, agent dispatch (serialized), deterministic bot-reply rendering |
+| `chat.py` | Persist/list messages, `@phoenix` detection, agent dispatch (serialized), deterministic bot-reply rendering |
 | `drafts.py` | Expense-draft lifecycle: persist, edit, commit, supersede, cancel |
 | `tools.py` | The LLM-facing `CustomTool` set (find/propose/void/period/balances/settle + member CRUD) |
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
@@ -98,17 +100,17 @@ Caddy (auto-TLS)
 - **PWA:** `public/manifest.webmanifest` + `public/sw.js` (registered via
   `sw-register`) make it installable to a home screen.
 
-## Usage (in the room chat, mention `@bot`)
+## Usage (in the room chat, mention `@phoenix`)
 
-- Log a meal: `@bot 840k cả nhóm trừ An, Bình +50k` (± a pasted bill photo) →
+- Log a meal: `@phoenix 840k cả nhóm trừ An, Bình +50k` (± a pasted bill photo) →
   posts an **editable draft card**; tap to adjust payer/participants/total, then **Confirm**.
-- Payer didn't eat: `@bot An trả 200k nhưng không ăn, chia Bình và Cường`
-- Correct a recorded meal: `@bot xoá 42`
-- Preview who-owes-whom: `@bot ai trả tuần này`
-- Lock it in (the only thing that closes a period): `@bot chốt tuần này`
-- Display-only spend: `@bot tháng này tôi tiêu bao nhiêu`
-- Manage members: `@bot thêm thành viên Dũng`, `@bot đổi tên An thành Anh`,
-  `@bot xoá thành viên Cường` (soft-delete), `@bot khôi phục Cường`.
+- Payer didn't eat: `@phoenix An trả 200k nhưng không ăn, chia Bình và Cường`
+- Correct a recorded meal: `@phoenix xoá 42`
+- Preview who-owes-whom: `@phoenix ai trả tuần này`
+- Lock it in (the only thing that closes a period): `@phoenix chốt tuần này`
+- Display-only spend: `@phoenix tháng này tôi tiêu bao nhiêu`
+- Manage members: `@phoenix thêm thành viên Dũng`, `@phoenix đổi tên An thành Anh`,
+  `@phoenix xoá thành viên Cường` (soft-delete), `@phoenix khôi phục Cường`.
 - Reset the bot's conversation memory: `/clear` — summarizes the recent chat into
   the room's long-term memory and starts a fresh context window (the chat history
   stays visible; the ledger is untouched).
@@ -132,7 +134,7 @@ Run the full stack locally — the Next.js dev server rewrites `/api/*` and
 `/internal/*` to the backend (mirroring Caddy), so the browser only talks to `:3000`:
 
 ```bash
-# terminal 1 — backend (OPEN_ROUTER_KEY only needed for actual @bot turns)
+# terminal 1 — backend (OPEN_ROUTER_KEY only needed for actual @phoenix turns)
 cd backend && cp ../.env.example ../.env   # then edit ../.env
 OPEN_ROUTER_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
 
@@ -189,7 +191,7 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
    `curl -X POST https://<CADDY_DOMAIN>/api/rooms -H "X-Admin-Password: <ADMIN_PASSWORD>" -H "content-type: application/json" -d '{"name":"Lunch"}'`.
 6. Members open `/join/<invite_token>`, set a nickname + PIN, and fill in their
    bank details on the profile screen. Add placeholders ahead of time with
-   `@bot thêm thành viên …`; they claim them on first sign-in.
+   `@phoenix thêm thành viên …`; they claim them on first sign-in.
 7. Nightly backups: schedule `deploy/backup.sh` from cron (see the script header).
 
 ## Testing
@@ -198,7 +200,7 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
   and guests, negative/overshoot rejection, remainder; greedy netting), period
   boundaries, ledger balances incl. `since_last`, roster/account resolution,
   join/identify/claim, draft lifecycle, QR encoding, tools, image sanitize,
-  `@bot` mention detection, SSE/`agui` translation, `RoomHub`, a mocked agent
+  `@phoenix` mention detection, SSE/`agui` translation, `RoomHub`, a mocked agent
   turn, and API routes (golden fixtures under `backend/tests/golden/`).
 - **Frontend** (`vitest`): SSE parsing, message merge/dedupe, agent-timeline,
   balance-table, expense-draft-card, and mention rendering.
