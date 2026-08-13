@@ -123,6 +123,91 @@ def test_resolve_all_active_skips_default_participant_false_but_name_still_resol
         assert got2["matched"][0]["id"] == cu.id
 
 
+def _prod_room(s):
+    """The production roster that exposed the bug (room "12B +2 🐔")."""
+    r = _make_room(s, "12B", "t")
+    s.add_all([
+        Member(room_id=r.id, display_name="Emi", nickname="Emi", pin="1",
+               account_holder="Le Hoang Hung"),
+        Member(room_id=r.id, display_name="Tabu", nickname="Tabu", pin="2",
+               aliases=["Bùi Trang", "Trang Bùi"], account_holder="BUI THU TRANG"),
+        Member(room_id=r.id, display_name="Linh Nguyen", nickname="Linh", pin="3",
+               account_holder="NGUYEN ANH LINH"),
+        Member(room_id=r.id, display_name="Kun", nickname="Kun", pin="4",
+               aliases=["Quách Trí Dũng", "Dũng"], account_holder="QUACH TRI DUNG"),
+        Member(room_id=r.id, display_name="Nhím", nickname="Nhím", pin="5",
+               aliases=["Trang Dinh"], account_holder="DINH HONG TRANG"),
+        Member(room_id=r.id, display_name="Giang Hoàng", nickname="Giang", pin="6",
+               account_holder="HOANG MINH GIANG"),
+    ])
+    s.flush()
+    return r
+
+
+def test_resolve_finds_the_real_name_behind_a_nickname(db):
+    """"anh Hưng" is Emi — the only place "Hung" is written is the bank account.
+
+    Production: "nay ăn bún cá với anh Hưng chị Nhím hết 175k" resolved only
+    Nhím, so the bill was proposed split two ways instead of three.
+    """
+    with db.session() as s:
+        r = _prod_room(s)
+        for query in ("Hưng", "anh Hưng", "a Hưng", "hung", "Le Hoang Hung", "Hưng Lê"):
+            got = roster.resolve(s, r.id, names=[query])
+            assert [m["display_name"] for m in got["matched"]] == ["Emi"], query
+            assert got["unresolved"] == []
+
+
+def test_resolve_is_tone_insensitive_both_ways(db):
+    with db.session() as s:
+        r = _prod_room(s)
+        for query, expected in (("Nhim", "Nhím"), ("chị Nhím", "Nhím"),
+                                ("Dũng", "Kun"), ("dung", "Kun"),
+                                ("Giang", "Giang Hoàng"), ("hoang", "Giang Hoàng")):
+            got = roster.resolve(s, r.id, names=[query])
+            assert [m["display_name"] for m in got["matched"]] == [expected], query
+
+
+def test_resolve_matches_the_bank_account_holder(db):
+    with db.session() as s:
+        r = _prod_room(s)
+        got = roster.resolve(s, r.id, names=["Nguyen Anh Linh", "QUACH TRI DUNG"])
+        assert {m["display_name"] for m in got["matched"]} == {"Linh Nguyen", "Kun"}
+
+
+def test_a_name_two_people_share_is_ambiguous_not_guessed(db):
+    """"Trang" is both Tabu (BUI THU TRANG) and Nhím (DINH HONG TRANG)."""
+    with db.session() as s:
+        r = _prod_room(s)
+        got = roster.resolve(s, r.id, names=["Trang"])
+        assert got["matched"] == []
+        assert got["unresolved"] == []
+        assert got["ambiguous"][0]["name"] == "Trang"
+        assert {c["display_name"] for c in got["ambiguous"][0]["candidates"]} == {"Tabu", "Nhím"}
+
+        # ...but the full name someone actually goes by is not ambiguous.
+        exact = roster.resolve(s, r.id, names=["Bùi Trang"])
+        assert [m["display_name"] for m in exact["matched"]] == ["Tabu"]
+
+
+def test_a_name_nobody_has_is_still_unresolved(db):
+    with db.session() as s:
+        r = _prod_room(s)
+        got = roster.resolve(s, r.id, names=["Thắng"])
+        assert got["matched"] == []
+        assert got["ambiguous"] == []
+        assert got["unresolved"] == ["Thắng"]
+
+
+def test_honorific_never_eats_the_whole_name(db):
+    """A member whose name IS a kinship word must still resolve."""
+    with db.session() as s:
+        r = _make_room(s, "A", "a")
+        s.add(Member(room_id=r.id, display_name="Cô", nickname="co", pin="1"))
+        s.flush()
+        assert roster.resolve(s, r.id, names=["Cô"])["matched"][0]["display_name"] == "Cô"
+
+
 def test_teams_capture_helpers_are_removed():
     assert not hasattr(roster, "capture_sender")
     assert not hasattr(roster, "member_by_teams_id")

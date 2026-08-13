@@ -99,6 +99,12 @@ Caddy (auto-TLS)
 - `lib/` — `api`, `sse`, `session`, `format`, `theme`, `sw-register`, `utils`.
 - **PWA:** `public/manifest.webmanifest` + `public/sw.js` (registered via
   `sw-register`) make it installable to a home screen.
+- **Icons:** all four (`icon-192`, `icon-512`, `apple-touch-icon`,
+  `src/app/favicon.ico`) are rasterized from `scripts/icon-phoenix.svg` by
+  `python scripts/gen-icons.py`. The filenames never change, so **new art must
+  also bump the `?v=` on every reference** (manifest, `layout.tsx`, `sw.js`) —
+  browsers, the SW cache and an installed Android WebAPK all decide "is this a
+  new icon?" from the URL alone. `src/app/__tests__/icons.test.ts` enforces it.
 
 ## Usage (in the room chat, mention `@phoenix`)
 

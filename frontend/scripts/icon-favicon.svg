@@ -1,0 +1,12 @@
+<!-- The 16/32px tab mark. The full phoenix (icon-phoenix.svg) has feather
+     notches and a hairline đ that collapse into a smudge below ~48px, so the
+     favicon frames drop to the đ alone — the same dong sign that is cut into
+     the phoenix's chest, and the app's icon before the rebrand. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#CC4E33"/>
+  <g stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" fill="none">
+    <circle cx="222" cy="322" r="92"/>
+    <path d="M 314 118 L 314 366"/>
+    <path d="M 222 174 L 406 174"/>
+  </g>
+</svg>
