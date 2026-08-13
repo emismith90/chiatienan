@@ -143,6 +143,20 @@ serve **stale chunks**. Before concluding a FE fix "didn't work":
 
 Otherwise you're testing the old bundle.
 
+**Icons are the same trap, one level worse.** They live at fixed URLs
+(`/icon-192.png`, …), so a new drawing lands as new bytes at an old address and
+every cache that keys on the URL keeps the old picture: the browser's favicon
+store, the SW cache, and — for an installed Android PWA — the WebAPK, which
+only re-downloads its launcher icon when Chrome notices the *manifest* changed
+(a check that runs roughly daily). That is why the Phoenix icon shipped and
+nobody saw it. Hence the `?v=N` on every icon reference. After bumping it:
+
+- **Browser tab / desktop:** hard reload is enough.
+- **Installed Android PWA:** allow ~a day for Chrome's WebAPK update, or
+  reinstall from the ⋮ menu.
+- **iOS home screen:** iOS never re-fetches it — remove the icon and
+  *Add to Home Screen* again.
+
 ## 6. The debug/export API — no SSH required
 
 §0–2 all assume you can reach port 22. Sometimes you can't: the office LAN

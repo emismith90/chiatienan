@@ -18,9 +18,15 @@ export const metadata: Metadata = {
   // iOS doesn't read the web manifest for "Add to Home Screen"; these give it a
   // standalone launch, a titled icon, and a crisp home-screen glyph.
   appleWebApp: { capable: true, title: "chiatienan", statusBarStyle: "default" },
+  // The `?v=` is load-bearing, not decoration: the icon FILES change while their
+  // URLs don't, and a browser favicon store, a service-worker cache and an
+  // installed Android WebAPK all key on the URL. The Phoenix rebrand shipped new
+  // bytes at the old paths and every installed client kept the old picture.
+  // Bump this with ICON_VERSION in scripts/gen-icons.py whenever the art moves.
+  // (src/app/favicon.ico is picked up by Next on its own and needs no entry.)
   icons: {
-    icon: "/icon-192.png",
-    apple: [{ url: "/icon-192.png", sizes: "180x180" }],
+    icon: "/icon-192.png?v=2",
+    apple: [{ url: "/apple-touch-icon.png?v=2", sizes: "180x180" }],
   },
 };
 

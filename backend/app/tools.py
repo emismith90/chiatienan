@@ -67,6 +67,10 @@ class ToolContext:
     sender_name: str | None = None
     # People @mentioned in this message (bot mention already stripped):
     turn_mentions: list[dict] = field(default_factory=list)
+    # Names this turn looked up that pinned to no member (or to two). Kept so
+    # ``propose_meal`` can refuse to quietly leave that person out of the split
+    # — see :func:`_dropped_names`.
+    unknown_names: dict[str, str] = field(default_factory=dict)
 
 
 def _err(message: str) -> dict:
@@ -79,6 +83,33 @@ def _parse_iso(value) -> date | None:
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _dropped_names(ctx: "ToolContext", db: Database, participants: list[int],
+                   payer: int | None, guests: list[str]) -> list[str]:
+    """Names the turn looked up, never pinned down, and never accounted for.
+
+    WHY — production, 2026-08-13: *"nay ăn bún cá với anh Hưng chị Nhím hết
+    175k"*. ``find_members`` matched Nhím and missed Hưng, the model called him a
+    guest **in its prose** and then proposed the meal without a ``guests``
+    entry. Two heads instead of three: every share on that card was 50% too big,
+    and nothing on it said a person had gone missing. A name is "accounted for"
+    once one of its words shows up in a participant/payer's name or in a guest
+    label — so resolving him on a second lookup, adding him as a member, or
+    listing him as a guest all clear it. Anything left is a person the split
+    silently forgot.
+    """
+    if not ctx.unknown_names:
+        return []
+    with db.session() as s:
+        tokens_by_id = roster.member_name_tokens(s, ctx.room_id)
+    accounted: set[str] = set()
+    for mid in [*participants, *([payer] if payer else [])]:
+        accounted |= tokens_by_id.get(mid, set())
+    for g in guests:
+        accounted |= roster.name_tokens(g)
+    return [raw for raw, _why in ctx.unknown_names.items()
+            if not (roster.name_tokens(raw) & accounted)]
 
 
 def _names_for(session, room_id, ids) -> dict[int, str]:
@@ -100,7 +131,12 @@ _FIND_SCHEMA = {
         "names": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Names or nicknames to look up (e.g. ['An', 'Bình']).",
+            "description": (
+                "Names to look up (e.g. ['An', 'Bình']). Pass the name EXACTLY as the user"
+                " wrote it — the tool matches display name, nickname, aliases and the bank"
+                " account holder, with or without Vietnamese tones, and strips 'anh'/'chị'"
+                " itself. Do not de-accent or shorten it yourself."
+            ),
         },
         "all_active": {
             "type": "boolean",
@@ -284,10 +320,18 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         names = list(args.get("names") or [])
         all_active = bool(args.get("all_active"))
         with db.session() as s:
-            return {
-                "ok": True,
-                **roster.resolve(s, ctx.room_id, names=names, mentions=ctx.turn_mentions, all_active=all_active),
-            }
+            res = roster.resolve(s, ctx.room_id, names=names,
+                                 mentions=ctx.turn_mentions, all_active=all_active)
+        asked = names + [str(m.get("nickname") or "?") for m in ctx.turn_mentions]
+        still_unknown = {str(n) for n in res["unresolved"]}
+        still_unknown |= {str(a["name"]) for a in res["ambiguous"]}
+        for raw in asked:
+            if raw in still_unknown:
+                ctx.unknown_names[raw] = "ambiguous" if raw not in res["unresolved"] else "unresolved"
+            else:
+                # Asked again and pinned down this time — no longer a hole.
+                ctx.unknown_names.pop(raw, None)
+        return {"ok": True, **res}
 
     def propose_meal(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -310,6 +354,24 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
             return _err("Could not determine the payer.")
+        dropped = _dropped_names(ctx, db, participants, payer, guests)
+        if dropped:
+            names = ", ".join(f"«{n}»" for n in dropped)
+            if any(ctx.unknown_names.get(n) == "ambiguous" for n in dropped):
+                return _err(
+                    f"{names} khớp với hơn một người, và bữa này không có ai trong số họ. "
+                    "HỎI người dùng là ai (kèm tên các ứng viên `find_members` trả về) "
+                    "rồi mới đề xuất — đoán bừa là ghi nợ nhầm người."
+                )
+            return _err(
+                f"{names} đã được tra trong lượt này nhưng không khớp thành viên nào, "
+                "và cũng không có trong participants hay guests — chia như vậy là bỏ sót "
+                "người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: "
+                "(1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; "
+                "(2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác "
+                "(tên thật, tên ngân hàng, biệt danh); "
+                "(3) là người mới → `add_member` rồi cho id vào `participants`."
+            )
         # Date resolution is authoritative here (like money-safety for amounts):
         # the model passes the user's day *word* and the tool computes the date,
         # so an LLM-computed occurred_on can never land a day off.
@@ -550,6 +612,11 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 )
             except accounts.AccountError as exc:
                 return _err(str(exc))
+            # The name that failed to resolve a moment ago now exists, so it is
+            # no longer a hole propose_meal has to complain about.
+            fresh = roster.name_tokens(m.display_name) | roster.name_tokens(m.nickname)
+            for raw in [k for k in ctx.unknown_names if roster.name_tokens(k) & fresh]:
+                ctx.unknown_names.pop(raw, None)
             return {"ok": True, "member_id": m.id, "nickname": m.nickname}
 
     def update_member(args, _tool_ctx=None) -> dict:
@@ -813,7 +880,9 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     return {
         "find_members": CustomTool(
             execute=find_members,
-            description="Look up member ids by name/nickname, or the whole group (all_active).",
+            description=("Look up member ids by name/nickname/real name/bank-account name, or the"
+                         " whole group (all_active). Returns `unresolved` (nobody by that name) and"
+                         " `ambiguous` (two people match — ask which one); neither may be ignored."),
             input_schema=_FIND_SCHEMA,
         ),
         "propose_meal": CustomTool(

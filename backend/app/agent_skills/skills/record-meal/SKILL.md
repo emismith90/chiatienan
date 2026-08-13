@@ -5,6 +5,10 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
 # Ghi một bữa ăn
 
 1. `find_members` để xác định người trả + người tham gia (`all_active:true` cho 'cả nhóm').
+   - Truyền tên Y NGUYÊN như người dùng viết ("anh Hưng", "chị Nhím"). Công cụ tự bỏ
+     "anh/chị/em", tự bỏ dấu, và tra cả tên thật lẫn **tên chủ tài khoản ngân hàng** —
+     nhiều người trong nhóm chỉ có tên thật ở đó ("Hưng" = chủ TK "Le Hoang Hung").
+   - **Kết quả `unresolved` / `ambiguous` KHÔNG được bỏ qua** (xem mục dưới).
    - «tôi»/«mình»/«tớ» = NGƯỜI ĐANG NHẮN. `member_id` của họ đã ghi trong prompt hệ thống,
      nên không cần tìm và **TUYỆT ĐỐI không hỏi "bạn là ai"**. "Tôi trả" → để trống `payer`
      (công cụ tự lấy người nhắn) hoặc truyền đúng id đó.
@@ -27,6 +31,20 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
      `guests` (tên nếu biết, không thì "khách 1", "khách 2"). Khách làm giảm suất mỗi người
      nhưng KHÔNG bị ghi nợ; bỏ `guests` là chia sai cho tất cả mọi người.
    - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
+
+## Người ăn mà `find_members` không tra ra
+
+Nói trong câu trả lời rằng "coi X là khách" là CHƯA GHI GÌ CẢ — thẻ nháp chỉ có cái bạn
+truyền vào `propose_meal`. Bỏ sót một cái đầu là mọi người còn lại phải trả nhiều hơn thực tế,
+và trên thẻ không có gì cho thấy đã thiếu người. Với mỗi tên `unresolved`, chọn MỘT:
+
+- Người ngoài nhóm → tên đó vào `guests` (khách chia đầu người nhưng không bị ghi nợ).
+- Nghi là thành viên viết khác tên → `find_members` lại bằng tên khác (tên thật, tên
+  ngân hàng, biệt danh) trước khi kết luận là khách.
+- Thành viên mới → `add_member` rồi cho id vào `participants`.
+
+Tên `ambiguous` (hai người cùng khớp, vd "Trang") → HỎI người dùng là ai, đừng chọn bừa.
+`propose_meal` sẽ báo lỗi nếu một tên đã tra hụt mà không nằm trong `participants` lẫn `guests`.
 - Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
 - Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), truyền nguyên văn vào `day_word` của `propose_meal` — công cụ tự tính ngày (giờ VN), TUYỆT ĐỐI không tự suy ra ngày. Không nói ngày → bỏ trống (mặc định hôm nay).
 

@@ -59,7 +59,7 @@
         "type": "boolean"
       },
       "names": {
-        "description": "Names or nicknames to look up (e.g. ['An', 'Bình']).",
+        "description": "Names to look up (e.g. ['An', 'Bình']). Pass the name EXACTLY as the user wrote it — the tool matches display name, nickname, aliases and the bank account holder, with or without Vietnamese tones, and strips 'anh'/'chị' itself. Do not de-accent or shorten it yourself.",
         "items": {
           "type": "string"
         },
