@@ -1,5 +1,7 @@
 # Phoenix Knowledge & Memory UI — make what the bot knows visible and editable
 
+> **Status: delivered** — all three phases, one branch. 940 backend tests, 266 frontend tests, and the flows driven end-to-end in a real browser. See [Delivered](#delivered) for what changed against this plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Phoenix now remembers things — restaurants, standing rules, notes about people, and rolled-up conversation history — and a human can see none of it and edit none of it. Give it the same treatment the ledger got: a panel that presents each kind of knowledge in its own shape (cards, chips, sections — never raw file text) and lets a room member correct it.
@@ -34,11 +36,11 @@ Two consequences worth naming, because they are the actual bug report:
 - **K1 — One panel, three tabs, mirroring the three stores.** Not one merged "memory" list. A dated observation decays, a standing rule does not, and a place row is inert until someone eats there; collapsing them into one list would hide exactly the distinction the design spent D4 establishing.
 - **K2 — Tab strip inside the side panel, not a fifth header button.** The header cluster already overran 320px once and had to be given `flex-wrap` (`room-view.tsx:507`). `Ledger` / `Bộ nhớ` live as tabs at the top of the panel; the existing mobile `Ledger` button opens the drawer on whichever tab was last used.
 - **K3 — Derived numbers are read-only, always.** `times`, `days_since`, `avg_per_head`, `band` and the weekday rhythm are rendered as chips and never as inputs. Editing a computed count is inventing history; D1 puts those numbers in Python precisely so no one can hand-type them.
-- **K4 — `slug` is immutable.** It is the `place:` subject in `observations.md`, so renaming a place must keep its slug or every note about it silently detaches. `name` and `aliases` are freely editable; the slug shows in the detail dialog as a muted mono identity line. (A true slug rename needs an observations rewrite — out of scope, and it should stay out until someone actually needs it.)
+- **K4 — `slug` is immutable.** It is the `place:` subject in `observations.md`, so renaming a place must keep its slug or every note about it silently detaches. `name` and `aliases` are freely editable; the slug shows in the detail dialog as a muted mono identity line reading "mã định danh, không đổi được". (A true slug rename needs an observations rewrite — out of scope, and it should stay out until someone actually needs it.)
 - **K5 — Deleting a place is `active=False`.** `meals.place_id` references it and history must not lose its subject. `closed_until` stays the *temporary* lever (D11, self-expiring); the dialog offers both and labels the difference.
 - **K6 — Line-preserving file writes.** `observations.load()` skips comments and malformed lines by design ("one stray line must cost one fact, not lunch"), so any write that rewrites the file *from parsed rows* deletes them. **`observations.remove()` has this bug today** (`observations.py:119`) — it rewrites from `load()` and drops every comment and unparsed line in the file. Fix it as part of this work: edit/delete operate on the raw line list, matching by line index resolved from a content id, and every line the parser did not understand is written back verbatim.
-- **K7 — Stable line ids without changing the format.** `id = sha1(f"{when}|{subject}|{gate}|{text}").hexdigest()[:12]`, computed on read. No new field, so the file stays hand-editable (D4) and the seed installer keeps working. Two byte-identical lines collide; that is fine — they are the same fact, and removing either satisfies the request.
-- **K8 — Optimistic concurrency via `etag`.** `GET` returns `sha256` of each file's bytes. Writes send it back; a mismatch is `409` and the panel refetches and says so. The alternative — last-write-wins on a file the agent also appends to — loses a note whenever someone edits while a turn is running.
+- **K7 — Stable line ids without changing the format.** `id = sha1(f"{when}|{subject}|{gate}|{text}").hexdigest()[:12]`, computed on read. No new field, so the file stays hand-editable (D4) and the seed installer keeps working. Two byte-identical lines collide. **Revised in delivery:** that is *not* fine — a collision makes both lines unaddressable — so an identical add is a no-op and an edit that would collide is refused (see Delivered).
+- **K8 — Optimistic concurrency via `etag`.** `GET` returns `sha256` of each file's bytes. Writes send it back; a mismatch is `409` and the panel refetches and says so. (A place `409` is a *name collision*, not this — places carry no etag, so only the etag-guarded callers treat 409 as "reload".) The alternative — last-write-wins on a file the agent also appends to — loses a note whenever someone edits while a turn is running.
 - **K9 — Every write takes `chat._agent_lock`.** Exactly what `commit_memo_route` already does (`main.py:641`) and for the same reason. Place writes are DB-only and would be safe without it, but they are taken under it too so the lock discipline is uniform and nobody has to remember which endpoint is which.
 - **K10 — Edits are visible to the room.** Memory steers suggestions, so a member quietly deleting "phải gọi trước 11h30" changes everyone's lunch. Each write posts a short `bot`-kind room message ("Nhím đã xoá ghi nhớ về Cơm gà Thịnh Lơ: …"). Cheap (existing `chat.post_message` plumbing), and it gives the file the trail `observations.remove`'s docstring explicitly refuses to keep inside the file itself.
 - **K11 — Any room member may edit; no admin gate.** Consistent with the fact that any member can already make Phoenix write a note by asking, and confirm it on the memo card. Auth is `require_session` + `_check_room`, same as the ledger.
@@ -103,42 +105,42 @@ Ships the whole "it is not visible" half on its own, with no write path to get w
 
 **Interfaces:** `knowledge.snapshot(session, room_id, *, today=None) -> dict` — the full GET payload.
 
-- [ ] Failing test: a room with two places (one `chưa-thử`, one with three linked meals), four observation lines (one `always` + gate, one recent, one 200 days old, one deliberately malformed) and a two-section `memory.md` produces: both places with correct `times`/`band`, three parsed observations with stable ids and the old one `stale: true`, the malformed line absent from the payload *and still present in the file*, and two memory sections with their dates.
-- [ ] Implement. Subject labels resolve through `places.list_places` / `roster.list_members(include_inactive=True)` — a note about a since-removed member must still render their name, not `member:nhim`.
-- [ ] An unresolvable subject (place deleted, member gone from the DB) renders with `subject_label = subject` and `subject_kind = "unknown"` rather than being dropped. A note you cannot see is a note you cannot delete.
-- [ ] Commit.
+- [x] Failing test: a room with two places (one `chưa-thử`, one with three linked meals), four observation lines (one `always` + gate, one recent, one 200 days old, one deliberately malformed) and a two-section `memory.md` produces: both places with correct `times`/`band`, three parsed observations with stable ids and the old one `stale: true`, the malformed line absent from the payload *and still present in the file*, and two memory sections with their dates.
+- [x] Implement. Subject labels resolve through `places.list_places` / `roster.list_members(include_inactive=True)` — a note about a since-removed member must still render their name, not `member:nhim`.
+- [x] An unresolvable subject (place deleted, member gone from the DB) renders with `subject_label = subject` and `subject_kind = "unknown"` rather than being dropped. A note you cannot see is a note you cannot delete.
+- [x] Commit.
 
 ### Task 2: `GET /api/rooms/{id}/knowledge`
 
 **Files:** modify `backend/app/main.py`; test `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test: 200 for a member of the room, 403 for a session belonging to another room (`_check_room`), and the payload shape above.
-- [ ] Implement, `require_session` + `_check_room` (K11). Read-only, so no lock.
-- [ ] Commit.
+- [x] Failing test: 200 for a member of the room, 403 for a session belonging to another room (`_check_room`), and the payload shape above.
+- [x] Implement, `require_session` + `_check_room` (K11). Read-only, so no lock.
+- [x] Commit.
 
 ### Task 3: The panel shell
 
 **Files:** create `side-panel.tsx`, `knowledge-panel.tsx`, `use-knowledge.ts`; modify `room-view.tsx`, `api.ts`; test `frontend/src/components/chat/__tests__/side-panel.test.tsx`.
 
-- [ ] Failing test: the drawer renders a `Ledger` / `Bộ nhớ` tab strip; switching to `Bộ nhớ` renders the three sub-tabs; the ledger tab still renders `StatementSections`; the last-used tab survives closing and reopening the drawer.
-- [ ] Implement. Both mount sites (desktop column, phone drawer) take `SidePanel`; tab state lifts to `RoomView` so the two share it. `aria-selected` on the tabs, arrow-key movement, and the drawer keeps its existing Esc handling.
-- [ ] Commit.
+- [x] Failing test: the drawer renders a `Ledger` / `Bộ nhớ` tab strip; switching to `Bộ nhớ` renders the three sub-tabs; the ledger tab still renders `StatementSections`; the last-used tab survives closing and reopening the drawer.
+- [x] Implement. Both mount sites (desktop column, phone drawer) take `SidePanel`; tab state lifts to `RoomView` so the two share it. `aria-selected` on the tabs, arrow-key movement, and the drawer keeps its existing Esc handling.
+- [x] Commit.
 
 ### Task 4: Rendering the three stores
 
 **Files:** create `place-card.tsx`, `observation-row.tsx`, `memory-sections.tsx`; tests alongside.
 
-- [ ] Failing tests, one per store: a place card shows name, band chip, `times`/`days_since` in Vietnamese ("4 lần · 12 ngày trước"), tag chips, a `chưa-thử` badge, a `Đóng tới 20/8` badge when `closed_until` is set and a muted style when `active: false`; an observation row shows a gate chip in human words (K13) and a `Cũ` marker when `stale`; memory renders as collapsed dated sections plus the read-only watermark footnote (K12).
-- [ ] Implement. **Quán** is a search-filtered list (100 seeded places — a search box is not optional), ordered by `times` desc then name. **Ghi nhớ** groups by subject and splits `Quy tắc` (always) from `Ghi nhớ` (dated, newest first). **Nhật ký** collapses every section but the newest.
-- [ ] Empty states that say how the store gets filled ("Chưa có ghi nhớ nào — nói với @phoenix «quán X phải gọi trước 11h30»"), not a bare "no data".
-- [ ] Commit.
+- [x] Failing tests, one per store: a place card shows name, band chip, `times`/`days_since` in Vietnamese ("4 lần · 12 ngày trước"), tag chips, a `chưa-thử` badge, a `Đóng tới 20/8` badge when `closed_until` is set and a muted style when `active: false`; an observation row shows a gate chip in human words (K13) and a `Cũ` marker when `stale`; memory renders as collapsed dated sections plus the read-only watermark footnote (K12).
+- [x] Implement. **Quán** is a search-filtered list (100 seeded places — a search box is not optional), ordered by `times` desc then name. **Ghi nhớ** groups by subject and splits `Quy tắc` (always) from `Ghi nhớ` (dated, newest first). **Nhật ký** collapses every section but the newest.
+- [x] Empty states that say how the store gets filled ("Chưa có ghi nhớ nào — nói với @phoenix «quán X phải gọi trước 11h30»"), not a bare "no data".
+- [x] Commit.
 
 ### Task 5: Live refresh
 
 **Files:** modify `backend/app/main.py` (`commit_memo_route`), `frontend/src/hooks/use-room.ts`; test both sides.
 
-- [ ] Failing test: committing a memo publishes `knowledge:changed`; the hook bumps `knowledgeVersion` and `use-knowledge` refetches.
-- [ ] Implement. Commit.
+- [x] Failing test: committing a memo publishes `knowledge:changed`; the hook bumps `knowledgeVersion` and `use-knowledge` refetches.
+- [x] Implement. Commit.
 
 ## Phase 2 — Editable: places and observations
 
@@ -150,42 +152,42 @@ The two stores that steer `suggest_lunch`, so they are the two worth fixing by h
 
 **Interfaces:** `observations.replace_line(room_id, line_id, obs) -> bool`, `observations.delete_line(room_id, line_id) -> bool`, `observations.file_etag(room_id) -> str`.
 
-- [ ] Failing test: a file containing a comment, a malformed line and three good lines survives an edit and a delete with the comment and the malformed line **byte-identical and in position**; the existing `remove()` gets the same guarantee (it does not today); a `line_id` that no longer exists returns `False` rather than raising.
-- [ ] Implement over the raw line list, not over `load()`.
-- [ ] Commit.
+- [x] Failing test: a file containing a comment, a malformed line and three good lines survives an edit and a delete with the comment and the malformed line **byte-identical and in position**; the existing `remove()` gets the same guarantee (it does not today); a `line_id` that no longer exists returns `False` rather than raising.
+- [x] Implement over the raw line list, not over `load()`.
+- [x] Commit.
 
 ### Task 7: Observation write endpoints
 
 **Files:** modify `backend/app/main.py`; test `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test: POST appends a well-formed line; PATCH with a stale `etag` returns `409` and leaves the file untouched; DELETE with a current etag removes exactly one line; each write happens under `chat._agent_lock` and publishes `knowledge:changed`; a `gate` that fails `_GATE_RE` is a `422`, not a silently-dropped field.
-- [ ] Implement (K8, K9). `subject` arrives as an explicit `place:<slug>` / `member:<nickname>` from the panel — the UI already knows which subject the user tapped, so `_memo_subject`'s free-text guessing (and its D18 ambiguity risk) is not in this path at all.
-- [ ] Commit.
+- [x] Failing test: POST appends a well-formed line; PATCH with a stale `etag` returns `409` and leaves the file untouched; DELETE with a current etag removes exactly one line; each write happens under `chat._agent_lock` and publishes `knowledge:changed`; a `gate` that fails `_GATE_RE` is a `422`, not a silently-dropped field.
+- [x] Implement (K8, K9). `subject` arrives as an explicit `place:<slug>` / `member:<nickname>` from the panel — the UI already knows which subject the user tapped, so `_memo_subject`'s free-text guessing (and its D18 ambiguity risk) is not in this path at all.
+- [x] Commit.
 
 ### Task 8: Place write endpoints
 
 **Files:** modify `backend/app/places.py`, `backend/app/main.py`; test `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test: PATCH `name` leaves `slug` untouched and keeps the place's observations attached (K4); POST with a name that slugifies onto an existing place returns `409` naming the existing place; DELETE sets `active=False` and leaves `meals.place_id` intact (K5); `walk_minutes`/`price_hint` accept `null` to clear.
-- [ ] Implement; `add_place` (tool) and `POST /places` share one `places.create_place`.
-- [ ] Commit.
+- [x] Failing test: PATCH `name` leaves `slug` untouched and keeps the place's observations attached (K4); POST with a name that slugifies onto an existing place returns `409` naming the existing place; DELETE sets `active=False` and leaves `meals.place_id` intact (K5); `walk_minutes`/`price_hint` accept `null` to clear.
+- [x] Implement; `add_place` (tool) and `POST /places` share one `places.create_place`.
+- [x] Commit.
 
 ### Task 9: The editor dialogs
 
 **Files:** create `place-dialog.tsx`, `observation-dialog.tsx`; modify `knowledge-panel.tsx`, `api.ts`; tests alongside.
 
-- [ ] Failing tests: the place dialog round-trips every editable field, renders slug read-only with an explanation, shows derived stats as text (K3), and offers "Đóng tạm tới…" and "Ẩn quán" as distinct actions; the observation dialog has a `Quy tắc (always)` ⇄ `Ngày cụ thể` toggle that swaps a date input in and out, a three-way gate select + time input, and a delete with confirmation; a `409` shows "Có người vừa sửa — đã tải lại" and refetches rather than retrying blind.
-- [ ] Implement as centred dialogs on the `ProfileDialog` pattern (focus trap, Esc, backdrop click), so the 260/320px column never has to host a form.
-- [ ] Add "＋ Thêm quán" / "＋ Thêm ghi nhớ" on the respective sub-tabs.
-- [ ] Commit.
+- [x] Failing tests: the place dialog round-trips every editable field, renders slug read-only with an explanation, shows derived stats as text (K3), and offers "Đóng tạm tới…" and "Ẩn quán" as distinct actions; the observation dialog has a `Quy tắc (always)` ⇄ `Ngày cụ thể` toggle that swaps a date input in and out, a three-way gate select + time input, and a delete with confirmation; a `409` shows "Có người vừa sửa — đã tải lại" and refetches rather than retrying blind.
+- [x] Implement as centred dialogs on the `ProfileDialog` pattern (focus trap, Esc, backdrop click), so the 260/320px column never has to host a form.
+- [x] Add "＋ Thêm quán" / "＋ Thêm ghi nhớ" on the respective sub-tabs.
+- [x] Commit.
 
 ### Task 10: The room-visible trail (K10)
 
 **Files:** modify `backend/app/main.py`; test `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test: each write posts one `bot`-kind message naming the actor, the subject and the change, and publishes it — and a place `PATCH` that changes nothing posts nothing.
-- [ ] Implement. One short Vietnamese line per change; never echo a money figure (money-safety, D3).
-- [ ] Commit.
+- [x] Failing test: each write posts one `bot`-kind message naming the actor, the subject and the change, and publishes it — and a place `PATCH` that changes nothing posts nothing.
+- [x] Implement. One short Vietnamese line per change; never echo a money figure (money-safety, D3).
+- [x] Commit.
 
 ## Phase 3 — Editable: conversation memory
 
@@ -195,25 +197,41 @@ Last, because it is the store with the least leverage per edit and the most rope
 
 **Files:** modify `backend/app/memory.py`, `backend/app/main.py`; test `backend/tests/test_memory_sections.py`.
 
-- [ ] Failing test: `parse_sections` → `write_sections` on an untouched file is byte-identical (round-trip safety before anything is allowed to edit it); editing section 0 leaves section 1 and any preamble text alone; deleting the last section leaves the watermark untouched (K12); stale `etag` → `409`; writes take the lock.
-- [ ] Implement. Reject a body containing `\n## ` — one section cannot smuggle in another.
-- [ ] Commit.
+- [x] Failing test: `parse_sections` → `write_sections` on an untouched file is byte-identical (round-trip safety before anything is allowed to edit it); editing section 0 leaves section 1 and any preamble text alone; deleting the last section leaves the watermark untouched (K12); stale `etag` → `409`; writes take the lock.
+- [x] Implement. Reject a body containing `\n## ` — one section cannot smuggle in another.
+- [x] Commit.
 
 ### Task 12: Memory editing UI
 
 **Files:** modify `memory-sections.tsx`, `api.ts`; test alongside.
 
-- [ ] Failing test: expanding a section reveals `Sửa` / `Xoá`; edit swaps in a textarea with save/cancel; delete confirms first; the watermark line has no control.
-- [ ] Implement. Commit.
+- [x] Failing test: expanding a section reveals `Sửa` / `Xoá`; edit swaps in a textarea with save/cancel; delete confirms first; the watermark line has no control.
+- [x] Implement. Commit.
 
 ### Task 13: Notes where the person already is
 
 **Files:** modify `frontend/src/components/chat/room-view.tsx` (`MemberInfoDialog`, `ProfileDialog`); test alongside.
 
-- [ ] Failing test: a member dialog lists that member's `member:` observations, with the same rows and the same edit affordance as the panel.
-- [ ] Implement — the same components, reused; no second renderer for the same data. Commit.
+- [x] Failing test: a member dialog lists that member's `member:` observations, with the same rows and the same edit affordance as the panel.
+- [x] Implement — the same components, reused; no second renderer for the same data. Commit.
 
 ---
+
+## Delivered
+
+Shipped as planned, with these deviations — all of them things the plan could not have known:
+
+- **`observations.md` did have the data-loss bug K6 predicted**, and so did `remove()`. Fixed: `indexed()` reports raw line numbers, and `replace_line`/`delete_line`/`remove` edit that list in place. A file with a comment and an unparsable line survives an edit byte-for-byte (`test_observations_edit.py`).
+- **`_GATE_RE` accepted hours 20–29.** `[0-2]\d` matched `25`, so a hand-typed `busy@25:00` passed validation and then reached `now.replace(hour=25)` in `gate_status` — one typo raising `ValueError` inside every `suggest_lunch` for that room. Bounded at 23, where a bad gate degrades to prose like anything else the parser cannot read. Found by writing the `parse_gate` test, not by reading the regex.
+- **Two duplicate guards the plan missed.** K7 waved off `line_id` collisions as harmless ("the same fact twice"), but a collision means neither line can be addressed again *and* React sees duplicate keys. So: an identical `POST` is a no-op returning `already_existed` (the `add_place` shape), an edit that would collide is a `422`, and the list keys are index-suffixed so a hand-edited file already holding a pair still renders. Caught by driving the real UI twice.
+- **`writeError` originally mapped every 409 to "someone else edited this".** Wrong for places, whose 409 means "that name is taken" — places carry no etag. The server's own detail is now shown, and only the etag-guarded callers reload.
+- **The dialog needed a pinned action row.** A place has eleven fields; on a 900px viewport the form overflowed `max-h-[85dvh]` and Save was off screen. `PanelDialog` takes a `footer` that sits below the scroller.
+- **`subject_id` added to the read model.** Without it, "notes about this person" in the member dialog would have meant "notes whose label matches this display name", which is wrong the day two members share one.
+- **Both `member:` spellings resolve to one person.** The seed installer writes the nickname and `tools._memo_subject` writes the folded display name; both are already in the wild. `SubjectIndex` indexes every form and reports a canonical `subject_key`, so the panel groups them under one heading without rewriting anyone's file.
+- **Names differ from the plan:** `note-row.tsx` / `note-dialog.tsx` (not `observation-*`), plus a `knowledge-ui.tsx` holding the dialog shell, chips and label helpers the three views share.
+- **The weekday rhythm is a sentence, not a chart.** "hay ăn T5" beats a seven-bar micro-chart of `[0,1,0,2,0,1,0]` at 320px, and it would have been the only chart in the app.
+
+Verified in the browser (not only in jsdom): adding a standing rule through the gate picker and seeing it render as "Đặt trước 10:45"; editing it into a dated note with the gate cleared; renaming Quán Bé Bự and watching its notes follow the rename (K4 proven live, not just unit-tested); and a `📓` trail message landing in the room for each write.
 
 ## Risks & non-goals
 
