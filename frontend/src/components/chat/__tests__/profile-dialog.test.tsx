@@ -6,7 +6,11 @@ import { getProfile } from "@/lib/rooms-store";
 vi.mock("@/lib/session", () => ({ useSession: () => ({ signOut: vi.fn(), memberId: 1 }) }));
 
 const updateMe = vi.fn();
-vi.mock("@/lib/api", () => ({ updateMe: (...a: any[]) => updateMe(...a) }));
+// The dialog now also renders MemberNotes, which reads the knowledge snapshot.
+vi.mock("@/lib/api", () => ({
+  updateMe: (...a: any[]) => updateMe(...a),
+  getKnowledge: () => Promise.resolve({ observations: [], subjects: [], etags: {} }),
+}));
 
 const member = {
   id: 1, display_name: "An", nickname: "an", claimed: true, has_bank: false,
@@ -21,7 +25,7 @@ beforeEach(() => {
 describe("ProfileDialog save-back", () => {
   it("writes edited fields to the saved profile after a successful save", async () => {
     updateMe.mockResolvedValue({ ok: true });
-    render(<ProfileDialog member={member} onClose={() => {}} onSaved={() => {}} />);
+    render(<ProfileDialog member={member} roomId={3} knowledgeVersion={0} onClose={() => {}} onSaved={() => {}} />);
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "An Nguyen" } });
     fireEvent.change(screen.getByLabelText("Bank code"), { target: { value: "VCB" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -32,7 +36,7 @@ describe("ProfileDialog save-back", () => {
 
   it("does not touch the saved profile when the save fails", async () => {
     updateMe.mockRejectedValue(new Error("boom"));
-    render(<ProfileDialog member={member} onClose={() => {}} onSaved={() => {}} />);
+    render(<ProfileDialog member={member} roomId={3} knowledgeVersion={0} onClose={() => {}} onSaved={() => {}} />);
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "X" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -42,7 +46,7 @@ describe("ProfileDialog save-back", () => {
 
   it("defaults the random-pick toggle to checked and sends false when unchecked", async () => {
     updateMe.mockResolvedValue({ ok: true });
-    render(<ProfileDialog member={member} onClose={() => {}} onSaved={() => {}} />);
+    render(<ProfileDialog member={member} roomId={3} knowledgeVersion={0} onClose={() => {}} onSaved={() => {}} />);
     const toggle = screen.getByRole("checkbox", { name: /include me in random picks/i });
     expect(toggle).toBeChecked();
 
@@ -57,6 +61,8 @@ describe("ProfileDialog save-back", () => {
     render(
       <ProfileDialog
         member={{ ...member, default_participant: false }}
+        roomId={3}
+        knowledgeVersion={0}
         onClose={() => {}}
         onSaved={() => {}}
       />,

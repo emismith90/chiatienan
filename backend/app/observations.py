@@ -21,11 +21,15 @@ Why these four and not a table (design D4):
 ``text``    free Vietnamese prose, untouched. "Nhím đề xuất rồi lại đổi ý" is not
             table-shaped and schematising it would destroy the meaning.
 
-The file is hand-edited by the operator, so **a malformed line is skipped with a
-warning, never raised**: one stray line must cost one fact, not lunch.
+The file is editable two ways — the knowledge panel (:mod:`app.knowledge`) and a
+text editor on the box — so **a malformed line is skipped with a warning, never
+raised**: one stray line must cost one fact, not lunch. Every write here edits the
+raw line list in place, so the comments and unreadable lines the parser skips
+survive an edit made through the UI.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -40,7 +44,12 @@ _FILE = "observations.md"
 #: How far back a dated observation still counts. Rules ignore this entirely.
 DEFAULT_SINCE_DAYS = 180
 
-_GATE_RE = re.compile(r"^(busy|order-by|closes)@([0-2]\d):([0-5]\d)$")
+#: The hour is bounded at 23, not at ``[0-2]\d``: the file is hand-editable, and a
+#: stray ``busy@25:00`` used to satisfy the pattern and then reach
+#: ``now.replace(hour=25)`` in :func:`gate_status` — one typo crashing every lunch
+#: suggestion for the room. Failing the regex instead demotes the gate to prose,
+#: which is what :func:`_parse_line` already does with anything it cannot read.
+_GATE_RE = re.compile(r"^(busy|order-by|closes)@([01]\d|2[0-3]):([0-5]\d)$")
 
 
 @dataclass(frozen=True)
@@ -57,6 +66,21 @@ class Observation:
     def to_line(self) -> str:
         when = self.when.isoformat() if self.when else "always"
         return f"- {when} | {self.subject} | {self.gate or '-'} | {self.text}"
+
+    @property
+    def line_id(self) -> str:
+        """A stable handle for this fact, computed from its own four fields.
+
+        The UI needs to name one line in order to edit or delete it, and the file
+        has no id column — deliberately, because it is meant to stay hand-editable
+        (design D4) and the seed installer writes it by hand. Hashing the rendered
+        line gives an id that survives a reload, survives lines being added above
+        it, and costs the format nothing.
+
+        Two byte-identical lines collide. That is correct: they are the same fact
+        written twice, and removing either one satisfies the request.
+        """
+        return hashlib.sha1(self.to_line().encode("utf-8")).hexdigest()[:12]
 
 
 def _parse_line(raw: str, lineno: int) -> Observation | None:
@@ -97,15 +121,48 @@ def _path(room_id: int):
     return room_memory_dir(room_id) / _FILE
 
 
-def load(room_id: int) -> list[Observation]:
+def _read_raw(room_id: int) -> list[str]:
+    """Every line of the file, verbatim, newlines stripped."""
     path = _path(room_id)
     if not path.exists():
         return []
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def _write_raw(room_id: int, lines: list[str]) -> None:
+    _path(room_id).write_text("".join(ln + "\n" for ln in lines), encoding="utf-8")
+
+
+def indexed(room_id: int) -> list[tuple[int, Observation]]:
+    """``(raw line index, observation)`` for every line that parses.
+
+    The index is the anchor every edit rides on. Rewriting the file from
+    :func:`load`'s output instead — which is what :func:`remove` used to do —
+    silently deletes the comments and malformed lines :func:`_parse_line`
+    deliberately skips, turning "one stray line costs one fact" into "one edit
+    costs every line the parser didn't like".
+    """
     out = []
-    for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if (o := _parse_line(raw, i)) is not None:
-            out.append(o)
+    for i, raw in enumerate(_read_raw(room_id)):
+        if (o := _parse_line(raw, i + 1)) is not None:
+            out.append((i, o))
     return out
+
+
+def load(room_id: int) -> list[Observation]:
+    return [o for _i, o in indexed(room_id)]
+
+
+def file_etag(room_id: int) -> str:
+    """Fingerprint of the file as it stands, for optimistic concurrency.
+
+    The turn loop appends to this file too, so an editor that writes blind loses
+    whichever change landed first. Callers hand this back on write; a mismatch is
+    a refusal, not a merge.
+    """
+    path = _path(room_id)
+    data = path.read_bytes() if path.exists() else b""
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def append(room_id: int, obs: Observation) -> None:
@@ -116,17 +173,47 @@ def append(room_id: int, obs: Observation) -> None:
         f.write(prefix + obs.to_line() + "\n")
 
 
+def _find(room_id: int, line_id: str) -> int | None:
+    for i, o in indexed(room_id):
+        if o.line_id == line_id:
+            return i
+    return None
+
+
+def replace_line(room_id: int, line_id: str, obs: Observation) -> bool:
+    """Rewrite one line in place. False when ``line_id`` is no longer present."""
+    i = _find(room_id, line_id)
+    if i is None:
+        return False
+    lines = _read_raw(room_id)
+    lines[i] = obs.to_line()
+    _write_raw(room_id, lines)
+    return True
+
+
+def delete_line(room_id: int, line_id: str) -> bool:
+    """Drop one line, leaving every other byte of the file alone."""
+    i = _find(room_id, line_id)
+    if i is None:
+        return False
+    lines = _read_raw(room_id)
+    del lines[i]
+    _write_raw(room_id, lines)
+    return True
+
+
 def remove(room_id: int, *, subject: str, text: str) -> bool:
     """Delete the first line matching ``subject`` + ``text``. True if one went.
 
-    No tombstone and no history: this is a lunch note, not the ledger.
+    No tombstone and no history: this is a lunch note, not the ledger. Everything
+    else in the file — comments, and lines the parser could not read — survives
+    untouched; see :func:`indexed`.
     """
-    rows = load(room_id)
-    for i, o in enumerate(rows):
+    for i, o in indexed(room_id):
         if o.subject == subject and o.text == text:
-            keep = rows[:i] + rows[i + 1:]
-            _path(room_id).write_text(
-                "".join(r.to_line() + "\n" for r in keep), encoding="utf-8")
+            lines = _read_raw(room_id)
+            del lines[i]
+            _write_raw(room_id, lines)
             return True
     return False
 
@@ -173,6 +260,40 @@ def gate_kind(obs: Observation) -> str | None:
     """``"busy"`` / ``"order-by"`` / ``"closes"``, or None when ungated."""
     m = _GATE_RE.match(obs.gate or "")
     return m.group(1) if m else None
+
+
+#: How each gate verb reads to a human. ``_GATE_RE`` is the schema, so this is the
+#: only place a person should ever have to meet ``order-by@11:30``.
+_GATE_LABELS = {"busy": "Đông từ", "order-by": "Đặt trước", "closes": "Đóng cửa"}
+
+
+def gate_at(obs: Observation) -> str | None:
+    """``"11:30"`` for ``order-by@11:30``; None when ungated."""
+    m = _GATE_RE.match(obs.gate or "")
+    return f"{m.group(2)}:{m.group(3)}" if m else None
+
+
+def gate_label(obs: Observation) -> str | None:
+    """``"Đặt trước 11:30"`` for ``order-by@11:30``; None when ungated."""
+    m = _GATE_RE.match(obs.gate or "")
+    if not m:
+        return None
+    return f"{_GATE_LABELS[m.group(1)]} {m.group(2)}:{m.group(3)}"
+
+
+def parse_gate(kind: str | None, at: str | None) -> str | None:
+    """Build a gate from a picker's ``(kind, "HH:MM")``, validating both.
+
+    Raises :class:`ValueError` on anything ``_GATE_RE`` would not match, so a bad
+    gate is a refusal at the edge rather than a field that quietly vanishes when
+    the file is next read.
+    """
+    if not kind:
+        return None
+    gate = f"{kind}@{at or ''}"
+    if not _GATE_RE.match(gate):
+        raise ValueError(f"Không hiểu điều kiện «{gate}».")
+    return gate
 
 
 def gate_status(obs: Observation, *, now, walk_minutes: int | None = None

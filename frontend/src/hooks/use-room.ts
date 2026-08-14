@@ -23,6 +23,9 @@ export type RoomState = {
    * over the existing room SSE — no second connection. Optional for the same
    * reason as `hasMore`. */
   ledgerVersion?: number;
+  /** Same idea for the knowledge panel: bumped on `knowledge:changed`, which the
+   * write routes AND the memo card's commit emit (both write `observations.md`). */
+  knowledgeVersion?: number;
 };
 
 /** Initial scrollback window (days). Only messages this recent are fetched and
@@ -40,6 +43,9 @@ export const INITIAL_WINDOW_DAYS = 3;
  */
 export function mergeEvent(s: RoomState, e: any): RoomState {
   if (e.type === "ledger:changed") return { ...s, ledgerVersion: (s.ledgerVersion ?? 0) + 1 };
+  if (e.type === "knowledge:changed") {
+    return { ...s, knowledgeVersion: (s.knowledgeVersion ?? 0) + 1 };
+  }
   if (e.type === "bot.typing") return { ...s, typing: true };
   // `bot.done` is terminal: clear the typing indicator AND any live turn. The
   // per-turn `agent.run.finished` that normally clears `activeTurn` is
@@ -378,6 +384,7 @@ export function useRoom(roomId: number) {
     activeTurn: state.activeTurn,
     hasMore: state.hasMore,
     ledgerVersion: state.ledgerVersion ?? 0,
+    knowledgeVersion: state.knowledgeVersion ?? 0,
     loadingEarlier,
     loadEarlier,
     send,

@@ -11,8 +11,10 @@ rollover advance it. All writes happen under ``chat._agent_lock`` (single writer
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -75,13 +77,29 @@ def load_memory(room_id: int) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
-def read_watermark(room_id: int) -> int:
+def read_meta(room_id: int) -> dict:
+    """The watermark file as a dict, or ``{}`` when absent/unreadable.
+
+    Read-only for everyone but :func:`set_watermark`. ``summarized_through_id`` is
+    the lower bound of the agent's recent-message window, so moving it backwards
+    re-summarizes months of chat into duplicate sections on the next turn — an
+    LLM-billed, user-visible mistake with no undo. Nothing in the HTTP surface
+    writes it.
+    """
     path = room_memory_dir(room_id) / _META_NAME
     if not path.exists():
-        return 0
+        return {}
     try:
-        return int(json.loads(path.read_text(encoding="utf-8")).get("summarized_through_id", 0))
-    except (ValueError, TypeError, json.JSONDecodeError, AttributeError):
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def read_watermark(room_id: int) -> int:
+    try:
+        return int(read_meta(room_id).get("summarized_through_id", 0))
+    except (ValueError, TypeError):
         return 0
 
 
@@ -101,6 +119,108 @@ def append_summary(room_id: int, *, summary_text: str, through_id: int,
     with path.open("a", encoding="utf-8") as f:
         f.write(section)
     set_watermark(room_id, through_id=through_id, through_at=through_at)
+
+
+# ------------------------------------------------------------------ sections
+
+#: A summary section header, as :func:`append_summary` writes it.
+_SECTION_RE = re.compile(r"^## (.*)$", re.M)
+
+#: What ``append_summary`` puts between a section's title and its date.
+_DATE_SEP = " — "
+
+
+def file_etag(room_id: int) -> str:
+    """Fingerprint of ``memory.md``, for optimistic concurrency (see observations)."""
+    path = room_memory_dir(room_id) / _MD_NAME
+    data = path.read_bytes() if path.exists() else b""
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _split(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """``(preamble, [(header_line, body)])`` such that the pieces re-concatenate
+    into ``text`` byte-for-byte.
+
+    ``body`` keeps its own leading and trailing newlines, which is what makes the
+    round-trip exact: a parser that strips whitespace and a writer that re-adds
+    its own guess will reformat the whole file the first time anyone edits one
+    section of it.
+    """
+    marks = list(_SECTION_RE.finditer(text))
+    if not marks:
+        return text, []
+    preamble = text[: marks[0].start()]
+    blocks = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        blocks.append((m.group(1), text[m.end():end]))
+    return preamble, blocks
+
+
+def _join(preamble: str, blocks: list[tuple[str, str]]) -> str:
+    return preamble + "".join(f"## {header}{body}" for header, body in blocks)
+
+
+def parse_sections(room_id: int) -> list[dict]:
+    """``memory.md`` as displayable sections, newest last (file order).
+
+    Each section is ``{"index", "title", "date", "body"}``. ``append_summary``
+    writes ``## {header} — {date}``, so the two are split back apart here rather
+    than in the UI; a header that doesn't carry a date keeps ``date: None`` instead
+    of being dropped, because a hand-written section is still memory.
+    """
+    path = room_memory_dir(room_id) / _MD_NAME
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    _preamble, blocks = _split(text)
+    out = []
+    for i, (header, body) in enumerate(blocks):
+        title, date_str = header, None
+        if _DATE_SEP in header:
+            title, date_str = header.rsplit(_DATE_SEP, 1)
+        out.append({
+            "index": i,
+            "title": title.strip(),
+            "date": (date_str or "").strip() or None,
+            "body": body.strip("\n"),
+        })
+    return out
+
+
+class MemoryError_(Exception):
+    """A section edit that cannot be applied."""
+
+
+def write_section(room_id: int, index: int, body: str) -> None:
+    """Replace one section's body, leaving every other byte of the file alone."""
+    if "\n## " in f"\n{body}":
+        # One section may not smuggle in another: the index of every section after
+        # it would shift under the client that just edited this one.
+        raise MemoryError_("Nội dung không được chứa tiêu đề mục mới (## …).")
+    path = room_memory_dir(room_id) / _MD_NAME
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    preamble, blocks = _split(text)
+    if not 0 <= index < len(blocks):
+        raise MemoryError_("Không tìm thấy mục đó.")
+    header, old = blocks[index]
+    # Keep the original run of trailing newlines — that run is the blank line
+    # separating this section from the next one.
+    trailing = old[len(old.rstrip("\n")):] or "\n"
+    blocks[index] = (header, "\n" + body.strip() + trailing)
+    path.write_text(_join(preamble, blocks), encoding="utf-8")
+
+
+def delete_section(room_id: int, index: int) -> None:
+    """Drop one section, header and body. The watermark is untouched (see
+    :func:`read_meta`): deleting a summary must not make the agent re-summarize
+    the conversation it came from."""
+    path = room_memory_dir(room_id) / _MD_NAME
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    preamble, blocks = _split(text)
+    if not 0 <= index < len(blocks):
+        raise MemoryError_("Không tìm thấy mục đó.")
+    del blocks[index]
+    out = _join(preamble, blocks)
+    path.write_text(out.rstrip("\n") + "\n" if out.strip() else "", encoding="utf-8")
 
 
 def messages_to_summarize(session, room_id: int, *, watermark: int,

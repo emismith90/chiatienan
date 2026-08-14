@@ -44,6 +44,78 @@ _PLACE_PREFIXES = {"quan", "cho", "tiem"}
 CONFIDENT_TIERS = ("exact", "folded", "prefix")
 
 
+class PlaceError(Exception):
+    """A place write that cannot be applied."""
+
+
+#: Columns a human may edit. **`slug` is not one of them** and never will be: it is
+#: the `place:` subject in `observations.md`, so changing it silently detaches every
+#: note and standing rule about that restaurant. `name` and `aliases` carry the
+#: renaming, and the slug stays the identity it was created as.
+EDITABLE = (
+    "name", "aliases", "tags", "delivery", "address", "phone",
+    "walkable", "walk_minutes", "price_hint", "closed_until", "active",
+)
+
+_LIST_FIELDS = ("aliases", "tags", "delivery")
+
+
+def create_place(session: Session, room_id: int, *, name: str, **fields) -> Place:
+    """Insert a place, or raise if its slug is taken.
+
+    Shared by the ``add_place`` tool and the panel so the slug rule has one home.
+    The tool treats a collision as success (it wanted the place to exist, and it
+    does); the panel needs the collision surfaced, so this raises and the callers
+    differ.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise PlaceError("Quán cần có tên.")
+    slug = slugify(name)
+    if not slug:
+        raise PlaceError(f"Không tạo được mã định danh từ «{name}».")
+    existing = session.scalars(
+        select(Place).where(Place.room_id == room_id, Place.slug == slug)
+    ).first()
+    if existing is not None:
+        raise PlaceError(f"«{existing.name}» đã có trong danh sách.")
+    p = Place(room_id=room_id, slug=slug, name=name)
+    apply_edits(p, fields)
+    session.add(p)
+    session.flush()
+    return p
+
+
+def apply_edits(place: Place, fields: dict) -> bool:
+    """Assign the editable subset of ``fields`` onto ``place``. True if anything moved.
+
+    Returning "did something change" is what lets the caller stay quiet about a
+    no-op save instead of announcing an edit that edited nothing.
+    """
+    changed = False
+    for key in EDITABLE:
+        if key not in fields:
+            continue
+        value = fields[key]
+        if key == "name":
+            if not (value or "").strip():
+                raise PlaceError("Quán cần có tên.")
+            # The slug is not recomputed (see EDITABLE): renaming keeps the identity.
+            value = value.strip()
+        if key in _LIST_FIELDS:
+            value = [str(v).strip() for v in (value or []) if str(v).strip()]
+        elif isinstance(value, str):
+            value = value.strip() or None
+        if key in ("walkable", "active"):
+            if value is None:
+                continue                  # a flag has no "unset"
+            value = bool(value)
+        if getattr(place, key) != value:
+            setattr(place, key, value)
+            changed = True
+    return changed
+
+
 def list_places(session: Session, room_id: int, *, include_inactive: bool = False) -> list[Place]:
     stmt = select(Place).where(Place.room_id == room_id)
     if not include_inactive:
