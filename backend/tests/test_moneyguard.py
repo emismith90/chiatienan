@@ -6,7 +6,7 @@ with bash before recording them.
 """
 from dataclasses import dataclass
 
-from app.moneyguard import money_tokens, unbacked_amounts
+from app.moneyguard import fabricated_commit, money_tokens, unbacked_amounts
 
 
 @dataclass
@@ -83,3 +83,61 @@ def test_the_history_backs_an_amount_the_room_already_stated():
     assert unbacked_amounts("Tổng 324k nhé", f"@bot log\n{history}", []) == []
     # and an amount from nowhere is still unbacked
     assert unbacked_amounts("Tổng 500k nhé", f"@bot log\n{history}", []) == [500000]
+
+
+# --- fabricated commits (the enforcing half) -------------------------------- #
+
+#: Verbatim from room 3, 2026-08-14 13:14:07. `tools=0`, `images=1`, 6.1s — a
+#: word-perfect forgery of `chat._meal_body` for a meal that was never written.
+_PROD_FORGERY = (
+    "Đã ghi #14 — Texas Chicken: Bạch Mai trả tổng 793,760đ • Emi 132,293đ, "
+    "Nhím 132,293đ, Giang Hoàng 132,293đ, Linh Nguyen 132,293đ, Kun 132,293đ, "
+    "Tabu 132,293đ"
+)
+
+
+def test_the_production_forgery_is_caught():
+    stray = fabricated_commit(_PROD_FORGERY, "@phoenix log this for all", [])
+    assert stray == [132_293, 793_760]
+
+
+def test_a_forgery_survives_the_tools_that_did_not_write():
+    """The turn read the room and then lied about the outcome. Lookups and
+    read-only queries are not a licence to claim a write."""
+    tools = [_Inv("find_members", {"all_active": True}, {"ok": True, "matched": []}),
+             _Inv("resolve_date", {"day_word": "hôm nay"}, {"ok": True})]
+    assert fabricated_commit(_PROD_FORGERY, "@phoenix log this for all", tools)
+
+
+def test_a_failed_propose_meal_does_not_license_the_claim():
+    """The worst shape: the tool ran, refused, and the model announced success
+    anyway. `ok` is false, so nothing wrote."""
+    tools = [_Inv("propose_meal", {"total": 793_760}, {"ok": False, "error": "no participants"})]
+    assert fabricated_commit(_PROD_FORGERY, "@phoenix log this for all", tools)
+
+
+def test_a_real_proposal_is_not_a_forgery():
+    tools = [_Inv("propose_meal", {"total": 793_760},
+                  {"ok": True, "type": "expense_draft", "per_head": 132_293})]
+    assert fabricated_commit(_PROD_FORGERY, "@phoenix log this for all", tools) is None
+
+
+def test_recalling_a_meal_the_history_already_records_is_not_a_forgery():
+    """"Đã ghi" about the past is honest. The amounts trace to the conversation
+    the model was handed, which is exactly what separates it from an invention."""
+    history = "«A1»: BOT: Đã ghi #13 — bún cá: Giang Hoàng trả tổng 175,000đ"
+    body = "Bữa bún cá hôm qua mình đã ghi rồi nhé — tổng 175,000đ."
+    assert fabricated_commit(body, f"@phoenix ghi chưa\n{history}", []) is None
+
+
+def test_admitting_failure_is_never_a_forgery():
+    """The honest reply must survive: 'chưa ghi' is not 'đã ghi', and the guard
+    would otherwise suppress the very message it substitutes."""
+    body = "Mình chưa ghi được bữa này — hoá đơn 793,760đ nhưng chưa rõ ai trả."
+    assert fabricated_commit(body, "@phoenix log this for all", []) is None
+
+
+def test_talking_without_money_is_not_a_forgery():
+    """No amounts, nothing to be wrong about — 'đã ghi' alone must not block a
+    reply that moves no numbers."""
+    assert fabricated_commit("Đã ghi chú lại rồi nhé!", "@phoenix nhớ hộ mình", []) is None

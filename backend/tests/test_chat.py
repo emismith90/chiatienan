@@ -608,3 +608,51 @@ async def test_a_tool_backed_reply_logs_nothing(monkeypatch, db, caplog):
         await chat.run_bot_turn(db, room_id, member_id, "An", "@bot bún bò 305k")
 
     assert "unbacked money" not in caplog.text
+
+
+async def test_a_fabricated_commit_never_reaches_the_room(monkeypatch, db, caplog):
+    """Room 3, 2026-08-14: `tools=0`, and the room read a forged `_meal_body` as
+    a real ledger entry for three days. The reply the room gets must say the
+    ledger is untouched, and must not carry the invented numbers."""
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-forge"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="Emi", nickname="emi-forge", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+
+    forgery = (
+        "Đã ghi #14 — Texas Chicken: Bạch Mai trả tổng 793,760đ • Emi 132,293đ, "
+        "Nhím 132,293đ, Giang Hoàng 132,293đ"
+    )
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        return TurnResult(final_text=forgery, turn_id="t-forge1")
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+
+    with caplog.at_level("ERROR", logger="chiatienan"):
+        msg = await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix log this for all")
+
+    assert "Đã ghi #14" not in msg.body
+    assert "793,760" not in msg.body and "132,293" not in msg.body
+    assert "chưa ghi" in msg.body.lower()
+    # And it has to be findable afterwards — the forged text only survives in the log.
+    assert "suppressed fabricated commit" in caplog.text
+    assert "t-forge1" in caplog.text and "Texas Chicken" in caplog.text
+
+
+async def test_an_honest_reply_about_a_past_meal_still_gets_through(monkeypatch, db):
+    """The guard's blast radius: 'đã ghi' about a meal the conversation already
+    records is a normal answer, not a forgery."""
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-forge2"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="Emi", nickname="emi-forge2", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+        chat.post_message(s, room_id, None, "Đã ghi #13 — bún cá: Giang trả tổng 175,000đ", kind="bot")
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        return TurnResult(final_text="Rồi nhé, bữa bún cá mình đã ghi rồi — tổng 175,000đ.",
+                          turn_id="t-forge2")
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+    msg = await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix ghi bún cá chưa")
+    assert "175,000đ" in msg.body

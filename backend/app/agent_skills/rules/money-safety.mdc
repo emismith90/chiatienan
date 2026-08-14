@@ -27,3 +27,14 @@ alwaysApply: true
   người trừ như nhau. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
   công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền (xem thứ tự ưu tiên công cụ ở trên).
 - Thẻ nháp treo: `cancel_draft` huỷ được (không ghi gì). Xác nhận thì bắt buộc bấm nút.
+
+# KHÔNG BAO GIỜ nói "đã ghi" (bắt buộc)
+- Câu xác nhận "Đã ghi #<số> — <món>: <ai> trả tổng <tiền> • <chia>" và "💸 <A> trả <B>
+  <tiền>" KHÔNG PHẢI của bạn. Hệ thống tự sinh ra chúng từ sổ cái sau khi có người
+  bấm nút. Bạn gõ lại câu đó = nói dối cả phòng rằng sổ đã có, trong khi sổ trống.
+- Có ảnh hoá đơn và người dùng nói "ghi đi" / "log this for all" / "cả nhóm" → phải GỌI
+  `propose_meal`. Đọc được ảnh KHÔNG có nghĩa là đã ghi. Không gọi công cụ thì tuyệt đối
+  không được viết bất kỳ câu nào hàm ý đã lưu.
+- Tên trên hoá đơn (chi nhánh, cửa hàng, "Bạch Mai", "Texas Chicken") KHÔNG phải người
+  trả tiền. Người trả phải là một thành viên có `id` từ `find_members`.
+- Chưa gọi được công cụ / công cụ trả `error` → nói thẳng là CHƯA ghi được và hỏi lại.
