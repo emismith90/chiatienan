@@ -103,12 +103,20 @@ identity to attach any of this to and no way to count anything.
   history onto the wrong restaurant and no one reviews a backfill.
 - **D16 — Going out and ordering in are different questions.** 24 of the 100 places are
   delivery-only, several kilometres away (Mai Hắc Đế, Lương Đình Của, Hàng Bột). Offering
-  them to a group asking where to *walk* is a wrong answer, not a weak one. The rule is
-  deterministic and needs no guessing: **a place with a non-empty `delivery` and no
-  `walk_minutes` is excluded from walk-out suggestions**, and included only when the
-  message signals ordering in ("gọi về", "đặt ship", "order"). Setting `walk_minutes` on
-  one — My Healthy Corner and Mokchang are on the office's own streets — moves it into
-  both pools with no other edit.
+  them to a group asking where to *walk* is a wrong answer, not a weak one. `walkable` is
+  a plain boolean set per seed list — 76 true, 24 false. Walk-out suggestions filter to
+  `walkable`; delivery places surface only when the message signals ordering in ("gọi
+  về", "đặt ship", "order").
+- **D17 — One room-wide walk time, not a hundred hand-set ones.** An earlier draft asked
+  the operator for per-place `walk_minutes`; the answer was that the whole first list is
+  simply walkable, which is the better model — every walk-to place sits within a few
+  minutes of the office, so per-place precision buys nothing that a single constant does
+  not. `_DEFAULT_WALK_MINUTES` (module constant, ~5) feeds the `busy@`/`closes@`
+  arithmetic. `walk_minutes` survives as an optional per-place override for the one
+  outlier that eventually needs it, and is unset everywhere today.
+
+  This is the shape the whole seed keeps taking: a field the design wanted per-row turns
+  out to be a property of the list the row came from.
 
 ## Design
 
@@ -129,7 +137,8 @@ class Place(Base):
     tags: list            # JSON, default list — ["cơm", "gà"], free vocabulary
     delivery: list        # JSON, default list — ["shopeefood", "grab"]
     address: str|None     # String(200) — see D13
-    walk_minutes: int|None
+    walkable: bool        # default True — see D16
+    walk_minutes: int|None   # optional override of _DEFAULT_WALK_MINUTES (D17)
     phone: str|None       # String(20) — see D10
     price_hint: int|None  # VND per head, seed-supplied — see D8
     closed_until: date|None  # see D11
@@ -248,9 +257,10 @@ Python greps `member:nhim`, counts this month's lines, and hands over `3`.
 
 **Gate evaluation** (all clock arithmetic in Python, against `clock.now_ict()`):
 
-- `busy@HH:MM` — `eta = now + (place.walk_minutes or 0)`. `eta > busy_at` → `too_late`;
-  within `_ACT_NOW_BUSY = 15min` → `act_now`; else `ok`. Unseeded `walk_minutes`
-  degrades to a plain time compare, so the rule still works, less precisely.
+- `busy@HH:MM` — `eta = now + (place.walk_minutes or _DEFAULT_WALK_MINUTES)`.
+  `eta > busy_at` → `too_late`; within `_ACT_NOW_BUSY = 15min` → `act_now`; else `ok`.
+  The default is what makes "đi bây giờ có kịp không" a real question rather than
+  "đã quá giờ chưa" (D17).
 - `order-by@HH:MM` — `now > order_by` → `too_late`; within `_ACT_NOW_ORDER = 20min` →
   `act_now`; else `ok`. Travel time is irrelevant: you phone ahead.
 - `closes@HH:MM` — same travel-aware arithmetic as `busy@`. Separate verb because the
@@ -387,11 +397,9 @@ Observations seed the §4 format directly and are copied to
 `-` gate: standing traits ("nước dùng hơi mặn", "quán mùi") rather than dated incidents.
 Dated lines accumulate from chat over time; the seed establishes the baseline.
 
-**`walk_minutes` is the one field worth filling in by hand.** It is unset across the
-whole seed, and without it every `busy@`/`closes@` gate degrades to a plain clock compare
-— "đi bây giờ có kịp không" becomes "bây giờ đã quá giờ chưa", which is a different and
-less useful question. Deliberately left null rather than guessed: an invented walking
-time produces confidently wrong advice.
+`walkable` is set by the loader per file, not per row (D16): `places-local.json` and
+`places-nearby.json` are walk-to, `places-online.json` is not. `walk_minutes` is unset
+everywhere and stays that way — `_DEFAULT_WALK_MINUTES` covers the gate arithmetic (D17).
 
 ## Testing
 

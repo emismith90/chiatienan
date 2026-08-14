@@ -14,6 +14,7 @@
       "nước",
       "hay-ăn"
     ],
+    "walkable": true,
     "price_hint": 40000,
     "closed_until": "2026-09-30"
   },
@@ -34,6 +35,7 @@
       "nước",
       "đắt"
     ],
+    "walkable": true,
     "phone": "0359759630",
     "price_hint": 80000
   },
@@ -53,6 +55,7 @@
       "nước",
       "đắt"
     ],
+    "walkable": true,
     "phone": "0943000993",
     "price_hint": 90000
   },
@@ -70,6 +73,7 @@
       "chả",
       "gọi-về"
     ],
+    "walkable": true,
     "phone": "0912162393",
     "price_hint": 50000
   },
@@ -92,6 +96,7 @@
       "cơm",
       "bình dân"
     ],
+    "walkable": true,
     "phone": "0964165096",
     "price_hint": 60000
   },
@@ -114,6 +119,7 @@
       "chả",
       "nem cua bể"
     ],
+    "walkable": true,
     "price_hint": 50000
   },
   {
@@ -131,6 +137,7 @@
       "riêu",
       "nước"
     ],
+    "walkable": true,
     "price_hint": 60000
   },
   {
@@ -151,6 +158,7 @@
       "nước",
       "hay-ăn"
     ],
+    "walkable": true,
     "price_hint": 55000
   },
   {
@@ -172,6 +180,7 @@
       "khô",
       "hay-ăn"
     ],
+    "walkable": true,
     "price_hint": 80000
   },
   {
@@ -190,6 +199,7 @@
       "nước",
       "hay-ăn"
     ],
+    "walkable": true,
     "price_hint": 55000
   },
   {
@@ -207,7 +217,8 @@
       "bún",
       "mọc",
       "nước"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Xôi Bà Hiền",
@@ -221,7 +232,8 @@
     "tags": [
       "xôi",
       "mua-về"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bánh mỳ que Hồ Đắc Di",
@@ -237,7 +249,8 @@
     "tags": [
       "bánh mỳ",
       "mua-về"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Miến Lươn Lan Hương",
@@ -255,6 +268,7 @@
       "lươn",
       "nước"
     ],
+    "walkable": true,
     "phone": "0972407373",
     "price_hint": 75000
   },
@@ -273,6 +287,7 @@
       "sân vườn",
       "hay-ăn"
     ],
+    "walkable": true,
     "price_hint": 65000
   },
   {
@@ -290,7 +305,8 @@
       "huế",
       "cơm rang",
       "nước"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Nem nướng Nha Trang",
@@ -307,6 +323,7 @@
       "mua-về",
       "gần"
     ],
+    "walkable": true,
     "phone": "0399937526"
   },
   {
@@ -326,6 +343,7 @@
       "nhậu",
       "gọi-về"
     ],
+    "walkable": true,
     "phone": "0988365816",
     "price_hint": 100000
   },
@@ -345,6 +363,7 @@
       "dịp đặc biệt",
       "đắt"
     ],
+    "walkable": true,
     "price_hint": 200000
   },
   {
@@ -360,6 +379,7 @@
       "nhậu",
       "đắt"
     ],
+    "walkable": true,
     "price_hint": 200000
   },
   {
@@ -376,6 +396,7 @@
       "riêu",
       "nước"
     ],
+    "walkable": true,
     "price_hint": 65000
   },
   {
@@ -396,7 +417,8 @@
       "ngan",
       "nước",
       "bình dân"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bún cá Đặng Văn Ngữ",
@@ -412,7 +434,8 @@
       "cá",
       "gà tần",
       "nước"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Mì vịt quay Đặng Văn Ngữ",
@@ -432,7 +455,8 @@
       "vịt quay",
       "nước",
       "cơm xá xíu"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Phở Lý Quốc Sư",
@@ -448,7 +472,8 @@
       "cơm rang",
       "nước",
       "đắt"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Vua Gà Nướng Lu",
@@ -470,6 +495,7 @@
       "xôi",
       "lẩu thái"
     ],
+    "walkable": true,
     "phone": "0976297899"
   },
   {
@@ -488,6 +514,7 @@
       "phở xào",
       "hay-ăn"
     ],
+    "walkable": true,
     "phone": "0763192222"
   },
   {
@@ -508,6 +535,7 @@
       "nhậu",
       "hay-ăn"
     ],
+    "walkable": true,
     "phone": "0906279398"
   },
   {
@@ -530,6 +558,7 @@
       "dịp đặc biệt",
       "đắt"
     ],
+    "walkable": true,
     "price_hint": 150000
   },
   {
@@ -545,6 +574,7 @@
       "gà rán",
       "đắt"
     ],
+    "walkable": true,
     "price_hint": 150000
   },
   {
@@ -563,6 +593,7 @@
       "hay-ăn",
       "đắt"
     ],
+    "walkable": true,
     "phone": "0915262648",
     "price_hint": 200000
   },
@@ -579,7 +610,8 @@
       "bún",
       "cá",
       "khô"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bún đậu sân con voi",
@@ -594,6 +626,7 @@
       "bún đậu",
       "khô"
     ],
+    "walkable": true,
     "price_hint": 100000,
     "active": false
   },
@@ -613,6 +646,7 @@
       "bánh tráng",
       "khô"
     ],
+    "walkable": true,
     "price_hint": 150000
   },
   {
@@ -626,6 +660,7 @@
       "bánh cuốn",
       "khô"
     ],
+    "walkable": true,
     "price_hint": 60000
   },
   {
@@ -640,7 +675,8 @@
     "tags": [
       "bánh mỳ",
       "mua-về"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bánh mì Patê Cột Đèn",
@@ -665,6 +701,7 @@
       "gần",
       "bánh mì chảo"
     ],
+    "walkable": true,
     "price_hint": 40000
   },
   {
@@ -680,7 +717,8 @@
     "tags": [
       "bún",
       "chả"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Phở Ánh Sáng",
@@ -698,7 +736,8 @@
       "phở",
       "cơm rang",
       "nước"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Chả Cá Gia Phú",
@@ -715,6 +754,7 @@
       "bún đậu",
       "sạch"
     ],
+    "walkable": true,
     "phone": "0972379555"
   },
   {
@@ -730,6 +770,7 @@
       "bún",
       "ngan",
       "nước"
-    ]
+    ],
+    "walkable": true
   }
 ]

@@ -8,7 +8,8 @@
       "hotdog",
       "ăn vặt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bánh Cuốn Nóng Gia Truyền 77",
@@ -18,7 +19,8 @@
     "tags": [
       "bánh cuốn",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bánh Mì Cô Hương",
@@ -28,7 +30,8 @@
     "tags": [
       "bánh mì",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bún Riêu Ngon",
@@ -38,7 +41,8 @@
     "tags": [
       "bún riêu",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bún riêu Hoàn Hói",
@@ -48,7 +52,8 @@
     "tags": [
       "bún riêu",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Bếp Nhà 1986",
@@ -58,7 +63,8 @@
     "tags": [
       "món việt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Chú Long Kim Liên - Cơm Việt Hàn",
@@ -69,7 +75,8 @@
       "cơm việt",
       "hàn",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Chảo Cười - Cơm Trên Chảo Nóng",
@@ -80,7 +87,8 @@
       "cơm",
       "bánh mì chảo",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Cô Lê - Nem Nướng Nha Trang",
@@ -90,7 +98,8 @@
     "tags": [
       "nem nướng",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Cơm Ngon Yến Vy",
@@ -100,7 +109,8 @@
     "tags": [
       "cơm",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Cạp - Seafood",
@@ -110,7 +120,8 @@
     "tags": [
       "hải sản",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Hẻm Trộn",
@@ -120,7 +131,8 @@
     "tags": [
       "món trộn",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Korean Kitchen - Bếp Hàn Online",
@@ -130,7 +142,8 @@
     "tags": [
       "hàn quốc",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Linh Nga - Cơm, Bún Chả, Bánh Cuốn",
@@ -142,7 +155,8 @@
       "bún",
       "bánh cuốn",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Lương Tâm Quán",
@@ -152,7 +166,8 @@
     "tags": [
       "ăn vặt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Lẩu & Nướng Ăndeee",
@@ -163,7 +178,8 @@
       "lẩu",
       "nướng",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Mr Mlem CS1 - Chuỗi Buffet Nướng Lẩu",
@@ -174,7 +190,8 @@
       "buffet nướng",
       "lẩu",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Nem Nướng Nha Trang (104D8)",
@@ -184,7 +201,8 @@
     "tags": [
       "nem nướng",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Nhà hàng Car Park",
@@ -194,7 +212,8 @@
     "tags": [
       "món việt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "PS+ Nem Nướng Nha Trang - Bún Đậu",
@@ -205,7 +224,8 @@
       "nem nướng",
       "bún đậu",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Phở Ngọc - Trần Hữu Tước",
@@ -215,7 +235,8 @@
     "tags": [
       "phở",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Quan koy",
@@ -225,7 +246,8 @@
     "tags": [
       "món việt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Quán Bún & Lẩu Nam Đồng",
@@ -236,7 +258,8 @@
       "bún",
       "lẩu",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Quán Chị Nui",
@@ -246,7 +269,8 @@
     "tags": [
       "ăn vặt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Quán Chị Nui - Ăn Vặt",
@@ -256,7 +280,8 @@
     "tags": [
       "ăn vặt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Quán Ăn Vặt Ngon Hà Nội",
@@ -267,7 +292,8 @@
       "ăn vặt",
       "cơm",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "S Kitchen",
@@ -279,7 +305,8 @@
       "mỳ",
       "bún",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Taiwan Food - Shop Online",
@@ -289,7 +316,8 @@
     "tags": [
       "đồ ăn đài loan",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "The Canteen - Food & Drinks",
@@ -300,7 +328,8 @@
       "ăn vặt",
       "món việt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Thái Hạnh - Huy Mai - Quán Ăn Vặt",
@@ -310,7 +339,8 @@
     "tags": [
       "ăn vặt",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Thực Thần - Ẩm Thực Trung Hoa",
@@ -320,7 +350,8 @@
     "tags": [
       "trung hoa",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Tịnh Tâm Quán - Cơm Chay",
@@ -330,7 +361,8 @@
     "tags": [
       "cơm chay",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Xiăo Chì - Ăn Vặt Trung Hoa",
@@ -340,7 +372,8 @@
     "tags": [
       "ăn vặt trung hoa",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Ăn Vặt Hàn Quốc",
@@ -350,7 +383,8 @@
     "tags": [
       "ăn vặt hàn quốc",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   },
   {
     "name": "Ốc Trang Hải Phòng",
@@ -361,6 +395,7 @@
       "ốc",
       "hải sản",
       "chưa-thử"
-    ]
+    ],
+    "walkable": true
   }
 ]
