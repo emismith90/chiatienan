@@ -1306,13 +1306,22 @@ Phase 1 is invisible to users — no new chat behaviour, no UI. It ships the sch
    ```bash
    docker compose exec backend python -c "import sqlite3,datetime,os; os.makedirs('/data/backups',exist_ok=True); sqlite3.connect('/data/chiatienan.db').backup(sqlite3.connect(f'/data/backups/backup-{datetime.date.today()}.db'))"
    ```
-4. Seed and backfill in one command:
+4. **The seeds must be in the running image.** They ship via `COPY seeds ./seeds`
+   (backend/Dockerfile) — added after Phase 1 was written, because the original
+   runbook here documented a command that could not work: the image copied only
+   `app` and `agent_sidecar`, so `seeds/places-local.json` did not exist inside
+   the container. Confirm before seeding:
+   ```bash
+   docker compose exec backend ls seeds/
+   ```
+   Empty or missing means the running image predates that change — redeploy first.
+5. Seed and backfill in one command:
    ```bash
    docker compose exec backend python -m app.seed_places <ROOM_ID> \
      seeds/places-local.json seeds/places-nearby.json seeds/places-online.json
    ```
    Expected: `total: +100 ~0` then a `backfill: {...}` line. **A non-zero `ambiguous` count is normal** — those meals stay unlinked until an alias is added.
-5. Check what linked, and improve aliases from what didn't:
+6. Check what linked, and improve aliases from what didn't:
    ```bash
    curl -sS -H "X-Debug-Key: $DEBUG_API_KEY" "https://chiatienan.duckdns.org/internal/debug/tables/meals.csv?room_id=<ROOM_ID>" -o meals.csv
    ```
