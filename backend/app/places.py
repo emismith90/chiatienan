@@ -149,3 +149,41 @@ def resolve(session: Session, room_id: int, *, names: list[str] | None = None) -
         "unresolved": unresolved,
         "ambiguous": ambiguous,
     }
+
+
+def backfill_links(session: Session, room_id: int) -> dict:
+    """Link historical meals to places by resolving ``meals.dish``.
+
+    **Confident tiers only.** A backfill has no draft card, so no human reviews
+    the guess before it is written — and a wrong link silently moves a meal's
+    money history onto another restaurant, which no later correction catches
+    because nothing looks broken. An unlinked meal is the cheaper failure.
+
+    Idempotent: meals that already carry a ``place_id`` are never revisited, so
+    re-running after adding aliases only picks up what was previously missed.
+    """
+    from app.models import Meal
+
+    index = _PlaceIndex(list_places(session, room_id))
+    rows = session.scalars(
+        select(Meal).where(
+            Meal.room_id == room_id,
+            Meal.place_id.is_(None),
+            Meal.voided.is_(False),
+            Meal.dish.isnot(None),
+        )
+    ).all()
+
+    counts = {"linked": 0, "skipped": 0, "ambiguous": 0}
+    for meal in rows:
+        hits, tier = index.lookup(meal.dish or "")
+        if len(hits) > 1:
+            counts["ambiguous"] += 1
+        elif len(hits) == 1 and tier in CONFIDENT_TIERS:
+            meal.place_id = hits[0].id
+            counts["linked"] += 1
+        else:
+            counts["skipped"] += 1
+    session.flush()
+    logger.info("[places] backfill room=%s %s", room_id, counts)
+    return counts
