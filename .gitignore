@@ -17,6 +17,7 @@ next-env.d.ts
 *.tsbuildinfo
 .DS_Store
 .superpowers/
+.worktrees/
 
 # Real production conversations, pseudonymized but never committed. A leak here
 # would be an unrecoverable privacy incident, so the bodies stay off git
