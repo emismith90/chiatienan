@@ -181,3 +181,60 @@ def test_an_unambiguous_person_still_works(two_trangs):
     _db, tools = two_trangs
     res = tools["remember"].execute({"about": "Giang", "text": "Thích bún riêu"})
     assert res["ok"] and res["subject"].startswith("member:")
+
+
+# ------------------------------------------ re-filing a card when a place is renamed
+#
+# `create` freezes the subject into the attachment and `commit` reads it back, so
+# a card left pending across a slug rename would commit onto a slug the place no
+# longer has. Production had exactly one such card pending when this was written.
+
+def _memos(session, room_id=1):
+    from sqlalchemy import select
+    return list(session.scalars(
+        select(RoomMessage).where(RoomMessage.room_id == room_id,
+                                  RoomMessage.kind == "memo_draft")))
+
+
+def test_retarget_moves_pending_cards_and_their_label(env):
+    db, _ = env
+    with db.session() as s:
+        memos.create(s, 1, action="add", subject="place:be-bu",
+                     subject_label="Quán Bé Bự", text="Gọi giá tính tiền",
+                     when=date(2026, 8, 14))
+    with db.session() as s:
+        assert memos.retarget_subject(s, 1, old="place:be-bu", new="place:be-bu-moi",
+                                      new_label="Bé Bự (mới)") == 1
+    with db.session() as s:
+        att = _memos(s)[0].attachments
+    assert att["subject"] == "place:be-bu-moi"
+    assert att["subject_label"] == "Bé Bự (mới)"
+    assert att["status"] == "pending"
+
+
+def test_retarget_leaves_committed_and_cancelled_cards_alone(env):
+    """A committed card records what already happened under the old slug — the
+    same rename moves that observation line, and rewriting the card as well would
+    make the record disagree with the file."""
+    db, _ = env
+    with db.session() as s:
+        done = memos.create(s, 1, action="add", subject="place:be-bu",
+                            subject_label="Quán Bé Bự", text="đã ghi")
+        gone = memos.create(s, 1, action="add", subject="place:be-bu",
+                            subject_label="Quán Bé Bự", text="đã huỷ")
+        memos.commit(s, done.id, 1)
+        memos.cancel(s, gone.id, 1)
+
+    with db.session() as s:
+        assert memos.retarget_subject(s, 1, old="place:be-bu", new="place:x") == 0
+    with db.session() as s:
+        assert {m.attachments["subject"] for m in _memos(s)} == {"place:be-bu"}
+
+
+def test_retarget_ignores_cards_about_someone_else(env):
+    db, _ = env
+    with db.session() as s:
+        memos.create(s, 1, action="add", subject="member:giang",
+                     subject_label="Giang Hoàng", text="hay đổi ý")
+    with db.session() as s:
+        assert memos.retarget_subject(s, 1, old="place:be-bu", new="place:x") == 0

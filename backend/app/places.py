@@ -48,10 +48,16 @@ class PlaceError(Exception):
     """A place write that cannot be applied."""
 
 
-#: Columns a human may edit. **`slug` is not one of them** and never will be: it is
-#: the `place:` subject in `observations.md`, so changing it silently detaches every
-#: note and standing rule about that restaurant. `name` and `aliases` carry the
-#: renaming, and the slug stays the identity it was created as.
+#: Columns a human may edit. **`slug` is not one of them**, and neither is
+#: `former_slugs`: the slug is the `place:` subject in `observations.md` and the
+#: key `seed_places` matches on, so changing it as a field would silently detach
+#: every note and standing rule about that restaurant. `name` and `aliases` carry
+#: an ordinary renaming.
+#:
+#: A genuine identity change goes through :func:`rename_slug`, which migrates the
+#: stores that hold the old value instead of leaving them behind. It is a separate
+#: function — and a separate route — so that this tuple stays literally true and no
+#: client can rename by round-tripping a form.
 EDITABLE = (
     "name", "aliases", "tags", "delivery", "address", "phone",
     "walkable", "walk_minutes", "price_hint", "closed_until", "active",
@@ -84,6 +90,78 @@ def create_place(session: Session, room_id: int, *, name: str, **fields) -> Plac
     session.add(p)
     session.flush()
     return p
+
+
+def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) -> dict:
+    """Change a place's room-scoped identity, moving everything filed under it.
+
+    Three live stores hold a slug and all three move here: the row, the
+    ``place:`` subjects in ``observations.md``, and the frozen subject on any
+    **pending** memo card. The two *offline* stores — ``seeds/places-*.json`` and
+    ``seeds/observations-local.md`` — are not rewritten (a droplet's DB has long
+    since diverged from files in the repo, and an HTTP route must not edit them);
+    instead the old slug is remembered in ``former_slugs`` so their readers find
+    this row rather than manufacturing a duplicate. See :mod:`app.seed_places`.
+
+    The new slug is **typed, not derived from the name**. 12 of production's 100
+    places carry a curated slug that is not ``slugify(name)`` — ``be-bu`` for
+    "Quán Bé Bự - Khoai Tây", ``com-ga-thinh-lo`` for "Cơm gà đảo, cơm rang Thịnh
+    Lơ" — so recomputing on rename would undo curation nobody asked to undo. What
+    is typed still goes through :func:`slugify`, because ``roster._fold`` maps
+    ``đ→d`` by hand (NFD leaves it whole) and a second normaliser gets that wrong.
+
+    Renaming *onto* a slug another place holds, live or former, is refused rather
+    than merged: merging two places also has to reassign ``meals.place_id`` and
+    reconcile both histories, which is a different and much larger feature.
+
+    Returns ``{"changed", "slug", "former_slug", "notes_moved", "notes_deduped",
+    "memos_moved"}``.
+    """
+    # Local imports: `memos` imports `chat`, and a module-level import here would
+    # risk a cycle. `observations` is only needed on the write path.
+    from app import memos as memos_mod, observations as obs_mod
+
+    place = session.get(Place, place_id)
+    if place is None or place.room_id != room_id:
+        raise PlaceError("No such place.")
+
+    new = slugify(raw_slug or "")
+    if not new:
+        raise PlaceError(f"Cannot build an identifier from «{raw_slug}».")
+
+    old = place.slug
+    if new == old:
+        # "Quán Bé Bự" → "quán bé bự" is the same identity. Rewriting the memory
+        # file for nothing is not free: every line's `line_id` would churn.
+        return {"changed": False, "slug": old, "former_slug": None,
+                "notes_moved": 0, "notes_deduped": 0, "memos_moved": 0}
+
+    for other in list_places(session, room_id, include_inactive=True):
+        if other.id == place.id:
+            continue
+        if other.slug == new:
+            raise PlaceError(f"«{other.name}» already uses «{new}».")
+        if new in (other.former_slugs or []):
+            raise PlaceError(f"«{other.name}» used «{new}» before — pick another.")
+
+    # Renaming back to a slug this place previously held retires it from the
+    # former list: two rows must never both answer to one slug, and that includes
+    # one row answering to it twice.
+    formers = [f for f in (place.former_slugs or []) if f not in (new, old)]
+    place.former_slugs = [*formers, old]
+    place.slug = new
+    session.flush()
+
+    notes = obs_mod.retarget_subject(room_id, old=f"place:{old}", new=f"place:{new}")
+    memos_moved = memos_mod.retarget_subject(
+        session, room_id, old=f"place:{old}", new=f"place:{new}",
+        new_label=place.name)
+
+    logger.info("[places] rename room=%s %s -> %s notes=%s memos=%s",
+                room_id, old, new, notes, memos_moved)
+    return {"changed": True, "slug": new, "former_slug": old,
+            "notes_moved": notes["moved"], "notes_deduped": notes["deduped"],
+            "memos_moved": memos_moved}
 
 
 def apply_edits(place: Place, fields: dict) -> bool:

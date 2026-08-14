@@ -62,22 +62,50 @@ def lint(rows: list[dict], *, member_names: list[str]) -> list[str]:
     return problems
 
 
+def _by_slug(session: Session, room_id: int) -> dict[str, Place]:
+    """Every way this room's places can be addressed by slug, current and former.
+
+    The former slugs are what stops a rename from turning into a duplicate. The
+    seed files pin ``slug`` on all 100 rows and ``_FIELDS`` excludes it, so a row
+    still pinned to a pre-rename slug would otherwise miss its place, create a
+    second one carrying the old slug, and leave ``backfill_links`` to link meals
+    to whichever the matcher happened to prefer. Nothing about that failure is
+    visible until someone counts the room's restaurants.
+
+    Current slugs win over former ones, so a slug that is live somewhere can never
+    be captured by a row that used to hold it.
+    """
+    rows = list(session.scalars(select(Place).where(Place.room_id == room_id)))
+    index: dict[str, Place] = {}
+    for p in rows:
+        for old in (p.former_slugs or []):
+            index.setdefault(old, p)
+    for p in rows:
+        index[p.slug] = p
+    return index
+
+
 def load_file(session: Session, room_id: int, path) -> dict:
     """Upsert one seed file's places into ``room_id``. Returns created/updated counts."""
     rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    index = _by_slug(session, room_id)
     created = updated = 0
     for row in rows:
         slug = row.get("slug") or slugify(row["name"])
-        existing = session.scalars(
-            select(Place).where(Place.room_id == room_id, Place.slug == slug)
-        ).first()
+        existing = index.get(slug)
         values = {k: row[k] for k in _FIELDS if k in row}
         if cu := row.get("closed_until"):
             values["closed_until"] = date.fromisoformat(cu)
         if existing is None:
-            session.add(Place(room_id=room_id, slug=slug, **values))
+            new = Place(room_id=room_id, slug=slug, **values)
+            session.add(new)
+            index[slug] = new
             created += 1
         else:
+            # Curated fields refresh; the slug does not (`_FIELDS` excludes it).
+            # A row matched by a *former* slug keeps the slug the rename gave it —
+            # the DB is the authority on identity, the file is the authority on
+            # everything else.
             for k, v in values.items():
                 setattr(existing, k, v)
             updated += 1
@@ -112,11 +140,12 @@ def main(argv: list[str]) -> int:
         print(f"backfill: {backfill_links(s, room_id)}")
     obs_seed = paths[0].parent / "observations-local.md"
     if obs_seed.exists():
-        print(f"observations: {install_observations(room_id, obs_seed)}")
+        with db.session() as s:
+            print(f"observations: {install_observations(room_id, obs_seed, s)}")
     return 0
 
 
-def install_observations(room_id: int, path) -> dict:
+def install_observations(room_id: int, path, session: Session | None = None) -> dict:
     """Copy a seed observations file into the room, skipping lines already there.
 
     Idempotent and non-destructive: notes the room has accumulated since the last
@@ -130,6 +159,7 @@ def install_observations(room_id: int, path) -> dict:
         o = observations._parse_line(raw, i)
         if o is None:
             continue
+        o = _canonical_subject(session, room_id, o)
         if (o.subject, o.text) in existing:
             skipped += 1
             continue
@@ -137,6 +167,25 @@ def install_observations(room_id: int, path) -> dict:
         existing.add((o.subject, o.text))
         added += 1
     return {"added": added, "skipped": skipped}
+
+
+def _canonical_subject(session, room_id: int, o):
+    """Rewrite a seed line's ``place:`` subject to the place's current slug.
+
+    Without this, a seed file still naming a pre-rename slug looks like a fact the
+    room does not have — because the live file now says the new slug — so every
+    re-seed re-adds it, one orphan note per run. Members and unknown places are
+    passed through untouched.
+    """
+    from dataclasses import replace
+
+    prefix, _, rest = o.subject.partition(":")
+    if prefix != "place" or session is None:
+        return o
+    p = _by_slug(session, room_id).get(rest)
+    if p is None or p.slug == rest:
+        return o
+    return replace(o, subject=f"place:{p.slug}")
 
 
 if __name__ == "__main__":

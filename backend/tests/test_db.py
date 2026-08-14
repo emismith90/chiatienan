@@ -194,3 +194,29 @@ def test_ddl_default_prefers_an_explicit_server_default():
 
     t = Table("t", MetaData(), Column("n", Integer, server_default=text("42"), default=7))
     assert _ddl_default(t.c.n) == "42"
+
+
+def test_former_slugs_is_added_to_an_existing_places_table(tmp_path):
+    """`_sync_additive_columns` must ALTER it in, with `[]` for the rows already
+    there — a nullable column would make every reader need `or []`, and the whole
+    point of the column is that `seed_places` can trust it."""
+    import sqlalchemy as sa
+    from app.db import Database
+
+    url = f"sqlite:///{tmp_path / 'legacy.db'}"
+    eng = sa.create_engine(url)
+    with eng.begin() as c:
+        c.execute(sa.text(
+            "CREATE TABLE places (id INTEGER PRIMARY KEY, room_id INTEGER NOT NULL,"
+            " slug VARCHAR(60) NOT NULL, name VARCHAR(120) NOT NULL)"))
+        c.execute(sa.text(
+            "INSERT INTO places (room_id, slug, name) VALUES (1, 'be-bu', 'Quán Bé Bự')"))
+    eng.dispose()
+
+    db = Database(url)
+    db.create_all()
+
+    from app.models import Place
+    with db.session() as s:
+        p = s.scalars(sa.select(Place)).one()
+        assert p.former_slugs == []

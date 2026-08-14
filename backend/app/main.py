@@ -226,6 +226,17 @@ class PlacePatchIn(BaseModel):
     active: bool | None = None
 
 
+class PlaceSlugIn(BaseModel):
+    """The new identifier, typed rather than derived from the name.
+
+    12 of production's 100 places carry a curated slug that is not
+    ``slugify(name)``, so recomputing on rename would undo curation. The server
+    still normalises whatever arrives through ``places.slugify`` — there is no
+    second normaliser, in TypeScript or anywhere else.
+    """
+    slug: str
+
+
 class ObservationIn(BaseModel):
     subject: str                      # "place:<slug>" | "member:<nickname>"
     text: str
@@ -828,6 +839,57 @@ async def delete_place_route(room_id: int, place_id: int,
                 trail = _knowledge_trail(s, room_id, ctx, f"hid place «{p.name}».")
     await _publish_knowledge(room_id, trail)
     return {"ok": True}
+
+
+@app.post("/api/rooms/{room_id}/places/{place_id}/slug")
+async def rename_place_slug_route(room_id: int, place_id: int, body: PlaceSlugIn,
+                                  ctx: AuthCtx = Depends(require_session)):
+    """Change a place's identity and move everything filed under the old one.
+
+    Its own route rather than a field on ``PATCH /places/{id}``: this is a small
+    migration across three live stores, and keeping it off ``PlacePatchIn`` means
+    ``places.EDITABLE`` stays literally true and no existing client can rename by
+    round-tripping a form.
+
+    Under ``chat._agent_lock`` like every knowledge write — ``observations.md`` is
+    read-modify-write and the turn loop is the other writer. No ``etag``: the
+    request names a place, not a line, and the whole point is that it rewrites
+    whatever the file currently says about that place.
+    """
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                out = places.rename_slug(s, room_id, place_id, body.slug)
+            except places.PlaceError as exc:
+                # "No such place" is a 404; a collision is a 409; an unusable slug
+                # is a 422. The panel shows the server's own detail either way.
+                text = str(exc)
+                if text == "No such place.":
+                    raise HTTPException(404, text)
+                raise HTTPException(409 if "already uses" in text or "used" in text
+                                    else 422, text)
+            trail = None
+            if out["changed"]:
+                p = s.get(Place, place_id)
+                moved = []
+                if out["notes_moved"]:
+                    moved.append(f"{out['notes_moved']} note"
+                                 f"{'' if out['notes_moved'] == 1 else 's'}")
+                if out["memos_moved"]:
+                    moved.append(f"{out['memos_moved']} pending card"
+                                 f"{'' if out['memos_moved'] == 1 else 's'}")
+                tail = f" ({', '.join(moved)} moved)" if moved else ""
+                trail = _knowledge_trail(
+                    s, room_id,
+                    ctx, f"changed the identifier for «{p.name}»: "
+                         f"{out['former_slug']} → {out['slug']}{tail}.")
+    # Every affected line's `line_id` is a hash of its own text, so changing the
+    # subject changed all of them: an open panel is holding ids that no longer
+    # exist and has to refetch.
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True, **out}
 
 
 @app.post("/api/rooms/{room_id}/observations")

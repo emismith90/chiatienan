@@ -29,6 +29,17 @@ def _read(room_id):
     return (room_memory_dir(room_id) / "observations.md").read_text(encoding="utf-8")
 
 
+def _path_bytes(room_id):
+    from app.memory import room_memory_dir
+    return (room_memory_dir(room_id) / "observations.md").read_bytes()
+
+
+@pytest.fixture
+def room():
+    """A room id, so the retarget tests read as prose rather than as `1`."""
+    return 1
+
+
 #: A comment, a good line, a line the parser cannot read, and two more good ones.
 MIXED = (
     "# Ghi chú tay — đừng xoá\n"
@@ -144,3 +155,90 @@ def test_parse_gate_validates_instead_of_dropping():
         obs.parse_gate("nonsense", "11:30")
     with pytest.raises(ValueError):
         obs.parse_gate("busy", None)
+
+
+# ============================================ retargeting one subject onto another
+#
+# The write half of a place slug rename. Line-preserving like every other write
+# here, and additionally responsible for never producing two byte-identical lines
+# — they would share a `line_id` and neither could be addressed again.
+
+def test_retarget_moves_only_the_matching_subject(room):
+    _write(room, "# tay viết\n"
+                 "- always | place:old | order-by@11:30 | Phải gọi trước.\n"
+                 "- 2026-08-10 | place:old | - | Hôm nay hết gà.\n"
+                 "- always | member:nhim | - | Thích bún riêu.\n"
+                 "rác không đọc được\n")
+
+    assert obs.retarget_subject(room, old="place:old", new="place:new") == {
+        "moved": 2, "deduped": 0}
+
+    lines = _read(room).splitlines()
+    assert lines == [
+        "# tay viết",
+        "- always | place:new | order-by@11:30 | Phải gọi trước.",
+        "- 2026-08-10 | place:new | - | Hôm nay hết gà.",
+        "- always | member:nhim | - | Thích bún riêu.",
+        "rác không đọc được",
+    ]
+
+
+def test_retarget_keeps_comments_and_unreadable_lines_byte_for_byte(room):
+    """The K6 guarantee, applied to the widest write in the module."""
+    original = ("# quán ăn\n"
+                "\n"
+                "- always | place:old | - | Ăn được.\n"
+                "- 2026-13-99 | place:old | - | ngày sai\n"
+                "  lơ lửng không có gạch đầu dòng\n")
+    _write(room, original)
+
+    obs.retarget_subject(room, old="place:old", new="place:new")
+
+    after = _read(room).splitlines()
+    assert after[0] == "# quán ăn"
+    assert after[1] == ""
+    assert after[3] == "- 2026-13-99 | place:old | - | ngày sai"   # unparsed, untouched
+    assert after[4] == "  lơ lửng không có gạch đầu dòng"
+
+
+def test_retarget_drops_a_line_that_would_collide_instead_of_writing_it(room):
+    """A moved line landing exactly on an existing one would make both
+    unaddressable — `line_id` is a hash of the rendered line."""
+    _write(room, "- always | place:old | - | Ăn được.\n"
+                 "- always | place:new | - | Ăn được.\n")
+
+    assert obs.retarget_subject(room, old="place:old", new="place:new") == {
+        "moved": 0, "deduped": 1}
+    assert _read(room) == "- always | place:new | - | Ăn được.\n"
+
+
+def test_retarget_collapses_a_pre_existing_identical_pair(room):
+    """Two identical lines under the old subject were already unaddressable;
+    coming out the other side as one is a repair, not a loss."""
+    _write(room, "- always | place:old | - | Ăn được.\n"
+                 "- always | place:old | - | Ăn được.\n")
+
+    assert obs.retarget_subject(room, old="place:old", new="place:new") == {
+        "moved": 1, "deduped": 1}
+    assert _read(room) == "- always | place:new | - | Ăn được.\n"
+
+    ids = [o.line_id for o in obs.load(room)]
+    assert len(ids) == len(set(ids))
+
+
+def test_retarget_with_nothing_to_move_does_not_touch_the_file(room):
+    _write(room, "- always | member:nhim | - | Thích bún riêu.\n")
+    before = _path_bytes(room)
+
+    assert obs.retarget_subject(room, old="place:old", new="place:new") == {
+        "moved": 0, "deduped": 0}
+    assert _path_bytes(room) == before
+
+
+def test_retarget_leaves_no_temp_file_behind(room):
+    """The write goes through a sibling temp file and `os.replace`."""
+    _write(room, "- always | place:old | - | Ăn được.\n")
+    obs.retarget_subject(room, old="place:old", new="place:new")
+
+    from app.memory import room_memory_dir
+    assert [p.name for p in room_memory_dir(room).iterdir()] == ["observations.md"]

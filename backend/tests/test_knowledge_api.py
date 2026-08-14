@@ -535,3 +535,191 @@ async def test_committing_a_memo_publishes_knowledge_changed(api_client_room, mo
     r = client.post(f"/api/rooms/{room_id}/memos/{memo_id}/commit", headers=headers)
     assert r.status_code == 200, r.text
     assert seen
+
+
+# ======================================================== renaming a place's slug
+#
+# `slug` is a foreign key held by things that are not the database, so this route
+# is a small migration rather than a field edit. `PlacePatchIn` still has no
+# `slug`, which is what keeps `places.EDITABLE` literally true.
+
+def _rename(client, headers, room_id, place_id, slug):
+    return client.post(f"/api/rooms/{room_id}/places/{place_id}/slug",
+                       json={"slug": slug}, headers=headers)
+
+
+def test_renaming_a_slug_keeps_every_note_attached_to_the_place(api_client_room):
+    """The load-bearing one: after a rename the notes still resolve to the place,
+    the count is unchanged, and nothing became an orphan."""
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Bún chả rửa xe Nam Đồng")
+    _write_obs(room_id,
+               "- always | place:bun-cha-rua-xe-nam-dong | busy@12:00 | Đông lúc 12h.\n"
+               "- 2026-08-10 | place:bun-cha-rua-xe-nam-dong | - | Hết chả.\n")
+
+    before = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    assert next(x for x in before["places"] if x["id"] == p["id"])["note_count"] == 2
+
+    r = _rename(client, headers, room_id, p["id"], "bun-cha-huong-lien")
+    assert r.status_code == 200, r.text
+    assert r.json()["notes_moved"] == 2
+
+    after = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    place = next(x for x in after["places"] if x["id"] == p["id"])
+    assert place["slug"] == "bun-cha-huong-lien"
+    assert place["former_slugs"] == ["bun-cha-rua-xe-nam-dong"]
+    assert place["note_count"] == 2
+    labels = {o["subject_label"] for o in after["observations"]}
+    assert labels == {"Bún chả rửa xe Nam Đồng"}          # still resolved, not ⚠️
+    assert not [o for o in after["observations"] if o["subject_kind"] == "unknown"]
+
+
+def test_a_comment_and_a_malformed_line_survive_the_rename(api_client_room):
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    _write_obs(room_id, "# đừng xoá\n"
+                        "- always | place:quan-be-bu | - | Ăn được.\n"
+                        "- rubbish that does not parse\n")
+
+    _rename(client, headers, room_id, p["id"], "be-bu")
+
+    lines = _read_obs(room_id).splitlines()
+    assert lines[0] == "# đừng xoá"
+    assert lines[2] == "- rubbish that does not parse"
+    assert lines[1] == "- always | place:be-bu | - | Ăn được."
+
+
+def test_a_memo_drafted_before_the_rename_commits_onto_the_new_slug(api_client_room):
+    """Modelled on the card that was sitting pending in production."""
+    client, headers, room_id, m = api_client_room
+    from app import memos
+    from app.db import get_db
+
+    p = _seed_place(room_id, "Bún riêu cô Trang")
+    with get_db().session() as s:
+        memo = memos.create(s, room_id, action="add", subject="place:bun-rieu-co-trang",
+                            subject_label="Bún riêu cô Trang",
+                            text="Gọi giá tính tiền", when=date(2026, 8, 14))
+        memo_id = memo.id
+
+    assert _rename(client, headers, room_id, p["id"],
+                   "bun-rieu-truong-sa").json()["memos_moved"] == 1
+
+    r = client.post(f"/api/rooms/{room_id}/memos/{memo_id}/commit", headers=headers)
+    assert r.status_code == 200, r.text
+
+    data = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    note = next(o for o in data["observations"] if o["text"] == "Gọi giá tính tiền")
+    assert note["subject"] == "place:bun-rieu-truong-sa"
+    assert note["subject_kind"] == "place"                 # attached, not an orphan
+
+
+def test_renaming_onto_a_taken_slug_is_a_409_naming_the_other_place(api_client_room):
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Bún chả rửa xe")
+    _seed_place(room_id, "Bún chả Hương Liên")
+
+    r = _rename(client, headers, room_id, p["id"], "bun-cha-huong-lien")
+    assert r.status_code == 409
+    assert "Bún chả Hương Liên" in r.json()["detail"]
+
+
+def test_an_unusable_slug_is_a_422_and_a_missing_place_a_404(api_client_room):
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    assert _rename(client, headers, room_id, p["id"], "!!!").status_code == 422
+    assert _rename(client, headers, room_id, 9999, "x").status_code == 404
+
+
+def test_renaming_to_the_same_slug_changes_nothing_and_says_nothing(api_client_room):
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    _write_obs(room_id, "- always | place:quan-be-bu | - | Ăn được.\n")
+    before = _read_obs(room_id)
+
+    r = _rename(client, headers, room_id, p["id"], "Quán Bé Bự")
+    assert r.status_code == 200 and r.json()["changed"] is False
+    assert _read_obs(room_id) == before
+
+    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()
+    assert not [x for x in msgs["messages"] if "identifier" in (x["body"] or "")]
+
+
+def test_the_rename_leaves_a_trail_naming_both_slugs_and_what_moved(api_client_room):
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    _write_obs(room_id, "- always | place:quan-be-bu | - | Ăn được.\n")
+
+    _rename(client, headers, room_id, p["id"], "be-bu")
+
+    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()
+    trail = [x["body"] for x in msgs["messages"] if "identifier" in (x["body"] or "")]
+    assert len(trail) == 1
+    assert "quan-be-bu → be-bu" in trail[0]
+    assert "1 note moved" in trail[0]
+
+
+@pytest.mark.asyncio
+async def test_the_rename_publishes_knowledge_changed(api_client_room, monkeypatch):
+    """Every affected line's content-derived id changed, so an open panel is
+    holding ids that no longer exist."""
+    client, headers, room_id, m = api_client_room
+    seen = []
+    orig = hub.publish
+
+    async def spy(rid, ev):
+        if rid == room_id and ev.get("type") == "knowledge:changed":
+            seen.append(ev)
+        await orig(rid, ev)
+
+    monkeypatch.setattr(hub, "publish", spy)
+    p = _seed_place(room_id, "Quán Bé Bự")
+    _rename(client, headers, room_id, p["id"], "be-bu")
+    assert seen, "expected knowledge:changed after a rename"
+
+
+def test_slug_is_still_not_a_patchable_field(api_client_room):
+    """`PATCH /places` must stay unable to rename — that is what makes
+    `places.EDITABLE` a true statement rather than a comment."""
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    client.patch(f"/api/rooms/{room_id}/places/{p['id']}",
+                 json={"name": "Bé Bự", "slug": "be-bu"}, headers=headers)
+    data = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    assert next(x for x in data["places"] if x["id"] == p["id"])["slug"] == "quan-be-bu"
+
+
+def test_a_note_left_under_a_former_slug_still_resolves_to_the_place(api_client_room):
+    """Only a hand edit or a restored backup can produce one — `rename_slug`
+    rewrites the live file — but rendering it as `⚠️ unknown` would hide which
+    restaurant it belongs to from the one person who could fix it."""
+    client, headers, room_id, m = api_client_room
+    p = _seed_place(room_id, "Quán Bé Bự")
+    _rename(client, headers, room_id, p["id"], "be-bu")
+    _write_obs(room_id, "- always | place:quan-be-bu | - | Ăn được.\n")   # stale slug
+
+    data = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    note = data["observations"][0]
+    assert note["subject_kind"] == "place"
+    assert note["subject_label"] == "Quán Bé Bự"
+    assert note["subject_key"] == "place:be-bu"        # canonical: the current slug
+
+
+def test_the_snapshot_reports_pending_cards_so_the_dialog_can_say_what_moves(api_client_room):
+    client, headers, room_id, m = api_client_room
+    from app import memos
+    from app.db import get_db
+
+    p = _seed_place(room_id, "Quán Bé Bự")
+    with get_db().session() as s:
+        kept = memos.create(s, room_id, action="add", subject="place:quan-be-bu",
+                            subject_label="Quán Bé Bự", text="pending one")
+        gone = memos.create(s, room_id, action="add", subject="place:quan-be-bu",
+                            subject_label="Quán Bé Bự", text="cancelled one")
+        memos.cancel(s, gone.id, room_id)
+        assert kept.id != gone.id
+
+    data = client.get(f"/api/rooms/{room_id}/knowledge", headers=headers).json()
+    row = next(x for x in data["places"] if x["id"] == p["id"])
+    assert row["pending_memo_count"] == 1              # the cancelled one does not move
+    assert row["former_slugs"] == []

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
+                        UniqueConstraint, text)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.clock import now_ict
@@ -76,6 +77,24 @@ class Place(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
     slug: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    # Every slug this row has been known by, oldest first. Appended by
+    # `places.rename_slug` and by nothing else — it is not in `places.EDITABLE`.
+    #
+    # This is what makes a rename safe against the two stores that live outside
+    # the database. `seed_places.load_file` looks a row up by `(room_id, slug)`
+    # from a JSON file that pins the slug on all 100 rows, so after a DB-only
+    # rename the next seeder run would create a *second* place carrying the old
+    # slug — and `backfill_links` would then start linking meals to whichever one
+    # the matcher preferred. The seed observations file has the same problem in
+    # miniature. Both readers consult this list, so a stale pin finds the renamed
+    # row instead of manufacturing a duplicate.
+    #
+    # `server_default` rather than `default=list` alone: `db._sync_additive_columns`
+    # can only add a NOT NULL column when it has a literal DDL default, and a
+    # callable default has none — without this the column arrives nullable and
+    # every reader needs `or []`.
+    former_slugs: Mapped[list] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     aliases: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)

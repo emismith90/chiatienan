@@ -25,7 +25,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app import memory, observations as obs_mod, places as places_mod, roster
-from app.models import Member
+from app.models import Member, Place
 
 
 def _member_key(raw: str) -> str:
@@ -46,9 +46,16 @@ class SubjectIndex:
     """
 
     def __init__(self, session: Session, room_id: int):
-        self.places = {
-            p.slug: p for p in places_mod.list_places(session, room_id, include_inactive=True)
-        }
+        self.places: dict[str, Place] = {}
+        for p in places_mod.list_places(session, room_id, include_inactive=True):
+            self.places[p.slug] = p
+            # Former slugs resolve too, and report the *current* one as the
+            # canonical `subject_key`. `rename_slug` rewrites the live file, so a
+            # line under an old slug can only come from a hand edit or a restored
+            # backup — and rendering that as `⚠️ unknown` would hide which
+            # restaurant it is from the one person who could fix it.
+            for old in (p.former_slugs or []):
+                self.places.setdefault(old, p)
         self.members: dict[str, Member] = {}
         # include_inactive: a note about someone who has since left the room must
         # still render their name. A note you cannot read is a note you cannot delete.
@@ -135,6 +142,32 @@ def observation_rows(session: Session, room_id: int, *, today=None,
     return rows
 
 
+def _pending_memo_counts(session: Session, room_id: int) -> dict[str, int]:
+    """``{subject: pending memo cards}`` for the room, in one pass.
+
+    The rename confirmation has to say what will move, and a card frozen to the
+    old slug is the half nobody expects. One query over the room's memo drafts
+    rather than one per place — there are two of these in production, and there
+    is no reason for the number of queries to track the number of restaurants.
+    """
+    from app.models import RoomMessage
+
+    from sqlalchemy import select as _select
+    out: dict[str, int] = {}
+    rows = session.scalars(
+        _select(RoomMessage).where(RoomMessage.room_id == room_id,
+                                   RoomMessage.kind == "memo_draft")
+    ).all()
+    for m in rows:
+        att = m.attachments or {}
+        if att.get("status") != "pending":
+            continue
+        subject = att.get("subject")
+        if subject:
+            out[subject] = out.get(subject, 0) + 1
+    return out
+
+
 def place_rows(session: Session, room_id: int, *, today=None,
                note_counts: dict[str, int] | None = None) -> list[dict]:
     """Every place in the room — including hidden ones — with its ledger stats.
@@ -149,12 +182,17 @@ def place_rows(session: Session, room_id: int, *, today=None,
     rows = places_mod.list_places(session, room_id, include_inactive=True)
     st = places_mod.stats(session, room_id, today=today)
     counts = note_counts or {}
+    pending = _pending_memo_counts(session, room_id)
     out = []
     for p in rows:
         s = st.get(p.id, {})
         out.append({
             "id": p.id,
             "slug": p.slug,
+            # Read-only, like the stats: appended by `rename_slug` and by nothing
+            # else. Shown so the panel can explain why a stale seed file still
+            # finds this row.
+            "former_slugs": list(p.former_slugs or []),
             "name": p.name,
             "aliases": list(p.aliases or []),
             "tags": list(p.tags or []),
@@ -168,6 +206,7 @@ def place_rows(session: Session, room_id: int, *, today=None,
             "active": p.active,
             "untried": places_mod.UNTRIED_TAG in (p.tags or []),
             "note_count": counts.get(f"place:{p.slug}", 0),
+            "pending_memo_count": pending.get(f"place:{p.slug}", 0),
             # Read-only, all of it (D1).
             "stats": {
                 "times": s.get("times", 0),
