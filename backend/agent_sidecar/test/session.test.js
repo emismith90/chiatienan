@@ -145,7 +145,7 @@ test("no builtin tools means money-safety is structural, not advisory", () => {
 
 test("builtin tools are allowlisted ALONGSIDE the money tools, never instead", () => {
   // pi treats `tools` as an allowlist, so omitting our own names would silently
-  // disable all 14 and leave the model holding only bash — the worst of both worlds.
+  // disable them all and leave the model holding only bash — the worst of both worlds.
   const options = toolOptionsFor(["read", "write", "bash"],
     ["propose_meal", "settle_period"]);
   assert.deepEqual(options.tools,
