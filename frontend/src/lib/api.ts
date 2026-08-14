@@ -148,6 +148,12 @@ export const recommitDraft = (
     body: JSON.stringify(fields),
   });
 
+export const commitMemo = (roomId: number, memoId: number) =>
+  req(`/api/rooms/${roomId}/memos/${memoId}/commit`, { method: "POST" });
+
+export const cancelMemo = (roomId: number, memoId: number) =>
+  req(`/api/rooms/${roomId}/memos/${memoId}/cancel`, { method: "POST" });
+
 export const cancelDraft = (roomId: number, draftId: number) =>
   req(`/api/rooms/${roomId}/drafts/${draftId}`, {
     method: "PATCH",

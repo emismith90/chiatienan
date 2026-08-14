@@ -1,0 +1,473 @@
+[
+  {
+    "name": "Nét Cuốn - 7 Ngày Rau Tươi",
+    "slug": "net-cuon",
+    "address": "Mai Anh Tuấn",
+    "aliases": [
+      "nét cuốn",
+      "net cuon",
+      "7 ngày rau tươi",
+      "bánh tráng cuốn"
+    ],
+    "tags": [
+      "cuốn",
+      "bánh tráng",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ],
+    "phone": "0868565077"
+  },
+  {
+    "name": "Midori House",
+    "slug": "midori-house",
+    "aliases": [
+      "midori",
+      "midori house"
+    ],
+    "tags": [
+      "salad",
+      "cơm gạo lứt",
+      "bún nưa",
+      "healthy",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "The B6 - Original Taste",
+    "slug": "the-b6",
+    "aliases": [
+      "b6",
+      "the b6",
+      "original taste"
+    ],
+    "tags": [
+      "hàn quốc",
+      "gà rán",
+      "gimbab",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Texas Chicken",
+    "slug": "texas-chicken",
+    "aliases": [
+      "texas",
+      "texas chicken"
+    ],
+    "tags": [
+      "gà rán",
+      "fastfood",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Bonchon Chicken",
+    "slug": "bonchon-chicken",
+    "aliases": [
+      "bonchon",
+      "bon chon"
+    ],
+    "tags": [
+      "gà rán",
+      "hàn quốc",
+      "fastfood",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Oíhii",
+    "slug": "oihii",
+    "aliases": [
+      "oihii",
+      "oíhii"
+    ],
+    "tags": [
+      "cơm bò",
+      "cơm gà",
+      "hội an",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Cơm gà Hải Nam Kampong",
+    "slug": "com-ga-hai-nam-kampong",
+    "aliases": [
+      "kampong",
+      "cơm gà hải nam",
+      "com ga hai nam",
+      "hải nam"
+    ],
+    "tags": [
+      "cơm gà",
+      "hải nam",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Cúc Cháo Sườn Sụn",
+    "slug": "cuc-chao-suon-sun",
+    "aliases": [
+      "cúc",
+      "cháo sườn",
+      "chao suon",
+      "cháo sườn sụn",
+      "chao suon sun"
+    ],
+    "tags": [
+      "cháo",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Bánh cuốn Bà Hoành",
+    "slug": "banh-cuon-ba-hoanh",
+    "address": "Tô Hiến Thành",
+    "aliases": [
+      "bà hoành",
+      "ba hoanh",
+      "bánh cuốn bà hoành"
+    ],
+    "tags": [
+      "bánh cuốn",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Bánh cuốn Bà Xuân",
+    "slug": "banh-cuon-ba-xuan",
+    "aliases": [
+      "bà xuân",
+      "ba xuan",
+      "bánh cuốn bà xuân"
+    ],
+    "tags": [
+      "bánh cuốn",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Omu One",
+    "slug": "omu-one",
+    "aliases": [
+      "omu",
+      "omu one",
+      "cơm trứng phủ",
+      "com trung phu"
+    ],
+    "tags": [
+      "cơm trứng phủ",
+      "nhật",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Flychef",
+    "slug": "flychef",
+    "aliases": [
+      "flychef",
+      "fly chef"
+    ],
+    "tags": [
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Phở cuốn Hương Mai",
+    "slug": "pho-cuon-huong-mai",
+    "aliases": [
+      "phở cuốn",
+      "pho cuon",
+      "hương mai",
+      "huong mai"
+    ],
+    "tags": [
+      "phở cuốn",
+      "cuốn",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Mỳ Bò Đài Loan",
+    "slug": "my-bo-dai-loan",
+    "aliases": [
+      "mỳ bò đài loan",
+      "my bo dai loan",
+      "mì bò đài loan"
+    ],
+    "tags": [
+      "mì",
+      "bò",
+      "đài loan",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Cơm tấm Mẹ Bắp",
+    "slug": "com-tam-me-bap",
+    "aliases": [
+      "mẹ bắp",
+      "me bap",
+      "cơm tấm mẹ bắp"
+    ],
+    "tags": [
+      "cơm tấm",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Nem nướng Nha Trang Hàng Bột",
+    "slug": "nem-nuong-nha-trang-hang-bot",
+    "address": "Hàng Bột",
+    "aliases": [
+      "nem nướng hàng bột",
+      "nem nuong hang bot"
+    ],
+    "tags": [
+      "nem nướng",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Pi Thái - Hủ Tiếu Thái Lan",
+    "slug": "pi-thai",
+    "address": "Phạm Ngọc Thạch",
+    "aliases": [
+      "pi thái",
+      "pi thai",
+      "hủ tiếu thái lan",
+      "hu tieu thai"
+    ],
+    "tags": [
+      "hủ tiếu",
+      "thái",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Bún chả 38 Mai Hắc Đế",
+    "slug": "bun-cha-38-mai-hac-de",
+    "address": "38 Mai Hắc Đế",
+    "aliases": [
+      "bún chả 38",
+      "bun cha 38",
+      "mai hắc đế",
+      "mai hac de"
+    ],
+    "tags": [
+      "bún",
+      "chả",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Mokchang",
+    "slug": "mokchang",
+    "address": "Xã Đàn",
+    "aliases": [
+      "mokchang",
+      "mok chang"
+    ],
+    "tags": [
+      "hàn quốc",
+      "gà rán",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "My Healthy Corner",
+    "slug": "my-healthy-corner",
+    "address": "Đặng Văn Ngữ",
+    "aliases": [
+      "healthy corner",
+      "my healthy corner"
+    ],
+    "tags": [
+      "salad",
+      "healthy",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Kaoya Hotpot - Mì Vịt Quay & Cơm Xá Xíu",
+    "slug": "kaoya-hotpot",
+    "address": "Lương Đình Của",
+    "aliases": [
+      "kaoya",
+      "kaoya hotpot",
+      "mì vịt quay kaoya"
+    ],
+    "tags": [
+      "mì vịt quay",
+      "cơm xá xíu",
+      "lẩu",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Al Fresco's",
+    "slug": "al-frescos",
+    "aliases": [
+      "al fresco",
+      "al frescos",
+      "alfresco"
+    ],
+    "tags": [
+      "pizza",
+      "mỳ ý",
+      "sườn",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Mì Vằn Thắn, Sủi Cảo Hải Yến",
+    "slug": "mi-van-than-hai-yen",
+    "aliases": [
+      "hải yến",
+      "hai yen",
+      "mì vằn thắn",
+      "mi van than",
+      "sủi cảo"
+    ],
+    "tags": [
+      "mì",
+      "vằn thắn",
+      "sủi cảo",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  },
+  {
+    "name": "Bún chả Hương Liên (Obama)",
+    "slug": "bun-cha-huong-lien",
+    "aliases": [
+      "hương liên",
+      "huong lien",
+      "obama",
+      "bún chả obama"
+    ],
+    "tags": [
+      "bún",
+      "chả",
+      "nem cua bể",
+      "giao-hàng"
+    ],
+    "walkable": false,
+    "delivery": [
+      "shopeefood",
+      "grab"
+    ]
+  }
+]

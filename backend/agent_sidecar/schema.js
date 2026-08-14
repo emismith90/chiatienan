@@ -1,8 +1,8 @@
 /**
- * JSON Schema → TypeBox, for the 14 tool schemas `app/tools.py` owns.
+ * JSON Schema → TypeBox, for the tool schemas `app/tools.py` owns.
  *
  * Pi wants TypeBox for a tool's `parameters`, and Python produces plain JSON
- * Schema. All 14 schemas were dumped (`bench/dump_schemas.py`) and analysed: the
+ * Schema. All schemas were dumped (`bench/dump_schemas.py`) and analysed: the
  * converter needs **exactly six keywords** and nothing more —
  *
  *   type · properties · required · items · description · enum
@@ -16,7 +16,7 @@
  *
  * 1. **String enums must use `StringEnum`**, not `Type.Union` /`Type.Literal`.
  *    Pi's `docs/extensions.md` is explicit that the union form breaks Google's
- *    API. Six of the 14 schemas carry an enum, from three distinct definitions —
+ *    API. Six of them carry an enum, from three distinct definitions —
  *    `discount_split`, `keyword` (shared by reference across four tools), and
  *    `mode`.
  * 2. **One union type exists**: `{"type": ["string", "integer"]}` on `target`, in

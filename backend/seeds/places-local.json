@@ -1,0 +1,775 @@
+[
+  {
+    "name": "Phở Vui",
+    "slug": "pho-vui",
+    "aliases": [
+      "pho vui",
+      "phở vui",
+      "vui"
+    ],
+    "tags": [
+      "phở",
+      "gà",
+      "bún thang",
+      "nước",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "price_hint": 40000,
+    "closed_until": "2026-09-30"
+  },
+  {
+    "name": "Phở gà Thìn Béo",
+    "slug": "pho-ga-thin-beo",
+    "aliases": [
+      "thìn béo",
+      "thin beo",
+      "phở thìn",
+      "pho thin",
+      "phở gà thìn",
+      "pho ga thin beo"
+    ],
+    "tags": [
+      "phở",
+      "gà",
+      "nước",
+      "đắt"
+    ],
+    "walkable": true,
+    "phone": "0359759630",
+    "price_hint": 80000
+  },
+  {
+    "name": "Bún sườn chua Xã Đàn",
+    "slug": "bun-suon-chua-xa-dan",
+    "aliases": [
+      "bún sườn chua",
+      "bun suon chua",
+      "bún sườn",
+      "xã đàn",
+      "xa dan"
+    ],
+    "tags": [
+      "bún",
+      "sườn",
+      "nước",
+      "đắt"
+    ],
+    "walkable": true,
+    "phone": "0943000993",
+    "price_hint": 90000
+  },
+  {
+    "name": "Bún chả Tuấn Hưng",
+    "slug": "bun-cha-tuan-hung",
+    "aliases": [
+      "bún chả tuấn hưng",
+      "bun cha tuan hung",
+      "tuấn hưng",
+      "tuan hung"
+    ],
+    "tags": [
+      "bún",
+      "chả",
+      "gọi-về"
+    ],
+    "walkable": true,
+    "phone": "0912162393",
+    "price_hint": 50000
+  },
+  {
+    "name": "Bếp Mẹ Gạo",
+    "slug": "bep-me-gao",
+    "address": "38B Trần Hữu Tước",
+    "aliases": [
+      "bếp mẹ gạo",
+      "bep me gao",
+      "mẹ gạo",
+      "me gao",
+      "bò né",
+      "bo ne"
+    ],
+    "tags": [
+      "bò né",
+      "mỳ ý",
+      "nui",
+      "cơm",
+      "bình dân"
+    ],
+    "walkable": true,
+    "phone": "0964165096",
+    "price_hint": 60000
+  },
+  {
+    "name": "Bún chả nem cua bể Trần Hữu Tước",
+    "slug": "bun-cha-nem-cua-be-tran-huu-tuoc",
+    "address": "113B1 Trần Hữu Tước",
+    "aliases": [
+      "bún chả nem cua bể",
+      "bun cha nem cua be",
+      "nem cua bể",
+      "nem cua be",
+      "bún chả trần hữu tước",
+      "bà tâm",
+      "ba tam",
+      "bún chả bà tâm"
+    ],
+    "tags": [
+      "bún",
+      "chả",
+      "nem cua bể"
+    ],
+    "walkable": true,
+    "price_hint": 50000
+  },
+  {
+    "name": "Bún riêu Đồng Bóng Tok Tok",
+    "slug": "bun-rieu-dong-bong-tok-tok",
+    "aliases": [
+      "bún riêu tok tok",
+      "bun rieu tok tok",
+      "tok tok",
+      "đồng bóng",
+      "dong bong"
+    ],
+    "tags": [
+      "bún",
+      "riêu",
+      "nước"
+    ],
+    "walkable": true,
+    "price_hint": 60000
+  },
+  {
+    "name": "Bún riêu cá Trường Sa",
+    "slug": "bun-rieu-ca-truong-sa",
+    "address": "110B Trần Hữu Tước",
+    "aliases": [
+      "bún riêu cá",
+      "bun rieu ca",
+      "trường sa",
+      "truong sa",
+      "bún riêu trường sa"
+    ],
+    "tags": [
+      "bún",
+      "riêu",
+      "cá",
+      "nước",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "price_hint": 55000
+  },
+  {
+    "name": "Bún đậu mẹt Trần Hữu Tước",
+    "slug": "bun-dau-met-tran-huu-tuoc",
+    "address": "86 Trần Hữu Tước",
+    "aliases": [
+      "bún đậu mẹt",
+      "bun dau met",
+      "bún đậu trần hữu tước",
+      "bun dau tran huu tuoc",
+      "bún đậu",
+      "bún đậu anh linh",
+      "bun dau anh linh"
+    ],
+    "tags": [
+      "bún đậu",
+      "khô",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "price_hint": 80000
+  },
+  {
+    "name": "Bún bò Huế 1992",
+    "slug": "bun-bo-hue-1992",
+    "aliases": [
+      "bún bò huế 1992",
+      "bun bo hue 1992",
+      "bún bò 1992",
+      "1992"
+    ],
+    "tags": [
+      "bún",
+      "bò",
+      "huế",
+      "nước",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "price_hint": 55000
+  },
+  {
+    "name": "Bún mọc",
+    "slug": "bun-moc",
+    "address": "P103 B1 TT Nam Đồng",
+    "aliases": [
+      "bún mọc",
+      "bun moc",
+      "bún mọc hàng lược",
+      "bun moc hang luoc",
+      "57 hàng lược"
+    ],
+    "tags": [
+      "bún",
+      "mọc",
+      "nước"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Xôi Bà Hiền",
+    "slug": "xoi-ba-hien",
+    "aliases": [
+      "xôi bà hiền",
+      "xoi ba hien",
+      "xôi",
+      "bà hiền"
+    ],
+    "tags": [
+      "xôi",
+      "mua-về"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Bánh mỳ que Hồ Đắc Di",
+    "slug": "banh-my-que-ho-dac-di",
+    "aliases": [
+      "bánh mỳ que",
+      "banh my que",
+      "bánh mì que",
+      "bánh mỳ tam giác",
+      "banh my tam giac",
+      "hồ đắc di"
+    ],
+    "tags": [
+      "bánh mỳ",
+      "mua-về"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Miến Lươn Lan Hương",
+    "slug": "mien-luon-lan-huong",
+    "aliases": [
+      "miến lươn",
+      "mien luon",
+      "lan hương",
+      "lan huong",
+      "miến lươn lan hương",
+      "chợ nam đồng"
+    ],
+    "tags": [
+      "miến",
+      "lươn",
+      "nước"
+    ],
+    "walkable": true,
+    "phone": "0972407373",
+    "price_hint": 75000
+  },
+  {
+    "name": "Cơm tấm Hồ Đắc Di",
+    "slug": "com-tam-ho-dac-di",
+    "aliases": [
+      "cơm tấm",
+      "com tam",
+      "cơm tấm hồ đắc di",
+      "com tam ho dac di"
+    ],
+    "tags": [
+      "cơm",
+      "sườn",
+      "sân vườn",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "price_hint": 65000
+  },
+  {
+    "name": "Bún bò Huế Ngự Uyển",
+    "slug": "bun-bo-hue-ngu-uyen",
+    "aliases": [
+      "ngự uyển",
+      "ngu uyen",
+      "bún bò ngự uyển",
+      "bun bo ngu uyen"
+    ],
+    "tags": [
+      "bún",
+      "bò",
+      "huế",
+      "cơm rang",
+      "nước"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Nem nướng Nha Trang",
+    "slug": "nem-nuong-nha-trang",
+    "aliases": [
+      "nem nướng",
+      "nem nuong",
+      "nem nướng nha trang",
+      "nha trang"
+    ],
+    "tags": [
+      "nem nướng",
+      "gà rán",
+      "mua-về",
+      "gần"
+    ],
+    "walkable": true,
+    "phone": "0399937526"
+  },
+  {
+    "name": "Quán Bé Bự - Khoai Tây",
+    "slug": "be-bu",
+    "aliases": [
+      "bé bự",
+      "be bu",
+      "quán bé bự",
+      "khoai tây",
+      "khoai tay",
+      "bé bự khoai tây"
+    ],
+    "tags": [
+      "cơm rang",
+      "gà",
+      "nhậu",
+      "gọi-về"
+    ],
+    "walkable": true,
+    "phone": "0988365816",
+    "price_hint": 100000
+  },
+  {
+    "name": "Lẩu Ếch Hà My",
+    "slug": "lau-ech-ha-my",
+    "aliases": [
+      "lẩu ếch",
+      "lau ech",
+      "hà my",
+      "ha my",
+      "lẩu ếch hà my"
+    ],
+    "tags": [
+      "lẩu",
+      "ếch",
+      "dịp đặc biệt",
+      "đắt"
+    ],
+    "walkable": true,
+    "price_hint": 200000
+  },
+  {
+    "name": "Lòng lợn Đặng Văn Ngữ",
+    "slug": "long-lon-dang-van-ngu",
+    "aliases": [
+      "lòng lợn",
+      "long lon",
+      "lòng lợn đặng văn ngữ"
+    ],
+    "tags": [
+      "lòng lợn",
+      "nhậu",
+      "đắt"
+    ],
+    "walkable": true,
+    "price_hint": 200000
+  },
+  {
+    "name": "Bún riêu cô Trang",
+    "slug": "bun-rieu-co-trang",
+    "aliases": [
+      "bún riêu cô trang",
+      "bun rieu co trang",
+      "cô trang",
+      "co trang"
+    ],
+    "tags": [
+      "bún",
+      "riêu",
+      "nước"
+    ],
+    "walkable": true,
+    "price_hint": 65000
+  },
+  {
+    "name": "Bún Ngan D2 Đặng Văn Ngữ",
+    "slug": "bun-ngan-d2",
+    "address": "105 D2 Đặng Văn Ngữ",
+    "aliases": [
+      "bún ngan d2",
+      "bun ngan d2",
+      "ngan d2",
+      "bún ngan đặng văn ngữ",
+      "bún miến ngan",
+      "bun mien ngan",
+      "miến ngan d2"
+    ],
+    "tags": [
+      "bún",
+      "ngan",
+      "nước",
+      "bình dân"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Bún cá Đặng Văn Ngữ",
+    "slug": "bun-ca-dang-van-ngu",
+    "aliases": [
+      "bún cá",
+      "bun ca",
+      "bún cá đặng văn ngữ",
+      "gà tần"
+    ],
+    "tags": [
+      "bún",
+      "cá",
+      "gà tần",
+      "nước"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Mì vịt quay Đặng Văn Ngữ",
+    "slug": "mi-vit-quay-dang-van-ngu",
+    "address": "77 Đặng Văn Ngữ",
+    "aliases": [
+      "mì vịt quay",
+      "mi vit quay",
+      "vịt quay",
+      "vit quay",
+      "jacky",
+      "cơm xá xíu",
+      "com xa xiu"
+    ],
+    "tags": [
+      "mì",
+      "vịt quay",
+      "nước",
+      "cơm xá xíu"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Phở Lý Quốc Sư",
+    "slug": "pho-ly-quoc-su",
+    "aliases": [
+      "phở lý quốc sư",
+      "pho ly quoc su",
+      "lý quốc sư",
+      "ly quoc su"
+    ],
+    "tags": [
+      "phở",
+      "cơm rang",
+      "nước",
+      "đắt"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Vua Gà Nướng Lu",
+    "slug": "vua-ga-nuong-lu",
+    "address": "103 D1 Đặng Văn Ngữ",
+    "aliases": [
+      "gà nướng lu",
+      "ga nuong lu",
+      "vua gà nướng",
+      "gà nướng",
+      "ga nuong",
+      "lẩu thái",
+      "lau thai",
+      "x.kiên",
+      "xkien"
+    ],
+    "tags": [
+      "gà nướng",
+      "xôi",
+      "lẩu thái"
+    ],
+    "walkable": true,
+    "phone": "0976297899"
+  },
+  {
+    "name": "Phở Tần",
+    "slug": "pho-tan",
+    "aliases": [
+      "phở tần",
+      "pho tan",
+      "tần",
+      "tan"
+    ],
+    "tags": [
+      "phở",
+      "bò",
+      "cơm rang",
+      "phở xào",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "phone": "0763192222"
+  },
+  {
+    "name": "Cơm gà đảo, cơm rang Thịnh Lơ",
+    "slug": "com-ga-thinh-lo",
+    "aliases": [
+      "thịnh lơ",
+      "thinh lo",
+      "cơm gà thịnh lơ",
+      "com ga thinh lo",
+      "cơm gà đảo",
+      "com ga dao",
+      "cơm rang thịnh lơ"
+    ],
+    "tags": [
+      "cơm gà",
+      "cơm rang",
+      "nhậu",
+      "hay-ăn"
+    ],
+    "walkable": true,
+    "phone": "0906279398"
+  },
+  {
+    "name": "Kxs Ẩm thực Hàn Quốc",
+    "slug": "kxs-am-thuc-han-quoc",
+    "address": "101 D2 Đặng Văn Ngữ",
+    "aliases": [
+      "kxs",
+      "ẩm thực hàn quốc",
+      "am thuc han quoc",
+      "hàn quốc",
+      "han quoc",
+      "kều xay sạch",
+      "keu xay sach"
+    ],
+    "tags": [
+      "hàn quốc",
+      "gà rán",
+      "kimbab",
+      "dịp đặc biệt",
+      "đắt"
+    ],
+    "walkable": true,
+    "price_hint": 150000
+  },
+  {
+    "name": "Chickenbyzo",
+    "slug": "chickenbyzo",
+    "aliases": [
+      "chickenbyzo",
+      "chicken byzo",
+      "byzo"
+    ],
+    "tags": [
+      "hàn quốc",
+      "gà rán",
+      "đắt"
+    ],
+    "walkable": true,
+    "price_hint": 150000
+  },
+  {
+    "name": "Ông Già Chả Cá",
+    "slug": "ong-gia-cha-ca",
+    "aliases": [
+      "ông già chả cá",
+      "ong gia cha ca",
+      "chả cá ông già",
+      "ông già",
+      "ong gia"
+    ],
+    "tags": [
+      "chả cá",
+      "lẩu",
+      "hay-ăn",
+      "đắt"
+    ],
+    "walkable": true,
+    "phone": "0915262648",
+    "price_hint": 200000
+  },
+  {
+    "name": "Bún cá chấm Trung Tự",
+    "slug": "bun-ca-cham-trung-tu",
+    "aliases": [
+      "bún cá chấm",
+      "bun ca cham",
+      "trung tự",
+      "trung tu"
+    ],
+    "tags": [
+      "bún",
+      "cá",
+      "khô"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Bún đậu sân con voi",
+    "slug": "bun-dau-san-con-voi",
+    "aliases": [
+      "bún đậu sân con voi",
+      "bun dau san con voi",
+      "sân con voi",
+      "san con voi"
+    ],
+    "tags": [
+      "bún đậu",
+      "khô"
+    ],
+    "walkable": true,
+    "price_hint": 100000,
+    "active": false
+  },
+  {
+    "name": "Bánh tráng, nem lụi Hoàng Bèo",
+    "slug": "hoang-beo",
+    "aliases": [
+      "hoàng bèo",
+      "hoang beo",
+      "nem lụi",
+      "nem lui",
+      "bánh tráng",
+      "banh trang"
+    ],
+    "tags": [
+      "nem lụi",
+      "bánh tráng",
+      "khô"
+    ],
+    "walkable": true,
+    "price_hint": 150000
+  },
+  {
+    "name": "Bánh cuốn (cạnh Hoàng Bèo)",
+    "slug": "banh-cuon-canh-hoang-beo",
+    "aliases": [
+      "bánh cuốn",
+      "banh cuon"
+    ],
+    "tags": [
+      "bánh cuốn",
+      "khô"
+    ],
+    "walkable": true,
+    "price_hint": 60000
+  },
+  {
+    "name": "Bánh Mì Linh Nam Đồng",
+    "slug": "banh-mi-linh-nam-dong",
+    "aliases": [
+      "bánh mì linh",
+      "banh mi linh",
+      "bánh mỳ linh",
+      "linh nam đồng"
+    ],
+    "tags": [
+      "bánh mỳ",
+      "mua-về"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Bánh mì Patê Cột Đèn",
+    "slug": "banh-mi-pate-cot-den",
+    "address": "71 Đặng Văn Ngữ",
+    "aliases": [
+      "patê cột đèn",
+      "pate cot den",
+      "bánh mì cột đèn",
+      "banh mi cot den",
+      "cột đèn",
+      "cot den",
+      "cột điện",
+      "cot dien",
+      "cột điện quán",
+      "bánh mì chảo"
+    ],
+    "tags": [
+      "bánh mỳ",
+      "xôi",
+      "mua-về",
+      "gần",
+      "bánh mì chảo"
+    ],
+    "walkable": true,
+    "price_hint": 40000
+  },
+  {
+    "name": "Bún chả rửa xe Nam Đồng",
+    "slug": "bun-cha-rua-xe",
+    "aliases": [
+      "bún chả rửa xe",
+      "bun cha rua xe",
+      "rửa xe",
+      "rua xe",
+      "bún chả nam đồng"
+    ],
+    "tags": [
+      "bún",
+      "chả"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Phở Ánh Sáng",
+    "slug": "pho-anh-sang",
+    "address": "109 Nam Đồng",
+    "aliases": [
+      "phở ánh sáng",
+      "pho anh sang",
+      "ánh sáng",
+      "anh sang",
+      "phở bò ánh sáng",
+      "com rang anh sang"
+    ],
+    "tags": [
+      "phở",
+      "cơm rang",
+      "nước"
+    ],
+    "walkable": true
+  },
+  {
+    "name": "Chả Cá Gia Phú",
+    "slug": "cha-ca-gia-phu",
+    "address": "16 Nam Đồng",
+    "aliases": [
+      "chả cá gia phú",
+      "cha ca gia phu",
+      "gia phú",
+      "gia phu"
+    ],
+    "tags": [
+      "chả cá",
+      "bún đậu",
+      "sạch"
+    ],
+    "walkable": true,
+    "phone": "0972379555"
+  },
+  {
+    "name": "Bún Ngan Nam Đồng",
+    "slug": "bun-ngan-nam-dong",
+    "aliases": [
+      "bún ngan nam đồng",
+      "bun ngan nam dong",
+      "bún ngan",
+      "bun ngan"
+    ],
+    "tags": [
+      "bún",
+      "ngan",
+      "nước"
+    ],
+    "walkable": true
+  }
+]

@@ -1,4 +1,4 @@
-"""The tool manifest, and the proof the 14 tools were left alone."""
+"""The tool manifest, and the proof the 19 tools were left alone."""
 from pathlib import Path
 
 
@@ -7,7 +7,7 @@ def test_tool_manifest_covers_every_tool_with_a_schema(db):
     names = set(build_tools(ToolContext(db=db, room_id=1)))
     manifest = {t["name"] for t in tool_manifest()}
     assert manifest == names
-    assert len(manifest) == 14
+    assert len(manifest) == 19
     assert all(t["description"] and t["schema"]["type"] == "object" for t in tool_manifest())
 
 

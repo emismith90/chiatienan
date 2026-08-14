@@ -1,0 +1,42 @@
+- always | place:pho-vui | - | Đang sửa quán, chắc hết tháng 9/2026 mới xong.
+- always | place:pho-vui | - | Thường không có quẩy, và hay hết gà đùi.
+- always | member:linh | - | Phở Vui là quán ruột.
+- always | place:pho-ga-thin-beo | - | Đắt, nhưng ngon hơn Phở Vui một chút.
+- always | member:nhim | - | Ở Thìn Béo hay gọi phở gà trứng — một bát 120k.
+- always | place:bun-suon-chua-xa-dan | - | Quẩy to. Đắt: 90k một bát đầy đủ. Ít ra đây thôi.
+- always | place:bun-cha-tuan-hung | - | Ăn được. Mới sửa quán nên sạch sẽ.
+- always | place:bun-cha-tuan-hung | busy@12:00 | Thường đông lúc 12h.
+- always | place:bep-me-gao | - | Quán bình dân, thi thoảng ăn được.
+- always | place:bun-cha-nem-cua-be-tran-huu-tuoc | - | Ăn được nhưng mùi kinh khủng — phải có quần áo thay.
+- always | place:bun-rieu-dong-bong-tok-tok | - | Bà chủ hay live stream dí camera vào mặt khách.
+- always | member:giang | - | Bún riêu Đồng Bóng Tok Tok là quán tủ.
+- always | place:bun-rieu-ca-truong-sa | - | Ăn tạm được.
+- always | place:bun-dau-met-tran-huu-tuoc | - | Quán bật nhạc retro 9x. Có kẹo free.
+- always | place:xoi-ba-hien | - | Không có chỗ ngồi, chỉ mua về ăn thôi.
+- always | place:banh-my-que-ho-dac-di | - | Không có chỗ ngồi, chỉ mua về ăn thôi.
+- always | place:mien-luon-lan-huong | - | Trong chợ Nam Đồng. Nước dùng hơi bị mặn.
+- always | place:com-tam-ho-dac-di | - | Có view sân vườn, ăn được.
+- always | place:bun-bo-hue-ngu-uyen | - | Có cơm rang mắm tép, ăn tạm.
+- always | place:nem-nuong-nha-trang | - | Ngay cạnh văn phòng nhưng không có chỗ ngồi, chỉ gọi về. Có bán cả gà rán.
+- always | place:be-bu | - | Hay gọi cơm rang gà xào tỏi với cánh gà xóc muối hải sản.
+- always | place:be-bu | - | Quán mùi. Gọi về được.
+- always | place:be-bu | busy@12:00 | Đông, nên ra sớm trước 12h.
+- always | place:lau-ech-ha-my | - | Có dịp thì ăn.
+- always | place:long-lon-dang-van-ngu | - | Ai bị gout thì kiêng chỗ này.
+- always | place:bun-rieu-co-trang | - | Quán gọi giá tính tiền — nhớ hỏi giá trước!
+- always | place:bun-ngan-d2 | - | Quán bình dân.
+- always | place:bun-ca-dang-van-ngu | - | Có bán gà tần. Mỳ bán riêng, không kèm gà tần.
+- always | place:pho-ly-quoc-su | - | Đắt, lâu lắm không ăn ở đây. Có cơm rang trứng cua.
+- always | place:com-ga-thinh-lo | - | Quán nhậu nên có đồ nhậu.
+- always | place:com-ga-thinh-lo | order-by@11:30 | Order đồ rất lâu — phải gọi đặt trước.
+- always | place:kxs-am-thuc-han-quoc | - | Có dịp thì ăn.
+- always | place:chickenbyzo | - | Làm hơi bị lâu.
+- always | place:ong-gia-cha-ca | - | Ăn chả cá. Muốn ăn lẩu thì phải gọi đặt trước.
+- always | place:bun-ca-cham-trung-tu | - | Có vẻ đang sửa quán.
+- always | place:bun-dau-san-con-voi | - | Có vẻ đã đóng cửa hẳn.
+- always | place:hoang-beo | - | Hay gọi thêm bánh cuốn bên cạnh sang.
+- always | place:banh-cuon-canh-hoang-beo | - | Hay gọi nem lụi bên Hoàng Bèo sang.
+- always | place:banh-mi-linh-nam-dong | closes@12:30 | Trưa 12h30 là đóng cửa rồi.
+- always | place:banh-mi-pate-cot-den | - | Quán gần, hay chọn đại nếu không chọn được gì. Có bánh mỳ thập cẩm, xôi, bánh mỳ que.
+- always | place:pho-anh-sang | - | Có cơm rang dưa bò. Ít khi ăn ở đây.
+- always | place:cha-ca-gia-phu | - | Mát, sạch. Vào đây thì hay ăn bún đậu.

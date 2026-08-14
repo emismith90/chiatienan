@@ -25,6 +25,47 @@
     ],
     "type": "object"
   },
+  "add_place": {
+    "properties": {
+      "address": {
+        "type": "string"
+      },
+      "aliases": {
+        "description": "Other spellings the group uses, including tone-free forms.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "delivery": {
+        "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      },
+      "phone": {
+        "type": "string"
+      },
+      "tags": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "walkable": {
+        "description": "Can the group walk there from the office?",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "type": "object"
+  },
   "cancel_draft": {
     "properties": {
       "draft_id": {
@@ -66,6 +107,38 @@
         "type": "array"
       }
     },
+    "type": "object"
+  },
+  "find_places": {
+    "properties": {
+      "all": {
+        "description": "Return every place in the room.",
+        "type": "boolean"
+      },
+      "names": {
+        "description": "Place names as the user wrote them ('thịnh lơ', 'quán bé bự').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "type": "object"
+  },
+  "forget": {
+    "properties": {
+      "about": {
+        "type": "string"
+      },
+      "text": {
+        "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "about",
+      "text"
+    ],
     "type": "object"
   },
   "get_period_summary": {
@@ -248,6 +321,31 @@
     ],
     "type": "object"
   },
+  "remember": {
+    "properties": {
+      "about": {
+        "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím').",
+        "type": "string"
+      },
+      "gate": {
+        "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM.",
+        "type": "string"
+      },
+      "standing": {
+        "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay.",
+        "type": "boolean"
+      },
+      "text": {
+        "description": "Nội dung, tiếng Việt, một câu.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "about",
+      "text"
+    ],
+    "type": "object"
+  },
   "resolve_date": {
     "properties": {
       "word": {
@@ -304,6 +402,35 @@
       },
       "to": {
         "description": "ISO date, inclusive. See `from`.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "suggest_lunch": {
+    "properties": {
+      "budget": {
+        "description": "Only places in this price band.",
+        "enum": [
+          "rẻ",
+          "vừa",
+          "đắt"
+        ],
+        "type": "string"
+      },
+      "delivery": {
+        "description": "True when the group wants to order in rather than walk out.",
+        "type": "boolean"
+      },
+      "exclude": {
+        "description": "Places to leave out ('vừa ăn hôm qua rồi').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "today": {
+        "description": "YYYY-MM-DD; omit for today.",
         "type": "string"
       }
     },

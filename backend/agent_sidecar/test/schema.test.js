@@ -4,7 +4,7 @@
  * Two of these tests exist because the design names them as the cases a naive
  * converter gets silently wrong: a string enum built with `Type.Union` breaks
  * Google's API, and `{"type": ["string","integer"]}` is the one real union in all
- * 14 schemas. The rest hold the line that an unsupported keyword throws instead of
+ * the real schemas. The rest hold the line that an unsupported keyword throws instead of
  * being dropped — a dropped constraint means the model sends arguments the tool
  * rejects, which looks like a clarifying question, not a bug.
  */
@@ -61,12 +61,18 @@ test("descriptions survive, because they are the model's instructions", () => {
   assert.match(s.properties.total.description, /integer VND/);
 });
 
-test("every one of the 14 real schemas converts and validates", () => {
-  assert.equal(Object.keys(FIXTURE).length, 14);
+test("every real schema converts and validates, none lost in conversion", () => {
+  // Deliberately NOT a hardcoded tool count. The fixture is generated from
+  // `build_tools` and already guarded against drift on the Python side
+  // (tests/test_tool_schemas_fixture.py), so pinning the number here only
+  // duplicated it in a second language — and it went stale the first time a
+  // tool was added. What matters is that conversion loses nothing.
+  const names = Object.keys(FIXTURE);
+  assert.ok(names.length > 0, "fixture is empty — regenerate with bench.dump_schemas");
   for (const [name, schema] of Object.entries(FIXTURE)) {
     assert.doesNotThrow(() => toTypeBox(schema, name), name);
   }
-  assert.equal(Object.keys(toTypeBoxManifest(FIXTURE)).length, 14);
+  assert.deepEqual(Object.keys(toTypeBoxManifest(FIXTURE)).sort(), names.sort());
 });
 
 test("the six real enums keep their values", () => {

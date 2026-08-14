@@ -2,7 +2,7 @@
  * Session construction, and the proxy that sends every tool call back to Python.
  *
  * The Node side owns the whole harness — provider, model, resources, events. It
- * owns **no arithmetic**: all 14 tools execute in Python over the real DB, so a
+ * owns **no arithmetic**: all money tools execute in Python over the real DB, so a
  * number never crosses to the model's side of the wire (design D3).
  */
 import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, SessionManager }
@@ -147,7 +147,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
  * stating a number no tool produced.
  *
  * pi treats `tools` as an **allowlist**, so the custom names must be repeated there
- * or all 14 money tools vanish and the model is left holding only `bash` — the worst
+ * or all money tools vanish and the model is left holding only `bash` — the worst
  * of both worlds.
  */
 export function toolOptionsFor(builtins, customNames) {
