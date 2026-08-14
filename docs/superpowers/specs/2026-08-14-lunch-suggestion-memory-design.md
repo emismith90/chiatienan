@@ -216,7 +216,15 @@ The tier is returned rather than swallowed because §5 treats confident tiers
 | `last_on` | max `occurred_on` |
 | `days_since` | `today_ict() - last_on`, `None` if never |
 | `weekday_counts` | `{0..6: n}` over the window |
-| `avg_per_head` | mean of `total_amount ÷ (len(shares) + len(guests))`, else `price_hint` |
+| `avg_per_head` | mean of `total_amount ÷ len(shares)`, else `price_hint` |
+
+**`total_amount` is `tracked_total` — members only.** `split_with_guests`
+(`money.py:341`) computes the per-head over members *plus* guests, bills the
+members, then drops the guest heads as settled in cash. So the guest count is
+already out of the stored total, and dividing by `len(shares) + len(guests)`
+would divide members-only money by members-plus-guests — understating per-head
+cost by exactly the guest fraction, and making any place where guests join look
+cheaper than it is.
 | `band` | `rẻ`/`vừa`/`đắt` — tertiles of `avg_per_head` across the room's places |
 
 `band` is relative to the room, not absolute VND, so it stays correct as prices drift.

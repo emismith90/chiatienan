@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import re
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Place
@@ -187,3 +187,101 @@ def backfill_links(session: Session, room_id: int) -> dict:
     session.flush()
     logger.info("[places] backfill room=%s %s", room_id, counts)
     return counts
+
+
+#: How much history a suggestion looks at. Long enough to see a weekday rhythm,
+#: short enough that a place the room dropped six months ago stops competing.
+_STATS_WINDOW_DAYS = 120
+
+_BANDS = ("rẻ", "vừa", "đắt")
+
+
+def _band_for(value: int | None, thresholds: tuple[int, int] | None) -> str | None:
+    """Which tertile ``value`` falls in, or None when it cannot be placed."""
+    if value is None or thresholds is None:
+        return None
+    low, high = thresholds
+    if value <= low:
+        return _BANDS[0]
+    return _BANDS[1] if value <= high else _BANDS[2]
+
+
+def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DAYS,
+          today=None) -> dict[int, dict]:
+    """Per-place counts, recency, weekday rhythm and price band, from the ledger.
+
+    Every number a suggestion rests on is computed here, in Python (design D1):
+    a model that eyeballs "we ate bún chả 3 times" is wrong eventually, and a
+    confidently wrong count poisons trust in everything else the bot says.
+
+    ``avg_per_head`` divides by **members only**. ``Meal.total_amount`` is
+    ``tracked_total`` — :func:`app.money.split_with_guests` already computed the
+    per-head over members plus guests, billed the members and dropped the guest
+    heads as settled in cash. Dividing again by members+guests would understate
+    the per-head cost by exactly the guest fraction, making every place where
+    guests join look cheaper than it is.
+
+    ``band`` is a tertile **across this room's own places**, not absolute VND, so
+    it stays meaningful as prices drift. ``price_hint`` fills in for a place with
+    no linked meals yet and is dropped the moment real history exists (D8).
+    """
+    from datetime import timedelta
+
+    from app.clock import today_ict
+    from app.models import Meal, MealShare
+
+    today = today or today_ict()
+    cutoff = today - timedelta(days=window_days)
+    rows = list_places(session, room_id, include_inactive=True)
+
+    out: dict[int, dict] = {
+        p.id: {"times": 0, "last_on": None, "days_since": None,
+               "weekday_counts": {i: 0 for i in range(7)},
+               "avg_per_head": None, "band": None}
+        for p in rows
+    }
+    totals: dict[int, list[int]] = {p.id: [] for p in rows}
+
+    meals = session.scalars(
+        select(Meal).where(
+            Meal.room_id == room_id,
+            Meal.place_id.isnot(None),
+            Meal.voided.is_(False),
+            Meal.occurred_on >= cutoff,
+        )
+    ).all()
+
+    for meal in meals:
+        entry = out.get(meal.place_id)
+        if entry is None:
+            continue                      # a place from another room, or deleted
+        entry["times"] += 1
+        if entry["last_on"] is None or meal.occurred_on > entry["last_on"]:
+            entry["last_on"] = meal.occurred_on
+        entry["weekday_counts"][meal.occurred_on.weekday()] += 1
+        heads = session.scalar(
+            select(func.count()).select_from(MealShare).where(MealShare.meal_id == meal.id)
+        ) or 0
+        if heads:
+            totals[meal.place_id].append(meal.total_amount // heads)
+
+    for p in rows:
+        entry = out[p.id]
+        if entry["last_on"] is not None:
+            entry["days_since"] = (today - entry["last_on"]).days
+        seen = totals[p.id]
+        entry["avg_per_head"] = (sum(seen) // len(seen)) if seen else p.price_hint
+
+    # Tertiles over whatever prices we know, so a room of six cheap places still
+    # gets a spread rather than everything landing in one band.
+    known = sorted(v for v in (out[p.id]["avg_per_head"] for p in rows) if v is not None)
+    thresholds = None
+    if len(known) >= 3:
+        # Boundaries index off (n-1), so the top tertile is genuinely the top:
+        # with [30k, 70k, 200k], `n//3` would put 200k at the "vừa" ceiling and
+        # leave "đắt" unreachable.
+        last = len(known) - 1
+        thresholds = (known[last // 3], known[(2 * last) // 3])
+    for p in rows:
+        out[p.id]["band"] = _band_for(out[p.id]["avg_per_head"], thresholds)
+    return out
