@@ -33,6 +33,11 @@ def env():
                      account_holder="DINH HONG TRANG"))
         s.add(Member(id=2, room_id=1, display_name="Linh Nguyen", nickname="Linh",
                      account_holder="NGUYEN ANH LINH"))
+        # The real room has a SECOND person reachable as "Trang" (BUI THU TRANG,
+        # alias "Bùi Trang"). Modelling only Nhím made the residual test assert
+        # behaviour production never had.
+        s.add(Member(id=3, room_id=1, display_name="Tabu", nickname="Tabu",
+                     account_holder="BUI THU TRANG", aliases=["Bùi Trang"]))
         s.add(Place(room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
                     aliases=["cô trang", "co trang"]))
         s.add(Place(room_id=1, slug="bun-dau-met-tran-huu-tuoc",
@@ -73,23 +78,31 @@ def test_shipped_seeds_contain_no_bare_member_name_alias():
     assert lint(rows, member_names=ROOM_NAMES) == []
 
 
-def test_known_residual_the_bare_honorific_form_still_reaches_the_member(env):
+def test_known_residual_the_bare_honorific_form_still_reaches_the_members(env):
     """Characterisation, not an endorsement — this is the limit of the guard.
 
-    "cô Trang" strips its kinship term to "trang", which is the last token of
-    Nhím's bank-holder name, so `roster` legitimately answers with Nhím. That is
-    correct *for a person lookup*; the room means the restaurant. Nothing here
-    can tell them apart, because the ambiguity is real in the language itself.
+    "cô Trang" strips its kinship term to "trang", which is a name token of TWO
+    people in the real room: Nhím (bank holder `DINH HONG TRANG`, alias "Trang
+    Dinh") and Tabu (`BUI THU TRANG`, alias "Bùi Trang"). So `roster` returns
+    them as **ambiguous** rather than picking one — which is the safe outcome, and
+    safer than a single match would be.
 
-    What keeps it safe is that the two indexes are separate and the model picks
-    the tool — enforced above by the split-membership test, and taught by the
-    suggest-lunch skill. Pinned so that a future change to `_HONORIFICS` or the
-    given-name tier surfaces here instead of in a wrong bill.
+    The fixture models both on purpose. An earlier version had only Nhím and
+    asserted a lone match, which was never true of production: it would have gone
+    green while quietly describing behaviour the real room never exhibits.
+
+    Meanwhile the place index answers the same string with the restaurant. Neither
+    is wrong — the ambiguity is real in the language. What keeps it safe is that
+    the indexes are separate and the model picks the tool, enforced above by the
+    split-membership test. Pinned so a change to `_HONORIFICS` or the given-name
+    tier surfaces here instead of in a wrong bill.
     """
     db, _tools = env
     with db.session() as s:
         res = roster.resolve(s, 1, names=["cô Trang"])
-    assert [m["display_name"] for m in res["matched"]] == ["Nhím"]
+    assert res["matched"] == [], "two people answer to Trang — must not pick one"
+    assert [a["name"] for a in res["ambiguous"]] == ["cô Trang"]
+    assert {c["display_name"] for c in res["ambiguous"][0]["candidates"]} == {"Nhím", "Tabu"}
 
     # ...and the place index answers the same string with the restaurant.
     with db.session() as s:

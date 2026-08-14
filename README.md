@@ -147,6 +147,12 @@ OPEN_ROUTER_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
 # terminal 2 — frontend
 cd frontend && npm install && npm run dev   # http://localhost:3000
 npm test                                     # vitest unit suite
+
+# Sidecar (Node) — CI runs this on EVERY change, because Python builds the tool
+# schemas and the sidecar converts them: when they drift the failure is not a red
+# build, it is the model sending arguments the tool rejects. Without `npm ci`,
+# `node --test` fails module-not-found and gives no signal at all.
+cd backend/agent_sidecar && npm ci && node --test
 ```
 
 Then create a room and open its invite link:

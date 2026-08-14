@@ -136,3 +136,48 @@ def test_forget_proposes_removal_of_a_real_line(env):
     with db.session() as s:
         memos.commit(s, res["memo_id"], 1)
     assert obs.load(1) == []
+
+
+# ------------------- place-vs-person, operator's explicit rule (D18) --------
+
+@pytest.fixture()
+def two_trangs():
+    """The real room: a restaurant whose full name contains a person's name."""
+    db = Database("sqlite:///:memory:")
+    db.create_all()
+    with db.session() as s:
+        s.add(Room(id=1, name="t", invite_token="t"))
+        s.flush()
+        s.add(Member(id=8, room_id=1, display_name="Nhím", nickname="Nhím",
+                     account_holder="DINH HONG TRANG"))
+        s.add(Member(id=5, room_id=1, display_name="Tabu", nickname="Tabu",
+                     account_holder="BUI THU TRANG", aliases=["Bùi Trang"]))
+        s.add(Member(id=9, room_id=1, display_name="Giang Hoàng", nickname="Giang"))
+        s.add(Place(room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
+                    aliases=["bún riêu cô trang", "bun rieu co trang"]))
+    return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=9))
+
+
+def test_the_full_restaurant_name_files_against_the_place(two_trangs):
+    _db, tools = two_trangs
+    res = tools["remember"].execute({"about": "Bún riêu cô Trang", "text": "Gọi giá tính tiền"})
+    assert res["ok"] and res["subject"] == "place:bun-rieu-co-trang"
+
+
+def test_a_bare_person_name_never_files_against_the_restaurant(two_trangs):
+    """The operator's rule: 'cô Trang' is a person, not the bún riêu shop.
+
+    resolve_best would tie-break this onto the restaurant, filing a note about a
+    colleague against a shop. _memo_subject requires a confident place tier and
+    refuses when the text could also be a person.
+    """
+    _db, tools = two_trangs
+    res = tools["remember"].execute({"about": "cô Trang", "text": "Hay đổi ý"})
+    assert res["ok"] is False, "two people answer to Trang — must ask, not guess"
+    assert "find_places" in res["error"] or "find_members" in res["error"]
+
+
+def test_an_unambiguous_person_still_works(two_trangs):
+    _db, tools = two_trangs
+    res = tools["remember"].execute({"about": "Giang", "text": "Thích bún riêu"})
+    assert res["ok"] and res["subject"].startswith("member:")

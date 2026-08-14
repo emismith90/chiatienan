@@ -861,16 +861,25 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     def _memo_subject(s, raw: str) -> tuple[str, str] | None:
         """Resolve free text to ``("place:slug"|"member:nick", label)``, or None.
 
-        Tries places first, then members. The two never answer for each other
-        (design D18) — this only picks which namespace the user meant.
+        **A place only wins on a CONFIDENT tier, never a tie-break.** "Bún riêu cô
+        Trang" is a full restaurant name and matches exactly; a bare "cô Trang" is
+        a person in this room — two of them — and `resolve_best` would happily
+        tie-break it onto the restaurant, filing a note about a colleague against
+        a bún riêu shop. Requiring an exact/folded/prefix hit means the bare form
+        falls through to the roster where it belongs.
+
+        If the text plausibly names a person *as well*, refuse and let the model
+        ask. Across namespaces, ambiguity is never guessed (design D18).
         """
         from app import places as places_mod
 
-        place, _tier = places_mod.resolve_best(s, ctx.room_id, raw)
-        if place is not None:
-            return f"place:{place.slug}", place.name
+        place, tier = places_mod.resolve_one(s, ctx.room_id, raw)
         res = roster.resolve(s, ctx.room_id, names=[raw])
-        if len(res["matched"]) == 1:
+        person_plausible = bool(res["matched"] or res["ambiguous"])
+
+        if place is not None and tier in places_mod.CONFIDENT_TIERS and not person_plausible:
+            return f"place:{place.slug}", place.name
+        if len(res["matched"]) == 1 and place is None:
             m = res["matched"][0]
             return f"member:{roster._fold(m['display_name']).replace(' ', '-')}", m["display_name"]
         return None
