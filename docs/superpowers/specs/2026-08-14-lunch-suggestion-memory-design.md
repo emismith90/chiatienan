@@ -79,8 +79,8 @@ identity to attach any of this to and no way to count anything.
 - **D13 — `address` disambiguates, it does not locate.** Three different "Nem Nướng Nha
   Trang" listings sit within walking distance; the room's notes describe exactly one.
   The address is what tells them apart, and it is the only durable way to spot that two
-  listings are one kitchen. It is not geocoded and does not compute distance — that is
-  `walk_minutes`, hand-set.
+  listings are one kitchen. It is not geocoded and does not compute distance — walkability
+  is the `walkable` flag (D16) and travel time is a room-wide constant (D17).
 - **D14 — Untried places are tagged, not hidden.** A place seeded from a directory
   listing has no history, no notes, and nobody's word for it. Tagged `chưa-thử` and
   demoted in ranking unless the user asks for something new — otherwise 35 unknown
