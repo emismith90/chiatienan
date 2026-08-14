@@ -195,12 +195,12 @@ def write_section(room_id: int, index: int, body: str) -> None:
     if "\n## " in f"\n{body}":
         # One section may not smuggle in another: the index of every section after
         # it would shift under the client that just edited this one.
-        raise MemoryError_("Nội dung không được chứa tiêu đề mục mới (## …).")
+        raise MemoryError_("The body must not contain a new section heading (## …).")
     path = room_memory_dir(room_id) / _MD_NAME
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     preamble, blocks = _split(text)
     if not 0 <= index < len(blocks):
-        raise MemoryError_("Không tìm thấy mục đó.")
+        raise MemoryError_("No such section.")
     header, old = blocks[index]
     # Keep the original run of trailing newlines — that run is the blank line
     # separating this section from the next one.
@@ -217,7 +217,7 @@ def delete_section(room_id: int, index: int) -> None:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     preamble, blocks = _split(text)
     if not 0 <= index < len(blocks):
-        raise MemoryError_("Không tìm thấy mục đó.")
+        raise MemoryError_("No such section.")
     del blocks[index]
     out = _join(preamble, blocks)
     path.write_text(out.rstrip("\n") + "\n" if out.strip() else "", encoding="utf-8")

@@ -70,15 +70,15 @@ def create_place(session: Session, room_id: int, *, name: str, **fields) -> Plac
     """
     name = (name or "").strip()
     if not name:
-        raise PlaceError("Quán cần có tên.")
+        raise PlaceError("A place needs a name.")
     slug = slugify(name)
     if not slug:
-        raise PlaceError(f"Không tạo được mã định danh từ «{name}».")
+        raise PlaceError(f"Cannot build an identifier from «{name}».")
     existing = session.scalars(
         select(Place).where(Place.room_id == room_id, Place.slug == slug)
     ).first()
     if existing is not None:
-        raise PlaceError(f"«{existing.name}» đã có trong danh sách.")
+        raise PlaceError(f"«{existing.name}» is already on the list.")
     p = Place(room_id=room_id, slug=slug, name=name)
     apply_edits(p, fields)
     session.add(p)
@@ -99,7 +99,7 @@ def apply_edits(place: Place, fields: dict) -> bool:
         value = fields[key]
         if key == "name":
             if not (value or "").strip():
-                raise PlaceError("Quán cần có tên.")
+                raise PlaceError("A place needs a name.")
             # The slug is not recomputed (see EDITABLE): renaming keeps the identity.
             value = value.strip()
         if key in _LIST_FIELDS:

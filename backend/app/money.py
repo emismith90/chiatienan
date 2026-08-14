@@ -110,7 +110,7 @@ def normalize_items(items, participants: list[int]) -> list[dict]:
         try:
             member, amount = int(raw["member"]), int(raw["amount"])
         except (KeyError, TypeError, ValueError):
-            raise MoneyError("Mỗi dòng món cần {member, amount} là số.") from None
+            raise MoneyError("Every item line needs {member, amount} as numbers.") from None
         if member in by_member:
             raise MoneyError(
                 f"Thành viên {member} có nhiều hơn một dòng món — gộp lại thành một dòng."
@@ -125,7 +125,7 @@ def normalize_items(items, participants: list[int]) -> list[dict]:
     part_set = set(participants)
     stray = sorted(m for m in by_member if m not in part_set)
     if stray:
-        raise MoneyError(f"Các dòng món này không thuộc bữa ăn: {stray}.")
+        raise MoneyError(f"These item lines are not part of the meal: {stray}.")
     missing = [m for m in participants if m not in by_member]
     if missing:
         raise MoneyError(

@@ -124,9 +124,9 @@ def test_etag_of_a_missing_file_is_stable():
 # ----------------------------------------------------------------- gate labels
 
 @pytest.mark.parametrize("gate,label,at", [
-    ("busy@12:00", "Đông từ 12:00", "12:00"),
-    ("order-by@11:30", "Đặt trước 11:30", "11:30"),
-    ("closes@12:30", "Đóng cửa 12:30", "12:30"),
+    ("busy@12:00", "Busy from 12:00", "12:00"),
+    ("order-by@11:30", "Order by 11:30", "11:30"),
+    ("closes@12:30", "Closes 12:30", "12:30"),
     (None, None, None),
 ])
 def test_gates_render_as_human_words(gate, label, at):

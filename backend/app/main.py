@@ -566,7 +566,7 @@ async def qr_request(room_id: int, body: QrRequestIn, ctx: AuthCtx = Depends(req
             }
             msg = chat.post_message(
                 s, room_id, None,
-                f"📱 QR chuyển khoản {payer.display_name if payer else '?'}"
+                f"📱 Transfer QR {payer.display_name if payer else '?'}"
                 f" → {payee.display_name}: {amount:,}đ",
                 attachments=att, kind="bot",
             )
@@ -781,7 +781,7 @@ async def create_place_route(room_id: int, body: PlaceIn,
             except places.PlaceError as exc:
                 raise HTTPException(409, str(exc))
             out = {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name}
-            trail = _knowledge_trail(s, room_id, ctx, f"đã thêm quán «{p.name}».")
+            trail = _knowledge_trail(s, room_id, ctx, f"added place «{p.name}».")
     await _publish_knowledge(room_id, trail)
     return out
 
@@ -796,14 +796,14 @@ async def patch_place_route(room_id: int, place_id: int, body: PlacePatchIn,
         with db.session() as s:
             p = s.get(Place, place_id)
             if p is None or p.room_id != room_id:
-                raise HTTPException(404, "Không tìm thấy quán đó.")
+                raise HTTPException(404, "No such place.")
             try:
                 changed = places.apply_edits(p, body.model_dump(exclude_unset=True))
             except places.PlaceError as exc:
                 raise HTTPException(422, str(exc))
             s.flush()
             # A save that changed nothing announces nothing.
-            trail = (_knowledge_trail(s, room_id, ctx, f"đã sửa thông tin quán «{p.name}».")
+            trail = (_knowledge_trail(s, room_id, ctx, f"edited place «{p.name}».")
                      if changed else None)
     await _publish_knowledge(room_id, trail)
     return {"ok": True, "changed": changed}
@@ -820,12 +820,12 @@ async def delete_place_route(room_id: int, place_id: int,
         with db.session() as s:
             p = s.get(Place, place_id)
             if p is None or p.room_id != room_id:
-                raise HTTPException(404, "Không tìm thấy quán đó.")
+                raise HTTPException(404, "No such place.")
             trail = None
             if p.active:
                 p.active = False
                 s.flush()
-                trail = _knowledge_trail(s, room_id, ctx, f"đã ẩn quán «{p.name}».")
+                trail = _knowledge_trail(s, room_id, ctx, f"hid place «{p.name}».")
     await _publish_knowledge(room_id, trail)
     return {"ok": True}
 
@@ -846,7 +846,7 @@ async def create_observation_route(room_id: int, body: ObservationIn,
     _check_room(ctx, room_id)
     text = _one_line(body.text)
     if not text:
-        raise HTTPException(422, "Ghi nhớ cần có nội dung.")
+        raise HTTPException(422, "A note needs some text.")
     try:
         gate = observations.parse_gate(body.gate_kind, body.gate_at)
     except ValueError as exc:
@@ -856,7 +856,7 @@ async def create_observation_route(room_id: int, body: ObservationIn,
         with db.session() as s:
             resolved = knowledge.SubjectIndex(s, room_id).resolve(body.subject)
             if resolved["subject_kind"] == "unknown":
-                raise HTTPException(422, f"Không rõ «{body.subject}» là quán nào hay ai.")
+                raise HTTPException(422, f"«{body.subject}» is not a known place or person.")
             obs = observations.Observation(
                 when=None if body.standing else (body.when or today_ict()),
                 subject=body.subject, gate=gate, text=text)
@@ -874,7 +874,7 @@ async def create_observation_route(room_id: int, body: ObservationIn,
                    "etag": observations.file_etag(room_id)}
             trail = _knowledge_trail(
                 s, room_id, ctx,
-                f"đã thêm ghi nhớ về «{resolved['subject_label']}»: {text}")
+                f"added a note about «{resolved['subject_label']}»: {text}")
     await _publish_knowledge(room_id, trail)
     return out
 
@@ -887,13 +887,13 @@ async def patch_observation_route(room_id: int, line_id: str, body: ObservationP
     fields = body.model_dump(exclude_unset=True)
     async with chat._agent_lock:
         if observations.file_etag(room_id) != body.etag:
-            raise HTTPException(409, "Có người vừa sửa ghi nhớ — hãy tải lại.")
+            raise HTTPException(409, "Someone just changed the notes — reload.")
         current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
         if current is None:
-            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+            raise HTTPException(404, "No such note.")
         text = _one_line(fields.get("text", current.text))
         if not text:
-            raise HTTPException(422, "Ghi nhớ cần có nội dung.")
+            raise HTTPException(422, "A note needs some text.")
         standing = fields.get("standing", current.is_rule)
         # A rule has no date; a dated line that never had one takes today's.
         when = None if standing else (fields.get("when") or current.when or today_ict())
@@ -912,15 +912,15 @@ async def patch_observation_route(room_id: int, line_id: str, body: ObservationP
         # same content-derived id, so neither could be addressed again.
         if updated.line_id != line_id and any(
                 o.line_id == updated.line_id for o in observations.load(room_id)):
-            raise HTTPException(422, "Đã có một ghi nhớ y hệt như vậy.")
+            raise HTTPException(422, "An identical note already exists.")
         if not observations.replace_line(room_id, line_id, updated):
-            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+            raise HTTPException(404, "No such note.")
         with db.session() as s:
             label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
             out = {"ok": True, "id": updated.line_id,
                    "etag": observations.file_etag(room_id)}
             trail = _knowledge_trail(s, room_id, ctx,
-                                     f"đã sửa ghi nhớ về «{label}»: {text}")
+                                     f"edited a note about «{label}»: {text}")
     await _publish_knowledge(room_id, trail)
     return out
 
@@ -932,15 +932,15 @@ async def delete_observation_route(room_id: int, line_id: str, etag: str = Query
     db = get_db()
     async with chat._agent_lock:
         if observations.file_etag(room_id) != etag:
-            raise HTTPException(409, "Có người vừa sửa ghi nhớ — hãy tải lại.")
+            raise HTTPException(409, "Someone just changed the notes — reload.")
         current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
         if current is None:
-            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+            raise HTTPException(404, "No such note.")
         observations.delete_line(room_id, line_id)
         with db.session() as s:
             label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
             trail = _knowledge_trail(
-                s, room_id, ctx, f"đã xoá ghi nhớ về «{label}»: {current.text}")
+                s, room_id, ctx, f"deleted the note about «{label}»: {current.text}")
     await _publish_knowledge(room_id, trail)
     return {"ok": True, "etag": observations.file_etag(room_id)}
 
@@ -953,13 +953,13 @@ async def patch_memory_section_route(room_id: int, index: int, body: MemorySecti
     db = get_db()
     async with chat._agent_lock:
         if memory.file_etag(room_id) != body.etag:
-            raise HTTPException(409, "Có người vừa sửa nhật ký — hãy tải lại.")
+            raise HTTPException(409, "Someone just changed the log — reload.")
         try:
             memory.write_section(room_id, index, body.body)
         except memory.MemoryError_ as exc:
             raise HTTPException(422, str(exc))
         with db.session() as s:
-            trail = _knowledge_trail(s, room_id, ctx, "đã sửa một mục trong nhật ký bộ nhớ.")
+            trail = _knowledge_trail(s, room_id, ctx, "edited an entry in the memory log.")
     await _publish_knowledge(room_id, trail)
     return {"ok": True, "etag": memory.file_etag(room_id)}
 
@@ -971,13 +971,13 @@ async def delete_memory_section_route(room_id: int, index: int, etag: str = Quer
     db = get_db()
     async with chat._agent_lock:
         if memory.file_etag(room_id) != etag:
-            raise HTTPException(409, "Có người vừa sửa nhật ký — hãy tải lại.")
+            raise HTTPException(409, "Someone just changed the log — reload.")
         try:
             memory.delete_section(room_id, index)
         except memory.MemoryError_ as exc:
             raise HTTPException(404, str(exc))
         with db.session() as s:
-            trail = _knowledge_trail(s, room_id, ctx, "đã xoá một mục trong nhật ký bộ nhớ.")
+            trail = _knowledge_trail(s, room_id, ctx, "deleted an entry from the memory log.")
     await _publish_knowledge(room_id, trail)
     return {"ok": True, "etag": memory.file_etag(room_id)}
 

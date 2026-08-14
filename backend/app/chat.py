@@ -325,14 +325,15 @@ def render_bot_attachments(result) -> dict | None:
 
 
 def _settlement_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a settlement, straight from the
-    tool-result dict — never from LLM prose (design D3, money-safety)."""
+    """Deterministic summary of a settlement, straight from the tool-result dict —
+    never from LLM prose (design D3, money-safety)."""
     period = attachments.get("period") or {}
     p_from, p_to = period.get("from"), period.get("to")
-    # "Tạm tính", not "Chốt kỳ": nothing is recorded and no period closes, so a
+    # "Provisional", not "Settled": nothing is recorded and no period closes, so a
     # header that reads like a closing entry was telling the room the books had
     # been ruled off when `settlements` had been empty since the ledger began.
-    header = f"Tạm tính {p_from} → {p_to}:" if p_from else f"Tạm tính đến {p_to}:"
+    header = (f"Provisional {p_from} → {p_to}:" if p_from
+              else f"Provisional through {p_to}:")
 
     transfers = attachments.get("transfers") or []
     lines = [header]
@@ -342,11 +343,11 @@ def _settlement_body(attachments: dict) -> str:
         # attachment, so nobody could see what it said without opening the card.
         lines.extend(
             f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ"
-            + (f" · ND: {t['note']}" if t.get("note") else "")
+            + (f" · ref: {t['note']}" if t.get("note") else "")
             for t in transfers
         )
     else:
-        lines.append(attachments.get("message") or "Không ai nợ ai.")
+        lines.append(attachments.get("message") or "Nobody owes anybody.")
 
     for w in attachments.get("warnings") or []:
         lines.append(f"⚠️ {w}")
@@ -354,20 +355,20 @@ def _settlement_body(attachments: dict) -> str:
 
 
 def _payment_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of recorded payment(s), from the tool/commit
-    dict — never LLM prose (money-safety)."""
+    """Deterministic summary of recorded payment(s), from the tool/commit dict —
+    never LLM prose (money-safety)."""
     transfers = attachments.get("transfers") or []
     if not transfers:
-        return "💸 Đã ghi thanh toán."
-    lines = [f"{t['from']['name']} trả {t['to']['name']} {t['amount']:,}đ" for t in transfers]
-    return "💸 " + lines[0] if len(lines) == 1 else "💸 Đã ghi:\n" + "\n".join(lines)
+        return "💸 Payment recorded."
+    lines = [f"{t['from']['name']} paid {t['to']['name']} {t['amount']:,}đ" for t in transfers]
+    return "💸 " + lines[0] if len(lines) == 1 else "💸 Recorded:\n" + "\n".join(lines)
 
 
 def _settle_blocked_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a blocked settle (pending drafts
-    must be confirmed/cancelled first), straight from the tool-result dict —
-    never from LLM prose (design D3, money-safety)."""
-    lines = [attachments.get("message") or "Có đề xuất chưa xác nhận."]
+    """Deterministic summary of a blocked settle (pending drafts must be
+    confirmed/cancelled first), straight from the tool-result dict — never from
+    LLM prose (design D3, money-safety)."""
+    lines = [attachments.get("message") or "There are drafts still unconfirmed."]
     for p in attachments.get("pending") or []:
         if p.get("kind") == "payment":
             parts = ", ".join(
@@ -376,16 +377,18 @@ def _settle_blocked_body(attachments: dict) -> str:
             lines.append(f"• #{p['draft_id']}: {parts}")
         else:
             lines.append(
-                f"• #{p['draft_id']}: {p.get('payer_name', '?')} trả "
-                f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} người)"
+                f"• #{p['draft_id']}: {p.get('payer_name', '?')} paid "
+                f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} people)"
             )
     # Production: this listed the blocking draft and stopped there, so people
     # asked the bot to close it four different ways instead of scrolling up to
     # the card. Say where the buttons are, and that chat can cancel it.
     if attachments.get("pending"):
+        # The buttons are named as the card renders them, in English — an
+        # instruction that names a control the room cannot find is worse than none.
         lines.append(
-            "Mở thẻ nháp ở trên (theo số #) rồi bấm **Xác nhận** hoặc **Huỷ** — "
-            'hoặc nhắn "huỷ đề xuất #<số>" là mình huỷ hộ.'
+            "Open the draft card above (by its # number) and press **Confirm** or "
+            '**Cancel** — or say "huỷ đề xuất #<số>" and I will cancel it for you.'
         )
     return "\n".join(lines)
 
@@ -406,31 +409,33 @@ def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
 #: invisible otherwise: nothing was written, so no balance moves and no card
 #: appears, and the next person to read the thread has only the bot's word.
 _FABRICATED_COMMIT_BODY = (
-    "⚠️ Mình **chưa ghi** bữa này vào sổ — chưa có gì thay đổi cả.\n"
-    "Nhắn lại giúp mình nhé (kèm ảnh hoá đơn nếu có, và nói rõ ai trả / chia cho ai) — "
-    "chỉ khi thẻ nháp hiện ra và có người bấm **Xác nhận** thì mới thật sự vào sổ."
+    "⚠️ This meal was **not recorded** — nothing in the ledger changed.\n"
+    "Please say it again (attach the bill photo if you have one, and say who paid and "
+    "who shared) — it only reaches the ledger once a draft card appears and someone "
+    "presses **Confirm**."
 )
 
 
 def _meal_body(attachments: dict) -> str:
-    """Deterministic Vietnamese summary of a committed meal, straight from the
-    tool-result dict — never from LLM prose (design D3, money-safety)."""
+    """Deterministic summary of a committed meal, straight from the tool-result
+    dict — never from LLM prose (design D3, money-safety)."""
     payer = attachments.get("payer") or {}
     shares = attachments.get("shares") or []
     shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
     bill = attachments.get("bill_total", attachments.get("tracked_total", attachments.get("total_amount", 0)))
     guests = attachments.get("guests") or []
-    guest_str = f" (gồm {len(guests)} khách trả tiền mặt)" if guests else ""
+    guest_str = (f" (incl. {len(guests)} guest{'' if len(guests) == 1 else 's'} paying cash)"
+                 if guests else "")
     dish = attachments.get("dish")
     dish_str = f" — {dish}" if dish else ""
     return (
-        f"Đã ghi #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} trả "
-        f"tổng {bill:,}đ{guest_str} • {shares_str}"
+        f"Recorded #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} paid "
+        f"{bill:,}đ total{guest_str} • {shares_str}"
     )
 
 
 def _statement_body(att: dict) -> str:
-    """Deterministic VN text for a personal statement — numbers from the tool dict.
+    """Deterministic text for a personal statement — numbers from the tool dict.
 
     Two sections and no total. The old closing line, "Ròng: -54.500đ", was the
     one number in the reply nobody could act on: it is not what you send anyone,
@@ -439,18 +444,18 @@ def _statement_body(att: dict) -> str:
     What you owe and what you are owed, per person per meal, is the whole answer.
     """
     name = (att.get("member") or {}).get("name", "?")
-    lines = [f"{name} — nợ và được nợ:"]
+    lines = [f"{name} — owes and is owed:"]
     owe = att.get("owe") or []
     owed = att.get("owed") or []
     if owe:
-        lines.append("Bạn nợ:")
-        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'bữa ăn'}"
-                  f"{' – đã trả' if r['status'] == 'paid' else ''})" for r in owe]
+        lines.append("You owe:")
+        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'meal'}"
+                  f"{' – paid' if r['status'] == 'paid' else ''})" for r in owe]
     if owed:
-        lines.append("Được nợ:")
-        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'bữa ăn'})" for r in owed]
+        lines.append("You are owed:")
+        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'meal'})" for r in owed]
     if not owe and not owed:
-        lines.append("Bạn không nợ ai, không ai nợ bạn.")
+        lines.append("You owe nobody, and nobody owes you.")
     return "\n".join(lines)
 
 
@@ -469,26 +474,27 @@ def _summary_body(att: dict) -> str:
     meals = sum(1 for e in timeline if e["kind"] == "meal")
     payments = len(timeline) - meals
     window = (f"{period.get('from')} → {period.get('to')}" if period.get("from")
-              else f"đến {period.get('to')}")
+              else f"through {period.get('to')}")
     if not timeline:
-        return f"Tóm tắt {window}: chưa có giao dịch nào trong kỳ."
+        return f"Summary {window}: no transactions in this period."
     parts = []
     if meals:
-        parts.append(f"{meals} bữa")
+        parts.append(f"{meals} meal{'' if meals == 1 else 's'}")
     if payments:
-        parts.append(f"{payments} lượt trả tiền")
+        parts.append(f"{payments} payment{'' if payments == 1 else 's'}")
     days = len({e.get("occurred_on") for e in timeline})
-    return f"Tóm tắt {window}: {', '.join(parts)} trong {days} ngày — chi tiết ở dưới."
+    return (f"Summary {window}: {', '.join(parts)} across {days} "
+            f"day{'' if days == 1 else 's'} — details below.")
 
 
 def _random_pick_body(att: dict) -> str:
-    """Deterministic VN text for a random draw — the winner comes from the tool
-    dict, never the LLM, so it can't be re-typed into a different name."""
+    """Deterministic text for a random draw — the winner comes from the tool dict,
+    never the LLM, so it can't be re-typed into a different name."""
     chosen = att.get("chosen") or {}
     n = len(att.get("candidates") or [])
     label = att.get("label")
     tail = f" ({label})" if label else ""
-    return f"🎲 Người được chọn{tail}: **{chosen.get('name', '?')}** — bốc trong {n} người."
+    return f"🎲 Picked{tail}: **{chosen.get('name', '?')}** — from {n} people."
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
@@ -582,7 +588,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             elif attachments and attachments.get("type") == "random_pick":
                 body = _random_pick_body(attachments)
             else:
-                body = result.final_text or (result.error and f"⚠️ {result.error}") or "(không có phản hồi)"
+                body = result.final_text or (result.error and f"⚠️ {result.error}") or "(no response)"
                 # The one path where money reaches the room as LLM prose. Report
                 # it (see app.moneyguard); enforcing comes after the log is quiet.
                 if result.final_text:
@@ -678,7 +684,7 @@ async def _maybe_rollover(db: Database, room_id: int) -> None:
     summary = await summarize_messages(rendered, kind="rollover")
     if summary:
         memory.append_summary(room_id, summary_text=summary, through_id=through_id,
-                              through_at=now_ict().isoformat(), header="Tự động lưu (cũ hơn 10 tuần)")
+                              through_at=now_ict().isoformat(), header="Auto-saved (older than 10 weeks)")
     # On a blank/failed summary we leave the watermark untouched so the aged
     # messages are retried next turn — never silently dropped.
 
@@ -696,13 +702,13 @@ async def clear_context(db: Database, room_id: int, *, up_to_id: int, emit=None)
         now_iso = now_ict().isoformat()
         if summary:
             memory.append_summary(room_id, summary_text=summary, through_id=up_to_id,
-                                  through_at=now_iso, header="Xoá ngữ cảnh")
+                                  through_at=now_iso, header="Context cleared")
         else:
             # No summary (empty window or summarizer failure) — still reset the
             # window; the user explicitly asked to clear.
             memory.set_watermark(room_id, through_id=up_to_id, through_at=now_iso)
         with db.session() as s:
             div = post_message(s, room_id, None,
-                               "🧹 Đã lưu tóm tắt vào bộ nhớ; ngữ cảnh đã xoá.",
+                               "🧹 Summary saved to memory; context cleared.",
                                kind="context_reset")
     return div

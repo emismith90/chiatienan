@@ -263,8 +263,10 @@ def gate_kind(obs: Observation) -> str | None:
 
 
 #: How each gate verb reads to a human. ``_GATE_RE`` is the schema, so this is the
-#: only place a person should ever have to meet ``order-by@11:30``.
-_GATE_LABELS = {"busy": "Đông từ", "order-by": "Đặt trước", "closes": "Đóng cửa"}
+#: only place a person should ever have to meet ``order-by@11:30``. Read by the
+#: knowledge panel only — ``tools`` branches on :func:`gate_kind`, so these are
+#: display strings and nothing decides on them.
+_GATE_LABELS = {"busy": "Busy from", "order-by": "Order by", "closes": "Closes"}
 
 
 def gate_at(obs: Observation) -> str | None:
@@ -274,7 +276,7 @@ def gate_at(obs: Observation) -> str | None:
 
 
 def gate_label(obs: Observation) -> str | None:
-    """``"Đặt trước 11:30"`` for ``order-by@11:30``; None when ungated."""
+    """``"Order by 11:30"`` for ``order-by@11:30``; None when ungated."""
     m = _GATE_RE.match(obs.gate or "")
     if not m:
         return None
@@ -292,7 +294,7 @@ def parse_gate(kind: str | None, at: str | None) -> str | None:
         return None
     gate = f"{kind}@{at or ''}"
     if not _GATE_RE.match(gate):
-        raise ValueError(f"Không hiểu điều kiện «{gate}».")
+        raise ValueError(f"Unknown clock rule «{gate}».")
     return gate
 
 

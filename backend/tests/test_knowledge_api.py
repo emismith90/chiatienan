@@ -87,7 +87,7 @@ def test_get_knowledge_returns_all_three_stores(api_client_room):
 
     # Rules first, then dated observations.
     assert data["observations"][0]["standing"] is True
-    assert data["observations"][0]["gate_label"] == "Đặt trước 11:30"
+    assert data["observations"][0]["gate_label"] == "Order by 11:30"
 
     assert [s["date"] for s in data["memory"]["sections"]] == ["2026-08-01"]
     assert data["memory"]["watermark"]["through_id"] == 9

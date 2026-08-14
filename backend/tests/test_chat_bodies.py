@@ -36,7 +36,7 @@ def test_render_summary_attachment():
     # the ledger panel it can open. Printing all of them made a fifteen-row
     # paragraph that a "format it as bullets please" request could not change.
     body = _summary_body(att)
-    assert body == "Tóm tắt đến 2026-07-22: 1 bữa trong 1 ngày — chi tiết ở dưới."
+    assert body == "Summary through 2026-07-22: 1 meal across 1 day — details below."
     # The detail is still carried, just not in the prose.
     assert att["timeline"][0]["dish"] == "bun bo"
 
@@ -52,13 +52,13 @@ def test_summary_body_counts_meals_payments_and_days():
             {"kind": "payment", "occurred_on": "2026-07-24", "amount": 1},
         ],
     })
-    assert body == ("Tóm tắt 2026-07-20 → 2026-07-26: 2 bữa, 2 lượt trả tiền "
-                    "trong 3 ngày — chi tiết ở dưới.")
+    assert body == ("Summary 2026-07-20 → 2026-07-26: 2 meals, 2 payments "
+                    "across 3 days — details below.")
 
 
 def test_summary_body_when_the_period_is_empty():
     body = _summary_body({"period": {"from": None, "to": "2026-07-26"}, "timeline": []})
-    assert body == "Tóm tắt đến 2026-07-26: chưa có giao dịch nào trong kỳ."
+    assert body == "Summary through 2026-07-26: no transactions in this period."
 
 
 def test_statement_body_prints_no_net_line():
@@ -71,13 +71,13 @@ def test_statement_body_prints_no_net_line():
         "owed": [{"name": "Linh", "amount": 20000, "dish": "ca phe", "status": "unpaid"}],
     })
     assert "Ròng" not in body and "-41" not in body and "41.000" not in body
-    assert "Bạn nợ:" in body and "Được nợ:" in body
+    assert "You owe:" in body and "You are owed:" in body
     assert "61,000đ" in body and "20,000đ" in body
 
 
 def test_statement_body_when_nothing_is_open_either_way():
     body = _statement_body({"member": {"id": 9, "name": "Giang"}, "owe": [], "owed": []})
-    assert body == "Giang — nợ và được nợ:\nBạn không nợ ai, không ai nợ bạn."
+    assert body == "Giang — owes and is owed:\nYou owe nobody, and nobody owes you."
     assert "Ròng" not in body
 
 
@@ -99,7 +99,7 @@ def test_render_random_pick_attachment_and_body():
     att = render_bot_attachments(res)
     assert att["type"] == "random_pick"
     body = _random_pick_body(att)
-    assert "An" in body and "trả tiền" in body and "2 người" in body
+    assert "An" in body and "trả tiền" in body and "from 2 people" in body
 
 
 def test_err_random_pick_result_not_wrapped():

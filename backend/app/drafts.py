@@ -47,7 +47,7 @@ def _sync_items(att: dict) -> dict:
     if not items:
         return att
     if att.get("guests"):
-        raise MoneyError("Ghi theo món chưa hỗ trợ khách lẻ — bỏ khách ra hoặc chia đều.")
+        raise MoneyError("Per-item split does not support cash guests yet — drop the guests or split evenly.")
     participants = [int(x) for x in att.get("member_participants") or []]
     items = normalize_items(items, participants)
     # The card patches a fixed field list that does not include discount_split,
@@ -253,7 +253,7 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     last = ledger.last_settlement(session, room_id)
     if last is not None and meal.occurred_on <= last.period_to:
         raise ledger.LedgerError(
-            "Bữa ăn này đã được chốt — hãy ghi một khoản điều chỉnh mới thay vì sửa."
+            "This meal has been settled — record a new adjustment instead of editing it."
         )
     for k in _EDITABLE:
         if k in patch:
