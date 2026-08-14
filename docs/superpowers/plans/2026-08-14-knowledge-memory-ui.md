@@ -235,8 +235,8 @@ Verified in the browser (not only in jsdom): adding a standing rule through the 
 
 ## Risks & non-goals
 
-- **Slug renames are not supported** (K4). If a room genuinely needs one, it is a migration that rewrites `observations.md` subjects under the lock, and it deserves its own plan.
-- **`stale` is display-only.** A stale observation still sits in the file and is still fed to the model the moment `DEFAULT_SINCE_DAYS` moves. Auto-pruning old notes is deliberately not in scope: the file is small, and a bot that deletes its own memory on a timer is a worse failure than a long file.
+- **Slug renames are not supported** (K4). If a room genuinely needs one, it is a migration that rewrites `observations.md` subjects under the lock, and it deserves its own plan. **It now has one:** [`2026-08-14-place-slug-rename.md`](2026-08-14-place-slug-rename.md).
+- **`stale` is display-only.** A stale observation still sits in the file and is still fed to the model the moment `DEFAULT_SINCE_DAYS` moves. Auto-pruning old notes is deliberately not in scope: the file is small, and a bot that deletes its own memory on a timer is a worse failure than a long file. **Measured 2026-08-14 and still the right answer:** production's only real room holds 42 observation lines, all of them standing rules, so nothing there can go stale at all — [`../notes/2026-08-14-stale-observations-measured.md`](../notes/2026-08-14-stale-observations-measured.md).
 - **No conflict *merge*.** `409` means "refetch and redo"; a three-way merge of a prose note is not worth the code.
 - **Payload size.** 100 places × ~14 fields + stats is ~20–30KB per fetch. Fine at the current scale, and it refetches only on `knowledge:changed`. If a room's list ever grows past a few hundred, the GET takes a `?section=` narrowing (already in the design) and the sub-tabs fetch lazily.
 - **`price_hint` becomes hand-editable**, which slightly softens D8's "seed-time fallback" framing. It stays labelled as a hint and is still ignored the moment real meals link, so a wrong hint decays on its own.
