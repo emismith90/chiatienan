@@ -115,10 +115,6 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
-
-
 def install_observations(room_id: int, path) -> dict:
     """Copy a seed observations file into the room, skipping lines already there.
 
@@ -140,3 +136,7 @@ def install_observations(room_id: int, path) -> dict:
         existing.add((o.subject, o.text))
         added += 1
     return {"added": added, "skipped": skipped}
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))
