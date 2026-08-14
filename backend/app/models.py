@@ -58,6 +58,44 @@ class Member(Base):
         return bool(self.bank_code and self.account_number and self.account_holder)
 
 
+class Place(Base):
+    """A restaurant the room can eat at or order from.
+
+    Identity for the free text in ``meals.dish``: "bún chả rửa xe", "Bún chả"
+    and "bun cha" are three strings for one business, and nothing can be counted
+    until they point at one row. ``slug`` is that identity — stable, ASCII, and
+    used verbatim as the ``place:`` subject in the observations file.
+
+    No price column on purpose (design D8): ``meals.total_amount ÷ heads`` is
+    what the group actually paid, after discounts. ``price_hint`` is only a
+    seed-time fallback for a place nobody has eaten at yet.
+    """
+    __tablename__ = "places"
+    __table_args__ = (UniqueConstraint("room_id", "slug", name="uq_room_place_slug"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    aliases: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    delivery: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    address: Mapped[str | None] = mapped_column(String(200))
+    # Walkability is a property of the seed list, not of each row (D17): the
+    # room's own list IS the walk-to set. 76 True / 24 False at seed time.
+    walkable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Optional override of the room-wide default used by the clock gates.
+    walk_minutes: Mapped[int | None] = mapped_column(Integer)
+    # Passed through verbatim, never retyped by the model (D10): a digit changed
+    # by hand is a wrong number nobody notices until they call it.
+    phone: Mapped[str | None] = mapped_column(String(20))
+    price_hint: Mapped[int | None] = mapped_column(Integer)          # VND per head
+    # Temporary closures self-expire (D11); `active=False` is for permanent ones.
+    closed_until: Mapped[date | None] = mapped_column(Date)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
+
+
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -90,6 +128,7 @@ class Meal(Base):
     note: Mapped[str | None] = mapped_column(String(400))
     raw_input: Mapped[str | None] = mapped_column(Text)
     dish: Mapped[str | None] = mapped_column(String(120))
+    place_id: Mapped[int | None] = mapped_column(ForeignKey("places.id"), nullable=True, index=True)
     initiator: Mapped[str | None] = mapped_column(String(120))
     guests: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)  # web|admin
