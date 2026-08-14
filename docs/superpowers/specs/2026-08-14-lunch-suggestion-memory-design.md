@@ -54,12 +54,28 @@ identity to attach any of this to and no way to count anything.
   like `add_member`. `remember`/`forget` go through a confirm card. A place row does
   nothing until someone eats there; an observation is a claim about a person or a
   business's quality, and TODO.md's "no way to verify a false claim" problem applies.
-- **D8 — Ledger price beats menu price.** `Place` has no price column. `meals.total_amount
-  ÷ heads` is what the group actually paid, after discounts, per person.
-- **D9 — Gate vocabulary stays tiny.** Two verbs (`busy@`, `order-by@`). Anything that
-  does not fit gets `-` and lives as pure prose the model may mention but Python does
-  not gate on. This escape hatch is what stops the feature growing into a rules DSL,
-  which is the obvious way it goes bad.
+- **D8 — Ledger price beats menu price, but a hint beats nothing.** `avg_per_head` from
+  the ledger is authoritative wherever history exists. `price_hint` (seed-supplied
+  VND/head) is the fallback that gives a never-eaten place a `band` on day one, and is
+  ignored the moment real meals link. Never shown to the user as an amount — it only
+  feeds the band (D5).
+- **D9 — Gate vocabulary stays tiny, and grows only from real data.** Three verbs:
+  `busy@`, `order-by@`, `closes@`. Anything that does not fit gets `-` and lives as pure
+  prose the model may mention but Python does not gate on. This escape hatch is what
+  stops the feature growing into a rules DSL, which is the obvious way it goes bad.
+  `closes@` was added by the seed pass, not designed in advance — see D12.
+- **D10 — Phone numbers are a field, never prose.** 14 of 41 seeded places carry one, and
+  several rules are actionable only with it ("gọi đặt trước 0906279398"). A model that
+  retypes a phone number gets it wrong the same way it gets an amount wrong, with the
+  same silent-failure shape, so `phone` is passed through verbatim by the tool and the
+  skill forbids re-typing it — identical treatment to money.
+- **D11 — `closed_until` over `active: false` for temporary closures.** Phở Vui is
+  mid-renovation until roughly end of September. A date self-expires; a boolean needs
+  someone to remember to flip it back, and nobody will. `active: false` stays for
+  permanent closures ("sân con voi có vẻ bị sập rồi").
+- **D12 — The seed pass is part of the design loop.** D10, D11, `price_hint` and `closes@`
+  all came from reading 41 real entries, not from up-front design. Anything added here
+  must trace to an entry that needed it.
 
 ## Design
 
@@ -80,6 +96,9 @@ class Place(Base):
     tags: list            # JSON, default list — ["cơm", "gà"], free vocabulary
     delivery: list        # JSON, default list — ["shopeefood", "grab"]
     walk_minutes: int|None
+    phone: str|None       # String(20) — see D10
+    price_hint: int|None  # VND per head, seed-supplied — see D8
+    closed_until: date|None  # see D11
     active: bool          # default True
     created_at: datetime
 ```
@@ -138,7 +157,7 @@ The tier is returned rather than swallowed because §5 treats confident tiers
 | `last_on` | max `occurred_on` |
 | `days_since` | `today_ict() - last_on`, `None` if never |
 | `weekday_counts` | `{0..6: n}` over the window |
-| `avg_per_head` | mean of `total_amount ÷ (len(shares) + len(guests))` |
+| `avg_per_head` | mean of `total_amount ÷ (len(shares) + len(guests))`, else `price_hint` |
 | `band` | `rẻ`/`vừa`/`đắt` — tertiles of `avg_per_head` across the room's places |
 
 `band` is relative to the room, not absolute VND, so it stays correct as prices drift.
@@ -146,10 +165,13 @@ Voided meals are excluded throughout (`Meal.voided`).
 
 **Places with no meal history are first-class.** On day one every seeded place has
 `times=0`, and a design that only ranked eaten-at places would suggest nothing at all.
-Such a place gets `days_since=None`, `band=None`, and sits in the **middle** of the
-ranking — never penalised as stale, never boosted as novel. It is suggestible
-immediately, and a `budget` filter simply does not exclude it (an unknown band cannot
-be ruled out). A place stays in this state until its first linked meal.
+Such a place gets `days_since=None` and sits in the **middle** of the ranking — never
+penalised as stale, never boosted as novel. Its `band` comes from `price_hint` (D8);
+only a place with neither history nor hint gets `band=None`, and a `budget` filter does
+not exclude those, since an unknown band cannot be ruled out.
+
+`closed_until` and `active=False` are filtered out of candidates before ranking, in
+Python. A `closed_until` in the past is simply ignored — no cleanup job, no cron.
 
 ### §4 Observations & rules — `app/observations.py`
 
@@ -170,7 +192,7 @@ Four fields, one `split("|", 3)` after stripping the leading `- `. No parser.
   lines never are (D4).
 - **`subject`** — `place:<slug>` (joins §1) or `member:<nickname>` (resolved through
   `roster`). This is the join that makes numbers and prose describe the same thing.
-- **`gate`** — `-`, `busy@HH:MM`, or `order-by@HH:MM` (D9).
+- **`gate`** — `-`, `busy@HH:MM`, `order-by@HH:MM`, or `closes@HH:MM` (D9).
 - **`text`** — free Vietnamese prose, untouched.
 
 **Malformed lines are skipped with a log warning, never raised.** This file is
@@ -196,9 +218,13 @@ Python greps `member:nhim`, counts this month's lines, and hands over `3`.
   within `_ACT_NOW_BUSY = 15min` → `act_now`; else `ok`. Unseeded `walk_minutes`
   degrades to a plain time compare, so the rule still works, less precisely.
 - `order-by@HH:MM` — `now > order_by` → `too_late`; within `_ACT_NOW_ORDER = 20min` →
-  `act_now`; else `ok`.
+  `act_now`; else `ok`. Travel time is irrelevant: you phone ahead.
+- `closes@HH:MM` — same travel-aware arithmetic as `busy@`. Separate verb because the
+  answers differ in kind: "sẽ đông, ra sớm đi" is advice, "đóng cửa rồi" is a refusal,
+  and a room told the wrong one wastes a walk. Added because Bánh Mì Linh closes at
+  12h30 and neither existing verb said that (D9, D12).
 
-`too_late` on a `busy@` means "sẽ đông/không kịp", not "closed" — the prose carries the
+`too_late` on a `busy@` means "sẽ đông/không kịp", not "shut" — the prose carries the
 nuance, the status only gates.
 
 ### §5 Linking meals to places
@@ -233,7 +259,7 @@ Added to `build_tools` (`tools.py:315`):
 
 | Tool | Args | Returns |
 |---|---|---|
-| `suggest_lunch` | `budget?`, `mood?`, `exclude?`, `eaters?` | ranked candidates: name, `band`, `days_since`, gate `status` + `minutes_left`, relevant observation lines |
+| `suggest_lunch` | `budget?`, `mood?`, `exclude?`, `eaters?` | ranked candidates: name, `band`, `days_since`, gate `status` + `minutes_left`, `phone`, relevant observation lines |
 | `find_places` | `query?`, `all?` | `{matched, unresolved, ambiguous}` |
 | `add_place` | `name`, `aliases?`, `tags?`, `delivery?`, `walk_minutes?` | created place (direct write, D7) |
 | `remember` | `subject`, `text`, `when?`, `gate?` | memo draft card |
@@ -274,6 +300,8 @@ of `pick-random/SKILL.md`. Load-bearing rules:
 - `suggest_lunch` decides the order — never re-rank, never pick a different one.
 - Never compute counts, intervals, averages or clock arithmetic; the tool supplies them.
 - Speak in bands (`rẻ`/`vừa`/`đắt`), never VND (D5).
+- **Never retype a phone number.** Copy the tool's `phone` verbatim or omit it. A digit
+  changed by hand is a wrong number nobody notices until they call it (D10).
 - Relay gate status in the tool's terms: `act_now` → say what to do now and how long is
   left; `too_late` → say so and offer the next candidate.
 - **At most one `remember` proposal per turn**, and only when the user says something
@@ -289,20 +317,38 @@ updates aliases/tags on re-run, then invokes `backfill_links`.
 ```json
 [
   {
-    "name": "Cơm gà Thịnh Lơ",
-    "aliases": ["thịnh lơ", "cơm gà thịnh lơ", "thinh lo"],
-    "tags": ["cơm", "gà"],
+    "name": "Cơm gà đảo, cơm rang Thịnh Lơ",
+    "slug": "com-ga-thinh-lo",
+    "aliases": ["thịnh lơ", "thinh lo", "cơm gà thịnh lơ", "cơm gà đảo"],
+    "tags": ["cơm gà", "cơm rang", "nhậu", "hay-ăn"],
     "delivery": ["shopeefood"],
-    "walk_minutes": 5
+    "walk_minutes": 5,
+    "phone": "0906279398",
+    "price_hint": 90000,
+    "closed_until": "2026-09-30",
+    "active": true
   }
 ]
 ```
 
-`slug` is optional (derived from `name`). Only `name` is required; everything else
-defaults empty. **Aliases are what make casual chat resolve** — seed every spelling the
-room actually types, including tone-free forms.
+Only `name` is required; `slug` derives from it and everything else defaults empty.
+**Aliases are what make casual chat resolve** — every spelling the room actually types,
+including tone-free forms (`thinh lo`), since people drop diacritics constantly.
 
-Observations seed the file directly, in the §4 format.
+Seeded files live in `backend/seeds/`: `places-local.json` (41 walk-to places) and
+`observations-local.md`. ShopeeFood/Grab places are a separate seed file with `delivery`
+populated.
+
+Observations seed the §4 format directly and are copied to
+`{DATA_DIR}/rooms/{room_id}/observations.md`. Nearly all seeded lines are `always` with a
+`-` gate: standing traits ("nước dùng hơi mặn", "quán mùi") rather than dated incidents.
+Dated lines accumulate from chat over time; the seed establishes the baseline.
+
+**`walk_minutes` is the one field worth filling in by hand.** It is unset across the
+whole seed, and without it every `busy@`/`closes@` gate degrades to a plain clock compare
+— "đi bây giờ có kịp không" becomes "bây giờ đã quá giờ chưa", which is a different and
+less useful question. Deliberately left null rather than guessed: an invented walking
+time produces confidently wrong advice.
 
 ## Testing
 
@@ -310,12 +356,18 @@ Observations seed the file directly, in the §4 format.
   `"quán bé bự"` → `"Bé Bự"`; two places sharing a token stay `ambiguous`; exact hit is
   never widened.
 - `test_places_stats.py` — `times`/`days_since`/`weekday_counts`/`band` over fixture
-  meals; voided meals excluded; guests counted in `avg_per_head`.
+  meals; voided meals excluded; guests counted in `avg_per_head`; `price_hint` supplies
+  the band with no history and is **overridden** once a meal links; `closed_until` in the
+  future filters the place out and in the past does not.
 - `test_observations.py` — round-trip append/load/remove; malformed line skipped and
   logged, not raised; `always` survives `since_days` filtering while a dated line does
   not; `count_since` returns the number the brief's third example needs.
 - `test_gates.py` — frozen clock: `busy@12:00` with and without `walk_minutes` at 11:20 /
-  11:50 / 12:10; `order-by@11:30` at 11:00 / 11:25 / 11:40.
+  11:50 / 12:10; `order-by@11:30` at 11:00 / 11:25 / 11:40; `closes@12:30` produces a
+  distinct status from `busy@12:30` at the same instant.
+- `test_seed_places.py` — `places-local.json` loads clean, is idempotent on re-run, and
+  every `subject:` slug in `observations-local.md` resolves to a seeded place or member.
+  This catches a typo'd slug, which would otherwise silently orphan an observation.
 - `test_suggest_lunch.py` — yesterday's place is penalised; `budget="rẻ"` filters by band;
   a `too_late` candidate sinks with its reason attached; `exclude` honoured; **a room whose
   places all have zero meals still returns a ranked list** (the day-one case).
