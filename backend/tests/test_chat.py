@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -8,7 +8,7 @@ from app import memory as mem
 from app.agent import ToolInvocation, TurnResult
 from app.clock import now_ict
 from app.db import Database
-from app.models import Room, Member
+from app.models import Meal, Room, Member
 from tests.test_ledger import _seed_room
 
 
@@ -656,3 +656,54 @@ async def test_an_honest_reply_about_a_past_meal_still_gets_through(monkeypatch,
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
     msg = await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix ghi bún cá chưa")
     assert "175,000đ" in msg.body
+
+
+async def test_the_forgery_stays_blocked_when_asked_a_fourth_time(monkeypatch, db):
+    """Room 3 asked four times over 44 minutes and got the same 157 characters
+    back every time. The first block must not depend on the room being clean —
+    once earlier forgeries sit in the history, their amounts read as 'backed',
+    so only the ledger check keeps the later ones out."""
+    forgery = (
+        "Đã ghi #14 — Texas Chicken: Bạch Mai trả tổng 793,760đ • Emi 132,293đ, "
+        "Nhím 132,293đ, Giang Hoàng 132,293đ"
+    )
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-loop"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="Emi", nickname="emi-loop", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+        # The three earlier forgeries the room already believes.
+        for _ in range(3):
+            chat.post_message(s, room_id, None, forgery, kind="bot")
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        return TurnResult(final_text=forgery, turn_id="t-loop4")
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+    msg = await chat.run_bot_turn(
+        db, room_id, member_id, "Emi",
+        "@phoenix nay ăn Texas chicken hết 793.760, chia đều cả 7 người")
+
+    assert "Đã ghi #14" not in msg.body
+    assert "chưa ghi" in msg.body.lower()
+
+
+async def test_a_confirmation_naming_a_real_meal_is_left_alone(monkeypatch, db):
+    """The ledger check must clear what the ledger supports, or the bot loses the
+    ability to answer "did you record it?"."""
+    with db.session() as s:
+        r = Room(name="A", invite_token="t-real"); s.add(r); s.flush()
+        m = Member(room_id=r.id, display_name="Emi", nickname="emi-real", pin="1"); s.add(m); s.flush()
+        room_id, member_id = r.id, m.id
+        meal = Meal(room_id=room_id, occurred_on=date(2026, 8, 13), payer_member_id=m.id,
+                    total_amount=175_000, dish="bún cá")
+        s.add(meal); s.flush()
+        meal_id = meal.id
+        chat.post_message(s, room_id, None,
+                          f"Đã ghi #{meal_id} — bún cá: Emi trả tổng 175,000đ", kind="bot")
+
+    async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        return TurnResult(final_text=f"Rồi nhé — Đã ghi #{meal_id}, tổng 175,000đ.", turn_id="t-real1")
+
+    monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
+    msg = await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix ghi bún cá chưa")
+    assert f"Đã ghi #{meal_id}" in msg.body

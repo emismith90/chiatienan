@@ -23,7 +23,7 @@ from app import memory, moneyguard
 from app.clock import now_ict
 from app.config import settings
 from app.db import Database
-from app.models import Member, RoomMessage
+from app.models import Meal, Member, RoomMessage
 from app.summarize import summarize_messages
 
 log = logging.getLogger("chiatienan")
@@ -390,6 +390,17 @@ def _settle_blocked_body(attachments: dict) -> str:
     return "\n".join(lines)
 
 
+def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
+    """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
+
+    Room-scoped and void-aware on purpose: "Đã ghi #14" is a claim about *this*
+    room's ledger, and a voided meal is one the room decided never happened.
+    """
+    with db.session() as s:
+        meal = s.get(Meal, meal_id)
+        return meal is not None and meal.room_id == room_id and not meal.voided
+
+
 #: What the room sees instead of a forged confirmation. It has to say the thing
 #: the forgery hid — that the ledger is untouched — because the failure is
 #: invisible otherwise: nothing was written, so no balance moves and no card
@@ -587,9 +598,18 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                     # so the room believed it, and asking again just reproduced
                     # it. Reporting is not enough for this one: the message must
                     # not be posted.
-                    forged = moneyguard.fabricated_commit(body, f"{text}\n{history or ''}",
-                                                          result.tools)
-                    if forged:
+                    #
+                    # `meal_exists` is what makes that stick across repeats. The
+                    # forgery was posted, so its numbers joined the room's own
+                    # history, and the history legitimately backs amounts — which
+                    # quietly cleared every retelling (three more over 44
+                    # minutes, `tools=0` each time). The ledger cannot be talked
+                    # round: "Đã ghi #14" is checked against `meals`.
+                    forged = moneyguard.fabricated_commit(
+                        body, f"{text}\n{history or ''}", result.tools,
+                        meal_exists=lambda mid: _meal_exists(db, room_id, mid),
+                    )
+                    if forged is not None:
                         log.error(
                             "suppressed fabricated commit: room=%s turn=%s amounts=%s "
                             "images=%d tools=%s text=%r",

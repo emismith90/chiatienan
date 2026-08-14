@@ -141,3 +141,52 @@ def test_talking_without_money_is_not_a_forgery():
     """No amounts, nothing to be wrong about — 'đã ghi' alone must not block a
     reply that moves no numbers."""
     assert fabricated_commit("Đã ghi chú lại rồi nhé!", "@phoenix nhớ hộ mình", []) is None
+
+
+# --- the laundering case: a forgery must not survive being repeated ---------- #
+
+def _ledger(*live_ids: int):
+    """`meal_exists` for a room whose ledger holds exactly `live_ids`."""
+    return lambda mid: mid in live_ids
+
+
+def test_a_repeat_is_caught_even_though_the_history_now_backs_its_numbers():
+    """Room 3, 13:17 / 13:57 / 13:58 — the same forgery, three more times.
+
+    Each repeat came back clean under the amount test alone: the first telling
+    was posted, so 793,760 and 132,293 were in the room's own history, and the
+    history is part of the allow-set by design. The ledger is not so
+    accommodating — meal #14 was never written.
+    """
+    history = "\n".join([f"«A1»: BOT: {_PROD_FORGERY}"] * 3)
+    user_text = f"@phoenix nay ăn Texas chicken hết 793.760, chia đều cả 7 người\n{history}"
+
+    # Amounts alone: laundered clean.
+    assert unbacked_amounts(_PROD_FORGERY, user_text, []) == []
+    assert fabricated_commit(_PROD_FORGERY, user_text, []) is None
+
+    # Against the ledger: condemned, however often it is retold.
+    assert fabricated_commit(_PROD_FORGERY, user_text, [], meal_exists=_ledger(13)) is not None
+
+
+def test_the_empty_amount_list_still_means_blocked():
+    """The meal-id verdict returns [] when nothing is unbacked. A caller testing
+    truthiness instead of `is not None` would post the forgery — pin the shape."""
+    history = "\n".join([f"«A1»: BOT: {_PROD_FORGERY}"] * 3)
+    verdict = fabricated_commit(_PROD_FORGERY, f"@phoenix log lại\n{history}", [],
+                                meal_exists=_ledger(13))
+    assert verdict == [] and verdict is not None
+
+
+def test_a_claim_about_a_meal_that_really_exists_is_left_alone():
+    body = "Bữa bún cá hôm qua mình đã ghi rồi nhé — Đã ghi #13, tổng 175,000đ."
+    history = "«A1»: BOT: Đã ghi #13 — bún cá: Giang Hoàng trả tổng 175,000đ"
+    assert fabricated_commit(body, f"@phoenix ghi chưa\n{history}", [],
+                             meal_exists=_ledger(13)) is None
+
+
+def test_a_voided_meal_is_not_a_recorded_one():
+    """`meal_exists` is void-aware: a meal the room cancelled did not happen."""
+    body = "Đã ghi #13 — bún cá: Giang Hoàng trả tổng 175,000đ"
+    assert fabricated_commit(body, "@phoenix ghi lại đi", [],
+                             meal_exists=_ledger()) is not None

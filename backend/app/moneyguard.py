@@ -44,6 +44,14 @@ _AMOUNT = re.compile(
 _BARE_MIN = 1000
 
 
+#: Separators only count as thousands grouping when they sit *between* digits in
+#: threes. "793,760" is money; "#13," is a meal id followed by a comma, and
+#: treating that trailing comma as grouping invented a 13đ amount out of
+#: ordinary prose — enough to condemn an honest sentence once the guard started
+#: blocking on the result.
+_GROUPED = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
+
+
 def _as_int(digits: str) -> int | None:
     """``"324.200"`` / ``"324,200"`` / ``"324200"`` -> 324200; junk -> None."""
     cleaned = digits.replace(".", "").replace(",", "")
@@ -60,6 +68,8 @@ def money_tokens(text: str) -> set[int]:
     """
     found: set[int] = set()
     for digits, unit in _AMOUNT.findall(_ISO_DATE.sub(" ", text or "")):
+        # A separator the number merely ends on ("#13,") is punctuation.
+        digits = digits.rstrip(".,")
         value = _as_int(digits)
         if value is None:
             continue
@@ -68,7 +78,7 @@ def money_tokens(text: str) -> set[int]:
             found.add(value * 1_000)
         elif suffix in ("tr", "triệu"):
             found.add(value * 1_000_000)
-        elif suffix in ("đ", "d", "vnd") or "." in digits or "," in digits:
+        elif suffix in ("đ", "d", "vnd") or _GROUPED.fullmatch(digits):
             found.add(value)
         elif value >= _BARE_MIN:
             found.add(value)
@@ -111,6 +121,17 @@ _COMMIT_CLAIM = re.compile(
     re.IGNORECASE,
 )
 
+#: ``Đã ghi #14`` — the meal-id form of ``chat._meal_body``. A claim that names a
+#: number is checkable against the ledger itself, which is the only test a
+#: forgery cannot launder its way past (see :func:`fabricated_commit`).
+_CLAIMED_MEAL_ID = re.compile(r"đã\s+ghi\s*#\s*(\d+)", re.IGNORECASE)
+
+
+def claimed_meal_ids(body: str) -> list[int]:
+    """Meal ids ``body`` asserts were written, in order of appearance."""
+    return [int(n) for n in _CLAIMED_MEAL_ID.findall(body or "")]
+
+
 #: The only tools whose success can make a commit claim true. A *successful*
 #: ``propose_meal``/``propose_payment`` never reaches the guard anyway — those
 #: turns end on the draft-card branch — so in practice this admits the turns
@@ -118,26 +139,46 @@ _COMMIT_CLAIM = re.compile(
 COMMIT_TOOLS = frozenset({"propose_meal", "propose_payment", "void_meal", "cancel_draft"})
 
 
-def fabricated_commit(body: str, user_text: str, tools) -> list[int] | None:
-    """The unbacked amounts in ``body``, if ``body`` claims a write nothing made.
+def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None) -> list[int] | None:
+    """Why ``body`` is a forged write claim, or ``None`` if it is not.
 
-    Returns ``None`` when the reply is fine. Three conditions must hold together,
-    because each alone has honest explanations:
+    Returns ``None`` for a reply that may be posted, otherwise the offending
+    amounts — **possibly an empty list**, when the giveaway was a meal id rather
+    than an amount. Callers must test ``is not None``; an emptiness test would
+    post exactly the forgeries test 1 exists to catch.
 
-    1. the reply claims the ledger was written (:data:`_COMMIT_CLAIM`);
-    2. no :data:`COMMIT_TOOLS` call succeeded this turn, so nothing wrote;
-    3. money in the reply is unbacked — the amounts came from neither the user,
-       the conversation, nor a tool.
+    A reply must first claim the ledger was written (:data:`_COMMIT_CLAIM`) with
+    no :data:`COMMIT_TOOLS` call succeeding this turn. Past that gate there are
+    two independent tests, and either one condemns it:
 
-    (3) is what keeps the bot able to talk about the past. "Bữa qua mình đã ghi
-    rồi, 175,000đ" quotes a total the handed-in history already contains, so its
-    amounts are backed and the reply stands. A confirmation assembled out of a
-    bill photo cannot clear it — which is the point, since that is the one the
-    room cannot tell apart from a real one.
+    1. **The ledger disagrees.** ``meal_exists`` — ``Callable[[int], bool]``
+       scoped to this room — is asked about every ``Đã ghi #N``. A meal id that
+       is not in the ledger cannot have been recorded, whatever the prose says.
+    2. **The money is untraceable.** Amounts that came from neither the user, the
+       conversation, nor a tool this turn.
+
+    Test 2 alone is not enough, and production proved it. The 2026-08-14 forgery
+    was posted, so its numbers entered the room's own history — and the history
+    is part of the allow-set, by design, so the bot can quote what the room
+    already said. Every *repeat* of that forgery therefore came back clean:
+    asked three more times over the next 44 minutes, the model reproduced the
+    same 157 characters with ``tools=0`` and test 2 stayed silent each time. A
+    forgery that is posted once launders itself into evidence for its own
+    repeats. Test 1 does not care: meal #14 was never in ``meals``, so it is
+    condemned on the first telling and on the thousandth.
+
+    Test 2 still earns its place — it catches a claim that names no id — and it
+    is still what keeps honest recall working: "bữa qua mình đã ghi rồi,
+    175,000đ" quotes a total from the handed-in history, names no meal id, and
+    passes.
     """
     if not body or not _COMMIT_CLAIM.search(body):
         return None
     for inv in tools or []:
         if inv.name in COMMIT_TOOLS and isinstance(inv.result, dict) and inv.result.get("ok"):
             return None
+    if meal_exists is not None:
+        for meal_id in claimed_meal_ids(body):
+            if not meal_exists(meal_id):
+                return unbacked_amounts(body, user_text, tools)
     return unbacked_amounts(body, user_text, tools) or None
