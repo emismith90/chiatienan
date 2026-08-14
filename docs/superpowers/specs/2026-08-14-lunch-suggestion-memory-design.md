@@ -117,6 +117,22 @@ identity to attach any of this to and no way to count anything.
 
   This is the shape the whole seed keeps taking: a field the design wanted per-row turns
   out to be a property of the list the row came from.
+- **D18 — Places and people share a name space, and the overlap is real.** `_NameIndex`
+  indexes **bank account holders** (`roster.py:121`), so this room's Nhím is reachable as
+  *Trang* — and the room eats at "Bún riêu **cô Trang**". `_strip_honorific` reduces both
+  to `trang`. The seed pass also imported "Bún Đậu **Anh Linh**" from a directory while
+  the room contains a member **Linh**; that alias was dropped, because "anh Linh" in
+  Vietnamese means the person and nothing else. "cô Trang" was kept: it is genuinely how
+  the room names that restaurant, and a seed that deletes real speech to dodge a
+  collision has moved the bug rather than fixed it.
+
+  Two guards, since the ambiguity cannot be seeded away:
+  1. **A seed lint** rejects any place alias reducing to a bare member nickname or given
+     name, `cô Trang` excepted by name. This is what caught "anh linh".
+  2. **Member and place resolution stay separate indexes**, chosen by which tool the model
+     calls. The residual hazard is `_dropped_names` (`tools.py:88`): a place name read as
+     a person makes `find_members` return a member, who is then added to the split as an
+     eater. That is money-affecting, so it gets an explicit test rather than a comment.
 
 ## Design
 
@@ -416,9 +432,19 @@ everywhere and stays that way — `_DEFAULT_WALK_MINUTES` covers the gate arithm
 - `test_gates.py` — frozen clock: `busy@12:00` with and without `walk_minutes` at 11:20 /
   11:50 / 12:10; `order-by@11:30` at 11:00 / 11:25 / 11:40; `closes@12:30` produces a
   distinct status from `busy@12:30` at the same instant.
-- `test_seed_places.py` — `places-local.json` loads clean, is idempotent on re-run, and
-  every `subject:` slug in `observations-local.md` resolves to a seeded place or member.
-  This catches a typo'd slug, which would otherwise silently orphan an observation.
+- `test_seed_places.py` — all three seed files load clean and are idempotent on re-run;
+  every `subject:` slug in `observations-local.md` resolves to a seeded place or member
+  (a typo'd slug would otherwise silently orphan an observation); slugs are unique across
+  all three files; `walkable` is true for local/nearby and false for online.
+- `test_name_space_separation.py` (D18) — the guard the operator called for, that a place
+  name is never read as a person:
+  - the **seed lint**: no place alias reduces to a bare member nickname or given name,
+    `cô Trang` excepted. Regression-locks the dropped `"anh linh"`.
+  - `places.resolve_one("Nhím")` → no place; `roster.resolve(names=["bún riêu cô Trang"])`
+    → no member. Neither index may answer for the other.
+  - **the money case**: a meal message naming "cô Trang" as the *place* must not add Nhím
+    (bank holder `DINH HONG TRANG`) to `participants`, and must not trip `_dropped_names`
+    into refusing the split. Asserted on the resulting shares, not on the prose.
 - `test_suggest_lunch.py` — yesterday's place is penalised; `budget="rẻ"` filters by band;
   a `too_late` candidate sinks with its reason attached; `exclude` honoured; **a room whose
   places all have zero meals still returns a ranked list** (the day-one case).
