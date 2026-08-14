@@ -12,13 +12,15 @@ import asyncio
 import json
 import logging
 import os
+from datetime import date
 from logging.handlers import RotatingFileHandler
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app import accounts, chat, debug_api, drafts, ledger, memos, roster, rooms
+from app import (accounts, chat, debug_api, drafts, knowledge, ledger, memory,
+                 memos, observations, places, roster, rooms)
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
@@ -26,7 +28,7 @@ from app.pi_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member, Room, RoomMessage
+from app.models import Member, Place, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
 
@@ -188,6 +190,63 @@ class DraftEditIn(BaseModel):
     dish: str | None = None
     initiator: str | None = None
     note: str | None = None
+
+
+class PlaceIn(BaseModel):
+    name: str
+    aliases: list[str] = []
+    tags: list[str] = []
+    delivery: list[str] = []
+    address: str | None = None
+    phone: str | None = None
+    walkable: bool = True
+    walk_minutes: int | None = None
+    price_hint: int | None = None
+    closed_until: date | None = None
+
+
+class PlacePatchIn(BaseModel):
+    """A partial place edit.
+
+    Read with ``exclude_unset=True``, so an omitted field is left alone and an
+    explicit ``null`` clears it — the difference matters for ``closed_until``,
+    ``walk_minutes`` and ``price_hint``, all of which a human needs to be able to
+    unset. ``slug`` is absent on purpose (``places.EDITABLE``).
+    """
+    name: str | None = None
+    aliases: list[str] | None = None
+    tags: list[str] | None = None
+    delivery: list[str] | None = None
+    address: str | None = None
+    phone: str | None = None
+    walkable: bool | None = None
+    walk_minutes: int | None = None
+    price_hint: int | None = None
+    closed_until: date | None = None
+    active: bool | None = None
+
+
+class ObservationIn(BaseModel):
+    subject: str                      # "place:<slug>" | "member:<nickname>"
+    text: str
+    standing: bool = False            # True == an "always" line (a rule, never ages out)
+    when: date | None = None          # defaults to today for a dated observation
+    gate_kind: str | None = None      # busy | order-by | closes
+    gate_at: str | None = None        # "HH:MM"
+
+
+class ObservationPatchIn(BaseModel):
+    etag: str
+    text: str | None = None
+    standing: bool | None = None
+    when: date | None = None
+    gate_kind: str | None = None
+    gate_at: str | None = None
+
+
+class MemorySectionIn(BaseModel):
+    etag: str
+    body: str
 
 
 @app.get("/health")
@@ -646,6 +705,8 @@ async def commit_memo_route(room_id: int, memo_id: int,
                 raise HTTPException(404, str(e))
             payload = chat.message_to_dict(m, None)
     await hub.publish(room_id, {"type": "message", **payload})
+    # This wrote observations.md, so an open knowledge panel is now stale.
+    await hub.publish(room_id, {"type": "knowledge:changed"})
     return {"ok": True}
 
 
@@ -663,6 +724,247 @@ async def cancel_memo_route(room_id: int, memo_id: int,
             payload = chat.message_to_dict(m, None)
     await hub.publish(room_id, {"type": "message", **payload})
     return {"ok": True}
+
+
+# --------------------------------------------------- knowledge & memory panel
+#
+# Phoenix's three knowledge stores, made visible and editable. Everything here
+# writes under ``chat._agent_lock``: two of the three stores are read-modify-write
+# files and the turn loop is the other writer. The file stores additionally carry
+# an ``etag`` — the panel hands back the fingerprint it read, and a mismatch is a
+# refusal, because last-write-wins on a file the agent appends to loses whichever
+# change landed first.
+
+
+def _knowledge_trail(session, room_id: int, ctx: AuthCtx, text: str) -> dict:
+    """Post the room-visible record of a knowledge edit.
+
+    Memory steers ``suggest_lunch``, so one member quietly deleting "phải gọi trước
+    11h30" changes everyone's lunch. ``observations.remove`` refuses to keep history
+    inside the file — rightly, it is a lunch note and not the ledger — so the trail
+    goes where the room already looks. Never carries a money figure (D3).
+    """
+    m = chat.post_message(session, room_id, None,
+                          body=f"📓 {ctx.display_name} {text}", kind="bot")
+    return chat.message_to_dict(m, None)
+
+
+async def _publish_knowledge(room_id: int, trail: dict | None) -> None:
+    if trail is not None:
+        await hub.publish(room_id, {"type": "message", **trail})
+    await hub.publish(room_id, {"type": "knowledge:changed"})
+
+
+def _one_line(text: str) -> str:
+    """Collapse whitespace: ``observations.md`` is one line per fact, so a newline
+    pasted into a note would split it into two malformed lines."""
+    return " ".join((text or "").split())
+
+
+@app.get("/api/rooms/{room_id}/knowledge")
+async def get_knowledge(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    """Places + observations + conversation memory, in one read (see `knowledge.py`)."""
+    _check_room(ctx, room_id)
+    with get_db().session() as s:
+        return knowledge.snapshot(s, room_id)
+
+
+@app.post("/api/rooms/{room_id}/places")
+async def create_place_route(room_id: int, body: PlaceIn,
+                             ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                p = places.create_place(s, room_id, **body.model_dump())
+            except places.PlaceError as exc:
+                raise HTTPException(409, str(exc))
+            out = {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name}
+            trail = _knowledge_trail(s, room_id, ctx, f"đã thêm quán «{p.name}».")
+    await _publish_knowledge(room_id, trail)
+    return out
+
+
+@app.patch("/api/rooms/{room_id}/places/{place_id}")
+async def patch_place_route(room_id: int, place_id: int, body: PlacePatchIn,
+                            ctx: AuthCtx = Depends(require_session)):
+    """Edit a place. ``slug`` is not editable — see ``places.EDITABLE``."""
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            p = s.get(Place, place_id)
+            if p is None or p.room_id != room_id:
+                raise HTTPException(404, "Không tìm thấy quán đó.")
+            try:
+                changed = places.apply_edits(p, body.model_dump(exclude_unset=True))
+            except places.PlaceError as exc:
+                raise HTTPException(422, str(exc))
+            s.flush()
+            # A save that changed nothing announces nothing.
+            trail = (_knowledge_trail(s, room_id, ctx, f"đã sửa thông tin quán «{p.name}».")
+                     if changed else None)
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True, "changed": changed}
+
+
+@app.delete("/api/rooms/{room_id}/places/{place_id}")
+async def delete_place_route(room_id: int, place_id: int,
+                             ctx: AuthCtx = Depends(require_session)):
+    """Hide a place (``active=False``). Never a row delete: ``meals.place_id``
+    references it, and history must not lose the subject it happened at."""
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            p = s.get(Place, place_id)
+            if p is None or p.room_id != room_id:
+                raise HTTPException(404, "Không tìm thấy quán đó.")
+            trail = None
+            if p.active:
+                p.active = False
+                s.flush()
+                trail = _knowledge_trail(s, room_id, ctx, f"đã ẩn quán «{p.name}».")
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True}
+
+
+@app.post("/api/rooms/{room_id}/observations")
+async def create_observation_route(room_id: int, body: ObservationIn,
+                                   ctx: AuthCtx = Depends(require_session)):
+    """Add a note or a standing rule.
+
+    No ``etag``: an append cannot clobber anyone else's line, so requiring one
+    would only make a concurrent turn cost the user their typing.
+
+    ``subject`` arrives already decided (the panel knows which row was tapped), so
+    ``tools._memo_subject``'s free-text guessing — and its cross-namespace
+    ambiguity risk, D18 — is not in this path at all. It is still validated: an
+    unresolvable subject would create a note nobody can attribute.
+    """
+    _check_room(ctx, room_id)
+    text = _one_line(body.text)
+    if not text:
+        raise HTTPException(422, "Ghi nhớ cần có nội dung.")
+    try:
+        gate = observations.parse_gate(body.gate_kind, body.gate_at)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            resolved = knowledge.SubjectIndex(s, room_id).resolve(body.subject)
+            if resolved["subject_kind"] == "unknown":
+                raise HTTPException(422, f"Không rõ «{body.subject}» là quán nào hay ai.")
+            obs = observations.Observation(
+                when=None if body.standing else (body.when or today_ict()),
+                subject=body.subject, gate=gate, text=text)
+            observations.append(room_id, obs)
+            out = {"ok": True, "id": obs.line_id, "etag": observations.file_etag(room_id)}
+            trail = _knowledge_trail(
+                s, room_id, ctx,
+                f"đã thêm ghi nhớ về «{resolved['subject_label']}»: {text}")
+    await _publish_knowledge(room_id, trail)
+    return out
+
+
+@app.patch("/api/rooms/{room_id}/observations/{line_id}")
+async def patch_observation_route(room_id: int, line_id: str, body: ObservationPatchIn,
+                                  ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    fields = body.model_dump(exclude_unset=True)
+    async with chat._agent_lock:
+        if observations.file_etag(room_id) != body.etag:
+            raise HTTPException(409, "Có người vừa sửa ghi nhớ — hãy tải lại.")
+        current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
+        if current is None:
+            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+        text = _one_line(fields.get("text", current.text))
+        if not text:
+            raise HTTPException(422, "Ghi nhớ cần có nội dung.")
+        standing = fields.get("standing", current.is_rule)
+        # A rule has no date; a dated line that never had one takes today's.
+        when = None if standing else (fields.get("when") or current.when or today_ict())
+        if "gate_kind" in fields or "gate_at" in fields:
+            try:
+                gate = observations.parse_gate(
+                    fields.get("gate_kind", observations.gate_kind(current)),
+                    fields.get("gate_at") or observations.gate_at(current))
+            except ValueError as exc:
+                raise HTTPException(422, str(exc))
+        else:
+            gate = current.gate
+        updated = observations.Observation(
+            when=when, subject=current.subject, gate=gate, text=text)
+        if not observations.replace_line(room_id, line_id, updated):
+            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+        with db.session() as s:
+            label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
+            out = {"ok": True, "id": updated.line_id,
+                   "etag": observations.file_etag(room_id)}
+            trail = _knowledge_trail(s, room_id, ctx,
+                                     f"đã sửa ghi nhớ về «{label}»: {text}")
+    await _publish_knowledge(room_id, trail)
+    return out
+
+
+@app.delete("/api/rooms/{room_id}/observations/{line_id}")
+async def delete_observation_route(room_id: int, line_id: str, etag: str = Query(...),
+                                   ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        if observations.file_etag(room_id) != etag:
+            raise HTTPException(409, "Có người vừa sửa ghi nhớ — hãy tải lại.")
+        current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
+        if current is None:
+            raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
+        observations.delete_line(room_id, line_id)
+        with db.session() as s:
+            label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
+            trail = _knowledge_trail(
+                s, room_id, ctx, f"đã xoá ghi nhớ về «{label}»: {current.text}")
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True, "etag": observations.file_etag(room_id)}
+
+
+@app.patch("/api/rooms/{room_id}/memory/sections/{index}")
+async def patch_memory_section_route(room_id: int, index: int, body: MemorySectionIn,
+                                     ctx: AuthCtx = Depends(require_session)):
+    """Rewrite one section's body. The watermark is never touched (`memory.read_meta`)."""
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        if memory.file_etag(room_id) != body.etag:
+            raise HTTPException(409, "Có người vừa sửa nhật ký — hãy tải lại.")
+        try:
+            memory.write_section(room_id, index, body.body)
+        except memory.MemoryError_ as exc:
+            raise HTTPException(422, str(exc))
+        with db.session() as s:
+            trail = _knowledge_trail(s, room_id, ctx, "đã sửa một mục trong nhật ký bộ nhớ.")
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True, "etag": memory.file_etag(room_id)}
+
+
+@app.delete("/api/rooms/{room_id}/memory/sections/{index}")
+async def delete_memory_section_route(room_id: int, index: int, etag: str = Query(...),
+                                      ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        if memory.file_etag(room_id) != etag:
+            raise HTTPException(409, "Có người vừa sửa nhật ký — hãy tải lại.")
+        try:
+            memory.delete_section(room_id, index)
+        except memory.MemoryError_ as exc:
+            raise HTTPException(404, str(exc))
+        with db.session() as s:
+            trail = _knowledge_trail(s, room_id, ctx, "đã xoá một mục trong nhật ký bộ nhớ.")
+    await _publish_knowledge(room_id, trail)
+    return {"ok": True, "etag": memory.file_etag(room_id)}
 
 
 @app.post("/api/rooms/{room_id}/drafts/{draft_id}/recommit")

@@ -960,16 +960,17 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             if existing is not None:
                 return {"ok": True, "place_id": existing.id, "slug": existing.slug,
                         "name": existing.name, "already_existed": True}
-            p = Place(
-                room_id=ctx.room_id, slug=slug, name=name,
-                aliases=[str(a) for a in args.get("aliases") or []],
-                tags=[str(t) for t in args.get("tags") or []],
-                delivery=[str(d) for d in args.get("delivery") or []],
-                address=args.get("address"), phone=args.get("phone"),
-                walkable=bool(args.get("walkable", True)),
-            )
-            s.add(p)
-            s.flush()
+            try:
+                p = places_mod.create_place(
+                    s, ctx.room_id, name=name,
+                    aliases=args.get("aliases") or [],
+                    tags=args.get("tags") or [],
+                    delivery=args.get("delivery") or [],
+                    address=args.get("address"), phone=args.get("phone"),
+                    walkable=bool(args.get("walkable", True)),
+                )
+            except places_mod.PlaceError as exc:
+                return _err(str(exc))
             return {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name,
                     "already_existed": False}
 
