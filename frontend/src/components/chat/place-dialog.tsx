@@ -10,20 +10,41 @@ import {
 
 /** Add or edit a restaurant.
  *
- * Two things this deliberately does not let you do:
+ * The slug is not a field on this form and never will be: recomputing it from a
+ * new name would silently detach every note about the place, so `Save` cannot
+ * touch it. Changing it deliberately is a different act with a different
+ * confirmation — `renamePlaceSlug` migrates the notes and the pending memo cards
+ * along with the row — and it lives behind the identity line rather than in the
+ * field list, so nobody performs a migration while editing a phone number.
  *
- * - **Change the slug.** It is the `place:` subject in `observations.md`, so
- *   recomputing it from a new name would silently detach every note and standing
- *   rule about the place. The name is free to change; the identity is not, and the
- *   dialog says so rather than hiding the field.
- * - **Edit the stats.** Visit counts and the price band come from the ledger
- *   (design D1) and appear here as a sentence.
+ * Still not editable here:
+ *
+ * - **The stats.** Visit counts and the price band come from the ledger
+ *   (design D1) and appear as a sentence.
  *
  * Hiding and temporary closure are separate controls because they mean different
  * things: `closed_until` self-expires (D11) and is the right answer for "đang sửa
  * quán, tuần sau mở lại"; `active=false` is the permanent one, and it is how you
  * delete a place at all — meals reference the row.
  */
+/** "3 notes and 1 pending card", or "Nothing" — what a rename will carry.
+ *
+ * Stated as a count before the fact, not reported after it: the notes are the
+ * reason the slug was frozen in the first place, and a confirmation that does not
+ * say how many are at stake is not a confirmation. */
+function movesLabel(place: KnowledgePlace): string {
+  const parts: string[] = [];
+  if (place.note_count) {
+    parts.push(`${place.note_count} note${place.note_count === 1 ? "" : "s"}`);
+  }
+  if (place.pending_memo_count) {
+    parts.push(`${place.pending_memo_count} pending card${
+      place.pending_memo_count === 1 ? "" : "s"}`);
+  }
+  if (!parts.length) return "Nothing";
+  return parts.join(" and ");
+}
+
 export function PlaceDialog({
   roomId, place, onClose, onSaved,
 }: {
@@ -48,6 +69,11 @@ export function PlaceDialog({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmHide, setConfirmHide] = useState(false);
+  // The rename is its own little flow: open the disclosure, type, confirm.
+  const [slugOpen, setSlugOpen] = useState(false);
+  const [slugDraft, setSlugDraft] = useState(place?.slug ?? "");
+  const [slugErr, setSlugErr] = useState("");
+  const [slugDone, setSlugDone] = useState("");
 
   const set = (key: keyof typeof f, value: string) => {
     setErr("");
@@ -102,6 +128,24 @@ export function PlaceDialog({
     }
   }
 
+  async function renameSlug() {
+    if (!place) return;
+    setBusy(true);
+    setSlugErr("");
+    try {
+      const out = await api.renamePlaceSlug(roomId, place.id, slugDraft);
+      // The server normalises what was typed, so report what was actually
+      // applied rather than what was in the box.
+      setSlugDone(out.changed ? out.slug : "");
+      setSlugOpen(false);
+      onSaved();
+    } catch (e) {
+      setSlugErr(writeError(e, "Could not change the identifier."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const actions = (
     <>
       {err && <p className="mb-2 text-xs text-[var(--danger)]">{err}</p>}
@@ -138,9 +182,46 @@ export function PlaceDialog({
               {fmt(place.stats.avg_per_head)}₫/head — from the ledger
             </p>
           )}
-          <p className="font-mono text-[10px] text-[var(--text-secondary)]">
-            {place.slug} · identifier, cannot be changed
-          </p>
+          <div className="pt-0.5">
+            <p className="font-mono text-[10px] text-[var(--text-secondary)]">
+              {slugDone || place.slug}
+              {!slugOpen && (
+                <button type="button" onClick={() => { setSlugOpen(true); setSlugDone(""); }}
+                        className="ml-2 font-sans text-[10px] text-[var(--accent-text)]">
+                  change
+                </button>
+              )}
+            </p>
+            {slugOpen && (
+              <div className="mt-1.5 rounded-md border border-[var(--border)] p-2">
+                <Field label="New identifier">
+                  <input className={fieldClass} value={slugDraft}
+                         onChange={(e) => { setSlugDraft(e.target.value); setSlugErr(""); }}
+                         placeholder="bun-cha-huong-lien" />
+                </Field>
+                <p className="mt-1.5 text-[10px] text-[var(--text-secondary)]">
+                  {movesLabel(place)} will move to the new identifier. The seed files
+                  still name the old one — that is safe, they will keep finding this
+                  place, but tidy them up when you next edit them.
+                </p>
+                {slugErr && (
+                  <p className="mt-1.5 text-[10px] text-[var(--danger)]">{slugErr}</p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button type="button" disabled={busy || !slugDraft.trim()}
+                          onClick={renameSlug}
+                          className="rounded-lg bg-[var(--accent-primary)] px-3 py-1 text-xs font-medium text-white disabled:opacity-40">
+                    Change identifier
+                  </button>
+                  <button type="button" disabled={busy}
+                          onClick={() => { setSlugOpen(false); setSlugDraft(place.slug); }}
+                          className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs text-[var(--text-secondary)]">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -126,8 +126,12 @@ export type PlaceStats = {
 
 export type KnowledgePlace = {
   id: number;
-  /** Identity, and the `place:` subject in the observations file. Never editable. */
+  /** Identity, and the `place:` subject in the observations file. Not editable as a
+   * field — changing it is a migration, see `renamePlaceSlug`. */
   slug: string;
+  /** Slugs this place used to have, oldest first. Read-only. The seed files keep
+   * finding the row through these, which is why a rename does not duplicate it. */
+  former_slugs: string[];
   name: string;
   aliases: string[];
   tags: string[];
@@ -141,6 +145,9 @@ export type KnowledgePlace = {
   active: boolean;
   untried: boolean;
   note_count: number;
+  /** Memo cards still awaiting Confirm. They carry a frozen `place:<slug>`, so a
+   * rename has to move them too — and the confirmation says how many. */
+  pending_memo_count: number;
   stats: PlaceStats;
 };
 
@@ -217,6 +224,32 @@ export const patchPlace = (
   req(`/api/rooms/${roomId}/places/${placeId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+
+export type SlugRename = {
+  ok: true;
+  changed: boolean;
+  slug: string;
+  former_slug: string | null;
+  notes_moved: number;
+  notes_deduped: number;
+  memos_moved: number;
+};
+
+/** Change a place's identity, moving its notes and pending memo cards with it.
+ *
+ * Deliberately not part of `patchPlace`: it is a migration across three stores,
+ * and a form round-trip must never be able to trigger one. The slug is sent as
+ * typed — the server normalises it through `places.slugify`, and reimplementing
+ * that here would mean a second Vietnamese folder in TypeScript (`đ→d` is
+ * hand-mapped, NFD leaves it whole) that could disagree with the real one.
+ */
+export const renamePlaceSlug = (
+  roomId: number, placeId: number, slug: string,
+): Promise<SlugRename> =>
+  req(`/api/rooms/${roomId}/places/${placeId}/slug`, {
+    method: "POST",
+    body: JSON.stringify({ slug }),
   });
 
 /** Hides the place (`active=false`). Meals still reference it, so it is never a row delete. */

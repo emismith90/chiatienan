@@ -6,7 +6,8 @@ export const knowledge: KnowledgeData = {
   etags: { observations: "obs-etag-1", memory: "mem-etag-1" },
   places: [
     {
-      id: 1, slug: "quan-be-bu", name: "Quán Bé Bự",
+      id: 1, slug: "quan-be-bu", former_slugs: [], pending_memo_count: 1,
+      name: "Quán Bé Bự",
       aliases: ["bé bự"], tags: ["cơm"], delivery: ["grab"],
       address: "12 Ngõ Nhỏ", phone: "0912345678",
       walkable: true, walk_minutes: null, price_hint: null,
@@ -17,7 +18,8 @@ export const knowledge: KnowledgeData = {
       },
     },
     {
-      id: 2, slug: "com-ga-thinh-lo", name: "Cơm gà Thịnh Lơ",
+      id: 2, slug: "com-ga-thinh-lo", former_slugs: ["com-ga"], pending_memo_count: 0,
+      name: "Cơm gà Thịnh Lơ",
       aliases: [], tags: ["chưa-thử"], delivery: [],
       address: null, phone: null,
       walkable: false, walk_minutes: null, price_hint: 40000,

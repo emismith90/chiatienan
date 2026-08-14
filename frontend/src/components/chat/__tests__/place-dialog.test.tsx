@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { PlaceDialog } from "../place-dialog";
 import { knowledge } from "./knowledge-fixture";
 
@@ -12,6 +13,7 @@ beforeEach(() => {
   vi.spyOn(api, "patchPlace").mockResolvedValue({ ok: true, changed: true } as any);
   vi.spyOn(api, "createPlace").mockResolvedValue({ ok: true } as any);
   vi.spyOn(api, "deletePlace").mockResolvedValue({ ok: true } as any);
+  vi.spyOn(api, "renamePlaceSlug").mockResolvedValue({ ok: true } as any);
 });
 
 describe("PlaceDialog", () => {
@@ -33,11 +35,21 @@ describe("PlaceDialog", () => {
     }));
   });
 
-  it("shows the slug as fixed identity, with no way to edit it", () => {
+  it("states the slug, and keeps it out of the form Save touches", () => {
     render(<PlaceDialog roomId={3} place={place} onClose={() => {}} onSaved={() => {}} />);
-    // Renaming must not detach the place's notes, so the slug is stated and inert.
-    expect(screen.getByText(/quan-be-bu · identifier, cannot be changed/)).toBeInTheDocument();
+    // Renaming is a migration, so it must never ride along with a phone-number
+    // edit: the identity is shown, and the field list does not contain it.
+    expect(screen.getByText(/quan-be-bu/)).toBeInTheDocument();
     expect(screen.queryByDisplayValue("quan-be-bu")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("New identifier")).not.toBeInTheDocument();
+  });
+
+  it("saving an edited name never sends a slug", async () => {
+    render(<PlaceDialog roomId={3} place={place} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Bé Bự" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.patchPlace).toHaveBeenCalled());
+    expect((api.patchPlace as any).mock.calls[0][2]).not.toHaveProperty("slug");
   });
 
   it("shows the ledger's numbers as prose, labelled as coming from the ledger", () => {
@@ -99,5 +111,83 @@ describe("PlaceDialog", () => {
     await waitFor(() =>
       expect(screen.getByText("«Quán Bé Bự» is already on the list.")).toBeInTheDocument());
     expect(screen.queryByText(/reloaded/)).not.toBeInTheDocument();
+  });
+});
+
+describe("PlaceDialog — changing the identifier", () => {
+  function open() {
+    render(<PlaceDialog roomId={3} place={place} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "change" }));
+  }
+
+  it("says what will move before it moves, in numbers", () => {
+    // The notes are the whole reason the slug was frozen; a confirmation that
+    // does not say how many are at stake is not a confirmation.
+    open();
+    expect(screen.getByText(/2 notes and 1 pending card will move/)).toBeInTheDocument();
+  });
+
+  it("names the seed files rather than leaving them as a surprise", () => {
+    open();
+    expect(screen.getByText(/seed files still name the old one/)).toBeInTheDocument();
+  });
+
+  it("pre-fills the current slug and sends what was typed, unnormalised", async () => {
+    // No client-side slugify: `roster._fold` hand-maps đ→d because NFD leaves it
+    // whole, and a second implementation here could disagree with the real one.
+    (api.renamePlaceSlug as any).mockResolvedValue({
+      ok: true, changed: true, slug: "bun-cha-huong-lien", former_slug: "quan-be-bu",
+      notes_moved: 2, notes_deduped: 0, memos_moved: 1,
+    });
+    open();
+    const field = screen.getByLabelText("New identifier");
+    expect(field).toHaveValue("quan-be-bu");
+    fireEvent.change(field, { target: { value: "  Bún Chả Hương Liên  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Change identifier" }));
+
+    await waitFor(() => expect(api.renamePlaceSlug).toHaveBeenCalledWith(
+      3, 1, "  Bún Chả Hương Liên  "));
+  });
+
+  it("shows the slug the server actually applied", async () => {
+    (api.renamePlaceSlug as any).mockResolvedValue({
+      ok: true, changed: true, slug: "bun-cha-huong-lien", former_slug: "quan-be-bu",
+      notes_moved: 2, notes_deduped: 0, memos_moved: 1,
+    });
+    open();
+    fireEvent.change(screen.getByLabelText("New identifier"),
+                     { target: { value: "Bún Chả Hương Liên" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change identifier" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/bun-cha-huong-lien/)).toBeInTheDocument());
+    expect(screen.queryByLabelText("New identifier")).not.toBeInTheDocument();
+  });
+
+  it("shows a collision as the server described it, and stays open", async () => {
+    // A place 409 is "that identifier is taken", not a stale etag — it must not
+    // trigger the reload banner, and the user needs the box back to try again.
+    (api.renamePlaceSlug as any).mockRejectedValue(
+      new ApiError(409, "«Bún chả Hương Liên» already uses «bun-cha-huong-lien»."));
+    open();
+    fireEvent.change(screen.getByLabelText("New identifier"),
+                     { target: { value: "bun-cha-huong-lien" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change identifier" }));
+
+    await waitFor(() => expect(
+      screen.getByText(/already uses/)).toBeInTheDocument());
+    expect(screen.getByLabelText("New identifier")).toBeInTheDocument();
+  });
+
+  it("does not fire on an empty identifier", () => {
+    open();
+    fireEvent.change(screen.getByLabelText("New identifier"), { target: { value: "  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Change identifier" }));
+    expect(api.renamePlaceSlug).not.toHaveBeenCalled();
+  });
+
+  it("is not offered when creating a place", () => {
+    render(<PlaceDialog roomId={3} place={null} onClose={() => {}} onSaved={() => {}} />);
+    expect(screen.queryByRole("button", { name: "change" })).not.toBeInTheDocument();
   });
 });

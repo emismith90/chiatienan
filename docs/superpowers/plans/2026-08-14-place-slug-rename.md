@@ -1,6 +1,6 @@
 # Renaming a place's `slug` — one identity change, five stores
 
-> **Status: planned, not built.** Written from the briefing plus a read of production (room 3) through the export API on 2026-08-14. The numbers in [What production actually holds](#what-production-actually-holds) are measured, not assumed, and two of them change the design.
+> **Status: delivered.** Written from the briefing plus a read of production (room 3) through the export API on 2026-08-14 — the numbers in [What production actually holds](#what-production-actually-holds) are measured, not assumed, and two of them changed the design. Built the same day: 981 backend tests, 274 frontend tests, and a rename driven end-to-end in a real browser. See [Delivered](#delivered).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -104,13 +104,13 @@ Frontend:
 - `observations.retarget_subject(room_id, *, old: str, new: str) -> {"moved": int, "deduped": int}`
 - `memos.retarget_subject(session, room_id, *, old: str, new: str, new_label: str) -> int`
 
-- [ ] Failing test: a file holding a comment, a malformed line, two lines under `place:old` and one under `member:x` comes back with the two lines retargeted and **the comment and the malformed line byte-identical and in position**; lines under other subjects are untouched; the return counts what moved.
-- [ ] Failing test: when the file already holds a line identical to what a moved line would render as, the moved line is dropped and `deduped` is 1 — never two lines sharing a `line_id`.
-- [ ] Failing test: two byte-identical lines already under `place:old` collapse to one on retarget (a pre-existing unaddressable pair is repaired, not carried forward).
-- [ ] Failing test: `memos.retarget_subject` rewrites `subject` and `subject_label` on `pending` drafts only; `committed` and `cancelled` attachments come back untouched (S7).
-- [ ] Implement. `retarget_subject` reads once and writes once (S9). `Place.former_slugs` is added as a JSON column with `default=list`; confirm `db._sync_additive_columns` ALTERs it into an existing SQLite file rather than needing a hand migration.
-- [ ] Make `observations._write_raw` write to a sibling temp file and `os.replace` it. Every writer benefits, and this one rewrites the whole file.
-- [ ] Commit.
+- [x] Failing test: a file holding a comment, a malformed line, two lines under `place:old` and one under `member:x` comes back with the two lines retargeted and **the comment and the malformed line byte-identical and in position**; lines under other subjects are untouched; the return counts what moved.
+- [x] Failing test: when the file already holds a line identical to what a moved line would render as, the moved line is dropped and `deduped` is 1 — never two lines sharing a `line_id`.
+- [x] Failing test: two byte-identical lines already under `place:old` collapse to one on retarget (a pre-existing unaddressable pair is repaired, not carried forward).
+- [x] Failing test: `memos.retarget_subject` rewrites `subject` and `subject_label` on `pending` drafts only; `committed` and `cancelled` attachments come back untouched (S7).
+- [x] Implement. `retarget_subject` reads once and writes once (S9). `Place.former_slugs` is added as a JSON column with `default=list`; confirm `db._sync_additive_columns` ALTERs it into an existing SQLite file rather than needing a hand migration.
+- [x] Make `observations._write_raw` write to a sibling temp file and `os.replace` it. Every writer benefits, and this one rewrites the whole file.
+- [x] Commit.
 
 ### Task 2: `places.rename_slug`
 
@@ -118,33 +118,33 @@ Frontend:
 
 **Interfaces:** `places.rename_slug(session, room_id, place_id, raw_slug) -> dict` — raises `PlaceError` on every refusal.
 
-- [ ] Failing tests, one per refusal: an empty or punctuation-only slug is refused (S1, same guard `create_place` already has); a slug another place holds is refused *naming that place* (S2); a slug in another place's `former_slugs` is refused naming it (S12); a normalised slug equal to the current one returns `changed: False` and writes nothing at all — assert the observations file's mtime and bytes are unchanged (S3).
-- [ ] Failing test: a successful rename sets `slug`, appends the old slug to `former_slugs`, and — renaming *back* to a slug the place previously held — removes it from `former_slugs` rather than leaving the row claiming both.
-- [ ] Failing test: the input goes through `places.slugify`, so `" Bún Chả Hương Liên "` and `"bun-cha-huong-lien"` are the same request (S1).
-- [ ] Implement. Order: validate → `UPDATE` + flush → `observations.retarget_subject` → `memos.retarget_subject` → return the counts (S5). `observations` and `memos` are imported inside the function; `memos` imports `chat`, and a module-level import here would risk a cycle.
-- [ ] Commit.
+- [x] Failing tests, one per refusal: an empty or punctuation-only slug is refused (S1, same guard `create_place` already has); a slug another place holds is refused *naming that place* (S2); a slug in another place's `former_slugs` is refused naming it (S12); a normalised slug equal to the current one returns `changed: False` and writes nothing at all — assert the observations file's mtime and bytes are unchanged (S3).
+- [x] Failing test: a successful rename sets `slug`, appends the old slug to `former_slugs`, and — renaming *back* to a slug the place previously held — removes it from `former_slugs` rather than leaving the row claiming both.
+- [x] Failing test: the input goes through `places.slugify`, so `" Bún Chả Hương Liên "` and `"bun-cha-huong-lien"` are the same request (S1).
+- [x] Implement. Order: validate → `UPDATE` + flush → `observations.retarget_subject` → `memos.retarget_subject` → return the counts (S5). `observations` and `memos` are imported inside the function; `memos` imports `chat`, and a module-level import here would risk a cycle.
+- [x] Commit.
 
 ### Task 3: The route
 
 **Files:** modify `backend/app/main.py`; test `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test: `POST .../places/{id}/slug` renames and returns the counts; a place from another room is a 404 (`_check_room` plus the room check `patch_place_route` already does); a collision is a 409 carrying the other place's name; an empty slug is a 422.
-- [ ] Failing test — **the one the briefing calls load-bearing**: a place with three notes is renamed, and afterwards `GET /knowledge` shows the same `note_count`, the same three rows, and `subject_label` still resolving to the place. Nothing orphaned, nothing lost.
-- [ ] Failing test: a `memo_draft` created *before* the rename and committed *after* it writes its line under the **new** slug, and that line shows up attached to the place — not as an `⚠️ unknown` orphan. Model it on the live production draft: `place:bun-rieu-co-trang`, dated, no gate.
-- [ ] Failing test: the write takes `chat._agent_lock` and publishes `knowledge:changed` (S10), and posts exactly one trail message naming both slugs and the counts.
-- [ ] Implement. Trail copy (English, per the app-wide language pass): `📓 {name} changed the identifier for "{place}": {old} → {new} (3 notes, 1 pending card).` No money figure, ever (D3).
-- [ ] Commit.
+- [x] Failing test: `POST .../places/{id}/slug` renames and returns the counts; a place from another room is a 404 (`_check_room` plus the room check `patch_place_route` already does); a collision is a 409 carrying the other place's name; an empty slug is a 422.
+- [x] Failing test — **the one the briefing calls load-bearing**: a place with three notes is renamed, and afterwards `GET /knowledge` shows the same `note_count`, the same three rows, and `subject_label` still resolving to the place. Nothing orphaned, nothing lost.
+- [x] Failing test: a `memo_draft` created *before* the rename and committed *after* it writes its line under the **new** slug, and that line shows up attached to the place — not as an `⚠️ unknown` orphan. Model it on the live production draft: `place:bun-rieu-co-trang`, dated, no gate.
+- [x] Failing test: the write takes `chat._agent_lock` and publishes `knowledge:changed` (S10), and posts exactly one trail message naming both slugs and the counts.
+- [x] Implement. Trail copy (English, per the app-wide language pass): `📓 {name} changed the identifier for "{place}": {old} → {new} (3 notes, 1 pending card).` No money figure, ever (D3).
+- [x] Commit.
 
 ### Task 4: The offline stores stop resurrecting the old slug
 
 **Files:** modify `backend/app/seed_places.py`, `backend/app/knowledge.py`; test `backend/tests/test_seed_places.py`, `backend/tests/test_knowledge_api.py`.
 
-- [ ] Failing test — **the silent-duplicate failure, pinned**: seed a room from a JSON row pinned to `slug: "bun-cha-rua-xe"`, rename the place to `bun-cha-huong-lien`, re-run `load_file` with the *unchanged* JSON, and assert the room still has **one** place — the renamed one, with its curated fields refreshed — and no row carrying the old slug. This is the assertion nobody notices is missing for months.
-- [ ] Failing test: `install_observations` re-run with a seed line still reading `place:bun-cha-rua-xe`, whose text is already in the room's file under the new slug, adds **nothing** (`{"added": 0, "skipped": 1}`).
-- [ ] Failing test: an observation line left under a former slug resolves through `SubjectIndex` to the place, with `subject_kind: "place"` and `subject_key` reporting the *current* slug, so the panel groups it under the restaurant rather than showing `⚠️`.
-- [ ] Implement. `load_file`'s fallback lookup is by `former_slugs` containment; on SQLite, load the room's places once and match in Python rather than reaching for a JSON operator.
-- [ ] Add `former_slugs` and `pending_memo_count` to `place_rows` (one pass over the room's pending `memo_draft` rows into a `Counter`, not a query per place).
-- [ ] Commit.
+- [x] Failing test — **the silent-duplicate failure, pinned**: seed a room from a JSON row pinned to `slug: "bun-cha-rua-xe"`, rename the place to `bun-cha-huong-lien`, re-run `load_file` with the *unchanged* JSON, and assert the room still has **one** place — the renamed one, with its curated fields refreshed — and no row carrying the old slug. This is the assertion nobody notices is missing for months.
+- [x] Failing test: `install_observations` re-run with a seed line still reading `place:bun-cha-rua-xe`, whose text is already in the room's file under the new slug, adds **nothing** (`{"added": 0, "skipped": 1}`).
+- [x] Failing test: an observation line left under a former slug resolves through `SubjectIndex` to the place, with `subject_kind: "place"` and `subject_key` reporting the *current* slug, so the panel groups it under the restaurant rather than showing `⚠️`.
+- [x] Implement. `load_file`'s fallback lookup is by `former_slugs` containment; on SQLite, load the room's places once and match in Python rather than reaching for a JSON operator.
+- [x] Add `former_slugs` and `pending_memo_count` to `place_rows` (one pass over the room's pending `memo_draft` rows into a `Counter`, not a query per place).
+- [x] Commit.
 
 ## Phase 2 — The affordance
 
@@ -152,10 +152,10 @@ Frontend:
 
 **Files:** modify `frontend/src/lib/api.ts`, `frontend/src/components/chat/place-dialog.tsx`; test `frontend/src/components/chat/__tests__/place-dialog.test.tsx`.
 
-- [ ] Failing test: the identity line renders the slug plus a `Change` control; opening it reveals an input pre-filled with the current slug and a confirmation that names the counts ("3 notes and 1 pending card will move to the new identifier") and the seed caveat; the rename only fires on the explicit confirm, not on the dialog's Save.
-- [ ] Failing test: a 409 shows the server's own message (the existing `writeError` path already prefers `detail` — a place 409 is a collision, not a stale etag, so it must not trigger a reload banner); a 422 shows the server's message; success closes the disclosure and the dialog refetches.
-- [ ] Implement. No client-side slug normalisation (S1) — the field takes what is typed, the server normalises, and the response carries the slug that was actually applied so the dialog can show it.
-- [ ] Commit.
+- [x] Failing test: the identity line renders the slug plus a `Change` control; opening it reveals an input pre-filled with the current slug and a confirmation that names the counts ("3 notes and 1 pending card will move to the new identifier") and the seed caveat; the rename only fires on the explicit confirm, not on the dialog's Save.
+- [x] Failing test: a 409 shows the server's own message (the existing `writeError` path already prefers `detail` — a place 409 is a collision, not a stale etag, so it must not trigger a reload banner); a 422 shows the server's message; success closes the disclosure and the dialog refetches.
+- [x] Implement. No client-side slug normalisation (S1) — the field takes what is typed, the server normalises, and the response carries the slug that was actually applied so the dialog can show it.
+- [x] Commit.
 
 ---
 
@@ -180,3 +180,21 @@ Beyond the suite, the one thing worth doing by hand before this ships: on the dr
 - **A line left under a former slug is legible but inert.** `SubjectIndex` will render it under the right place, but `for_subjects` asks for `place:<current-slug>`, so the model does not read it. This can only arise from a hand edit of the file or a restored backup — the rename rewrites the live file and `install_observations` canonicalises — so the fix is to run the rename again rather than to build a sweep. Revisit if it ever actually happens.
 - **The seed JSON still holds the old slug after a rename.** By design: an HTTP route must not write repo files, and the droplet's DB has already diverged from them. `former_slugs` makes that safe rather than making it correct, and the dialog says so (S11). Tidying the JSON stays an operator job.
 - **No preview.** The dialog states counts but does not list the affected lines. The notes are already visible one tab over, and the operation is reversible by renaming back — `former_slugs` even makes the return trip clean.
+
+
+---
+
+## Delivered
+
+Shipped as planned. Everything the plan specified is in, and the five load-bearing assertions are the tests named in each task. Deviations and things the plan could not have known:
+
+- **`seed_places._by_slug` resolves current slugs *after* former ones**, so a live slug can never be captured by a row that used to hold it. The plan said "look up by slug, then by former slug" and left the collision between the two unspecified; a place renamed away from `x` and a second place that has since taken `x` is a real state (`rename_slug` permits it — it only refuses renaming *onto* another row's former slug), and without the ordering the seed row for `x` would have updated the wrong restaurant.
+- **`install_observations` grew an optional `session` parameter** rather than a required one. Canonicalising a `place:` subject needs the DB, but the function had callers (and tests) with no session in hand; passing `None` skips the canonicalisation and keeps the old behaviour, which is a strict improvement rather than a breaking change.
+- **`main()` now opens a session for the observations step.** It previously ran `install_observations` after the `with db.session()` block had closed, so wiring the canonicalisation through meant moving it inside one.
+- **The route maps `PlaceError` to three statuses by message.** `places.rename_slug` raises one exception type for "no such place" (404), "already uses" / "used before" (409) and "cannot build an identifier" (422), and the route branches on the text. Ugly, but the alternative — three exception classes for one function — is worse, and the panel shows the server's detail either way.
+- **`movesLabel` says "Nothing"** when a place has neither notes nor pending cards. The plan assumed the confirmation always had a number to state; for the 58 seeded places nobody has written a note about, it does not.
+- **The dialog reports the slug the server applied**, not the one that was typed. The plan had this implicitly ("the response carries the slug that was actually applied"); in practice it matters more than expected, because typing "Bún Chả Anh Tuấn" and seeing `bun-cha-anh-tuan` come back is the only feedback that the normalisation happened at all.
+
+Verified in a browser, not only in jsdom: renaming **Bún chả Tuấn Hưng** from `bun-cha-tuan-hung` to a typed "Bún Chả Anh Tuấn", watching its two standing rules stay attached and the trail land as *"Emi changed the identifier for «Bún chả Tuấn Hưng»: bun-cha-tuan-hung → bun-cha-anh-tuan (2 notes moved)"* — then re-running `seed_places` with the **unmodified** JSON, which reported `+0 ~41` and left the room at 41 places with the observations seed skipping all 42 lines instead of re-adding orphans. That last step is the one the plan flagged as the failure nobody notices for months, and it is now both a test and a hand-check.
+
+Not built, still non-goals: merging two places, and tidying the seed JSON (the dialog says so).
