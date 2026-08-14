@@ -285,3 +285,40 @@ def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DA
     for p in rows:
         out[p.id]["band"] = _band_for(out[p.id]["avg_per_head"], thresholds)
     return out
+
+
+#: Tag a place carries when it came from a directory import rather than from
+#: anyone actually going there (design D14).
+UNTRIED_TAG = "chưa-thử"
+
+
+def resolve_best(session: Session, room_id: int, text: str, *, today=None
+                 ) -> tuple[Place | None, str]:
+    """Like :func:`resolve_one`, but decides an ambiguity instead of refusing it.
+
+    With 100 seeded places, 17 plain-dish queries are ambiguous — "bánh cuốn"
+    matches 6, "nem nướng" 5 — because a directory import adds places nobody has
+    been to. Asking every time is worse than not importing at all, so candidates
+    are ordered by (1) not ``chưa-thử``, (2) meal count, and the leader wins if
+    it beats the runner-up outright. A genuine tie still returns ``ambiguous``
+    and still asks (design D15).
+
+    **Suggestions use this; meal linking does not.** A wrong suggestion costs one
+    bad lunch idea, while a wrong link moves money history onto the wrong
+    restaurant with no card for anyone to catch it — see :func:`backfill_links`.
+    """
+    hits, tier = _PlaceIndex(list_places(session, room_id)).lookup(text)
+    if len(hits) == 1:
+        return hits[0], tier
+    if not hits:
+        return None, "none"
+
+    counts = stats(session, room_id, today=today)
+    def rank(p: Place) -> tuple[int, int]:
+        return (0 if UNTRIED_TAG in (p.tags or []) else 1,
+                counts.get(p.id, {}).get("times", 0))
+
+    ordered = sorted(hits, key=rank, reverse=True)
+    if rank(ordered[0]) > rank(ordered[1]):
+        return ordered[0], "best"
+    return None, "ambiguous"

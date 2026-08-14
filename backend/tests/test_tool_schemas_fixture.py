@@ -19,7 +19,7 @@ def test_committed_schema_fixture_matches_the_live_tools():
 
 def test_the_fixture_covers_every_tool():
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    assert len(fixture) == 16
+    assert len(fixture) == 17
     assert all(s["type"] == "object" for s in fixture.values())
 
 

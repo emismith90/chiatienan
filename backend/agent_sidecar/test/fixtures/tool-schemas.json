@@ -366,6 +366,35 @@
     },
     "type": "object"
   },
+  "suggest_lunch": {
+    "properties": {
+      "budget": {
+        "description": "Only places in this price band.",
+        "enum": [
+          "rẻ",
+          "vừa",
+          "đắt"
+        ],
+        "type": "string"
+      },
+      "delivery": {
+        "description": "True when the group wants to order in rather than walk out.",
+        "type": "boolean"
+      },
+      "exclude": {
+        "description": "Places to leave out ('vừa ăn hôm qua rồi').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "today": {
+        "description": "YYYY-MM-DD; omit for today.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
   "update_member": {
     "properties": {
       "account_holder": {

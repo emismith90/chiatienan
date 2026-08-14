@@ -268,6 +268,19 @@ _ADD_PLACE_SCHEMA = {
     "required": ["name"],
 }
 
+_SUGGEST_LUNCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "budget": {"type": "string", "enum": ["rẻ", "vừa", "đắt"],
+                   "description": "Only places in this price band."},
+        "delivery": {"type": "boolean",
+                     "description": "True when the group wants to order in rather than walk out."},
+        "exclude": {"type": "array", "items": {"type": "string"},
+                    "description": "Places to leave out ('vừa ăn hôm qua rồi')."},
+        "today": {"type": "string", "description": "YYYY-MM-DD; omit for today."},
+    },
+}
+
 _ADD_MEMBER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -691,6 +704,96 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             )
         return {"ok": True, **res}
 
+    def suggest_lunch(args, _tool_ctx=None) -> dict:
+        """Rank where the group should eat. **The tool decides the order.**
+
+        Every number behind the ranking — how long since, how often, how
+        expensive — is computed in Python (design D1). The model gets a decided
+        list and writes prose around it; it must never re-rank, and it never
+        sees a VND amount, only a band (D5), so a suggestion can never be
+        mistaken for a ledger figure.
+        """
+        args = args or {}
+        from app import places as places_mod
+
+        want_delivery = bool(args.get("delivery"))
+        budget = (args.get("budget") or "").strip() or None
+        exclude_raw = [str(x) for x in args.get("exclude") or []]
+        today = _parse_iso(args.get("today")) or today_ict()
+
+        with db.session() as s:
+            rows = places_mod.list_places(s, ctx.room_id)
+            counts = places_mod.stats(s, ctx.room_id, today=today)
+            excluded_ids = {
+                p.id for raw in exclude_raw
+                for p in [places_mod.resolve_best(s, ctx.room_id, raw, today=today)[0]]
+                if p is not None
+            }
+
+            pool = []
+            for p in rows:
+                # A temporary closure expires on its own (D11) — no cleanup job.
+                if p.closed_until and p.closed_until >= today:
+                    continue
+                # Going out and ordering in are different questions (D16).
+                if want_delivery:
+                    if not p.delivery:
+                        continue
+                elif not p.walkable:
+                    continue
+                if p.id in excluded_ids:
+                    continue
+                st = counts.get(p.id, {})
+                # An unknown band cannot be ruled out by a budget.
+                if budget and st.get("band") and st["band"] != budget:
+                    continue
+                pool.append((p, st))
+
+            def score(item) -> float:
+                """Familiarity first, minus a short-lived just-ate-there penalty.
+
+                An earlier version scored purely on days-since, which inverted the
+                whole feature: a favourite eaten every fortnight ranked *below* a
+                place nobody had been to, so the room's usuals would essentially
+                never be suggested. Frequency is the positive signal; recency is
+                only a penalty, and only for a few days.
+                """
+                p, st = item
+                days = st.get("days_since")
+                # Caps at 8 visits so one much-loved place cannot crowd out the
+                # rest of the rotation forever.
+                familiarity = min(st.get("times", 0), 8) * 6.0
+                # 30 the day you ate there, tapering to 0 by day 10.
+                recent_penalty = 0.0 if days is None else max(0.0, 30.0 - days * 3.0)
+                weekday = (st.get("weekday_counts") or {}).get(today.weekday(), 0) * 6.0
+                # A small nudge so never-eaten places surface sometimes...
+                novelty = 8.0 if days is None else 0.0
+                # ...but a directory import stays well behind the real favourites (D14).
+                untried = 25.0 if places_mod.UNTRIED_TAG in (p.tags or []) else 0.0
+                # Jitter so the same place does not lead every single day. Without
+                # it 40-odd never-eaten places tie exactly and stable sort falls
+                # back to alphabetical — "Bánh Mì Linh" forever. The TOOL decides,
+                # never the model (same rule as pick_random).
+                return (familiarity + weekday + novelty
+                        - recent_penalty - untried + random.uniform(0.0, 5.0))
+
+            pool.sort(key=score, reverse=True)
+            candidates = [
+                {
+                    "place_id": p.id,
+                    "name": p.name,
+                    "band": st.get("band"),
+                    "days_since": st.get("days_since"),
+                    "times": st.get("times", 0),
+                    "phone": p.phone,
+                    "tags": [t for t in (p.tags or []) if t != places_mod.UNTRIED_TAG],
+                    "untried": places_mod.UNTRIED_TAG in (p.tags or []),
+                }
+                for p, st in pool
+            ]
+        return {"ok": True, "mode": "delivery" if want_delivery else "walk",
+                "candidates": candidates}
+
     def add_place(args, _tool_ctx=None) -> dict:
         """Create a restaurant row. Writes immediately, like ``add_member``.
 
@@ -1075,6 +1178,16 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "`find_members` for people."
             ),
             input_schema=_FIND_PLACES_SCHEMA,
+        ),
+        "suggest_lunch": CustomTool(
+            execute=suggest_lunch,
+            description=(
+                "Decide where the group should eat ('trưa nay ăn gì?', 'ăn gì bây giờ'). "
+                "The TOOL ranks — do not re-order, do not pick a different one. Returns a "
+                "price band (rẻ/vừa/đắt), never an amount. Pass delivery:true when they "
+                "want to order in rather than walk out."
+            ),
+            input_schema=_SUGGEST_LUNCH_SCHEMA,
         ),
         "add_place": CustomTool(
             execute=add_place,
