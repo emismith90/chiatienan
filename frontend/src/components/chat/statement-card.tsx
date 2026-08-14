@@ -105,7 +105,7 @@ export function StatementSections({ owe, owed, roomId, onPaid }: {
   if (owe.length === 0 && owed.length === 0) {
     return (
       <p className="mt-2 text-xs text-[var(--text-secondary)]">
-        Bạn không nợ ai, không ai nợ bạn.
+        You owe nobody, and nobody owes you.
       </p>
     );
   }

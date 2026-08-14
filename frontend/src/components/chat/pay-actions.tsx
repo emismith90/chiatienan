@@ -23,11 +23,11 @@ import { getProfile } from "@/lib/rooms-store";
  * and the bank app live on the same screen, so scanning your own display is
  * impossible.
  *
- *  - "Mở <app>" opens the payer's own bank app, directly via its scheme. It
+ *  - "Open <app>" opens the payer's own bank app, directly via its scheme. It
  *    opens on the app's own screen: no launch URL we have can carry a transfer
  *    (see `lib/deeplink.ts` — including the one VietQR documents for it, which
  *    no bank app registers).
- *  - "Lưu QR" saves the QR to the camera roll. This is the only route that
+ *  - "Save QR" saves the QR to the camera roll. This is the only route that
  *    fills a transfer in: the payload carries the account, amount and note, and
  *    every bank app can read one from the photo library. Two taps beats typing.
  *  - Copy chips carry the numbers, because the launch cannot. They are also the
@@ -164,7 +164,7 @@ export function PayActions({
               className="inline-flex items-center gap-2 rounded-md bg-[var(--accent-primary)] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
             >
               <AppLogo app={app} platform={platform} />
-              Mở {app.appName}
+              Open {app.appName}
             </button>
           ) : (
             <button
@@ -172,7 +172,7 @@ export function PayActions({
               onClick={() => setPicking(true)}
               className="rounded-md bg-[var(--accent-primary)] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
             >
-              Mở app ngân hàng
+              Open banking app
             </button>
           )}
           {app && (
@@ -181,7 +181,7 @@ export function PayActions({
               onClick={() => setPicking(true)}
               className="rounded-md border border-[var(--border)] px-2.5 py-2 text-xs text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
             >
-              Đổi app
+              Change app
             </button>
           )}
         </div>
@@ -194,17 +194,17 @@ export function PayActions({
           disabled={saving === "busy"}
           className="rounded-md border border-[var(--accent-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-text)] transition-colors duration-150 hover:bg-[var(--bg-base)] disabled:opacity-50"
         >
-          {saving === "busy" ? "Đang lưu…"
-            : saving === "done" ? "✓ Đã lưu — quét trong app"
-            : saving === "error" ? "Lưu thất bại — thử lại"
-            : "Lưu QR để quét"}
+          {saving === "busy" ? "Saving…"
+            : saving === "done" ? "✓ Saved — scan it from your app"
+            : saving === "error" ? "Save failed — try again"
+            : "Save QR to scan"}
         </button>
       )}
 
       <div className="flex flex-wrap items-center justify-center gap-1.5">
-        <CopyChip label="Số TK" value={payee.accountNumber} />
-        <CopyChip label="Số tiền" value={String(Math.round(amount))} />
-        {note && <CopyChip label="Nội dung" value={note} />}
+        <CopyChip label="Account" value={payee.accountNumber} />
+        <CopyChip label="Amount" value={String(Math.round(amount))} />
+        {note && <CopyChip label="Reference" value={note} />}
       </div>
 
       {picking && (
@@ -248,10 +248,10 @@ function CopyChip({ label, value }: { label: string; value: string }) {
     <button
       type="button"
       onClick={copy}
-      aria-label={`Sao chép ${label}`}
+      aria-label={`Copy ${label}`}
       className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-base)] px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
     >
-      {done ? "✓ Đã chép" : label}
+      {done ? "✓ Copied" : label}
     </button>
   );
 }
@@ -289,12 +289,12 @@ function AppPicker({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Chọn app ngân hàng"
+        aria-label="Pick a banking app"
         onClick={(e) => e.stopPropagation()}
         className="max-h-[70vh] w-full max-w-sm overflow-y-auto rounded-t-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-xl sm:rounded-lg"
       >
         <p className="px-1 pb-2 text-sm font-medium text-[var(--text-primary)]">
-          Chọn app ngân hàng
+          Pick a banking app
         </p>
         <ul className="space-y-0.5">
           {apps.map((a) => (
@@ -322,7 +322,7 @@ function AppPicker({
           onClick={onClose}
           className="mt-2 w-full rounded-md border border-[var(--border)] py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)]"
         >
-          Đóng
+          Close
         </button>
       </div>
     </div>

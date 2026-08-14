@@ -49,7 +49,7 @@ function HumanMessage({ message }: { message: Message }) {
         )}
         {message.queued && !message.error && (
           <p className="mb-1 flex items-center gap-1 text-xs font-medium text-white/80">
-            <span aria-hidden>⏳</span> Chờ mạng để gửi…
+            <span aria-hidden>⏳</span> Waiting for the network…
           </p>
         )}
         {message.body && (

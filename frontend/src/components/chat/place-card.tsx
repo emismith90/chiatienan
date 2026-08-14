@@ -1,6 +1,6 @@
 "use client";
 import type { KnowledgePlace } from "@/lib/api";
-import { Chip, rhythmLabel, shortDate, visitLabel } from "./knowledge-ui";
+import { Chip, bandLabel, rhythmLabel, shortDate, visitLabel } from "./knowledge-ui";
 
 /** One restaurant, as a tappable summary row.
  *
@@ -29,21 +29,22 @@ export function PlaceCard({
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text-primary)]">
           {place.name}
         </span>
-        {place.stats.band && <Chip tone="accent">{place.stats.band}</Chip>}
+        {place.stats.band && <Chip tone="accent">{bandLabel(place.stats.band)}</Chip>}
       </div>
 
       <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
         {visitLabel(place.stats)}
         {rhythm && ` · ${rhythm}`}
-        {place.note_count > 0 && ` · ${place.note_count} ghi nhớ`}
+        {place.note_count > 0 &&
+          ` · ${place.note_count} note${place.note_count === 1 ? "" : "s"}`}
       </p>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        {!place.active && <Chip tone="danger">đã ẩn</Chip>}
-        {closed && <Chip tone="danger">đóng tới {shortDate(closed)}</Chip>}
-        {place.untried && <Chip>chưa thử</Chip>}
-        {!place.walkable && <Chip>không đi bộ được</Chip>}
-        {place.delivery.length > 0 && <Chip>giao: {place.delivery.join(", ")}</Chip>}
+        {!place.active && <Chip tone="danger">hidden</Chip>}
+        {closed && <Chip tone="danger">closed until {shortDate(closed)}</Chip>}
+        {place.untried && <Chip>untried</Chip>}
+        {!place.walkable && <Chip>not walkable</Chip>}
+        {place.delivery.length > 0 && <Chip>delivery: {place.delivery.join(", ")}</Chip>}
         {place.tags
           .filter((t) => t !== "chưa-thử")
           .map((t) => (

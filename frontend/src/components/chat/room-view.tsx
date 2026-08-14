@@ -410,7 +410,7 @@ export function ProfileDialog({
         )}
         {saved && !err && <p className="mt-3 text-sm text-[var(--text-secondary)]">Saved</p>}
 
-        {/* "Phoenix nhớ gì" about you — the case people most want to check. */}
+        {/* "What Phoenix remembers" about you — the case people most want to check. */}
         <MemberNotes roomId={roomId} memberId={member.id} version={knowledgeVersion} />
 
         <div className="mt-5 space-y-2">
@@ -463,7 +463,7 @@ export function RoomView({ roomId }: { roomId: number }) {
   const openLedgerRange = (range: { from: string; to: string }) => {
     setLedgerRange(range);
     // A scoped history answer is about money, so it must land on the ledger tab
-    // even if the panel was last left on Bộ nhớ.
+    // even if the panel was last left on Memory.
     setPanelTab("ledger");
     setDrawerOpen(true);
   };

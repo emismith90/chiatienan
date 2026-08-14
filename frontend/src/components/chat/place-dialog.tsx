@@ -2,8 +2,9 @@
 import { useState } from "react";
 import * as api from "@/lib/api";
 import type { KnowledgePlace } from "@/lib/api";
+import { fmt } from "@/lib/format";
 import {
-  Chip, Field, PanelDialog, fieldClass, primaryButtonClass, quietButtonClass,
+  Chip, Field, PanelDialog, bandLabel, fieldClass, primaryButtonClass, quietButtonClass,
   rhythmLabel, visitLabel, writeError,
 } from "./knowledge-ui";
 
@@ -58,7 +59,7 @@ export function PlaceDialog({
 
   async function save() {
     if (!f.name.trim()) {
-      setErr("Quán cần có tên.");
+      setErr("A place needs a name.");
       return;
     }
     setBusy(true);
@@ -81,7 +82,7 @@ export function PlaceDialog({
       onSaved();
       onClose();
     } catch (e) {
-      setErr(writeError(e, "Không lưu được, thử lại nhé."));
+      setErr(writeError(e, "Could not save — try again."));
     } finally {
       setBusy(false);
     }
@@ -106,23 +107,23 @@ export function PlaceDialog({
       {err && <p className="mb-2 text-xs text-[var(--danger)]">{err}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={busy} onClick={save} className={primaryButtonClass}>
-          {place ? "Lưu" : "Thêm quán"}
+          {place ? "Save" : "Add place"}
         </button>
         <button type="button" disabled={busy} onClick={onClose} className={quietButtonClass}>
-          Huỷ
+          Cancel
         </button>
       </div>
     </>
   );
 
   return (
-    <PanelDialog label={place ? `Sửa quán ${place.name}` : "Thêm quán"} onClose={onClose}
+    <PanelDialog label={place ? `Edit ${place.name}` : "Add place"} onClose={onClose}
                  footer={actions}>
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-base font-semibold text-[var(--text-primary)]">
-          {place ? place.name : "Thêm quán"}
+          {place ? place.name : "Add place"}
         </h3>
-        {place?.stats.band && <Chip tone="accent">{place.stats.band}</Chip>}
+        {place?.stats.band && <Chip tone="accent">{bandLabel(place.stats.band)}</Chip>}
       </div>
 
       {place && (
@@ -134,37 +135,37 @@ export function PlaceDialog({
           </p>
           {place.stats.avg_per_head != null && (
             <p className="text-xs text-[var(--text-secondary)]">
-              {place.stats.avg_per_head.toLocaleString("vi-VN")}₫/người — tính từ sổ
+              {fmt(place.stats.avg_per_head)}₫/head — from the ledger
             </p>
           )}
           <p className="font-mono text-[10px] text-[var(--text-secondary)]">
-            {place.slug} · mã định danh, không đổi được
+            {place.slug} · identifier, cannot be changed
           </p>
         </div>
       )}
 
       <div className="mt-4 space-y-3">
-        <Field label="Tên quán">
+        <Field label="Name">
           <input className={fieldClass} value={f.name} onChange={(e) => set("name", e.target.value)}
                  placeholder="Cơm gà Thịnh Lơ" />
         </Field>
-        <Field label="Tên gọi khác (cách nhau bằng dấu phẩy)">
+        <Field label="Other names (comma-separated)">
           <input className={fieldClass} value={f.aliases}
                  onChange={(e) => set("aliases", e.target.value)} placeholder="cơm gà, thịnh lơ" />
         </Field>
-        <Field label="Thẻ">
+        <Field label="Tags">
           <input className={fieldClass} value={f.tags} onChange={(e) => set("tags", e.target.value)}
                  placeholder="cơm, gần, nhanh" />
         </Field>
-        <Field label="Giao hàng (app nào)">
+        <Field label="Delivery apps">
           <input className={fieldClass} value={f.delivery}
                  onChange={(e) => set("delivery", e.target.value)} placeholder="grab, shopee" />
         </Field>
-        <Field label="Địa chỉ">
+        <Field label="Address">
           <input className={fieldClass} value={f.address}
                  onChange={(e) => set("address", e.target.value)} />
         </Field>
-        <Field label="Điện thoại">
+        <Field label="Phone">
           <input className={fieldClass} value={f.phone} inputMode="tel"
                  onChange={(e) => set("phone", e.target.value)} />
         </Field>
@@ -172,29 +173,30 @@ export function PlaceDialog({
         <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
           <input type="checkbox" checked={walkable} onChange={(e) => setWalkable(e.target.checked)}
                  className="h-4 w-4 accent-[var(--accent-primary)]" />
-          Đi bộ được
+          Walkable
         </label>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Phút đi bộ">
+          <Field label="Walk minutes">
             <input className={fieldClass} value={f.walk_minutes} inputMode="numeric"
-                   onChange={(e) => set("walk_minutes", e.target.value)} placeholder="mặc định 5" />
+                   onChange={(e) => set("walk_minutes", e.target.value)} placeholder="default 5" />
           </Field>
-          <Field label="Giá ước lượng/người">
+          <Field label="Price estimate per head">
             <input className={fieldClass} value={f.price_hint} inputMode="numeric"
                    onChange={(e) => set("price_hint", e.target.value)} placeholder="50000" />
           </Field>
         </div>
         <p className="text-[10px] text-[var(--text-secondary)]">
-          Giá ước lượng chỉ dùng khi chưa có bữa nào ghi vào sổ — có bữa thật là sổ nói.
+          The estimate is only used until a real meal reaches the ledger — after that the
+          ledger decides.
         </p>
 
-        <Field label="Đóng tạm đến ngày">
+        <Field label="Temporarily closed until">
           <input type="date" className={fieldClass} value={f.closed_until}
                  onChange={(e) => set("closed_until", e.target.value)} />
         </Field>
         <p className="text-[10px] text-[var(--text-secondary)]">
-          Tự hết hạn — không cần nhớ mở lại.
+          Expires on its own — nobody has to remember to reopen it.
         </p>
       </div>
 
@@ -204,26 +206,26 @@ export function PlaceDialog({
             confirmHide ? (
               <div className="flex items-center gap-2">
                 <p className="flex-1 text-xs text-[var(--text-secondary)]">
-                  Ẩn quán này khỏi gợi ý? Bữa đã ghi vẫn giữ nguyên.
+                  Hide this place from suggestions? Recorded meals stay as they are.
                 </p>
                 <button type="button" disabled={busy}
-                        onClick={() => run(api.deletePlace(roomId, place.id), "Không ẩn được.")}
+                        onClick={() => run(api.deletePlace(roomId, place.id), "Could not hide it.")}
                         className="rounded-lg border border-[var(--danger)] px-3 py-1.5 text-xs text-[var(--danger)] disabled:opacity-40">
-                  Ẩn
+                  Hide
                 </button>
               </div>
             ) : (
               <button type="button" onClick={() => setConfirmHide(true)}
                       className="text-xs text-[var(--danger)]">
-                Ẩn quán này
+                Hide this place
               </button>
             )
           ) : (
             <button type="button" disabled={busy}
                     onClick={() => run(api.patchPlace(roomId, place.id, { active: true }),
-                                       "Không mở lại được.")}
+                                       "Could not unhide it.")}
                     className="text-xs text-[var(--accent-text)]">
-              Mở lại quán này
+              Unhide this place
             </button>
           )}
         </div>

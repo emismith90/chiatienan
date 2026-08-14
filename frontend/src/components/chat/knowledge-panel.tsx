@@ -12,9 +12,9 @@ import { PlaceDialog } from "./place-dialog";
 type Tab = "places" | "notes" | "log";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "places", label: "Quán" },
-  { id: "notes", label: "Ghi nhớ" },
-  { id: "log", label: "Nhật ký" },
+  { id: "places", label: "Places" },
+  { id: "notes", label: "Notes" },
+  { id: "log", label: "Log" },
 ];
 
 /** Everything Phoenix knows, in three tabs — one per store.
@@ -87,7 +87,7 @@ export function KnowledgePanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Sub-tabs, one per store. */}
-      <div role="tablist" aria-label="Bộ nhớ của Phoenix"
+      <div role="tablist" aria-label="What Phoenix knows"
            className="flex overflow-hidden rounded-lg border border-[var(--border)] text-xs">
         {TABS.map((t) => (
           <button
@@ -112,7 +112,7 @@ export function KnowledgePanel({
 
       {conflict && (
         <p className="text-[11px] text-[var(--danger)]">
-          Có người vừa sửa — đã tải lại, xem lại rồi thử tiếp nhé.
+          Someone else just made a change — reloaded, take another look before retrying.
         </p>
       )}
 
@@ -121,8 +121,8 @@ export function KnowledgePanel({
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={tab === "places" ? "Tìm quán…" : "Tìm ghi nhớ…"}
-          aria-label={tab === "places" ? "Tìm quán" : "Tìm ghi nhớ"}
+          placeholder={tab === "places" ? "Search places…" : "Search notes…"}
+          aria-label={tab === "places" ? "Search places" : "Search notes"}
           className="w-full rounded-md border border-[var(--border)] bg-transparent px-2.5 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus-visible:ring-2 ring-[var(--accent-primary)]"
         />
       )}
@@ -135,13 +135,13 @@ export function KnowledgePanel({
             <>
               <button type="button" onClick={() => setPlaceEdit({ place: null })}
                       className="w-full rounded-lg border border-dashed border-[var(--border)] py-1.5 text-xs text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)]">
-                ＋ Thêm quán
+                ＋ Add place
               </button>
               {places.length === 0 ? (
                 <p className="text-xs text-[var(--text-secondary)]">
                   {q
-                    ? "Không có quán nào khớp."
-                    : "Chưa có quán nào. Thêm ở đây, hoặc nói với @phoenix «thêm quán Cơm gà Thịnh Lơ»."}
+                    ? "No places match."
+                    : "No places yet. Add one here, or tell @phoenix «thêm quán Cơm gà Thịnh Lơ»."}
                 </p>
               ) : (
                 places.map((p) => (
@@ -156,13 +156,13 @@ export function KnowledgePanel({
             <>
               <button type="button" onClick={() => setNoteEdit({ note: null })}
                       className="w-full rounded-lg border border-dashed border-[var(--border)] py-1.5 text-xs text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-base)]">
-                ＋ Thêm ghi nhớ
+                ＋ Add note
               </button>
               {groups.length === 0 ? (
                 <p className="text-xs text-[var(--text-secondary)]">
                   {q
-                    ? "Không có ghi nhớ nào khớp."
-                    : "Chưa có ghi nhớ nào. Thử nói với @phoenix «quán Bé Bự phải gọi trước 11h30»."}
+                    ? "No notes match."
+                    : "No notes yet. Try telling @phoenix «quán Bé Bự phải gọi trước 11h30»."}
                 </p>
               ) : (
                 groups.map((g) => (

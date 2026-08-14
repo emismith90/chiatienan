@@ -33,7 +33,7 @@ export const knowledge: KnowledgeData = {
       id: "aaa111", when: null, standing: true,
       subject: "place:quan-be-bu", subject_key: "place:quan-be-bu",
       subject_kind: "place", subject_label: "Quán Bé Bự", subject_id: 1,
-      gate: "order-by@11:30", gate_kind: "order-by", gate_label: "Đặt trước 11:30",
+      gate: "order-by@11:30", gate_kind: "order-by", gate_label: "Order by 11:30",
       text: "Phải gọi trước — quán làm chậm.", stale: false,
     },
     {

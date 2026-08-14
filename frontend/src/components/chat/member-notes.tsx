@@ -35,9 +35,9 @@ export function MemberNotes({
 
   return (
     <div className="mt-4 border-t border-[var(--border)] pt-3">
-      <SectionLabel>Phoenix nhớ gì</SectionLabel>
+      <SectionLabel>What Phoenix remembers</SectionLabel>
       {rows.length === 0 ? (
-        <p className="text-xs text-[var(--text-secondary)]">Chưa có ghi nhớ nào.</p>
+        <p className="text-xs text-[var(--text-secondary)]">No notes yet.</p>
       ) : (
         <div className="space-y-0.5">
           {rows.map((n, i) => (
@@ -49,7 +49,7 @@ export function MemberNotes({
       {subject && (
         <button type="button" onClick={() => setAdding(true)}
                 className="mt-1.5 text-[11px] text-[var(--accent-text)]">
-          ＋ Thêm ghi nhớ
+          ＋ Add note
         </button>
       )}
 

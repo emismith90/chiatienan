@@ -26,20 +26,20 @@ beforeEach(() => {
 describe("NoteDialog — the standing/dated choice", () => {
   it("spells out what each kind means, because it decides whether the note decays", () => {
     open(rule);
-    expect(screen.getByRole("button", { name: "Quy tắc" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/không bao giờ bỏ qua vì cũ/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Standing rule" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/never drops it for being old/)).toBeInTheDocument();
     // A rule has no date, so no date field is offered.
-    expect(screen.queryByLabelText("Ngày")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Date")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Chuyện một hôm" }));
-    expect(screen.getByText(/sau 6 tháng bot không đọc nữa/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Ngày")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "One day" }));
+    expect(screen.getByText(/after 6 months the bot stops reading it/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Date")).toBeInTheDocument();
   });
 
   it("sends when=null for a rule and a date for an observation", async () => {
     const p = open(dated);
-    fireEvent.click(screen.getByRole("button", { name: "Quy tắc" }));
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Standing rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.patchNote).toHaveBeenCalled());
     expect(api.patchNote).toHaveBeenCalledWith(3, "bbb222",
       expect.objectContaining({ standing: true, when: null, etag: "obs-etag-1" }));
@@ -50,29 +50,29 @@ describe("NoteDialog — the standing/dated choice", () => {
 describe("NoteDialog — clock gates", () => {
   it("offers the three verbs as a picker, never the `kind@HH:MM` syntax", () => {
     open(rule);
-    const select = screen.getByLabelText("Điều kiện giờ");
+    const select = screen.getByLabelText("Clock rule");
     expect(select).toHaveValue("order-by");
-    expect(screen.getByRole("option", { name: "Đặt trước…" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Đông từ…" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Đóng cửa…" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Order by…" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Busy from…" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Closes…" })).toBeInTheDocument();
     // The stored time is prefilled from the gate, split off the `@`.
-    expect(screen.getByLabelText("Lúc")).toHaveValue("11:30");
+    expect(screen.getByLabelText("At")).toHaveValue("11:30");
   });
 
-  it("clears the gate when 'Không có' is chosen", async () => {
+  it("clears the gate when 'None' is chosen", async () => {
     open(rule);
-    fireEvent.change(screen.getByLabelText("Điều kiện giờ"), { target: { value: "" } });
-    expect(screen.queryByLabelText("Lúc")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.change(screen.getByLabelText("Clock rule"), { target: { value: "" } });
+    expect(screen.queryByLabelText("At")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.patchNote).toHaveBeenCalledWith(3, "aaa111",
       expect.objectContaining({ gate_kind: null, gate_at: null })));
   });
 
   it("sends the picked verb and time together", async () => {
     open(dated);
-    fireEvent.change(screen.getByLabelText("Điều kiện giờ"), { target: { value: "closes" } });
-    fireEvent.change(screen.getByLabelText("Lúc"), { target: { value: "12:45" } });
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.change(screen.getByLabelText("Clock rule"), { target: { value: "closes" } });
+    fireEvent.change(screen.getByLabelText("At"), { target: { value: "12:45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.patchNote).toHaveBeenCalledWith(3, "bbb222",
       expect.objectContaining({ gate_kind: "closes", gate_at: "12:45" })));
   });
@@ -81,22 +81,22 @@ describe("NoteDialog — clock gates", () => {
 describe("NoteDialog — subject", () => {
   it("cannot be changed on an existing note, and says why", () => {
     open(rule);
-    expect(screen.getByText(/xoá rồi thêm lại/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Về ai \/ quán nào/)).not.toBeInTheDocument();
+    expect(screen.getByText(/delete this and add it again/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/About which place or person/)).not.toBeInTheDocument();
   });
 
   it("is a grouped picker when adding, prefilled from where you started", () => {
     open(null as any, { note: null, presetSubject: "member:nhim" });
-    const select = screen.getByLabelText(/Về ai \/ quán nào/);
+    const select = screen.getByLabelText(/About which place or person/);
     expect(select).toHaveValue("member:nhim");
-    expect(screen.getByRole("group", { name: "Quán" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Người" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Places" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "People" })).toBeInTheDocument();
   });
 
   it("creates against the chosen subject", async () => {
     open(null as any, { note: null });
-    fireEvent.change(screen.getByLabelText("Nội dung"), { target: { value: "Hết chỗ ngồi." } });
-    fireEvent.click(screen.getByRole("button", { name: "Ghi nhớ" }));
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Hết chỗ ngồi." } });
+    fireEvent.click(screen.getByRole("button", { name: "Remember" }));
     await waitFor(() => expect(api.createNote).toHaveBeenCalledWith(3,
       expect.objectContaining({ subject: "place:quan-be-bu", text: "Hết chỗ ngồi." })));
   });
@@ -105,9 +105,9 @@ describe("NoteDialog — subject", () => {
 describe("NoteDialog — delete and conflict", () => {
   it("confirms before deleting", async () => {
     open(rule);
-    fireEvent.click(screen.getByRole("button", { name: "Xoá ghi nhớ này" }));
-    expect(screen.getByText("Xoá hẳn ghi nhớ này?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Xoá" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete this note" }));
+    expect(screen.getByText("Delete this note for good?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(api.deleteNote).toHaveBeenCalledWith(3, "aaa111", "obs-etag-1"));
   });
@@ -115,19 +115,19 @@ describe("NoteDialog — delete and conflict", () => {
   it("reloads on a stale-etag conflict instead of retrying blind", async () => {
     const { ApiError } = await import("@/lib/api");
     vi.spyOn(api, "patchNote").mockRejectedValue(
-      new ApiError(409, "Có người vừa sửa ghi nhớ — hãy tải lại."));
+      new ApiError(409, "Someone just changed the notes — reload."));
     const p = open(rule);
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(p.onConflict).toHaveBeenCalled());
-    expect(screen.getByText(/hãy tải lại/)).toBeInTheDocument();
+    expect(screen.getByText(/reload/)).toBeInTheDocument();
     expect(p.onSaved).not.toHaveBeenCalled();
   });
 
   it("refuses an empty note without calling the API", () => {
     open(rule);
-    fireEvent.change(screen.getByLabelText("Nội dung"), { target: { value: "   " } });
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
-    expect(screen.getByText("Ghi nhớ cần có nội dung.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("A note needs some text.")).toBeInTheDocument();
     expect(api.patchNote).not.toHaveBeenCalled();
   });
 });

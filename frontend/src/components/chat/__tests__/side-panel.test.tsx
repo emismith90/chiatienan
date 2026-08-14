@@ -32,12 +32,12 @@ beforeEach(() => {
 describe("SidePanel", () => {
   it("opens on the ledger and switches to the knowledge panel", async () => {
     render(<Harness />);
-    await waitFor(() => expect(screen.getByText(/không nợ ai/)).toBeInTheDocument());
-    expect(screen.getByRole("tab", { name: "Sổ" })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(screen.getByText(/You owe nobody/)).toBeInTheDocument());
+    expect(screen.getByRole("tab", { name: "Ledger" })).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Bộ nhớ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
-    expect(screen.getByRole("tab", { name: "Bộ nhớ" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Memory" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("does not fetch the knowledge payload until the tab is opened", async () => {
@@ -45,21 +45,21 @@ describe("SidePanel", () => {
     await waitFor(() => expect(api.getLedger).toHaveBeenCalled());
     expect(api.getKnowledge).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Bộ nhớ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
     await waitFor(() => expect(api.getKnowledge).toHaveBeenCalledTimes(1));
   });
 
   it("keeps each side's state across a tab switch", async () => {
     render(<Harness />);
-    fireEvent.click(screen.getByRole("tab", { name: "Bộ nhớ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "bé bự" } });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Sổ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Ledger" }));
     // The ledger is showing, but the knowledge panel is only hidden — so its search
     // box, sub-tab and any half-typed filter are still there when you come back.
     expect(screen.getByRole("searchbox")).toHaveValue("bé bự");
-    fireEvent.click(screen.getByRole("tab", { name: "Bộ nhớ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
     expect(screen.getByRole("searchbox")).toHaveValue("bé bự");
     expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument();
   });
@@ -68,7 +68,7 @@ describe("SidePanel", () => {
     render(<Harness />);
     await waitFor(() => expect(screen.getByRole("button", { name: /Group/ })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Group/ }));
-    expect(screen.getByText("Ai nợ ai")).toBeInTheDocument();
+    expect(screen.getByText("Who owes who")).toBeInTheDocument();
     expect(screen.getByText("Giang")).toBeInTheDocument();
   });
 });

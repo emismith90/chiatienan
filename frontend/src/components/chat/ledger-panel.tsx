@@ -12,7 +12,7 @@ export function LedgerPanel({
   selfId: number | null;
   version: number;
   /** Explicit date range to show instead of the default window — set when a
-   * history answer in the chat is opened here ("Mở sổ"). */
+   * history answer in the chat is opened here (the "Mở sổ" chat action). */
   range?: { from: string; to: string } | null;
   onClearRange?: () => void;
 }) {
@@ -25,9 +25,9 @@ export function LedgerPanel({
 
   return (
     // No outer <aside> and no visible heading: `SidePanel` owns the scroll
-    // container and the tab strip that names this view ("Sổ").
+    // container and the tab strip that names this view ("Ledger").
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <h2 className="sr-only">Sổ chi tiêu</h2>
+      <h2 className="sr-only">Spending ledger</h2>
       <div className="flex items-center justify-end">
         {selfId != null && (
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-xs">
@@ -48,7 +48,7 @@ export function LedgerPanel({
                 className="flex items-center gap-1.5 self-start rounded-full border border-[var(--accent-primary)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--accent-text)]">
           {range.from} → {range.to}
           <span aria-hidden>✕</span>
-          <span className="sr-only">Bỏ giới hạn ngày</span>
+          <span className="sr-only">Clear the date range</span>
         </button>
       )}
 
@@ -62,7 +62,7 @@ export function LedgerPanel({
       ) : (
         <>
           <section>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Ai nợ ai</p>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Who owes who</p>
             <OutstandingList rows={data?.outstanding ?? []} selfId={selfId} />
           </section>
           <section>

@@ -25,21 +25,21 @@ describe("MemorySections", () => {
     expect(screen.getByText("- Ăn cơm gà")).toBeInTheDocument();
     expect(screen.queryByText(/Ăn bún chả/)).not.toBeInTheDocument();
     // Both headers are there, with their dates.
-    expect(screen.getByText("1/7")).toBeInTheDocument();
-    expect(screen.getByText("1/8")).toBeInTheDocument();
+    expect(screen.getByText("1 Jul")).toBeInTheDocument();
+    expect(screen.getByText("1 Aug")).toBeInTheDocument();
   });
 
   it("expands an older section on tap", () => {
     open();
-    fireEvent.click(screen.getByText("1/7"));
+    fireEvent.click(screen.getByText("1 Jul"));
     expect(screen.getByText(/Ăn bún chả/)).toBeInTheDocument();
   });
 
   it("edits one section's body against the etag", async () => {
     const p = open();
-    fireEvent.click(screen.getByRole("button", { name: "Sửa" }));
-    fireEvent.change(screen.getByLabelText(/Sửa mục/), { target: { value: "- Đã sửa" } });
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText(/Edit entry/), { target: { value: "- Đã sửa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(api.patchMemorySection).toHaveBeenCalledWith(3, 1, "mem-etag-1", "- Đã sửa"));
     expect(p.onSaved).toHaveBeenCalled();
@@ -47,43 +47,43 @@ describe("MemorySections", () => {
 
   it("cancels an edit without saving", () => {
     open();
-    fireEvent.click(screen.getByRole("button", { name: "Sửa" }));
-    fireEvent.change(screen.getByLabelText(/Sửa mục/), { target: { value: "- Nhầm" } });
-    fireEvent.click(screen.getByRole("button", { name: "Huỷ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText(/Edit entry/), { target: { value: "- Nhầm" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(api.patchMemorySection).not.toHaveBeenCalled();
     expect(screen.getByText("- Ăn cơm gà")).toBeInTheDocument();
   });
 
   it("confirms before deleting a section", async () => {
     open();
-    fireEvent.click(screen.getByRole("button", { name: "Xoá" }));
-    fireEvent.click(screen.getByRole("button", { name: "Xoá thật?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really delete?" }));
     await waitFor(() =>
       expect(api.deleteMemorySection).toHaveBeenCalledWith(3, 1, "mem-etag-1"));
   });
 
   it("shows the watermark as prose with no control on it", () => {
     open();
-    expect(screen.getByText(/Đã tóm tắt tới 2026-08-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Summarised through 2026-08-01/)).toBeInTheDocument();
     // Rolling the watermark back would make the next turn re-summarize months of
     // chat into duplicate sections — so it is never a field.
     expect(screen.queryByDisplayValue("42")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/tóm tắt tới/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Summarised through/)).not.toBeInTheDocument();
   });
 
   it("reloads on a stale-etag conflict", async () => {
     const { ApiError } = await import("@/lib/api");
     vi.spyOn(api, "patchMemorySection").mockRejectedValue(
-      new ApiError(409, "Có người vừa sửa nhật ký — hãy tải lại."));
+      new ApiError(409, "Someone just changed the log — reload."));
     const p = open();
-    fireEvent.click(screen.getByRole("button", { name: "Sửa" }));
-    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(p.onConflict).toHaveBeenCalled());
-    expect(screen.getByText(/hãy tải lại/)).toBeInTheDocument();
+    expect(screen.getByText(/reload/)).toBeInTheDocument();
   });
 
   it("says how the log gets written when there is none", () => {
     open({ sections: [], watermark: { through_id: null, through_at: null } });
-    expect(screen.getByText(/khi hội thoại cũ hơn 10 tuần/)).toBeInTheDocument();
+    expect(screen.getByText(/older than 10 weeks/)).toBeInTheDocument();
   });
 });

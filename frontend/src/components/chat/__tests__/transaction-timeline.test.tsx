@@ -58,7 +58,7 @@ describe("grouping by day", () => {
     expect(screen.getByText(/day4/)).toBeInTheDocument();
     expect(screen.queryByText(/day0/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /2 ngày trước đó/ }));
+    fireEvent.click(screen.getByRole("button", { name: /2 earlier days/ }));
     expect(screen.getByText(/day0/)).toBeInTheDocument();
   });
 });
