@@ -40,10 +40,10 @@ describe("ProfileDialog save-back", () => {
     expect(getProfile()).toEqual({});
   });
 
-  it("defaults the group-activity toggle to checked and sends false when unchecked", async () => {
+  it("defaults the random-pick toggle to checked and sends false when unchecked", async () => {
     updateMe.mockResolvedValue({ ok: true });
     render(<ProfileDialog member={member} onClose={() => {}} onSaved={() => {}} />);
-    const toggle = screen.getByRole("checkbox", { name: /include me by default/i });
+    const toggle = screen.getByRole("checkbox", { name: /include me in random picks/i });
     expect(toggle).toBeChecked();
 
     fireEvent.click(toggle);
@@ -53,7 +53,7 @@ describe("ProfileDialog save-back", () => {
     expect(updateMe).toHaveBeenCalledWith(expect.objectContaining({ default_participant: false }));
   });
 
-  it("respects an already-opted-out member's flag", () => {
+  it("respects a member already opted out of draws", () => {
     render(
       <ProfileDialog
         member={{ ...member, default_participant: false }}
@@ -61,6 +61,6 @@ describe("ProfileDialog save-back", () => {
         onSaved={() => {}}
       />,
     );
-    expect(screen.getByRole("checkbox", { name: /include me by default/i })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /include me in random picks/i })).not.toBeChecked();
   });
 });

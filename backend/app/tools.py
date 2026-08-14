@@ -140,7 +140,12 @@ _FIND_SCHEMA = {
         },
         "all_active": {
             "type": "boolean",
-            "description": "True to fetch all active members ('cả nhóm').",
+            "description": (
+                "True to fetch the WHOLE roster — every active member of the room, with"
+                " nobody filtered out. Use it for 'cả nhóm' / 'cả team' / 'mọi người' and"
+                " for the English 'everyone' / 'all' / 'the whole group' (production said"
+                " 'log this for all' and only the Vietnamese triggers were documented)."
+            ),
         },
     },
 }
@@ -259,9 +264,11 @@ _UPDATE_MEMBER_SCHEMA = {
         "default_participant": {
             "type": "boolean",
             "description": (
-                "Whether this member is swept into a 'whole group' chia tien split or "
-                "rot tra draw by default. Set false to exclude an irregular/casual member "
-                "— they can still be added to a specific activity by name. Defaults true."
+                "Whether this member is in the pool for a rut tham / random draw "
+                "(`pick_random`). Set false for someone who should never be drawn. It does "
+                "NOT affect splitting: 'cả nhóm' / 'everyone' always means the whole "
+                "roster, and leaving someone out of a meal is done per meal, by omitting "
+                "them from `participants`. Defaults true."
             ),
         },
     },
@@ -881,8 +888,9 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         "find_members": CustomTool(
             execute=find_members,
             description=("Look up member ids by name/nickname/real name/bank-account name, or the"
-                         " whole group (all_active). Returns `unresolved` (nobody by that name) and"
-                         " `ambiguous` (two people match — ask which one); neither may be ignored."),
+                         " whole group (all_active — every active member, no exceptions). Returns"
+                         " `unresolved` (nobody by that name) and `ambiguous` (two people match —"
+                         " ask which one); neither may be ignored."),
             input_schema=_FIND_SCHEMA,
         ),
         "propose_meal": CustomTool(
@@ -954,7 +962,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
         ),
         "update_member": CustomTool(
             execute=update_member,
-            description="Update a member's details (display_name, nickname, bank, aliases), restore a removed one (active:true), or exclude/include them from default group activities (default_participant:false/true).",
+            description="Update a member's details (display_name, nickname, bank, aliases), restore a removed one (active:true), or exclude/include them from random draws (default_participant:false/true — draws only, never splits).",
             input_schema=_UPDATE_MEMBER_SCHEMA,
         ),
         "delete_member": CustomTool(

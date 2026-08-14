@@ -151,40 +151,26 @@ function MemberChips({
         id="member-chips"
         className={`flex-wrap items-center gap-1.5 ${expanded ? "flex" : "hidden lg:flex"}`}
       >
+        {/* No member is marked out of "everyone" here, because none is: the
+            roster is exactly who a group split covers. `default_participant`
+            reaches the random draw only, and the draw states its own pool. */}
         {members.map((m) => {
           const isSelf = m.id === selfId;
-          // Members opted out of default group activities are still in the room
-          // and still in this row, but "cả nhóm" / "everyone" splits skip them.
-          // Undifferentiated, that reads as a bot that dropped someone — room 3
-          // asked "everyone, should be 7" with two members flagged out. Say so
-          // here, where the roster is.
-          const optedOut = m.default_participant === false;
           return (
             <button
               key={m.id}
               type="button"
               onClick={() => onSelect(m)}
-              title={
-                optedOut
-                  ? `${m.display_name} — not included by default in group splits. Tap for info`
-                  : `${m.display_name} — tap for info`
-              }
+              title={`${m.display_name} — tap for info`}
               className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
                 isSelf
                   ? "border-[var(--accent-primary)] text-[var(--text-primary)] ring-1 ring-[var(--accent-primary)]"
-                  : optedOut
-                    ? "border-dashed border-[var(--border)] text-[var(--text-secondary)] opacity-60"
-                    : "border-[var(--border)] text-[var(--text-secondary)]"
+                  : "border-[var(--border)] text-[var(--text-secondary)]"
               } bg-[var(--bg-base)]`}
             >
               <MemberInitial member={m} />
               {m.nickname || m.display_name}
               {isSelf && <span className="text-[10px] font-medium text-[var(--accent-text)]">You</span>}
-              {optedOut && (
-                <span className="text-[10px] font-medium" title="Not in default group splits">
-                  opt-out
-                </span>
-              )}
             </button>
           );
         })}
@@ -397,7 +383,11 @@ export function ProfileDialog({
               }}
               className="h-4 w-4"
             />
-            Include me by default in group splits &amp; random picks
+            {/* Splits deliberately no longer read this flag: "everyone" means the
+                roster, and a checkbox nobody else can see must not be what
+                decides who owes money. Leaving someone out of a meal is said out
+                loud, per meal, on the draft card. */}
+            Include me in random picks
           </label>
         </div>
 

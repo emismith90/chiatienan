@@ -55,7 +55,7 @@
   "find_members": {
     "properties": {
       "all_active": {
-        "description": "True to fetch all active members ('cả nhóm').",
+        "description": "True to fetch the WHOLE roster — every active member of the room, with nobody filtered out. Use it for 'cả nhóm' / 'cả team' / 'mọi người' and for the English 'everyone' / 'all' / 'the whole group' (production said 'log this for all' and only the Vietnamese triggers were documented).",
         "type": "boolean"
       },
       "names": {
@@ -331,7 +331,7 @@
         "type": "string"
       },
       "default_participant": {
-        "description": "Whether this member is swept into a 'whole group' chia tien split or rot tra draw by default. Set false to exclude an irregular/casual member — they can still be added to a specific activity by name. Defaults true.",
+        "description": "Whether this member is in the pool for a rut tham / random draw (`pick_random`). Set false for someone who should never be drawn. It does NOT affect splitting: 'cả nhóm' / 'everyone' always means the whole roster, and leaving someone out of a meal is done per meal, by omitting them from `participants`. Defaults true.",
         "type": "boolean"
       },
       "display_name": {

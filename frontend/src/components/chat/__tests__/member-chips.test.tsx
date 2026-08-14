@@ -67,18 +67,19 @@ describe("MemberChips collapse", () => {
     }
   });
 
-  it("marks the members that 'everyone' splits leave out", async () => {
+  it("counts and shows every member, flagged out of draws or not", async () => {
+    // Duc Le and Kun carry default_participant:false. That reaches pick_random
+    // and nothing else, so the roster must not single them out — an "everyone"
+    // split covers all seven, and a dimmed chip would say otherwise.
     render(<RoomView roomId={3} />);
-    fireEvent.click(await screen.findByRole("button", { name: /7 members/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Duc Le/ })).toHaveAttribute(
-        "title",
-        expect.stringContaining("not included by default in group splits"),
-      ),
-    );
-    // The opted-in majority carries no such warning.
-    expect(screen.getByRole("button", { name: /Nhím/ }).getAttribute("title")).not.toContain(
-      "not included",
-    );
+    const toggle = await screen.findByRole("button", { name: /7 members/ });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Duc Le/ })).toBeInTheDocument());
+    for (const name of ["Duc Le", "Kun"]) {
+      const chip = screen.getByRole("button", { name: new RegExp(name) });
+      expect(chip.className).not.toContain("border-dashed");
+      expect(chip).toHaveTextContent(name === "Duc Le" ? "Duc Le" : "Kun");
+      expect(chip).not.toHaveTextContent("opt-out");
+    }
   });
 });
