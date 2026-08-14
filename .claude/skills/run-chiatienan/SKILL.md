@@ -47,12 +47,27 @@ bash .claude/skills/run-chiatienan/stop.sh
 Open the printed `/join/<token>` URL in the Browser pane (`preview_start`), then
 drive it with the browser tools. The join → chat flow that works:
 
-1. Fill **Tên hiển thị / Biệt danh / PIN** (bank fields optional) and click
-   **Tạo & vào phòng** → lands in the room chat.
-2. Type in the composer ("Nhắn tin…") and click **Gửi** → the message appears
-   on the right; it round-trips through the API and back over SSE.
-3. `screenshot` to verify. A real render shows the header ("chiatienan", member
-   chip, Light mode / Hồ sơ / Đăng xuất) and the composer bar.
+1. The form defaults to **Already joined / sign in** once the room has a member,
+   so click the **Create account** tab first. Fill **Display name / Nickname /
+   PIN** (bank fields optional) and click **Create & join** → lands in the room
+   chat.
+2. Type in the composer ("Message… (@phoenix)") and click **Send** → the message
+   appears on the right; it round-trips through the API and back over SSE.
+3. `screenshot` to verify. A real render shows the header (room name, member
+   chip, Dark mode / Invite) and the composer bar. The side panel's tabs are
+   **Ledger | Memory**, and Memory's sub-tabs are **Places | Notes | Log**.
+
+The UI is English; the data in it (place names, tags, note text) is Vietnamese,
+and so is the bot's own voice. See the i18n boundary note in `backend/app/chat.py`.
+
+To give the knowledge panel something to show, seed the demo room (`room_id=1`):
+
+```bash
+cd backend && DATABASE_URL="sqlite:///$PWD/../data/chiatienan.db" DATA_DIR="$PWD/../data" \
+  .venv/bin/python -m app.seed_places 1 seeds/places-*.json
+```
+
+100 places and 42 standing rules.
 
 ### Smoke the API (no browser)
 
