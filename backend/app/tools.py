@@ -281,6 +281,29 @@ _SUGGEST_LUNCH_SCHEMA = {
     },
 }
 
+_REMEMBER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "about": {"type": "string",
+                  "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím')."},
+        "text": {"type": "string", "description": "Nội dung, tiếng Việt, một câu."},
+        "standing": {"type": "boolean",
+                     "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay."},
+        "gate": {"type": "string",
+                 "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM."},
+    },
+    "required": ["about", "text"],
+}
+
+_FORGET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "about": {"type": "string"},
+        "text": {"type": "string", "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn."},
+    },
+    "required": ["about", "text"],
+}
+
 _ADD_MEMBER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -778,8 +801,32 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                         - recent_penalty - untried + random.uniform(0.0, 5.0))
 
             pool.sort(key=score, reverse=True)
-            candidates = [
-                {
+
+            # Prose and clock rules for these candidates only — the file could
+            # grow for years and the turn stays small.
+            from app import observations as obs_mod
+            from app.clock import now_ict
+
+            now = now_ict()
+            notes = obs_mod.for_subjects(
+                ctx.room_id, [f"place:{p.slug}" for p, _ in pool], today=today)
+            by_subject: dict[str, list] = {}
+            for o in notes:
+                by_subject.setdefault(o.subject, []).append(o)
+
+            candidates = []
+            for p, st in pool:
+                mine = by_subject.get(f"place:{p.slug}", [])
+                status, minutes_left, kind, gate_note = "ok", None, None, None
+                for o in mine:
+                    if not o.gate:
+                        continue
+                    # Worst status wins: one shut door beats three fine ones.
+                    s_, left = obs_mod.gate_status(o, now=now, walk_minutes=p.walk_minutes)
+                    if s_ == "too_late" or (s_ == "act_now" and status == "ok"):
+                        status, minutes_left = s_, left
+                        kind, gate_note = obs_mod.gate_kind(o), o.text
+                candidates.append({
                     "place_id": p.id,
                     "name": p.name,
                     "band": st.get("band"),
@@ -788,11 +835,94 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                     "phone": p.phone,
                     "tags": [t for t in (p.tags or []) if t != places_mod.UNTRIED_TAG],
                     "untried": places_mod.UNTRIED_TAG in (p.tags or []),
-                }
-                for p, st in pool
-            ]
+                    "status": status,
+                    "gate_kind": kind,
+                    "minutes_left": minutes_left,
+                    # The note the gate came from, so an explanation quotes the
+                    # actual reason rather than whichever note happened to be
+                    # first ("ăn được, mới sửa quán" is not why it is too late).
+                    "gate_note": gate_note,
+                    "notes": [o.text for o in mine],
+                })
+
+            # A place you cannot get to is not a weak suggestion, it is a wrong
+            # one — but it still ships with its reason, so Phoenix can say why.
+            candidates.sort(key=lambda c: c["status"] == "too_late")
         return {"ok": True, "mode": "delivery" if want_delivery else "walk",
                 "candidates": candidates}
+
+    def _memo_subject(s, raw: str) -> tuple[str, str] | None:
+        """Resolve free text to ``("place:slug"|"member:nick", label)``, or None.
+
+        Tries places first, then members. The two never answer for each other
+        (design D18) — this only picks which namespace the user meant.
+        """
+        from app import places as places_mod
+
+        place, _tier = places_mod.resolve_best(s, ctx.room_id, raw)
+        if place is not None:
+            return f"place:{place.slug}", place.name
+        res = roster.resolve(s, ctx.room_id, names=[raw])
+        if len(res["matched"]) == 1:
+            m = res["matched"][0]
+            return f"member:{roster._fold(m['display_name']).replace(' ', '-')}", m["display_name"]
+        return None
+
+    def remember(args, _tool_ctx=None) -> dict:
+        """Propose remembering a fact about a place or a person.
+
+        Proposal, not a write: an observation asserts something about a person or
+        a business, and TODO.md's "no way to verify a false claim" applies (D7).
+        """
+        args = args or {}
+        from app import memos
+
+        raw = (args.get("about") or "").strip()
+        text = (args.get("text") or "").strip()
+        if not raw or not text:
+            return _err("Cần biết ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
+        gate = (args.get("gate") or "").strip() or None
+        when = None if args.get("standing") else today_ict()
+        with db.session() as s:
+            found = _memo_subject(s, raw)
+            if found is None:
+                return _err(
+                    f"Không rõ «{raw}» là quán nào hay ai. Gọi `find_places` hoặc "
+                    "`find_members` để xác định trước, hoặc `add_place` nếu là quán mới."
+                )
+            subject, label = found
+            try:
+                m = memos.create(s, ctx.room_id, action="add", subject=subject,
+                                 subject_label=label, text=text, when=when, gate=gate)
+            except memos.MemoError as exc:
+                return _err(str(exc))
+            return {"ok": True, "type": "memo_draft", "memo_id": m.id,
+                    "subject": subject, "subject_label": label, "text": text}
+
+    def forget(args, _tool_ctx=None) -> dict:
+        """Propose deleting a remembered fact. Confirmed on a card, like adding."""
+        args = args or {}
+        from app import memos, observations as obs_mod
+
+        raw = (args.get("about") or "").strip()
+        text = (args.get("text") or "").strip()
+        if not raw or not text:
+            return _err("Cần biết xoá ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
+        with db.session() as s:
+            found = _memo_subject(s, raw)
+            if found is None:
+                return _err(f"Không rõ «{raw}» là quán nào hay ai.")
+            subject, label = found
+            existing = [o for o in obs_mod.load(ctx.room_id) if o.subject == subject]
+            if not any(o.text == text for o in existing):
+                return _err(
+                    f"Không có ghi nhớ nào của «{label}» khớp đúng nội dung đó. "
+                    f"Hiện có: {[o.text for o in existing] or 'chưa có gì'}."
+                )
+            m = memos.create(s, ctx.room_id, action="remove", subject=subject,
+                             subject_label=label, text=text)
+            return {"ok": True, "type": "memo_draft", "memo_id": m.id,
+                    "subject": subject, "subject_label": label, "text": text}
 
     def add_place(args, _tool_ctx=None) -> dict:
         """Create a restaurant row. Writes immediately, like ``add_member``.
@@ -1188,6 +1318,23 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 "want to order in rather than walk out."
             ),
             input_schema=_SUGGEST_LUNCH_SCHEMA,
+        ),
+        "remember": CustomTool(
+            execute=remember,
+            description=(
+                "Đề xuất ghi nhớ một điều về quán hoặc về một người ('quán này hay hết gà', "
+                "'Giang thích bún riêu', 'phải gọi trước 11h30'). Tạo THẺ để người dùng xác "
+                "nhận — không ghi thẳng. Dùng standing:true cho luật lâu dài."
+            ),
+            input_schema=_REMEMBER_SCHEMA,
+        ),
+        "forget": CustomTool(
+            execute=forget,
+            description=(
+                "Đề xuất xoá một ghi nhớ đã có ('quán đó cải thiện rồi, bỏ ghi chú kia đi'). "
+                "Cũng cần xác nhận trên thẻ."
+            ),
+            input_schema=_FORGET_SCHEMA,
         ),
         "add_place": CustomTool(
             execute=add_place,

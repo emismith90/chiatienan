@@ -125,6 +125,22 @@
     },
     "type": "object"
   },
+  "forget": {
+    "properties": {
+      "about": {
+        "type": "string"
+      },
+      "text": {
+        "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "about",
+      "text"
+    ],
+    "type": "object"
+  },
   "get_period_summary": {
     "properties": {
       "keyword": {
@@ -302,6 +318,31 @@
     },
     "required": [
       "to"
+    ],
+    "type": "object"
+  },
+  "remember": {
+    "properties": {
+      "about": {
+        "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím').",
+        "type": "string"
+      },
+      "gate": {
+        "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM.",
+        "type": "string"
+      },
+      "standing": {
+        "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay.",
+        "type": "boolean"
+      },
+      "text": {
+        "description": "Nội dung, tiếng Việt, một câu.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "about",
+      "text"
     ],
     "type": "object"
   },

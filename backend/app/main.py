@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app import accounts, chat, debug_api, drafts, ledger, roster, rooms
+from app import accounts, chat, debug_api, drafts, ledger, memos, roster, rooms
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
@@ -626,6 +626,43 @@ async def commit_draft_route(room_id: int, draft_id: int,
     await hub.publish(room_id, {"type": "message", **meal_payload})
     await hub.publish(room_id, {"type": "ledger:changed"})
     return {"ok": True, "meal_id": meal_id}
+
+
+@app.post("/api/rooms/{room_id}/memos/{memo_id}/commit")
+async def commit_memo_route(room_id: int, memo_id: int,
+                            ctx: AuthCtx = Depends(require_session)):
+    """Write a proposed lunch note to the room's observations file.
+
+    Serialized under the same agent lock as the money drafts: `observations.md`
+    is a read-modify-write file and the turn loop is the other writer.
+    """
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                m = memos.commit(s, memo_id, room_id)
+            except memos.MemoError as e:
+                raise HTTPException(404, str(e))
+            payload = chat.message_to_dict(m, None)
+    await hub.publish(room_id, {"type": "message", **payload})
+    return {"ok": True}
+
+
+@app.post("/api/rooms/{room_id}/memos/{memo_id}/cancel")
+async def cancel_memo_route(room_id: int, memo_id: int,
+                            ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            try:
+                m = memos.cancel(s, memo_id, room_id)
+            except memos.MemoError as e:
+                raise HTTPException(404, str(e))
+            payload = chat.message_to_dict(m, None)
+    await hub.publish(room_id, {"type": "message", **payload})
+    return {"ok": True}
 
 
 @app.post("/api/rooms/{room_id}/drafts/{draft_id}/recommit")

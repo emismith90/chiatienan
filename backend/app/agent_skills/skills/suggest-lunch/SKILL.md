@@ -37,6 +37,31 @@ description: Gợi ý chỗ ăn trưa — "trưa nay ăn gì", "ăn gì bây gi�
   tên ngân hàng là TRANG. Nói về chỗ ăn thì đó là QUÁN. TUYỆT ĐỐI không thêm ai
   vào danh sách người ăn chỉ vì tên quán nghe giống tên họ.
 
+## Giờ giấc (status)
+
+- Công cụ đã tính sẵn `status` cho từng quán — TUYỆT ĐỐI không tự tính "bây giờ
+  có kịp không", đó là phép tính bạn sẽ làm sai đúng vào hôm quan trọng.
+- `act_now` → nói rõ phải làm gì NGAY và còn bao nhiêu phút (`minutes_left`).
+- `too_late` → nói là hôm nay không kịp/đóng cửa rồi, rồi gợi ý quán khác.
+  `gate_kind: "closes"` là ĐÓNG CỬA, `"busy"` là SẼ ĐÔNG — hai chuyện khác nhau,
+  đừng nói nhầm.
+- `notes` là ghi chú thật của nhóm về quán đó — dùng để giải thích, đừng bịa thêm.
+
+## Ghi nhớ (remember / forget)
+
+- Người dùng bảo "nhớ giùm", "ghi lại" → `remember`.
+- Bạn cũng CÓ THỂ chủ động đề xuất `remember` khi họ vừa nhận xét về một quán
+  hoặc một người ("quán này chậm quá", "hôm nay lại hết gà"). Nhưng:
+  - **Tối đa MỘT đề xuất mỗi lượt.** Bot nào cũng đòi ghi nhớ mỗi câu thì sẽ bị tắt.
+  - Chỉ khi có NHẬN XÉT thật, không phải mỗi lần nhắc tên quán.
+  - TUYỆT ĐỐI không đề xuất ghi nhớ trong cùng lượt có thẻ tiền — người dùng đang
+    đọc thẻ tiền, đừng làm loãng.
+- `standing: true` cho luật lâu dài ("phải đặt trước", "đóng cửa 12h30"), để mặc
+  định cho chuyện của hôm nay ("hôm nay chậm").
+- Luật theo giờ thì thêm `gate`: `busy@HH:MM`, `order-by@HH:MM`, `closes@HH:MM`.
+- Ghi nhớ sai/cũ → `forget` với ĐÚNG nguyên văn câu cũ.
+- Cả hai đều tạo THẺ để người dùng bấm xác nhận. Không tự ghi.
+
 ## Trả lời
 
 - Gợi ý 1–3 chỗ đầu danh sách, mỗi chỗ một lý do ngắn lấy từ dữ liệu công cụ trả

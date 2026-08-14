@@ -109,8 +109,34 @@ def main(argv: list[str]) -> int:
             totals = {k: totals[k] + res[k] for k in totals}
         print(f"total: +{totals['created']} ~{totals['updated']}")
         print(f"backfill: {backfill_links(s, room_id)}")
+    obs_seed = paths[0].parent / "observations-local.md"
+    if obs_seed.exists():
+        print(f"observations: {install_observations(room_id, obs_seed)}")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
+
+
+def install_observations(room_id: int, path) -> dict:
+    """Copy a seed observations file into the room, skipping lines already there.
+
+    Idempotent and non-destructive: notes the room has accumulated since the last
+    seed are never clobbered, and re-running only adds what is missing.
+    """
+    from app import observations
+
+    existing = {(o.subject, o.text) for o in observations.load(room_id)}
+    added = skipped = 0
+    for i, raw in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        o = observations._parse_line(raw, i)
+        if o is None:
+            continue
+        if (o.subject, o.text) in existing:
+            skipped += 1
+            continue
+        observations.append(room_id, o)
+        existing.add((o.subject, o.text))
+        added += 1
+    return {"added": added, "skipped": skipped}

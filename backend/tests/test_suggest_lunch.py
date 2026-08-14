@@ -176,3 +176,67 @@ def test_phone_is_passed_through_verbatim():
 def test_the_suggest_lunch_skill_ships():
     from app.agent import _read_skills
     assert "suggest-lunch" in {s["name"] for s in _read_skills()}
+
+
+# ------------------------------------------------- gates + notes integration
+
+@pytest.fixture()
+def obs_dir(tmp_path, monkeypatch):
+    from app import memory as mem
+    monkeypatch.setattr(mem, "_base_dir", lambda: tmp_path)
+    return tmp_path
+
+
+def _obs(room_id, text):
+    from app.memory import room_memory_dir
+    (room_memory_dir(room_id) / "observations.md").write_text(text, encoding="utf-8")
+
+
+def test_a_too_late_gate_sinks_the_place_with_its_reason(obs_dir, monkeypatch):
+    from datetime import datetime
+    db = _mk([dict(id=10, slug="be-bu", name="Bé Bự"), dict(id=11, slug="other", name="Khác")])
+    _obs(1, "- always | place:be-bu | busy@12:00 | Đông lúc 12h, phải đi sớm.\n")
+    monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 12, 30))
+    res = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})
+    by_name = {c["name"]: c for c in res["candidates"]}
+    assert by_name["Bé Bự"]["status"] == "too_late"
+    assert "Đông lúc 12h" in " ".join(by_name["Bé Bự"]["notes"])
+    assert res["candidates"][-1]["name"] == "Bé Bự", "a too_late place sinks to the bottom"
+
+
+def test_act_now_reports_the_minutes_left(obs_dir, monkeypatch):
+    from datetime import datetime
+    db = _mk([dict(id=10, slug="thinh-lo", name="Thịnh Lơ", phone="0906279398")])
+    _obs(1, "- always | place:thinh-lo | order-by@11:30 | Phải đặt trước — gọi điện thoại.\n")
+    monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 11, 15))
+    c = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})["candidates"][0]
+    assert c["status"] == "act_now" and c["minutes_left"] == 15
+    assert c["phone"] == "0906279398"
+
+
+def test_notes_carry_prose_for_the_candidates_only(obs_dir):
+    db = _mk([dict(id=10, slug="a", name="A"), dict(id=11, slug="b", name="B")])
+    _obs(1, "- always | place:a | - | Quán mùi.\n- always | place:b | - | Nhạc retro.\n")
+    res = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})
+    by_name = {c["name"]: c for c in res["candidates"]}
+    assert by_name["A"]["notes"] == ["Quán mùi."]
+    assert by_name["B"]["notes"] == ["Nhạc retro."]
+
+
+def test_ungated_places_have_ok_status_and_no_minutes(obs_dir):
+    db = _mk([dict(id=10, slug="a", name="A")])
+    c = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})["candidates"][0]
+    assert c["status"] == "ok" and c["minutes_left"] is None and c["notes"] == []
+
+
+def test_gate_note_quotes_the_rule_not_just_any_note(obs_dir, monkeypatch):
+    """An explanation must cite the reason for the gate, not an unrelated note."""
+    from datetime import datetime
+    db = _mk([dict(id=10, slug="tuan-hung", name="Tuấn Hưng")])
+    _obs(1, "- always | place:tuan-hung | -           | Ăn được, mới sửa quán nên sạch sẽ.\n"
+            "- always | place:tuan-hung | busy@12:00  | Thường đông lúc 12h.\n")
+    monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 12, 40))
+    c = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})["candidates"][0]
+    assert c["status"] == "too_late"
+    assert c["gate_note"] == "Thường đông lúc 12h."
+    assert len(c["notes"]) == 2, "the other note is still available for colour"
