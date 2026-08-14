@@ -533,7 +533,7 @@ def test_cancel_draft_closes_a_pending_card_without_writing(db):
         d, _ = drafts.create_draft(s, room_id, {
             "payer_member_id": a, "member_participants": [a, b, c], "guests": [],
             "bill_total": 324_000, "adjustments": [], "dish": None, "initiator": None,
-            "note": None, "per_head_preview": 108_000, "raw_input": "@bot test",
+            "note": None, "per_head_preview": 108_000, "raw_input": "@phoenix test",
         })
         draft_id = d.id
 
@@ -556,7 +556,7 @@ def test_cancel_draft_rejects_an_already_processed_card(db):
         d, _ = drafts.create_draft(s, room_id, {
             "payer_member_id": a, "member_participants": [a, b, c], "guests": [],
             "bill_total": 300_000, "adjustments": [], "dish": None, "initiator": None,
-            "note": None, "per_head_preview": 100_000, "raw_input": "@bot test",
+            "note": None, "per_head_preview": 100_000, "raw_input": "@phoenix test",
         })
         drafts.commit_draft(s, d.id, room_id, logged_by=str(a))
         draft_id = d.id
@@ -576,7 +576,7 @@ def test_cancel_draft_cannot_reach_another_room(db):
         d, _ = drafts.create_draft(s, room_a, {
             "payer_member_id": a1, "member_participants": [a1, a2, a3], "guests": [],
             "bill_total": 300_000, "adjustments": [], "dish": None, "initiator": None,
-            "note": None, "per_head_preview": 100_000, "raw_input": "@bot test",
+            "note": None, "per_head_preview": 100_000, "raw_input": "@phoenix test",
         })
         draft_id = d.id
 

@@ -255,11 +255,11 @@ def test_record_meal_stores_metadata(db):
         res = ledger.record_meal(
             s, room_id=room_id, payer_member_id=a, participants=[a, b],
             total_amount=200_000, dish="phở", initiator="Emi",
-            note="An đổi ý", raw_input="@bot 200k phở",
+            note="An đổi ý", raw_input="@phoenix 200k phở",
         )
         meal = s.get(__import__("app.models", fromlist=["Meal"]).Meal, res["meal_id"])
         assert meal.dish == "phở" and meal.initiator == "Emi"
-        assert meal.note == "An đổi ý" and meal.raw_input == "@bot 200k phở"
+        assert meal.note == "An đổi ý" and meal.raw_input == "@phoenix 200k phở"
         assert meal.guests == []
 
 

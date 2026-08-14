@@ -1,7 +1,7 @@
 """The bill someone pasted a message ago has to reach the vision turn.
 
-Nobody types "@bot" in the same message as the screenshot. In production the
-bill went up, then "@bot log đi" went up, and the bot — which only ever received
+Nobody types "@phoenix" in the same message as the screenshot. In production the
+bill went up, then "@phoenix log đi" went up, and the bot — which only ever received
 the images attached to the mentioning message — asked for a total that was on
 screen. Everything downstream (asking for per-dish prices, four rounds of
 "gửi số tiền từng người") followed from that.
@@ -37,7 +37,7 @@ def _post(db, room_id, member_id, body, images=None, minutes_ago=0):
 def test_image_from_the_previous_message_is_found(db):
     room_id, member_id = _room(db, "t-prev")
     _post(db, room_id, member_id, "emi ăn bò, nhím gà", images=[IMG])
-    ask = _post(db, room_id, member_id, "@bot log đi")
+    ask = _post(db, room_id, member_id, "@phoenix log đi")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask) == [IMG]
 
@@ -47,7 +47,7 @@ def test_only_the_newest_bill_is_carried_forward(db):
     _post(db, room_id, member_id, "bill hôm qua", images=[IMG])
     newer = {"data": "d29ybGQ=", "mimeType": "image/jpeg"}
     _post(db, room_id, member_id, "bill hôm nay", images=[newer])
-    ask = _post(db, room_id, member_id, "@bot log đi")
+    ask = _post(db, room_id, member_id, "@phoenix log đi")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask) == [newer]
 
@@ -55,7 +55,7 @@ def test_only_the_newest_bill_is_carried_forward(db):
 def test_a_stale_image_is_not_dragged_into_an_unrelated_turn(db):
     room_id, member_id = _room(db, "t-stale")
     _post(db, room_id, member_id, "bill tuần trước", images=[IMG], minutes_ago=60 * 24)
-    ask = _post(db, room_id, member_id, "@bot số dư")
+    ask = _post(db, room_id, member_id, "@phoenix số dư")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask) == []
 
@@ -65,14 +65,14 @@ def test_an_image_far_up_the_scrollback_is_not_carried_forward(db):
     _post(db, room_id, member_id, "bill", images=[IMG])
     for i in range(15):
         _post(db, room_id, member_id, f"chat {i}")
-    ask = _post(db, room_id, member_id, "@bot số dư")
+    ask = _post(db, room_id, member_id, "@phoenix số dư")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask) == []
 
 
 def test_no_images_in_the_room_is_just_empty(db):
     room_id, member_id = _room(db, "t-none")
-    ask = _post(db, room_id, member_id, "@bot số dư")
+    ask = _post(db, room_id, member_id, "@phoenix số dư")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask) == []
 
@@ -80,7 +80,7 @@ def test_no_images_in_the_room_is_just_empty(db):
 async def test_run_bot_turn_feeds_the_previous_message_s_bill_to_the_agent(monkeypatch, db):
     room_id, member_id = _room(db, "t-turn")
     _post(db, room_id, member_id, "emi ăn bò, nhím gà", images=[IMG])
-    ask = _post(db, room_id, member_id, "@bot log đi")
+    ask = _post(db, room_id, member_id, "@phoenix log đi")
     seen = {}
 
     async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
@@ -89,7 +89,7 @@ async def test_run_bot_turn_feeds_the_previous_message_s_bill_to_the_agent(monke
         return TurnResult(final_text="ok")
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
-    await chat.run_bot_turn(db, room_id, member_id, "Emi", "@bot log đi", before_id=ask)
+    await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix log đi", before_id=ask)
 
     assert seen["images"] == [IMG]
     # …and the text history says an image was there, so the model knows to look.
@@ -100,7 +100,7 @@ async def test_images_on_the_mentioning_message_still_win(monkeypatch, db):
     room_id, member_id = _room(db, "t-own")
     _post(db, room_id, member_id, "bill cũ", images=[IMG])
     own = {"data": "bmV3", "mimeType": "image/png"}
-    ask = _post(db, room_id, member_id, "@bot log đi", images=[own])
+    ask = _post(db, room_id, member_id, "@phoenix log đi", images=[own])
     seen = {}
 
     async def _fake_run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None):
@@ -109,7 +109,7 @@ async def test_images_on_the_mentioning_message_still_win(monkeypatch, db):
         return TurnResult(final_text="ok")
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
-    await chat.run_bot_turn(db, room_id, member_id, "Emi", "@bot log đi",
+    await chat.run_bot_turn(db, room_id, member_id, "Emi", "@phoenix log đi",
                             images=[own], before_id=ask)
     assert seen["images"] == [own]
 
@@ -126,6 +126,6 @@ def test_history_marks_images_without_dumping_base64(db):
 def test_lookback_can_be_switched_off(db, monkeypatch):
     room_id, member_id = _room(db, "t-off")
     _post(db, room_id, member_id, "bill", images=[IMG])
-    ask = _post(db, room_id, member_id, "@bot log đi")
+    ask = _post(db, room_id, member_id, "@phoenix log đi")
     with db.session() as s:
         assert chat.recent_images(s, room_id, before_id=ask, max_messages=0) == []

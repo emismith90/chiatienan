@@ -83,7 +83,7 @@ def _make_meal_draft(client, headers, room_id, m):
         "initiator": None,
         "note": None,
         "per_head_preview": 150_000,
-        "raw_input": "@bot test",
+        "raw_input": "@phoenix test",
     }
     with get_db().session() as s:
         d, _extras = drafts.create_draft(s, room_id, payload)

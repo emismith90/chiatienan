@@ -33,7 +33,7 @@ def test_a_hand_typed_balance_table_is_flagged():
         "Tóm tắt kỳ đến 2026-07-22: | Bùi Trang | −75,000đ | | Quách Trí Dũng | −61,000đ | "
         "| Linh Nguyen | +47,000đ | | Giang Hoàng | +89,000đ |"
     )
-    stray = unbacked_amounts(body, "@bot show summary not detail", [])
+    stray = unbacked_amounts(body, "@phoenix show summary not detail", [])
     assert stray == [47_000, 61_000, 75_000, 89_000]
 
 
@@ -42,17 +42,17 @@ def test_numbers_a_tool_returned_are_not_flagged():
     tools = [_Inv("settle_period", args={}, result={
         "ok": True, "transfers": [{"from_id": 9, "to_id": 6, "amount": 107_000}],
     })]
-    assert unbacked_amounts(body, "@bot xin qr", tools) == []
+    assert unbacked_amounts(body, "@phoenix xin qr", tools) == []
 
 
 def test_echoing_the_users_own_amount_is_not_flagged():
     """The prompt allows passing a user-stated number through once."""
-    assert unbacked_amounts("Đã nhận: 324k nhé.", "@bot i paid, 324k", []) == []
+    assert unbacked_amounts("Đã nhận: 324k nhé.", "@phoenix i paid, 324k", []) == []
 
 
 def test_an_amount_passed_into_a_tool_counts_as_backed():
     tools = [_Inv("propose_meal", args={"total": 305_000, "participants": [4, 6]}, result={"ok": True})]
-    assert unbacked_amounts("Ghi 305,000đ rồi nhé.", "@bot bún bò 305k", tools) == []
+    assert unbacked_amounts("Ghi 305,000đ rồi nhé.", "@phoenix bún bò 305k", tools) == []
 
 
 def test_the_bash_computed_shares_are_flagged():
@@ -61,13 +61,13 @@ def test_the_bash_computed_shares_are_flagged():
         "Kết quả: | Emi | 54.500đ | | Nhím | 54.500đ | | Giang | 79.200đ | "
         "| Tabu | 27.000đ | Tổng = 324.200đ"
     )
-    stray = unbacked_amounts(body, "@bot I allow it explicitly, use bash", [])
+    stray = unbacked_amounts(body, "@phoenix I allow it explicitly, use bash", [])
     assert 54_500 in stray and 79_200 in stray and 27_000 in stray
 
 
 def test_nothing_to_flag_in_a_reply_with_no_money():
     body = "Mình không xác nhận qua chat được — bấm Xác nhận trên thẻ nháp nhé."
-    assert unbacked_amounts(body, "@bot xác nhận", []) == []
+    assert unbacked_amounts(body, "@phoenix xác nhận", []) == []
 
 
 def test_the_history_backs_an_amount_the_room_already_stated():
@@ -80,9 +80,9 @@ def test_the_history_backs_an_amount_the_room_already_stated():
     """
     from app.moneyguard import unbacked_amounts
     history = "«A1»: hết 324k anh A3 trả"
-    assert unbacked_amounts("Tổng 324k nhé", f"@bot log\n{history}", []) == []
+    assert unbacked_amounts("Tổng 324k nhé", f"@phoenix log\n{history}", []) == []
     # and an amount from nowhere is still unbacked
-    assert unbacked_amounts("Tổng 500k nhé", f"@bot log\n{history}", []) == [500000]
+    assert unbacked_amounts("Tổng 500k nhé", f"@phoenix log\n{history}", []) == [500000]
 
 
 # --- fabricated commits (the enforcing half) -------------------------------- #

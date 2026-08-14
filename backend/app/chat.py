@@ -1,4 +1,4 @@
-"""Room chat — persist/list messages, ``@bot`` detection, agent dispatch.
+"""Room chat — persist/list messages, ``@phoenix`` detection, agent dispatch.
 
 Human messages are appended via :func:`post_message` (called by the route
 layer). A message that :func:`mentions_bot` triggers :func:`run_bot_turn`,
@@ -53,7 +53,7 @@ _CLEAR_RE = re.compile(
 
 def is_clear_command(text: str) -> bool:
     """True iff the whole message is the ``/clear`` command (optionally preceded
-    by an ``@bot``/``@<handle>`` mention). Exact — ``/cleared``/``/clear now``
+    by an ``@phoenix``/``@<handle>`` mention). Exact — ``/cleared``/``/clear now``
     do not match."""
     return _CLEAR_RE.match(text or "") is not None
 
@@ -73,7 +73,7 @@ def _awaits_an_answer(body: str) -> bool:
 
 def replies_to_bot_question(session: Session, room_id: int, member_id: int,
                             *, before_id: int) -> bool:
-    """True when a message with no ``@bot`` is plainly answering the bot.
+    """True when a message with no ``@phoenix`` is plainly answering the bot.
 
     People answer a question the way they would answer a person — "1", "2", "b",
     "tôi đã trả tiền Emi" — and every one of those was dropped in production for
@@ -279,7 +279,7 @@ def recent_images(session: Session, room_id: int, *, before_id: int | None = Non
                   max_messages: int | None = None, max_minutes: int | None = None) -> list[dict]:
     """Images from the most recent image-bearing message in the room's live window.
 
-    People paste the bill and *then* say "@bot log đi" — two messages. The turn's
+    People paste the bill and *then* say "@phoenix log đi" — two messages. The turn's
     own attachments are empty, so without this the bot never sees the bill and
     asks for a total that is already on screen. Only the newest image-bearing
     message is carried forward (one bill, not a scrollback of them), and only
@@ -494,7 +494,7 @@ def _random_pick_body(att: dict) -> str:
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
                         text: str, images=None, emit=None,
                         before_id: int | None = None) -> RoomMessage:
-    """Run the agent for one ``@bot`` turn and persist its reply.
+    """Run the agent for one ``@phoenix`` turn and persist its reply.
 
     Serialized by ``_agent_lock`` so a ledger-writing tool call (``settle_period``)
     from concurrent turns never interleaves with another. Meal turns never write
@@ -523,7 +523,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 s, room_id, watermark=memory.read_watermark(room_id),
                 before_id=before_id, limit=settings.history_max_messages,
             )
-            # "bill pasted, then @bot in the next message" is the normal way
+            # "bill pasted, then @phoenix in the next message" is the normal way
             # people use this — carry the recent bill into the turn.
             if not images:
                 images = recent_images(s, room_id, before_id=before_id) or None

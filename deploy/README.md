@@ -96,7 +96,7 @@ curl https://<CADDY_DOMAIN>/health       # -> {"status":"ok"} from the backend, 
 ```
 
 Then do the phone/PWA walkthrough: open `https://<CADDY_DOMAIN>` on a phone, install the PWA, open
-an admin-created invite link, create an account, send `@bot ghi 100k, an và binh`, confirm the bot
+an admin-created invite link, create an account, send `@phoenix ghi 100k, an và binh`, confirm the bot
 reply appears for all members.
 
 ## Redeploy (after code changes)

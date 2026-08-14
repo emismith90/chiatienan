@@ -23,7 +23,7 @@ def test_mentions_bot():
 
 def test_mentions_bot_ignores_email_like_text():
     assert not chat.mentions_bot("email me at user@bot.com")
-    assert chat.mentions_bot("@bot hi")
+    assert chat.mentions_bot("@phoenix hi")
 
 
 def test_post_and_list_since():
@@ -219,7 +219,7 @@ async def test_run_bot_turn_posts_error_body_on_agent_error(monkeypatch, db):
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
-    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ai trả tuần này")
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix ai trả tuần này")
 
     assert msg.kind == "bot"
     assert "boom" in msg.body
@@ -253,7 +253,7 @@ async def test_run_bot_turn_settlement_body_uses_tool_amounts(monkeypatch, db):
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
-    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot chốt kỳ")
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix chốt kỳ")
 
     assert msg.kind == "bot"
     assert "Bình" in msg.body and "An" in msg.body
@@ -283,7 +283,7 @@ async def test_run_bot_turn_settlement_body_no_transfers_uses_tool_message(monke
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
-    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot chốt kỳ")
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix chốt kỳ")
 
     assert "Không có gì để chốt" in msg.body
 
@@ -322,14 +322,14 @@ async def test_run_bot_turn_meal_proposal_creates_pending_draft(monkeypatch, db)
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
-    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 300k An Bình")
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix ghi 300k An Bình")
 
     assert msg.kind == "expense_draft"
     assert msg.attachments["status"] == "pending"
     assert msg.attachments["bill_total"] == 300000
     assert msg.attachments["dish"] == "phở"
     assert msg.attachments["member_participants"] == [member_id, member2_id]
-    assert msg.attachments["raw_input"] == "@bot ghi 300k An Bình"
+    assert msg.attachments["raw_input"] == "@phoenix ghi 300k An Bình"
     assert msg.body == ""  # draft cards render from attachments, never LLM prose
 
 
@@ -358,7 +358,7 @@ async def test_run_bot_turn_meal_proposal_carries_turn_id(monkeypatch, db):
 
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
-    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot ghi 100k")
+    msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix ghi 100k")
 
     assert msg.attachments["turn_id"] == "turn-abc123"
 
@@ -367,8 +367,8 @@ async def test_run_bot_turn_meal_proposal_carries_turn_id(monkeypatch, db):
     ("/clear", True),
     ("  /clear  ", True),
     ("/CLEAR", True),
-    ("@bot /clear", True),
-    ("@bot   /clear", True),
+    ("@phoenix /clear", True),
+    ("@phoenix   /clear", True),
     ("/cleared", False),
     ("/clear now", False),
     ("clear", False),
@@ -385,7 +385,7 @@ def test_build_history_renders_window(db):
         a = chat.post_message(s, room_id, m[0], "840k cả nhóm")
         b = chat.post_message(s, room_id, None, "Đã ghi #1", kind="bot")
         chat.post_message(s, room_id, None, "reset", kind="context_reset")  # skipped
-        cur = chat.post_message(s, room_id, m[1], "@bot ai trả")            # excluded (before_id)
+        cur = chat.post_message(s, room_id, m[1], "@phoenix ai trả")            # excluded (before_id)
         out = chat.build_history(s, room_id, watermark=0, before_id=cur.id, limit=200)
     assert out == "«M1»: 840k cả nhóm\nphoenix: Đã ghi #1"
 
@@ -511,10 +511,10 @@ def _room_with_two(db):
 
 def test_bare_reply_to_a_bot_question_reaches_the_bot(db):
     """Production: "1", "2", "b" and "tôi đã trả tiền Emi" were all dropped for
-    lacking @bot, then retyped with one seconds later."""
+    lacking @phoenix, then retyped with one seconds later."""
     room_id, emi, _kun = _room_with_two(db)
     with db.session() as s:
-        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, emi, "@phoenix giang paid Linh")
         chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
         answer = chat.post_message(s, room_id, emi, "1")
         assert chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
@@ -523,7 +523,7 @@ def test_bare_reply_to_a_bot_question_reaches_the_bot(db):
 def test_a_numbered_choice_counts_as_a_question(db):
     room_id, emi, _kun = _room_with_two(db)
     with db.session() as s:
-        chat.post_message(s, room_id, emi, "@bot ghi theo món")
+        chat.post_message(s, room_id, emi, "@phoenix ghi theo món")
         chat.post_message(s, room_id, None, "Chọn cách ghi:\n1. Chia đều\n2. Theo món",
                           kind="bot")
         answer = chat.post_message(s, room_id, emi, "2")
@@ -534,7 +534,7 @@ def test_someone_else_answering_does_not_wake_the_bot(db):
     """The bot asked Emi. Kun talking is Kun talking."""
     room_id, emi, kun = _room_with_two(db)
     with db.session() as s:
-        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, emi, "@phoenix giang paid Linh")
         chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
         answer = chat.post_message(s, room_id, kun, "1")
         assert not chat.replies_to_bot_question(s, room_id, kun, before_id=answer.id)
@@ -543,7 +543,7 @@ def test_someone_else_answering_does_not_wake_the_bot(db):
 def test_a_statement_is_not_an_open_question(db):
     room_id, emi, _kun = _room_with_two(db)
     with db.session() as s:
-        chat.post_message(s, room_id, emi, "@bot số dư")
+        chat.post_message(s, room_id, emi, "@phoenix số dư")
         chat.post_message(s, room_id, None, "💸 Đã ghi: Emi trả Linh 61,000đ", kind="bot")
         answer = chat.post_message(s, room_id, emi, "ok cảm ơn")
         assert not chat.replies_to_bot_question(s, room_id, emi, before_id=answer.id)
@@ -554,7 +554,7 @@ def test_human_chatter_after_a_bot_question_does_not_wake_it(db):
     conversation that moved on without it."""
     room_id, emi, kun = _room_with_two(db)
     with db.session() as s:
-        chat.post_message(s, room_id, emi, "@bot giang paid Linh")
+        chat.post_message(s, room_id, emi, "@phoenix giang paid Linh")
         chat.post_message(s, room_id, None, "Emi muốn ghi kiểu nào?", kind="bot")
         chat.post_message(s, room_id, kun, "trưa nay ăn gì mọi người")
         answer = chat.post_message(s, room_id, emi, "bún chả đi")
@@ -579,7 +579,7 @@ async def test_unbacked_money_in_a_reply_is_logged(monkeypatch, db, caplog):
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
     with caplog.at_level("WARNING", logger="chiatienan"):
-        msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@bot tóm tắt số dư")
+        msg = await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix tóm tắt số dư")
 
     assert "unbacked money in reply" in caplog.text
     assert "75000" in caplog.text and "89000" in caplog.text
@@ -605,7 +605,7 @@ async def test_a_tool_backed_reply_logs_nothing(monkeypatch, db, caplog):
     monkeypatch.setattr(agent_mod, "run_turn", _fake_run_turn)
 
     with caplog.at_level("WARNING", logger="chiatienan"):
-        await chat.run_bot_turn(db, room_id, member_id, "An", "@bot bún bò 305k")
+        await chat.run_bot_turn(db, room_id, member_id, "An", "@phoenix bún bò 305k")
 
     assert "unbacked money" not in caplog.text
 

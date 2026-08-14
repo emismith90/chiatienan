@@ -173,7 +173,7 @@ def test_editing_an_equal_split_draft_keeps_it_equal(db):
             "bill_total": 100_000, "adjustments": [], "discount_split": "equal",
             "items": [{"member": ids[0], "amount": 100_000}, {"member": ids[1], "amount": 20_000}],
             "dish": None, "initiator": None, "note": None, "per_head_preview": 0,
-            "raw_input": "@bot test",
+            "raw_input": "@phoenix test",
         })
         updated = drafts.update_draft(s, d.id, room_id, {"bill_total": 100_000})
         by_member = {a["member"]: a["amount"] for a in updated.attachments["adjustments"]}

@@ -13,7 +13,7 @@ export function mentionQuery(text: string, caret: number): string | null {
 /** Splices an accepted `@handle` into `text`, replacing the `[start, end)`
  * mention span. Strips any leading word-characters immediately after `end`
  * as the dangling remainder of the same token being completed — accepting
- * "@bo|ot" (caret after "bo", `end` there) yields "@bot ", not "@bot ot".
+ * "@pho|enix" (caret after "bo", `end` there) yields "@phoenix ", not "@phoenix enix".
  * Returns the new text and the caret position right after the insertion. */
 export function spliceMention(
   text: string,

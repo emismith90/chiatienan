@@ -14,7 +14,7 @@ def _payload(a, b, c, total=400_000, guests=None):
         "payer_member_id": a, "member_participants": [a, b, c], "guests": guests or [],
         "bill_total": total, "adjustments": [], "dish": None, "initiator": None,
         "note": None, "per_head_preview": total // (3 + len(guests or [])),
-        "raw_input": "@bot test",
+        "raw_input": "@phoenix test",
     }
 
 
