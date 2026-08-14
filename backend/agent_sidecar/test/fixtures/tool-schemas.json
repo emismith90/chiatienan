@@ -25,6 +25,47 @@
     ],
     "type": "object"
   },
+  "add_place": {
+    "properties": {
+      "address": {
+        "type": "string"
+      },
+      "aliases": {
+        "description": "Other spellings the group uses, including tone-free forms.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "delivery": {
+        "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      },
+      "phone": {
+        "type": "string"
+      },
+      "tags": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "walkable": {
+        "description": "Can the group walk there from the office?",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "type": "object"
+  },
   "cancel_draft": {
     "properties": {
       "draft_id": {
@@ -60,6 +101,22 @@
       },
       "names": {
         "description": "Names to look up (e.g. ['An', 'Bình']). Pass the name EXACTLY as the user wrote it — the tool matches display name, nickname, aliases and the bank account holder, with or without Vietnamese tones, and strips 'anh'/'chị' itself. Do not de-accent or shorten it yourself.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "type": "object"
+  },
+  "find_places": {
+    "properties": {
+      "all": {
+        "description": "Return every place in the room.",
+        "type": "boolean"
+      },
+      "names": {
+        "description": "Place names as the user wrote them ('thịnh lơ', 'quán bé bự').",
         "items": {
           "type": "string"
         },

@@ -180,7 +180,7 @@ async def test_the_image_count_is_announced_in_the_text(db, bridge):
 async def test_the_command_carries_every_tool_skill_and_rules_file(db, bridge):
     fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
     await agent.run_turn("x", _ctx(db))
-    assert len(fake.command["tools"]) == 14
+    assert len(fake.command["tools"]) == 16
     names = {s["name"] for s in fake.command["skills"]}
     assert {"record-meal", "record-payment", "balances", "pick-random"} <= names
     # every skill BODY ships, because the sidecar has no `read` tool

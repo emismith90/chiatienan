@@ -450,6 +450,25 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
         except MoneyError as exc:
             return _err(str(exc))
+
+        # Place resolution is metadata and must NEVER block the bill (design
+        # D2): this is the deliberate opposite of the _dropped_names guard
+        # above, because a missing eater bills everyone wrong while a missing
+        # place tag only costs a statistic. Only confident tiers link; a weaker
+        # guess rides the card instead, where one tap fixes it (D3).
+        place_id = None
+        place_guess = None
+        dish_text = (args.get("dish") or "").strip()
+        if dish_text:
+            from app import places as places_mod
+
+            with db.session() as s:
+                hit, tier = places_mod.resolve_one(s, ctx.room_id, dish_text)
+                if hit is not None:
+                    place_guess = {"id": hit.id, "name": hit.name}
+                    if tier in places_mod.CONFIDENT_TIERS:
+                        place_id = hit.id
+
         return {
             "ok": True,
             "type": "expense_draft",
@@ -461,6 +480,8 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             "items": items,
             "discount_split": discount_split if items else None,
             "dish": args.get("dish"),
+            "place_id": place_id,
+            "place_guess": place_guess,
             "initiator": args.get("initiator"),
             "note": args.get("note"),
             "per_head_preview": preview["per_head"],

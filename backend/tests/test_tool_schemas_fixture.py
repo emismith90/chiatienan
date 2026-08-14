@@ -17,9 +17,9 @@ def test_committed_schema_fixture_matches_the_live_tools():
     assert fixture == live_schemas(), "regenerate with: python -m bench.dump_schemas"
 
 
-def test_the_fixture_covers_all_fourteen_tools():
+def test_the_fixture_covers_every_tool():
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    assert len(fixture) == 14
+    assert len(fixture) == 16
     assert all(s["type"] == "object" for s in fixture.values())
 
 

@@ -24,6 +24,9 @@ DRAFT_KINDS = ("expense_draft", "payment_draft")
 _EDITABLE = {
     "payer_member_id", "member_participants", "guests", "bill_total",
     "adjustments", "items", "discount_split", "dish", "initiator", "note",
+    # The place guess rides the card the user already confirms (D3), so a wrong
+    # one is a single tap to fix rather than a separate approval flow.
+    "place_id",
 }
 
 
@@ -217,6 +220,7 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
         adjustments=_adjustments_map(att),
         guests=[str(g) for g in att.get("guests") or []],
         dish=att.get("dish"),
+        place_id=att.get("place_id"),
         initiator=att.get("initiator"),
         note=att.get("note"),
         occurred_on=date.fromisoformat(att["occurred_on"]) if att.get("occurred_on") else None,
