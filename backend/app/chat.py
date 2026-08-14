@@ -390,6 +390,17 @@ def _settle_blocked_body(attachments: dict) -> str:
     return "\n".join(lines)
 
 
+#: What the room sees instead of a forged confirmation. It has to say the thing
+#: the forgery hid — that the ledger is untouched — because the failure is
+#: invisible otherwise: nothing was written, so no balance moves and no card
+#: appears, and the next person to read the thread has only the bot's word.
+_FABRICATED_COMMIT_BODY = (
+    "⚠️ Mình **chưa ghi** bữa này vào sổ — chưa có gì thay đổi cả.\n"
+    "Nhắn lại giúp mình nhé (kèm ảnh hoá đơn nếu có, và nói rõ ai trả / chia cho ai) — "
+    "chỉ khi thẻ nháp hiện ra và có người bấm **Xác nhận** thì mới thật sự vào sổ."
+)
+
+
 def _meal_body(attachments: dict) -> str:
     """Deterministic Vietnamese summary of a committed meal, straight from the
     tool-result dict — never from LLM prose (design D3, money-safety)."""
@@ -564,28 +575,49 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
                 # The one path where money reaches the room as LLM prose. Report
                 # it (see app.moneyguard); enforcing comes after the log is quiet.
                 if result.final_text:
-                    # The history counts as the user having said it. A number the
-                    # room stated two messages ago and the bot repeats back
-                    # ("bạn nói tổng 324k") is not invented money, and flagging it
-                    # buries the alerts that matter — the benchmark's `p102`/`p104`
-                    # replies were reported as unbacked for quoting a total from the
-                    # conversation they were handed.
-                    stray = moneyguard.unbacked_amounts(
-                        body, f"{text}\n{history or ''}", result.tools)
-                    if stray:
-                        # images=N matters for triage. Replaying four days of
-                        # production through this: of the alerts that survive a
-                        # tool-output allow-set, all but one were prices the model
-                        # read off a bill photo — correct, but unattributable by
-                        # construction because image content is not text. The one
-                        # that was not (a split it computed with bash) is the
-                        # class worth enforcing on, so the two must be separable
-                        # before this can ever block.
-                        log.warning(
-                            "unbacked money in reply: room=%s turn=%s amounts=%s images=%d tools=%s",
-                            room_id, result.turn_id, stray, len(images or []),
-                            [inv.name for inv in result.tools],
+                    # …except for the one class that is wrong however the numbers
+                    # were obtained: prose that says the ledger was written when
+                    # no tool wrote it. 2026-08-14, room 3 — a bill photo and
+                    # "log this for all" came back in 6.1s with `tools=0` as a
+                    # word-perfect forgery of `_meal_body`: "Đã ghi #14 — Texas
+                    # Chicken: Bạch Mai trả tổng 793,760đ • …". There was no meal
+                    # #14, "Bạch Mai" is the branch on the receipt rather than
+                    # anyone in the room, and the split listed six of seven
+                    # members. Nothing distinguished it from a real confirmation,
+                    # so the room believed it, and asking again just reproduced
+                    # it. Reporting is not enough for this one: the message must
+                    # not be posted.
+                    forged = moneyguard.fabricated_commit(body, f"{text}\n{history or ''}",
+                                                          result.tools)
+                    if forged:
+                        log.error(
+                            "suppressed fabricated commit: room=%s turn=%s amounts=%s "
+                            "images=%d tools=%s text=%r",
+                            room_id, result.turn_id, forged, len(images or []),
+                            [inv.name for inv in result.tools], body[:400],
                         )
+                        body = _FABRICATED_COMMIT_BODY
+                    else:
+                        # The history counts as the user having said it. A number the
+                        # room stated two messages ago and the bot repeats back
+                        # ("bạn nói tổng 324k") is not invented money, and flagging it
+                        # buries the alerts that matter — the benchmark's `p102`/`p104`
+                        # replies were reported as unbacked for quoting a total from the
+                        # conversation they were handed.
+                        stray = moneyguard.unbacked_amounts(
+                            body, f"{text}\n{history or ''}", result.tools)
+                        if stray:
+                            # images=N matters for triage. Replaying four days of
+                            # production through this: of the alerts that survive a
+                            # tool-output allow-set, all but one were prices the model
+                            # read off a bill photo — correct, but unattributable by
+                            # construction because image content is not text. Those
+                            # stay a warning; the forgeries above are what blocks.
+                            log.warning(
+                                "unbacked money in reply: room=%s turn=%s amounts=%s images=%d tools=%s",
+                                room_id, result.turn_id, stray, len(images or []),
+                                [inv.name for inv in result.tools],
+                            )
 
             with db.session() as s:
                 new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")

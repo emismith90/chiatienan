@@ -85,6 +85,30 @@ function InviteButton({ roomId }: { roomId: number }) {
   );
 }
 
+/** One member's initial, in the accent disc used by both the chip and the
+ * collapsed summary's stack. */
+function MemberInitial({ member, className = "" }: { member: Member; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent-primary)] text-[10px] font-medium text-white ${className}`}
+    >
+      {(member.nickname || member.display_name || "?").charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+/** The roster row under the header.
+ *
+ * On a phone this was the single biggest fixed cost on screen: seven members
+ * wrap to two rows of pills, and together with the suggestion chips they left a
+ * 900px-tall viewport showing barely two messages. So below `lg` it collapses to
+ * one line — an avatar stack and a count — and the full grid is one tap away.
+ *
+ * The breakpoint is CSS (`hidden lg:flex`), not a media-query hook: the chips
+ * must be in the server-rendered HTML for a desktop first paint, and a
+ * JS-measured breakpoint would flip them in after hydration.
+ */
 function MemberChips({
   members,
   selfId,
@@ -94,34 +118,63 @@ function MemberChips({
   selfId: number | null;
   onSelect: (m: Member) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (members.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {members.map((m) => {
-        const isSelf = m.id === selfId;
-        return (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => onSelect(m)}
-            title={`${m.display_name} — tap for info`}
-            className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
-              isSelf
-                ? "border-[var(--accent-primary)] text-[var(--text-primary)] ring-1 ring-[var(--accent-primary)]"
-                : "border-[var(--border)] text-[var(--text-secondary)]"
-            } bg-[var(--bg-base)]`}
-          >
-            <span
-              aria-hidden
-              className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent-primary)] text-[10px] font-medium text-white"
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls="member-chips"
+        className="inline-flex min-h-8 w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-base)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] lg:hidden"
+      >
+        {/* Overlapping discs, capped at four so the row cannot grow with the
+            group — the fifth member onwards is represented by the count. The
+            overlap is a quarter of the disc: tighter and the initials stop
+            being initials and become a smudge. */}
+        <span aria-hidden className="flex items-center">
+          {members.slice(0, 4).map((m, i) => (
+            <MemberInitial
+              key={m.id}
+              member={m}
+              className={i > 0 ? "-ml-1 ring-1 ring-[var(--bg-base)]" : ""}
+            />
+          ))}
+        </span>
+        {members.length} {members.length === 1 ? "member" : "members"}
+        <span aria-hidden className={`transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}>
+          ▾
+        </span>
+      </button>
+      <div
+        id="member-chips"
+        className={`flex-wrap items-center gap-1.5 ${expanded ? "flex" : "hidden lg:flex"}`}
+      >
+        {/* No member is marked out of "everyone" here, because none is: the
+            roster is exactly who a group split covers. `default_participant`
+            reaches the random draw only, and the draw states its own pool. */}
+        {members.map((m) => {
+          const isSelf = m.id === selfId;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onSelect(m)}
+              title={`${m.display_name} — tap for info`}
+              className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 hover:bg-[var(--bg-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)] ${
+                isSelf
+                  ? "border-[var(--accent-primary)] text-[var(--text-primary)] ring-1 ring-[var(--accent-primary)]"
+                  : "border-[var(--border)] text-[var(--text-secondary)]"
+              } bg-[var(--bg-base)]`}
             >
-              {(m.nickname || m.display_name || "?").charAt(0).toUpperCase()}
-            </span>
-            {m.nickname || m.display_name}
-            {isSelf && <span className="text-[10px] font-medium text-[var(--accent-text)]">You</span>}
-          </button>
-        );
-      })}
+              <MemberInitial member={m} />
+              {m.nickname || m.display_name}
+              {isSelf && <span className="text-[10px] font-medium text-[var(--accent-text)]">You</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -330,7 +383,11 @@ export function ProfileDialog({
               }}
               className="h-4 w-4"
             />
-            Include me by default in group splits &amp; random picks
+            {/* Splits deliberately no longer read this flag: "everyone" means the
+                roster, and a checkbox nobody else can see must not be what
+                decides who owes money. Leaving someone out of a meal is said out
+                loud, per meal, on the draft card. */}
+            Include me in random picks
           </label>
         </div>
 

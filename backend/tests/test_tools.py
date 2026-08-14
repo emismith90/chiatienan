@@ -263,8 +263,9 @@ def test_update_member_tool_sets_default_participant_flag(db):
 
     out = tools["update_member"].execute({"target": "m2", "default_participant": False})
     assert out["ok"] is True and out["default_participant"] is False
-    # excluded from the "whole group" find_members sweep, still resolvable by name
-    assert {m["id"] for m in tools["find_members"].execute({"all_active": True})["matched"]} == {a}
+    # The flag reaches the random draw only: "everyone" still means everyone, so
+    # a split can never quietly bill fewer people than the room can see.
+    assert {m["id"] for m in tools["find_members"].execute({"all_active": True})["matched"]} == {a, b}
     assert {m["id"] for m in tools["find_members"].execute({"names": ["m2"]})["matched"]} == {b}
 
 

@@ -27,9 +27,9 @@ def list_members(
     balances/settlements can still reference a since-removed member).
 
     ``default_only=True`` further restricts to ``default_participant=True``
-    members — the ones swept into a "whole group" chia tien split or rot tra
-    draw without being named explicitly (design: exclude irregular members by
-    default; they're still resolvable by name).
+    members — the pool a ``pick_random`` draw runs over. It used to gate the
+    "whole group" split sweep too; see :func:`resolve` for why it no longer
+    does.
     """
     stmt = select(Member).where(Member.room_id == room_id)
     if not include_inactive:
@@ -178,10 +178,18 @@ def resolve(
     account holder**, tone-insensitively and by given name — see
     :class:`_NameIndex`. Returns ``{"matched": [{"id", "display_name"}],
     "unresolved": [<raw strings>], "ambiguous": [{"name", "candidates"}]}``.
-    ``all_active=True`` returns every *default-participant* room member so the
-    LLM never has to enumerate the roster from memory (design §5) — members
-    flagged out of default group activities are skipped here but still match
-    by an explicit name/mention below.
+    ``all_active=True`` returns every active room member so the LLM never has to
+    enumerate the roster from memory (design §5) — "cả nhóm" / "everyone" means
+    the roster the room can see, and nothing else.
+
+    It used to mean *default-participant* members only, which made the sweep a
+    silent subset of the roster: ``GET /api/rooms/{id}/members`` lists everyone,
+    so a group of seven with two flagged out showed seven chips and split six
+    ways, with nothing in the tool result naming the missing one. Room 3 asked
+    "everyone, should be 7". A flag whose effect is invisible at the point of
+    use cannot be the thing that decides who owes money — excluding someone is
+    now something the room says out loud, per meal. ``default_participant``
+    still governs ``pick_random``, where the pool is stated in the result.
 
     A name that could be two people comes back under ``ambiguous`` rather than
     being guessed: picking one silently bills the wrong person, and the caller
@@ -194,7 +202,7 @@ def resolve(
     ambiguous: list[dict] = []
 
     if all_active:
-        for m in list_members(session, room_id, default_only=True):
+        for m in list_members(session, room_id):
             matched[m.id] = m
 
     def take(raw: str) -> None:

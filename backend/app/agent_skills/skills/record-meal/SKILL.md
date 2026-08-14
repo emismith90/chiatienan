@@ -5,6 +5,12 @@ description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò
 # Ghi một bữa ăn
 
 1. `find_members` để xác định người trả + người tham gia (`all_active:true` cho 'cả nhóm').
+   - `all_active:true` trả về **TOÀN BỘ** thành viên đang hoạt động của phòng, không lọc ai.
+     Dùng cho cả tiếng Việt ('cả nhóm', 'cả team', 'mọi người') lẫn tiếng Anh
+     ('everyone', 'all', 'for all', 'the whole group').
+   - Muốn bỏ ai ra khỏi bữa này thì bỏ id của họ khỏi `participants` — chỉ khi người dùng
+     NÓI RÕ. Không có ai bị loại "mặc định": số người trong `participants` phải khớp với
+     những gì người dùng thấy trên thanh thành viên.
    - Truyền tên Y NGUYÊN như người dùng viết ("anh Hưng", "chị Nhím"). Công cụ tự bỏ
      "anh/chị/em", tự bỏ dấu, và tra cả tên thật lẫn **tên chủ tài khoản ngân hàng** —
      nhiều người trong nhóm chỉ có tên thật ở đó ("Hưng" = chủ TK "Le Hoang Hung").
@@ -79,7 +85,7 @@ số tiền từng người phải trả, và không ai phát hiện được v�
 - Ảnh hoá đơn trong ngữ cảnh lượt này (kể cả người dùng dán ở tin nhắn ngay trước rồi mới
   `@bot`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
 - Đọc được ảnh KHÔNG thay thế bước xác định người ăn: vẫn phải `find_members`
-  (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người") rồi mới
+  (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người"/"everyone"/"all") rồi mới
   `propose_meal`. Bỏ bước đó thì `participants` chỉ còn mình người nhắn — cả cái bill
   ghi nợ cho một người, và con số nhìn vẫn "đúng" nên không ai thấy sai.
 - Đọc từ ảnh: tổng thực trả → `total`; giá từng dòng → `items` (nhớ nhân số lượng, và giá

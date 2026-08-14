@@ -53,6 +53,13 @@ html,body{background:var(--bg-base);color:var(--text-primary);
    in a bot reply — must own an `overflow-x:auto` box of its own. */
 html,body{overflow-x:clip;max-width:100%;}
 
+/* A sideways-scrolling strip that owns its overflow (see above) but should not
+   show a bar for it — the suggestion chips above the composer, where a scrollbar
+   would eat as much height as the row it serves. Touch platforms draw no
+   persistent bar anyway; this only equalises the desktop rendering. */
+.no-scrollbar{scrollbar-width:none;-ms-overflow-style:none;}
+.no-scrollbar::-webkit-scrollbar{display:none;}
+
 /* Safe-area insets for the installed PWA (viewport-fit=cover) so fixed top/
    bottom chrome clears the notch and home indicator. No-ops on devices with
    zero insets. */
