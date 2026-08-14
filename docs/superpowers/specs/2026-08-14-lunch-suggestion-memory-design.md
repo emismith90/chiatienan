@@ -76,6 +76,17 @@ identity to attach any of this to and no way to count anything.
 - **D12 — The seed pass is part of the design loop.** D10, D11, `price_hint` and `closes@`
   all came from reading 41 real entries, not from up-front design. Anything added here
   must trace to an entry that needed it.
+- **D13 — `address` disambiguates, it does not locate.** Three different "Nem Nướng Nha
+  Trang" listings sit within walking distance; the room's notes describe exactly one.
+  The address is what tells them apart, and it is the only durable way to spot that two
+  listings are one kitchen. It is not geocoded and does not compute distance — that is
+  `walk_minutes`, hand-set.
+- **D14 — Untried places are tagged, not hidden.** A place seeded from a directory
+  listing has no history, no notes, and nobody's word for it. Tagged `chưa-thử` and
+  demoted in ranking unless the user asks for something new — otherwise 30 unknown
+  places drown out the handful the room actually likes. This tag is what makes a
+  directory import safe, and it is why Google Places discovery stays deferred: the
+  import already covers breadth.
 
 ## Design
 
@@ -95,6 +106,7 @@ class Place(Base):
     aliases: list         # JSON, default list
     tags: list            # JSON, default list — ["cơm", "gà"], free vocabulary
     delivery: list        # JSON, default list — ["shopeefood", "grab"]
+    address: str|None     # String(200) — see D13
     walk_minutes: int|None
     phone: str|None       # String(20) — see D10
     price_hint: int|None  # VND per head, seed-supplied — see D8
@@ -335,9 +347,17 @@ Only `name` is required; `slug` derives from it and everything else defaults emp
 **Aliases are what make casual chat resolve** — every spelling the room actually types,
 including tone-free forms (`thinh lo`), since people drop diacritics constantly.
 
-Seeded files live in `backend/seeds/`: `places-local.json` (41 walk-to places) and
-`observations-local.md`. ShopeeFood/Grab places are a separate seed file with `delivery`
-populated.
+Seeded files live in `backend/seeds/`:
+
+| File | Contents |
+|---|---|
+| `places-local.json` | 41 places the room actually eats at, with prices, phones, gates |
+| `observations-local.md` | 42 standing facts keyed to those places and members |
+| `nearby-listing.csv` | the raw 48-row directory listing, kept for re-reconciliation |
+| `places-nearby.json` | 30 listed places the room has never mentioned, all `chưa-thử` (D14) |
+
+The loader takes multiple files; later files never overwrite an earlier place's
+curated fields.
 
 Observations seed the §4 format directly and are copied to
 `{DATA_DIR}/rooms/{room_id}/observations.md`. Nearly all seeded lines are `always` with a

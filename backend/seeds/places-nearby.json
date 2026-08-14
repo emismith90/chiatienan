@@ -1,0 +1,314 @@
+[
+  {
+    "name": "Mr Mlem CS1 - Chuỗi Buffet Nướng Lẩu",
+    "slug": "mr-mlem-cs1-chuoi-buffet-nuong-lau",
+    "address": "34 Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "buffet nướng",
+      "lẩu",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Tịnh Tâm Quán - Cơm Chay",
+    "slug": "tinh-tam-quan-com-chay",
+    "address": "43 Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "cơm chay",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Taiwan Food - Shop Online",
+    "slug": "taiwan-food-shop-online",
+    "address": "135B Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "đồ ăn đài loan",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Phở Ngọc - Trần Hữu Tước",
+    "slug": "pho-ngoc-tran-huu-tuoc",
+    "address": "10 Ngõ 135B Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "phở",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Bún Riêu Ngon",
+    "slug": "bun-rieu-ngon",
+    "address": "115B1 Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "bún riêu",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Bún riêu Hoàn Hói",
+    "slug": "bun-rieu-hoan-hoi",
+    "address": "109 Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "bún riêu",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Quan koy",
+    "slug": "quan-koy",
+    "address": "111B1 Trần Hữu Tước",
+    "aliases": [],
+    "tags": [
+      "món việt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Thái Hạnh - Huy Mai - Quán Ăn Vặt",
+    "slug": "thai-hanh-huy-mai-quan-an-vat",
+    "address": "3 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Cạp - Seafood",
+    "slug": "cap-seafood",
+    "address": "101B D2 Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "hải sản",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Quán Chị Nui - Ăn Vặt",
+    "slug": "quan-chi-nui-an-vat",
+    "address": "Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "The Canteen - Food & Drinks",
+    "slug": "the-canteen-food-drinks",
+    "address": "102 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "món việt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Chú Long Kim Liên - Cơm Việt Hàn",
+    "slug": "chu-long-kim-lien-com-viet-han",
+    "address": "112D3 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "cơm việt",
+      "hàn",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Lương Tâm Quán",
+    "slug": "luong-tam-quan",
+    "address": "112 D3 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Korean Kitchen - Bếp Hàn Online",
+    "slug": "korean-kitchen-bep-han-online",
+    "address": "102 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "hàn quốc",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Hẻm Trộn",
+    "slug": "hem-tron",
+    "address": "111 D3 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "món trộn",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Bếp Nhà 1986",
+    "slug": "bep-nha-1986",
+    "address": "106D1 Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "món việt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Thực Thần - Ẩm Thực Trung Hoa",
+    "slug": "thuc-than-am-thuc-trung-hoa",
+    "address": "108 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "trung hoa",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Ăn Vặt Hàn Quốc",
+    "slug": "an-vat-han-quoc",
+    "address": "3 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt hàn quốc",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Quán Ăn Vặt Ngon Hà Nội",
+    "slug": "quan-an-vat-ngon-ha-noi",
+    "address": "1 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "cơm",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Quán Chị Nui",
+    "slug": "quan-chi-nui",
+    "address": "10 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Brohotdog - Hotdog & Drink",
+    "slug": "brohotdog-hotdog-drink",
+    "address": "103 D2 Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "hotdog",
+      "ăn vặt",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Bánh Mì Cô Hương",
+    "slug": "banh-mi-co-huong",
+    "address": "7A Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "bánh mì",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Xiăo Chì - Ăn Vặt Trung Hoa",
+    "slug": "xiao-chi-an-vat-trung-hoa",
+    "address": "109 Ngõ 4C Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ăn vặt trung hoa",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Lẩu & Nướng Ăndeee",
+    "slug": "lau-nuong-andeee",
+    "address": "113D1 Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "lẩu",
+      "nướng",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Ốc Trang Hải Phòng",
+    "slug": "oc-trang-hai-phong",
+    "address": "114 D1 Đặng Văn Ngữ",
+    "aliases": [],
+    "tags": [
+      "ốc",
+      "hải sản",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Chảo Cười - Cơm Trên Chảo Nóng",
+    "slug": "chao-cuoi-com-tren-chao-nong",
+    "address": "103 Nam Đồng",
+    "aliases": [],
+    "tags": [
+      "cơm",
+      "bánh mì chảo",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Cơm Ngon Yến Vy",
+    "slug": "com-ngon-yen-vy",
+    "address": "174 Ngõ Xã Đàn 2",
+    "aliases": [],
+    "tags": [
+      "cơm",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "S Kitchen",
+    "slug": "s-kitchen",
+    "address": "162 Ngõ Xã Đàn 2",
+    "aliases": [],
+    "tags": [
+      "cơm",
+      "mỳ",
+      "bún",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Linh Nga - Cơm, Bún Chả, Bánh Cuốn",
+    "slug": "linh-nga-com-bun-cha-banh-cuon",
+    "address": "176 Ngõ Xã Đàn 2",
+    "aliases": [],
+    "tags": [
+      "cơm",
+      "bún",
+      "bánh cuốn",
+      "chưa-thử"
+    ]
+  },
+  {
+    "name": "Nhà hàng Car Park",
+    "slug": "nha-hang-car-park",
+    "address": "156 Ngõ Xã Đàn 2",
+    "aliases": [],
+    "tags": [
+      "món việt",
+      "chưa-thử"
+    ]
+  }
+]
