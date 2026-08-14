@@ -20,9 +20,12 @@ from dataclasses import dataclass, field
 from datetime import date
 
 
+from sqlalchemy import select
+
 from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
+from app.models import Place
 from app.money import (
     MoneyError,
     itemized_adjustments,
@@ -231,6 +234,38 @@ _PERIOD_SCHEMA = {
         "from": {"type": "string", "description": "ISO date for keyword=explicit."},
         "to": {"type": "string", "description": "ISO date for keyword=explicit."},
     },
+}
+
+_FIND_PLACES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "names": {
+            "type": "array", "items": {"type": "string"},
+            "description": "Place names as the user wrote them ('thịnh lơ', 'quán bé bự').",
+        },
+        "all": {"type": "boolean", "description": "Return every place in the room."},
+    },
+}
+
+_ADD_PLACE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "aliases": {
+            "type": "array", "items": {"type": "string"},
+            "description": "Other spellings the group uses, including tone-free forms.",
+        },
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "delivery": {
+            "type": "array", "items": {"type": "string"},
+            "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
+        },
+        "address": {"type": "string"},
+        "phone": {"type": "string"},
+        "walkable": {"type": "boolean",
+                     "description": "Can the group walk there from the office?"},
+    },
+    "required": ["name"],
 }
 
 _ADD_MEMBER_SCHEMA = {
@@ -619,6 +654,55 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
                 ctx.unknown_names.pop(raw, None)
             return {"ok": True, "member_id": m.id, "nickname": m.nickname}
 
+    def find_places(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        from app import places as places_mod
+
+        with db.session() as s:
+            if args.get("all"):
+                rows = places_mod.list_places(s, ctx.room_id)
+                return {"ok": True, "places": [
+                    {"id": p.id, "name": p.name, "slug": p.slug, "tags": p.tags,
+                     "walkable": p.walkable} for p in rows
+                ]}
+            res = places_mod.resolve(
+                s, ctx.room_id, names=[str(n) for n in args.get("names") or []]
+            )
+        return {"ok": True, **res}
+
+    def add_place(args, _tool_ctx=None) -> dict:
+        """Create a restaurant row. Writes immediately, like ``add_member``.
+
+        A place is inert until someone eats there (design D7) — nothing about it
+        asserts anything, so it needs no confirm card. Observations do.
+        """
+        args = args or {}
+        from app import places as places_mod
+
+        name = (args.get("name") or "").strip()
+        if not name:
+            return _err("Missing place name.")
+        slug = places_mod.slugify(name)
+        with db.session() as s:
+            existing = s.scalars(
+                select(Place).where(Place.room_id == ctx.room_id, Place.slug == slug)
+            ).first()
+            if existing is not None:
+                return {"ok": True, "place_id": existing.id, "slug": existing.slug,
+                        "name": existing.name, "already_existed": True}
+            p = Place(
+                room_id=ctx.room_id, slug=slug, name=name,
+                aliases=[str(a) for a in args.get("aliases") or []],
+                tags=[str(t) for t in args.get("tags") or []],
+                delivery=[str(d) for d in args.get("delivery") or []],
+                address=args.get("address"), phone=args.get("phone"),
+                walkable=bool(args.get("walkable", True)),
+            )
+            s.add(p)
+            s.flush()
+            return {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name,
+                    "already_existed": False}
+
     def update_member(args, _tool_ctx=None) -> dict:
         args = args or {}
         target = args.get("target")
@@ -961,6 +1045,24 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
             execute=delete_member,
             description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
             input_schema=_DELETE_MEMBER_SCHEMA,
+        ),
+        "find_places": CustomTool(
+            execute=find_places,
+            description=(
+                "Look up restaurants the group knows by name ('thịnh lơ', 'quán bé bự'), "
+                "or list them all with all:true. Returns places, never people — use "
+                "`find_members` for people."
+            ),
+            input_schema=_FIND_PLACES_SCHEMA,
+        ),
+        "add_place": CustomTool(
+            execute=add_place,
+            description=(
+                "Add a restaurant the group has started going to. Writes immediately "
+                "(a place row is inert until someone eats there). Seed `aliases` with "
+                "every spelling the group actually types, including tone-free ones."
+            ),
+            input_schema=_ADD_PLACE_SCHEMA,
         ),
         "propose_payment": CustomTool(
             execute=propose_payment,
