@@ -38,7 +38,7 @@ name: Deploy
 #                                volume: it holds SQLite and every room's
 #                                long-term memory.
 #     PI_MAX_TOOLS             – default "40"
-#     PI_MAX_SECONDS           – default "120"
+#     PI_MAX_SECONDS           – default "600"
 #     (no base-URL variable: the OpenRouter URL is a constant in the sidecar)
 #     BOT_HANDLE               – default "bot"
 #     DATABASE_URL             – default "sqlite:////data/chiatienan.db" (keep it
@@ -168,7 +168,7 @@ jobs:
           PI_PROVIDER: ${{ vars.PI_PROVIDER || 'openrouter' }}
           PI_THINKING: ${{ vars.PI_THINKING || 'medium' }}
           PI_MAX_TOOLS: ${{ vars.PI_MAX_TOOLS || '40' }}
-          PI_MAX_SECONDS: ${{ vars.PI_MAX_SECONDS || '120' }}
+          PI_MAX_SECONDS: ${{ vars.PI_MAX_SECONDS || '600' }}
           DATA_DIR: ${{ vars.DATA_DIR || '/data' }}
           DATA_DIR_FALLBACK: /data
           BOT_HANDLE: ${{ vars.BOT_HANDLE || 'bot' }}

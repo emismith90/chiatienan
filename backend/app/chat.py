@@ -393,6 +393,37 @@ def _settle_blocked_body(attachments: dict) -> str:
     return "\n".join(lines)
 
 
+def _empty_turn_body(result) -> str:
+    """What to say when the model produced no text.
+
+    Three different things end up here and they are not the same failure, so they
+    must not read the same:
+
+    ``error``   the run itself broke — the message is already ours, not the
+                vendor's (see ``turn.js:formatError``).
+    ``capped``  the turn was cut at ``PI_MAX_SECONDS``/``PI_MAX_TOOLS`` before the
+                model wrote anything. A cap is deliberately not an error (it
+                usually keeps a partial answer), but with nothing accumulated it
+                arrives here looking exactly like a dead turn. Production,
+                2026-08-14: "ăn gì ngon ngon đi mày" was cut at 120.6s having
+                called ``suggest_lunch`` and written nothing, and the room was told
+                the same "(no response)" it had been told for a genuinely empty
+                completion — so nobody could tell that simply asking again would
+                work, which it did (79.5s, 602 characters).
+    neither     the provider returned an empty completion. Rare, and worth saying
+                plainly rather than dressing up as a timeout.
+
+    All three say "nothing was recorded", because that is the question a room
+    actually has when the bot goes quiet mid-conversation about money.
+    """
+    if result.error:
+        return f"⚠️ {result.error}"
+    if result.capped:
+        return ("⏱️ That took too long and I ran out of time before answering — "
+                "nothing was recorded. Ask me again.")
+    return ("⚠️ I came back with nothing — nothing was recorded. Ask me again.")
+
+
 def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
     """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
 
@@ -588,7 +619,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
             elif attachments and attachments.get("type") == "random_pick":
                 body = _random_pick_body(attachments)
             else:
-                body = result.final_text or (result.error and f"⚠️ {result.error}") or "(no response)"
+                body = result.final_text or _empty_turn_body(result)
                 # The one path where money reaches the room as LLM prose. Report
                 # it (see app.moneyguard); enforcing comes after the log is quiet.
                 if result.final_text:
