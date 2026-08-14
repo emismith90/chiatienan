@@ -87,14 +87,28 @@ identity to attach any of this to and no way to count anything.
   places drown out the handful the room actually likes. This tag is what makes a
   directory import safe, and it is why Google Places discovery stays deferred: the
   import already covers breadth.
-- **D15 — Ambiguity breaks toward the place the room knows.** When a lookup returns
-  several candidates and exactly one is not `chưa-thử`, take it instead of asking. The
-  import created this case directly: "nem nướng" now matches four places, three of them
-  listings nobody has been to. Without the tie-break a directory import makes the room's
-  own daily haunt un-sayable — every mention becomes a disambiguation prompt, and the
-  feature is worse than before the import. Two or more *known* candidates still return
-  `ambiguous` and still ask; this only discards places that exist solely because a
-  directory listed them.
+- **D15 — Ambiguity breaks toward the place the room actually eats at.** With 100 seeded
+  places, 17 plain-dish queries are ambiguous: "bánh cuốn" matches 6, "nem nướng" 5,
+  "bún đậu" 3. Asking every time is worse than not importing at all. Candidates are
+  ordered by (1) not `chưa-thử`, (2) meal count from §3, and the top one wins outright
+  if it beats the runner-up; a genuine tie still returns `ambiguous` and still asks.
+
+  This is what makes the generic aliases correct rather than a land-grab. `"bún đậu"` on
+  the Trần Hữu Tước entry encodes *"when we say bún đậu we mean that one"* — true of this
+  room, and provable from its ledger.
+
+  **The tolerance differs by caller, deliberately.** Suggestion and observation lookup
+  take the top candidate: guessing wrong costs one bad suggestion. Meal **linking** (§5)
+  does not — it keeps the conservative rule, because a wrong link silently moves money
+  history onto the wrong restaurant and no one reviews a backfill.
+- **D16 — Going out and ordering in are different questions.** 24 of the 100 places are
+  delivery-only, several kilometres away (Mai Hắc Đế, Lương Đình Của, Hàng Bột). Offering
+  them to a group asking where to *walk* is a wrong answer, not a weak one. The rule is
+  deterministic and needs no guessing: **a place with a non-empty `delivery` and no
+  `walk_minutes` is excluded from walk-out suggestions**, and included only when the
+  message signals ordering in ("gọi về", "đặt ship", "order"). Setting `walk_minutes` on
+  one — My Healthy Corner and Mokchang are on the office's own streets — moves it into
+  both pools with no other edit.
 
 ## Design
 
@@ -362,7 +376,8 @@ Seeded files live in `backend/seeds/`:
 | `places-local.json` | 41 places the room actually eats at, with prices, phones, gates |
 | `observations-local.md` | 42 standing facts keyed to those places and members |
 | `nearby-listing.csv` | the raw 48-row directory listing, kept for re-reconciliation |
-| `places-nearby.json` | 30 listed places the room has never mentioned, all `chưa-thử` (D14) |
+| `places-nearby.json` | 35 listed places the room has never mentioned, all `chưa-thử` (D14) |
+| `places-online.json` | 24 delivery-only places (ShopeeFood/Grab), `walk_minutes` unset |
 
 The loader takes multiple files; later files never overwrite an earlier place's
 curated fields.
