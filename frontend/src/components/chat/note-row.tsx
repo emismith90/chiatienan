@@ -5,7 +5,7 @@ import { Chip, shortDate } from "./knowledge-ui";
 /** One remembered fact — a standing rule or a dated observation.
  *
  * The gate is the whole reason this is a component and not a line of text:
- * `order-by@11:30` is a schema, and a human should only ever meet it as "Đặt trước
+ * `order-by@11:30` is a schema, and a human should only ever meet it as "Order by
  * 11:30". `stale` marks a line that is still in the file but past the window the
  * agent reads — shown rather than hidden, because a note nobody can see is a note
  * nobody can clean up.
@@ -28,11 +28,11 @@ export function NoteRow({
       <div className="mt-1 flex flex-wrap items-center gap-1">
         {note.gate_label && <Chip tone="accent">{note.gate_label}</Chip>}
         {note.standing ? (
-          <Chip>luôn đúng</Chip>
+          <Chip>always</Chip>
         ) : (
           <Chip>{shortDate(note.when)}</Chip>
         )}
-        {note.stale && <Chip>đã cũ, bot không đọc nữa</Chip>}
+        {note.stale && <Chip>old — the bot stopped reading this</Chip>}
       </div>
     </button>
   );

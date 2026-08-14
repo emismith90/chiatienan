@@ -29,7 +29,7 @@ describe("LotterySpinner", () => {
   it("announces the draw and cycles through the roster names", () => {
     vi.useFakeTimers();
     render(<LotterySpinner names={["An", "Bình", "Chi"]} />);
-    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Đang bốc thăm ngẫu nhiên…");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-label", "Drawing at random…");
     // A name from the roster is shown, and it advances on a timer.
     expect(screen.getByText("An")).toBeInTheDocument();
     act(() => {

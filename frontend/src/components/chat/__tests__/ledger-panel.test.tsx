@@ -38,7 +38,7 @@ describe("LedgerPanel", () => {
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText("You owe")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Group/ }));
-    expect(screen.getByText("Ai nợ ai")).toBeInTheDocument();
+    expect(screen.getByText("Who owes who")).toBeInTheDocument();
     expect(screen.getByText("Giang")).toBeInTheDocument();
     expect(screen.getByText(/bun bo/)).toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe("LedgerPanel", () => {
 
   it("falls back to the group view when there is no signed-in member", async () => {
     render(<LedgerPanel roomId={3} selfId={null} version={0} />);
-    await waitFor(() => expect(screen.getByText("Ai nợ ai")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Who owes who")).toBeInTheDocument());
     // No toggle to offer: "mine" has no meaning without a member id.
     expect(screen.queryByRole("button", { name: /Mine/ })).not.toBeInTheDocument();
   });
@@ -68,6 +68,6 @@ describe("LedgerPanel", () => {
     } as any);
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() =>
-      expect(screen.getByText(/không nợ ai, không ai nợ bạn/)).toBeInTheDocument());
+      expect(screen.getByText(/You owe nobody/)).toBeInTheDocument());
   });
 });

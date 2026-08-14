@@ -53,7 +53,7 @@ export function LotterySpinner({ names }: { names: string[] }) {
   return (
     <div
       role="status"
-      aria-label="Đang bốc thăm ngẫu nhiên…"
+      aria-label="Drawing at random…"
       className="mt-4 flex justify-start"
     >
       <div className="w-full max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center shadow-sm">
@@ -66,7 +66,7 @@ export function LotterySpinner({ names }: { names: string[] }) {
         >
           {current}
         </div>
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">Đang bốc thăm…</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">Drawing…</div>
       </div>
     </div>
   );

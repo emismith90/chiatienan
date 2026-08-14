@@ -155,7 +155,7 @@ def test_settlement_body_calls_itself_a_running_total():
         "period": {"from": None, "to": "2026-07-27"},
         "transfers": [{"from_name": "Kun", "to_name": "Emi", "amount": 54500, "note": None}],
     })
-    assert body.startswith("Tạm tính đến 2026-07-27:")
+    assert body.startswith("Provisional through 2026-07-27:")
     assert "Chốt" not in body
 
 
@@ -165,7 +165,7 @@ def test_settlement_body_names_both_ends_of_a_bounded_period():
         "transfers": [],
         "message": "Mọi người đã cân bằng — không ai nợ ai trong kỳ này.",
     })
-    assert body.startswith("Tạm tính 2026-07-20 → 2026-07-26:")
+    assert body.startswith("Provisional 2026-07-20 → 2026-07-26:")
     assert "cân bằng" in body
 
 
@@ -178,7 +178,7 @@ def test_settlement_body_shows_the_transfer_memo():
                        "amount": 107000, "note": "Giang Hoang: T5 bun cha rua xe"}],
     })
     assert "107,000đ" in body
-    assert "ND: Giang Hoang: T5 bun cha rua xe" in body
+    assert "ref: Giang Hoang: T5 bun cha rua xe" in body
 
 
 def test_settlement_body_without_a_memo_is_unchanged():
@@ -197,7 +197,7 @@ def test_settle_blocked_body_says_how_to_clear_it():
         "pending": [{"draft_id": 101, "payer_name": "Emi", "bill_total": 324000,
                      "participant_count": 6}],
     })
-    assert "Xác nhận" in body and "Huỷ" in body
+    assert "Confirm" in body and "Cancel" in body
     assert "huỷ đề xuất" in body
 
 
@@ -634,7 +634,7 @@ async def test_a_fabricated_commit_never_reaches_the_room(monkeypatch, db, caplo
 
     assert "Đã ghi #14" not in msg.body
     assert "793,760" not in msg.body and "132,293" not in msg.body
-    assert "chưa ghi" in msg.body.lower()
+    assert "not recorded" in msg.body.lower()
     # And it has to be findable afterwards — the forged text only survives in the log.
     assert "suppressed fabricated commit" in caplog.text
     assert "t-forge1" in caplog.text and "Texas Chicken" in caplog.text
@@ -684,7 +684,7 @@ async def test_the_forgery_stays_blocked_when_asked_a_fourth_time(monkeypatch, d
         "@phoenix nay ăn Texas chicken hết 793.760, chia đều cả 7 người")
 
     assert "Đã ghi #14" not in msg.body
-    assert "chưa ghi" in msg.body.lower()
+    assert "not recorded" in msg.body.lower()
 
 
 async def test_a_confirmation_naming_a_real_meal_is_left_alone(monkeypatch, db):

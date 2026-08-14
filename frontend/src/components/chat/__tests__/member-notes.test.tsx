@@ -14,15 +14,15 @@ describe("MemberNotes", () => {
     render(<MemberNotes roomId={3} memberId={9} version={0} />);
     await waitFor(() =>
       expect(screen.getByText("Đề xuất quán rồi lại đổi ý.")).toBeInTheDocument());
-    expect(screen.getByText("Phoenix nhớ gì")).toBeInTheDocument();
+    expect(screen.getByText("What Phoenix remembers")).toBeInTheDocument();
     // Same NoteRow as the panel, so the staleness marker comes along for free.
-    expect(screen.getByText(/đã cũ, bot không đọc nữa/)).toBeInTheDocument();
+    expect(screen.getByText(/the bot stopped reading this/)).toBeInTheDocument();
   });
 
   it("matches on the member id, not on a name that happens to look the same", async () => {
     // Member 1 has no notes; member 9's must not leak in on a label match.
     render(<MemberNotes roomId={3} memberId={1} version={0} />);
-    await waitFor(() => expect(screen.getByText("Chưa có ghi nhớ nào.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No notes yet.")).toBeInTheDocument());
     expect(screen.queryByText("Đề xuất quán rồi lại đổi ý.")).not.toBeInTheDocument();
   });
 
@@ -37,14 +37,14 @@ describe("MemberNotes", () => {
     render(<MemberNotes roomId={3} memberId={9} version={0} />);
     await waitFor(() =>
       expect(screen.getByText("Đề xuất quán rồi lại đổi ý.")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Thêm ghi nhớ/ }));
-    expect(screen.getByRole("dialog", { name: "Thêm ghi nhớ" })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Về ai \/ quán nào/)).toHaveValue("member:nhim");
+    fireEvent.click(screen.getByRole("button", { name: /Add note/ }));
+    expect(screen.getByRole("dialog", { name: "Add note" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/About which place or person/)).toHaveValue("member:nhim");
   });
 
   it("stays quiet when the member is not in the subject list", async () => {
     render(<MemberNotes roomId={3} memberId={404} version={0} />);
     await waitFor(() => expect(api.getKnowledge).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: /Thêm ghi nhớ/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Add note/ })).not.toBeInTheDocument();
   });
 });

@@ -28,7 +28,7 @@ describe("settled settlement QRs", () => {
     // scannable QR in the thread. Tapping it pays money nobody owes.
     render(<BotMessage body="Tạm tính đến 2026-07-27:" attachments={settlement(true)} roomId={3} />);
     expect(screen.queryByAltText(/QR to transfer/)).not.toBeInTheDocument();
-    expect(screen.getByText(/không cần trả nữa/)).toBeInTheDocument();
+    expect(screen.getByText(/nothing left to pay/)).toBeInTheDocument();
   });
 
   it("still shows who owed whom, so history stays readable", () => {

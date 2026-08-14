@@ -15,11 +15,11 @@ describe("KnowledgePanel — places", () => {
   it("opens on the places tab and states the ledger's own counts in words", async () => {
     openPanel();
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
-    // "4 lần · 12 ngày trước · hay ăn T5 · 2 ghi nhớ" — derived, and read-only.
-    expect(screen.getByText(/4 lần · 12 ngày trước/)).toBeInTheDocument();
-    expect(screen.getByText(/2 ghi nhớ/)).toBeInTheDocument();
+    // "4 visits · 12d ago · usually Thu · 2 notes" — derived, and read-only.
+    expect(screen.getByText(/4 visits · 12d ago/)).toBeInTheDocument();
+    expect(screen.getByText(/2 notes/)).toBeInTheDocument();
     // The band, not the amount: a suggestion never speaks in VND (design D5).
-    expect(screen.getByText("vừa")).toBeInTheDocument();
+    expect(screen.getByText("mid")).toBeInTheDocument();
     expect(screen.queryByText(/55\.000/)).not.toBeInTheDocument();
   });
 
@@ -36,9 +36,9 @@ describe("KnowledgePanel — places", () => {
   it("flags a place that is closed, untried, or not walkable", async () => {
     openPanel();
     await waitFor(() => expect(screen.getByText("Cơm gà Thịnh Lơ")).toBeInTheDocument());
-    expect(screen.getByText("đóng tới 20/8")).toBeInTheDocument();
-    expect(screen.getByText("chưa thử")).toBeInTheDocument();
-    expect(screen.getByText("không đi bộ được")).toBeInTheDocument();
+    expect(screen.getByText("closed until 20 Aug")).toBeInTheDocument();
+    expect(screen.getByText("untried")).toBeInTheDocument();
+    expect(screen.getByText("not walkable")).toBeInTheDocument();
   });
 
   it("filters by name, alias and tag", async () => {
@@ -57,7 +57,7 @@ describe("KnowledgePanel — places", () => {
     openPanel();
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Quán Bé Bự"));
-    expect(screen.getByRole("dialog", { name: /Sửa quán Quán Bé Bự/ })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Edit Quán Bé Bự/ })).toBeInTheDocument();
   });
 });
 
@@ -65,7 +65,7 @@ describe("KnowledgePanel — notes", () => {
   const goToNotes = async () => {
     openPanel();
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("tab", { name: /Ghi nhớ/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Notes/ }));
   };
 
   it("groups notes under the thing they are about, rules first", async () => {
@@ -79,25 +79,25 @@ describe("KnowledgePanel — notes", () => {
 
   it("renders a clock gate in human words, never as `order-by@11:30`", async () => {
     await goToNotes();
-    expect(screen.getByText("Đặt trước 11:30")).toBeInTheDocument();
+    expect(screen.getByText("Order by 11:30")).toBeInTheDocument();
     expect(screen.queryByText(/order-by@/)).not.toBeInTheDocument();
   });
 
   it("marks a standing rule as always true and a dated note with its date", async () => {
     await goToNotes();
-    expect(screen.getByText("luôn đúng")).toBeInTheDocument();
-    expect(screen.getByText("10/8")).toBeInTheDocument();
+    expect(screen.getByText("always")).toBeInTheDocument();
+    expect(screen.getByText("10 Aug")).toBeInTheDocument();
   });
 
   it("says out loud when a note is too old for the bot to read", async () => {
     await goToNotes();
-    expect(screen.getByText(/đã cũ, bot không đọc nữa/)).toBeInTheDocument();
+    expect(screen.getByText(/the bot stopped reading this/)).toBeInTheDocument();
   });
 
   it("opens the note editor on tap", async () => {
     await goToNotes();
     fireEvent.click(screen.getByText("Hôm nay hết gà."));
-    expect(screen.getByRole("dialog", { name: "Sửa ghi nhớ" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit note" })).toBeInTheDocument();
   });
 });
 
@@ -105,12 +105,12 @@ describe("KnowledgePanel — memory log", () => {
   it("shows dated sections with only the newest expanded, and a read-only watermark", async () => {
     openPanel();
     await waitFor(() => expect(screen.getByText("Quán Bé Bự")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("tab", { name: /Nhật ký/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Log/ }));
 
     // Newest open, older collapsed.
     expect(screen.getByText("- Ăn cơm gà")).toBeInTheDocument();
     expect(screen.queryByText(/Ăn bún chả/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Đã tóm tắt tới 2026-08-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Summarised through 2026-08-01/)).toBeInTheDocument();
     // The watermark is prose, not a field: rolling it back re-summarizes months
     // of chat into duplicate sections.
     expect(screen.queryByDisplayValue("42")).not.toBeInTheDocument();
@@ -125,11 +125,11 @@ describe("KnowledgePanel — empty states", () => {
     });
     openPanel();
     await waitFor(() =>
-      expect(screen.getByText(/nói với @phoenix «thêm quán/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("tab", { name: /Ghi nhớ/ }));
+      expect(screen.getByText(/tell @phoenix «thêm quán/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Notes/ }));
     expect(screen.getByText(/phải gọi trước 11h30/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: /Nhật ký/ }));
-    expect(screen.getByText(/khi hội thoại cũ hơn 10 tuần/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Log/ }));
+    expect(screen.getByText(/older than 10 weeks/)).toBeInTheDocument();
   });
 });
 

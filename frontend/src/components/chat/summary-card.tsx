@@ -22,12 +22,12 @@ export function SummaryCard({
         <button type="button"
                 onClick={() => onOpenLedger({ from: period.from ?? period.to, to: period.to })}
                 className="text-xs font-medium text-[var(--accent-text)] underline">
-          Mở sổ {period.from ? `${period.from} → ${period.to}` : `đến ${period.to}`}
+          Open ledger {period.from ? `${period.from} → ${period.to}` : `through ${period.to}`}
         </button>
       )}
       {(attachments.outstanding ?? []).length > 0 && (
         <div className="border-t border-dashed border-[var(--border)] pt-3">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Ai nợ ai</p>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Who owes who</p>
           <OutstandingList rows={attachments.outstanding} />
         </div>
       )}

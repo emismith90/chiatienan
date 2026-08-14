@@ -57,9 +57,9 @@ function DaySection({ day }: { day: Day }) {
       <div className="mb-1 flex items-baseline justify-between border-b border-[var(--border)] pb-0.5">
         <h4 className="text-[11px] font-semibold text-[var(--text-primary)]">{day.day}</h4>
         <span className="text-[10px] text-[var(--text-secondary)]">
-          {day.spent > 0 && `${fmt(day.spent)}đ ăn`}
+          {day.spent > 0 && `${fmt(day.spent)}đ on food`}
           {day.spent > 0 && day.moved > 0 && " · "}
-          {day.moved > 0 && `${fmt(day.moved)}đ trả`}
+          {day.moved > 0 && `${fmt(day.moved)}đ repaid`}
         </span>
       </div>
       <ul className="space-y-2">
@@ -88,13 +88,13 @@ export function TransactionTimeline({ events }: { events: TimelineEvent[] }) {
       {hidden > 0 && (
         <button type="button" onClick={() => setExpanded(true)}
                 className="self-start text-xs font-medium text-[var(--accent-text)] underline">
-          {hidden} ngày trước đó…
+          {hidden} earlier day{hidden === 1 ? "" : "s"}…
         </button>
       )}
       {expanded && days.length > OPEN_DAYS && (
         <button type="button" onClick={() => setExpanded(false)}
                 className="self-start text-xs text-[var(--text-secondary)] underline">
-          Thu gọn
+          Collapse
         </button>
       )}
     </div>

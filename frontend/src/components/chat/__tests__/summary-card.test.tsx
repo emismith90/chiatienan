@@ -14,7 +14,7 @@ describe("SummaryCard via BotMessage", () => {
   it("renders the timeline and who owes whom, with no net column", () => {
     render(<BotMessage body="" attachments={att} roomId={3} />);
     expect(screen.getByText(/bun bo/)).toBeInTheDocument();
-    expect(screen.getByText("Ai nợ ai")).toBeInTheDocument();
+    expect(screen.getByText("Who owes who")).toBeInTheDocument();
     expect(screen.getByText("Giang")).toBeInTheDocument();
     expect(screen.getByText(/61\.000/)).toBeInTheDocument();
     expect(screen.queryByText("+61.000")).not.toBeInTheDocument();
@@ -34,13 +34,13 @@ describe("opening the ledger from a history answer", () => {
         onOpenLedger={onOpenLedger}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Mở sổ 2026-07-20 → 2026-07-26/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Open ledger 2026-07-20 → 2026-07-26/ }));
     expect(onOpenLedger).toHaveBeenCalledWith({ from: "2026-07-20", to: "2026-07-26" });
   });
 
   it("has no button when nothing can consume it", () => {
     render(<BotMessage body="Tóm tắt" roomId={3}
                        attachments={{ type: "summary", period: { from: null, to: "2026-07-26" }, timeline: [] }} />);
-    expect(screen.queryByRole("button", { name: /Mở sổ/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open ledger/ })).not.toBeInTheDocument();
   });
 });

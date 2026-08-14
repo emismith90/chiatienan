@@ -17,7 +17,7 @@ describe("RandomPickCard via BotMessage", () => {
     render(<BotMessage body="🎲" attachments={att} roomId={3} />);
     expect(screen.getByText("An")).toBeInTheDocument();
     expect(screen.getByText("trả tiền")).toBeInTheDocument();
-    expect(screen.getByText(/bốc trong 2 người/)).toBeInTheDocument();
+    expect(screen.getByText(/picked from 2/)).toBeInTheDocument();
     expect(screen.getByText(/Bình, An/)).toBeInTheDocument();
   });
 });

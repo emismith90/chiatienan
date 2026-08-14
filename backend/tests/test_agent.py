@@ -192,7 +192,7 @@ async def test_the_command_carries_both_models_and_the_caps(db, bridge):
     fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
     await agent.run_turn("x", _ctx(db))
     assert fake.command["model"] and fake.command["vision_model"]
-    assert fake.command["max_tools"] == 40 and fake.command["max_seconds"] == 120
+    assert fake.command["max_tools"] == 40 and fake.command["max_seconds"] == 600
 
 
 def test_turn_result_helpers_still_filter_on_ok():

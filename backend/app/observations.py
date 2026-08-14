@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from app.memory import room_memory_dir
@@ -130,7 +131,27 @@ def _read_raw(room_id: int) -> list[str]:
 
 
 def _write_raw(room_id: int, lines: list[str]) -> None:
-    _path(room_id).write_text("".join(ln + "\n" for ln in lines), encoding="utf-8")
+    """Replace the file atomically.
+
+    Every write here is a whole-file rewrite of the room's only long-term memory,
+    and :func:`retarget_subject` rewrites every line about one place at once. A
+    torn `write_text` on a full disk or a killed container would leave a truncated
+    memory file with no copy of what it held; ``os.replace`` is atomic on the same
+    filesystem, so a reader sees either the old file or the new one.
+    """
+    path = _path(room_id)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("".join(ln + "\n" for ln in lines), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _parse_lines(lines: list[str]) -> list[tuple[int, Observation]]:
+    """``(index into ``lines``, observation)`` for every line that parses."""
+    out = []
+    for i, raw in enumerate(lines):
+        if (o := _parse_line(raw, i + 1)) is not None:
+            out.append((i, o))
+    return out
 
 
 def indexed(room_id: int) -> list[tuple[int, Observation]]:
@@ -142,11 +163,7 @@ def indexed(room_id: int) -> list[tuple[int, Observation]]:
     deliberately skips, turning "one stray line costs one fact" into "one edit
     costs every line the parser didn't like".
     """
-    out = []
-    for i, raw in enumerate(_read_raw(room_id)):
-        if (o := _parse_line(raw, i + 1)) is not None:
-            out.append((i, o))
-    return out
+    return _parse_lines(_read_raw(room_id))
 
 
 def load(room_id: int) -> list[Observation]:
@@ -218,6 +235,45 @@ def remove(room_id: int, *, subject: str, text: str) -> bool:
     return False
 
 
+def retarget_subject(room_id: int, *, old: str, new: str) -> dict:
+    """Move every line filed under ``old`` to ``new``. ``{"moved", "deduped"}``.
+
+    One read and one write, over the raw line list — not N calls to
+    :func:`replace_line` (N whole-file rewrites), and never a rebuild from
+    :func:`load` (that eats comments and unparsable lines; see :func:`indexed`).
+
+    **Duplicates are dropped, not written.** ``line_id`` is a hash of the rendered
+    line, so two byte-identical lines share an id and neither can be addressed
+    again — the knowledge API already refuses to create that on POST and PATCH,
+    and a rewrite must not create it either. If a moved line would land exactly on
+    a line the file already holds, the moved one goes rather than being appended.
+    A pre-existing identical pair under ``old`` therefore collapses to one on the
+    way through, which is a repair rather than a loss: they were the same fact
+    written twice.
+    """
+    lines = _read_raw(room_id)
+    parsed = _parse_lines(lines)
+    rendered = {o.to_line() for _i, o in parsed}
+    moved, drop = 0, []
+    for i, o in parsed:
+        if o.subject != old:
+            continue
+        target = replace(o, subject=new)
+        line = target.to_line()
+        if line in rendered:
+            drop.append(i)
+            continue
+        rendered.discard(o.to_line())
+        rendered.add(line)
+        lines[i] = line
+        moved += 1
+    if moved or drop:
+        for i in sorted(drop, reverse=True):
+            del lines[i]
+        _write_raw(room_id, lines)
+    return {"moved": moved, "deduped": len(drop)}
+
+
 def for_subjects(room_id: int, subjects: list[str], *,
                  since_days: int = DEFAULT_SINCE_DAYS, today=None) -> list[Observation]:
     """Rules for ``subjects`` (always), plus their observations inside the window.
@@ -263,8 +319,10 @@ def gate_kind(obs: Observation) -> str | None:
 
 
 #: How each gate verb reads to a human. ``_GATE_RE`` is the schema, so this is the
-#: only place a person should ever have to meet ``order-by@11:30``.
-_GATE_LABELS = {"busy": "Đông từ", "order-by": "Đặt trước", "closes": "Đóng cửa"}
+#: only place a person should ever have to meet ``order-by@11:30``. Read by the
+#: knowledge panel only — ``tools`` branches on :func:`gate_kind`, so these are
+#: display strings and nothing decides on them.
+_GATE_LABELS = {"busy": "Busy from", "order-by": "Order by", "closes": "Closes"}
 
 
 def gate_at(obs: Observation) -> str | None:
@@ -274,7 +332,7 @@ def gate_at(obs: Observation) -> str | None:
 
 
 def gate_label(obs: Observation) -> str | None:
-    """``"Đặt trước 11:30"`` for ``order-by@11:30``; None when ungated."""
+    """``"Order by 11:30"`` for ``order-by@11:30``; None when ungated."""
     m = _GATE_RE.match(obs.gate or "")
     if not m:
         return None
@@ -292,7 +350,7 @@ def parse_gate(kind: str | None, at: str | None) -> str | None:
         return None
     gate = f"{kind}@{at or ''}"
     if not _GATE_RE.match(gate):
-        raise ValueError(f"Không hiểu điều kiện «{gate}».")
+        raise ValueError(f"Unknown clock rule «{gate}».")
     return gate
 
 

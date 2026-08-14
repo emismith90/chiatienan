@@ -106,7 +106,7 @@ def test_a_participant_with_no_item_is_rejected_not_billed_zero():
 
 
 def test_item_for_a_non_participant_is_rejected():
-    with pytest.raises(MoneyError, match="không thuộc"):
+    with pytest.raises(MoneyError, match="not part of the meal"):
         normalize_items([{"member": 1, "amount": 10}, {"member": 9, "amount": 10}], [1])
 
 

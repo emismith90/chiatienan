@@ -54,8 +54,8 @@ export function MemorySections({
   if (memory.sections.length === 0) {
     return (
       <p className="text-xs text-[var(--text-secondary)]">
-        Chưa có nhật ký nào. Phoenix tự viết mục mới khi bạn gõ <code>/clear</code> hoặc
-        khi hội thoại cũ hơn 10 tuần.
+        No log entries yet. Phoenix writes one when you type <code>/clear</code>, and when
+        the conversation gets older than 10 weeks.
       </p>
     );
   }
@@ -91,20 +91,20 @@ export function MemorySections({
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={8}
-                      aria-label={`Sửa mục ${s.title}`}
+                      aria-label={`Edit entry ${s.title}`}
                       className="w-full rounded-md border border-[var(--border)] bg-transparent p-2 text-xs leading-relaxed text-[var(--text-primary)] focus:outline-none focus-visible:ring-2 ring-[var(--accent-primary)]"
                     />
                     <div className="mt-2 flex gap-2">
                       <button type="button" disabled={busy}
                               onClick={() => run(
                                 api.patchMemorySection(roomId, s.index, etag, draft),
-                                "Không lưu được, thử lại nhé.")}
+                                "Could not save — try again.")}
                               className={primaryButtonClass}>
-                        Lưu
+                        Save
                       </button>
                       <button type="button" disabled={busy} onClick={() => setEditing(null)}
                               className={quietButtonClass}>
-                        Huỷ
+                        Cancel
                       </button>
                     </div>
                   </>
@@ -117,20 +117,20 @@ export function MemorySections({
                       <button type="button"
                               onClick={() => { setDraft(s.body); setEditing(s.index); }}
                               className="text-[11px] text-[var(--accent-text)]">
-                        Sửa
+                        Edit
                       </button>
                       {confirmDelete === s.index ? (
                         <button type="button" disabled={busy}
                                 onClick={() => run(
                                   api.deleteMemorySection(roomId, s.index, etag),
-                                  "Không xoá được.")}
+                                  "Could not delete.")}
                                 className="text-[11px] font-medium text-[var(--danger)]">
-                          Xoá thật?
+                          Really delete?
                         </button>
                       ) : (
                         <button type="button" onClick={() => setConfirmDelete(s.index)}
                                 className="text-[11px] text-[var(--danger)]">
-                          Xoá
+                          Delete
                         </button>
                       )}
                     </div>
@@ -144,8 +144,8 @@ export function MemorySections({
 
       {memory.watermark.through_at && (
         <p className="pt-1 text-[10px] text-[var(--text-secondary)]">
-          Đã tóm tắt tới {memory.watermark.through_at.slice(0, 10)}. Hội thoại mới hơn
-          Phoenix vẫn đọc trực tiếp.
+          Summarised through {memory.watermark.through_at.slice(0, 10)}. Anything newer
+          Phoenix still reads directly.
         </p>
       )}
     </div>

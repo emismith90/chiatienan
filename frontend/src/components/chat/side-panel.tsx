@@ -5,10 +5,8 @@ import { LedgerPanel } from "./ledger-panel";
 export type PanelTab = "ledger" | "knowledge";
 
 const TABS: { id: PanelTab; label: string }[] = [
-  // "Sổ" is the room's own word for the ledger — it is what a chat answer offers
-  // when it says "Mở sổ".
-  { id: "ledger", label: "Sổ" },
-  { id: "knowledge", label: "Bộ nhớ" },
+  { id: "ledger", label: "Ledger" },
+  { id: "knowledge", label: "Memory" },
 ];
 
 /**
@@ -37,7 +35,7 @@ export function SidePanel({
 }) {
   return (
     <aside className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
-      <div role="tablist" aria-label="Bảng bên"
+      <div role="tablist" aria-label="Side panel"
            className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--border)] text-xs">
         {TABS.map((t) => (
           <button

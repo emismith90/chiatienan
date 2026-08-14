@@ -50,6 +50,17 @@ class TurnResult:
     tools: list[ToolInvocation] = field(default_factory=list)
     error: str | None = None
     turn_id: str | None = None
+    #: The turn hit ``max_seconds`` or ``max_tools`` and was cut short. **Not an
+    #: error** — a cap keeps whatever was accumulated (see `turn.js:runTurn`) — but
+    #: the caller has to know, because a cap that lands before the model has
+    #: written anything leaves ``final_text`` empty and is indistinguishable from a
+    #: provider returning nothing. Production, 2026-08-14 room 3: "ăn gì ngon ngon
+    #: đi mày" ran `suggest_lunch` and was cut at 120.6s with 0 characters, and the
+    #: room got the same bare "(no response)" as a genuinely empty completion 100
+    #: minutes earlier. The same question answered in 69.0s / 344ch just before and
+    #: 79.5s / 602ch just after, so it was a timeout, not a failure — and the room
+    #: could not tell.
+    capped: bool = False
 
     def last_result(self, name: str) -> dict | None:
         """Most-recent successful (``ok``) result dict for a given tool name."""
@@ -161,7 +172,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
 
     tools = build_tools(ctx)
     bridge = get_bridge()
-    capped = False
+    stats: dict = {}
 
     try:
         async for message in bridge.request(command):
@@ -193,7 +204,11 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
             elif kind == "turn_done":
                 result.final_text = message.get("final_text") or ""
                 result.error = message.get("error")
-                capped = bool(message.get("capped"))
+                result.capped = bool(message.get("capped"))
+                # Token/cost for the log line only. The sidecar reports `null`
+                # rather than 0 when the provider did not say, so an unknown cost
+                # never reads as "free".
+                stats = message.get("stats") or {}
                 # `tools` is already accumulated from the round-trips above, which
                 # is the authoritative list: those results came from the real DB.
 
@@ -210,11 +225,13 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     # 20–80s turn actually went: how many tool round-trips, and which. The agent.*
     # timeline has this live but never persists it.
     logger.info(
-        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch%s%s",
+        "[agent] turn %s done in %.1fs tools=%d (%s) images=%d text=%dch"
+        " tokens=%s cost=%s%s%s",
         turn_id, time.monotonic() - started, len(result.tools),
         ",".join(inv.name for inv in result.tools) or "-",
         len(images or []), len(result.final_text),
-        " CAPPED" if capped else "",
+        stats.get("tokens", "?"), stats.get("cost", "?"),
+        " CAPPED" if result.capped else "",
         f" ERROR={result.error}" if result.error else "",
     )
     return result

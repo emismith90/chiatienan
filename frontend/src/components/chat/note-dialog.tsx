@@ -12,10 +12,10 @@ import {
  * `order-by` is not (you phone ahead), which is why they are three verbs and not
  * one "deadline" field — the room told the wrong one wastes a walk. */
 const GATES: { value: GateKind | ""; label: string }[] = [
-  { value: "", label: "Không có" },
-  { value: "order-by", label: "Đặt trước…" },
-  { value: "busy", label: "Đông từ…" },
-  { value: "closes", label: "Đóng cửa…" },
+  { value: "", label: "None" },
+  { value: "order-by", label: "Order by…" },
+  { value: "busy", label: "Busy from…" },
+  { value: "closes", label: "Closes…" },
 ];
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -83,7 +83,7 @@ export function NoteDialog({
 
   function save() {
     if (!text.trim()) {
-      setErr("Ghi nhớ cần có nội dung.");
+      setErr("A note needs some text.");
       return;
     }
     const fields = {
@@ -94,13 +94,13 @@ export function NoteDialog({
       gate_at: gateKind ? gateAt : null,
     };
     if (note) {
-      run(api.patchNote(roomId, note.id, { ...fields, etag }), "Không lưu được, thử lại nhé.");
+      run(api.patchNote(roomId, note.id, { ...fields, etag }), "Could not save — try again.");
     } else {
       if (!subject) {
-        setErr("Chọn quán hoặc người trước.");
+        setErr("Pick a place or a person first.");
         return;
       }
-      run(api.createNote(roomId, { ...fields, subject }), "Không lưu được, thử lại nhé.");
+      run(api.createNote(roomId, { ...fields, subject }), "Could not save — try again.");
     }
   }
 
@@ -109,41 +109,41 @@ export function NoteDialog({
       {err && <p className="mb-2 text-xs text-[var(--danger)]">{err}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={busy} onClick={save} className={primaryButtonClass}>
-          {note ? "Lưu" : "Ghi nhớ"}
+          {note ? "Save" : "Remember"}
         </button>
         <button type="button" disabled={busy} onClick={onClose} className={quietButtonClass}>
-          Huỷ
+          Cancel
         </button>
       </div>
     </>
   );
 
   return (
-    <PanelDialog label={note ? "Sửa ghi nhớ" : "Thêm ghi nhớ"} onClose={onClose}
+    <PanelDialog label={note ? "Edit note" : "Add note"} onClose={onClose}
                  footer={actions}>
       <h3 className="text-base font-semibold text-[var(--text-primary)]">
-        {note ? "Sửa ghi nhớ" : "Thêm ghi nhớ"}
+        {note ? "Edit note" : "Add note"}
       </h3>
 
       <div className="mt-4 space-y-3">
         {note ? (
           <p className="text-xs text-[var(--text-secondary)]">
-            Về <span className="font-medium text-[var(--text-primary)]">{note.subject_label}</span>
-            {" — đổi sang quán/người khác thì xoá rồi thêm lại."}
+            About <span className="font-medium text-[var(--text-primary)]">{note.subject_label}</span>
+            {" — to file it under someone else, delete this and add it again."}
           </p>
         ) : (
-          <Field label="Về ai / quán nào">
+          <Field label="About which place or person">
             <select className={fieldClass} value={subject}
                     onChange={(e) => setSubject(e.target.value)}>
               {places.length > 0 && (
-                <optgroup label="Quán">
+                <optgroup label="Places">
                   {places.map((s) => (
                     <option key={s.subject} value={s.subject}>{s.label}</option>
                   ))}
                 </optgroup>
               )}
               {members.length > 0 && (
-                <optgroup label="Người">
+                <optgroup label="People">
                   {members.map((s) => (
                     <option key={s.subject} value={s.subject}>{s.label}</option>
                   ))}
@@ -153,41 +153,41 @@ export function NoteDialog({
           </Field>
         )}
 
-        <Field label="Nội dung">
+        <Field label="Note">
           <input className={fieldClass} value={text} onChange={(e) => setText(e.target.value)}
                  placeholder="Phải gọi trước — quán làm chậm." />
         </Field>
 
         <div>
           <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-            Loại
+            Kind
           </span>
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-xs">
             <button type="button" onClick={() => setStanding(true)} aria-pressed={standing}
                     className={`flex-1 px-2.5 py-1.5 ${standing ? "bg-[var(--accent-primary)] font-semibold text-white" : "text-[var(--text-secondary)]"}`}>
-              Quy tắc
+              Standing rule
             </button>
             <button type="button" onClick={() => setStanding(false)} aria-pressed={!standing}
                     className={`flex-1 px-2.5 py-1.5 ${!standing ? "bg-[var(--accent-primary)] font-semibold text-white" : "text-[var(--text-secondary)]"}`}>
-              Chuyện một hôm
+              One day
             </button>
           </div>
           <p className="mt-1 text-[10px] text-[var(--text-secondary)]">
             {standing
-              ? "Quy tắc luôn đúng — bot không bao giờ bỏ qua vì cũ."
-              : "Chuyện một hôm sẽ nhạt dần: sau 6 tháng bot không đọc nữa."}
+              ? "A standing rule always holds — the bot never drops it for being old."
+              : "A one-day note fades: after 6 months the bot stops reading it."}
           </p>
         </div>
 
         {!standing && (
-          <Field label="Ngày">
+          <Field label="Date">
             <input type="date" className={fieldClass} value={when}
                    onChange={(e) => setWhen(e.target.value)} />
           </Field>
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Điều kiện giờ">
+          <Field label="Clock rule">
             <select className={fieldClass} value={gateKind}
                     onChange={(e) => setGateKind(e.target.value as GateKind | "")}>
               {GATES.map((g) => (
@@ -196,7 +196,7 @@ export function NoteDialog({
             </select>
           </Field>
           {gateKind && (
-            <Field label="Lúc">
+            <Field label="At">
               <input type="time" className={fieldClass} value={gateAt}
                      onChange={(e) => setGateAt(e.target.value)} />
             </Field>
@@ -204,7 +204,8 @@ export function NoteDialog({
         </div>
         {gateKind && (
           <p className="text-[10px] text-[var(--text-secondary)]">
-            Bot tự tính theo giờ hiện tại — quá giờ thì không gợi ý quán này nữa.
+            The bot works this out against the current time — past it, the place stops
+            being suggested.
           </p>
         )}
       </div>
@@ -213,17 +214,17 @@ export function NoteDialog({
         <div className="mt-4 border-t border-[var(--border)] pt-3">
           {confirmDelete ? (
             <div className="flex items-center gap-2">
-              <p className="flex-1 text-xs text-[var(--text-secondary)]">Xoá hẳn ghi nhớ này?</p>
+              <p className="flex-1 text-xs text-[var(--text-secondary)]">Delete this note for good?</p>
               <button type="button" disabled={busy}
-                      onClick={() => run(api.deleteNote(roomId, note.id, etag), "Không xoá được.")}
+                      onClick={() => run(api.deleteNote(roomId, note.id, etag), "Could not delete.")}
                       className="rounded-lg border border-[var(--danger)] px-3 py-1.5 text-xs text-[var(--danger)] disabled:opacity-40">
-                Xoá
+                Delete
               </button>
             </div>
           ) : (
             <button type="button" onClick={() => setConfirmDelete(true)}
                     className="text-xs text-[var(--danger)]">
-              Xoá ghi nhớ này
+              Delete this note
             </button>
           )}
         </div>

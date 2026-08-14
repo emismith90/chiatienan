@@ -21,7 +21,7 @@ def test_defaults_when_env_absent(monkeypatch):
     # Mandatory in practice: the primary is text-only, so every bill photo needs it.
     assert s.pi_vision_model == "qwen/qwen3-vl-30b-a3b-instruct"
     assert s.pi_provider == "openrouter" and s.pi_thinking == "medium"
-    assert s.pi_max_tools == 40 and s.pi_max_seconds == 120
+    assert s.pi_max_tools == 40 and s.pi_max_seconds == 600
     assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]
     assert s.bot_handle == "phoenix"

@@ -46,7 +46,7 @@ describe("PayActions — launching the bank app", () => {
     render(
       <PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open Vietcombank/i }));
     expect(loc.href).toContain("scheme=vietcombankmobile");
     expect(loc.href).toContain("package=com.VCB");
   });
@@ -56,20 +56,20 @@ describe("PayActions — launching the bank app", () => {
     // the roster value has to win where the two disagree.
     localStorage.setItem("chiatienan.profile", JSON.stringify({ bank_code: "ACB" }));
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    expect(screen.getByRole("button", { name: /Mở Vietcombank/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open Vietcombank/i })).toBeInTheDocument();
   });
 
   it("still falls back to the profile cache when the roster has no bank", () => {
     localStorage.setItem("chiatienan.profile", JSON.stringify({ bank_code: "VCB" }));
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode={null} />);
-    expect(screen.getByRole("button", { name: /Mở Vietcombank/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open Vietcombank/i })).toBeInTheDocument();
   });
 
   it("launches a scheme a phone actually registers, and no third party", () => {
     // Both failures this has had, pinned: routing via dl.vietqr.io put a page in
     // the way, and `vietqr://pay?…` made iOS say "the address is invalid".
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Mở Vietcombank/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open Vietcombank/i }));
     expect(loc.href).not.toContain("dl.vietqr.io");
     expect(loc.href).not.toContain("vietqr:");
     expect(loc.href).toContain("scheme=vietcombankmobile");
@@ -77,7 +77,7 @@ describe("PayActions — launching the bank app", () => {
 
   it("wraps the scheme in an intent on Android, for Chrome's own fallback", () => {
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="TCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Mở Techcombank/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open Techcombank/i }));
     expect(loc.href.startsWith("intent://")).toBe(true);
     expect(loc.href).toContain("scheme=tcb");
     expect(loc.href).toContain("browser_fallback_url");
@@ -86,19 +86,19 @@ describe("PayActions — launching the bank app", () => {
   it("prefers the app the member last paid from over their registered bank", () => {
     localStorage.setItem("chiatienan.bankApp", "acb");
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    expect(screen.getByRole("button", { name: /Mở ACB One/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open ACB One/i })).toBeInTheDocument();
   });
 
   it("offers a picker when we cannot guess the member's app", () => {
     // No profile bank, nothing remembered.
     render(<PayActions qrUrl={QR} amount={1000} note="x" />);
-    fireEvent.click(screen.getByRole("button", { name: "Mở app ngân hàng" }));
-    expect(screen.getByRole("dialog", { name: /Chọn app/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open banking app" }));
+    expect(screen.getByRole("dialog", { name: /Pick a banking app/ })).toBeInTheDocument();
   });
 
   it("remembers the app picked from the sheet, and launches it", async () => {
     render(<PayActions qrUrl={QR} amount={1000} note="x" />);
-    fireEvent.click(screen.getByRole("button", { name: "Mở app ngân hàng" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open banking app" }));
     fireEvent.click(screen.getByRole("button", { name: /MB Bank/ }));
 
     await waitFor(() => expect(localStorage.getItem("chiatienan.bankApp")).toBe("mb"));
@@ -109,9 +109,9 @@ describe("PayActions — launching the bank app", () => {
     setUA(DESKTOP_UA);
     localStorage.setItem("chiatienan.profile", JSON.stringify({ bank_code: "VCB" }));
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    expect(screen.queryByRole("button", { name: /^Mở/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
     // Copy still works there — that is the point of having both.
-    expect(screen.getByRole("button", { name: /Sao chép Số TK/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy Account/ })).toBeInTheDocument();
   });
 
   it("renders nothing when the QR URL is unparseable", () => {
@@ -129,7 +129,7 @@ describe("PayActions — saving the QR, the only route that pre-fills", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => pngBlob() }));
 
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" payerBankCode="VCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save QR/ }));
 
     await waitFor(() => expect(share).toHaveBeenCalled());
     const [[arg]] = share.mock.calls;
@@ -137,7 +137,7 @@ describe("PayActions — saving the QR, the only route that pre-fills", () => {
     expect(arg.files[0].type).toBe("image/png");
     // The amount names the file, so a camera roll full of these is navigable.
     expect(arg.files[0].name).toContain("107000");
-    expect(await screen.findByText(/Đã lưu/)).toBeInTheDocument();
+    expect(await screen.findByText(/Saved/)).toBeInTheDocument();
   });
 
   it("treats a dismissed share sheet as nothing happening, not a failure", async () => {
@@ -146,10 +146,10 @@ describe("PayActions — saving the QR, the only route that pre-fills", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => pngBlob() }));
 
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save QR/ }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /Lưu QR/ })).toBeInTheDocument());
-    expect(screen.queryByText(/thất bại/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: /Save QR/ })).toBeInTheDocument());
+    expect(screen.queryByText(/failed/)).not.toBeInTheDocument();
   });
 
   it("falls back to a download where the share sheet takes no files", async () => {
@@ -162,10 +162,10 @@ describe("PayActions — saving the QR, the only route that pre-fills", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save QR/ }));
 
     await waitFor(() => expect(click).toHaveBeenCalled());
-    expect(await screen.findByText(/Đã lưu/)).toBeInTheDocument();
+    expect(await screen.findByText(/Saved/)).toBeInTheDocument();
   });
 
   it("says so when the QR cannot be fetched, rather than claiming a save", async () => {
@@ -173,14 +173,14 @@ describe("PayActions — saving the QR, the only route that pre-fills", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
 
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    fireEvent.click(screen.getByRole("button", { name: /Lưu QR/ }));
-    expect(await screen.findByText(/thất bại/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save QR/ }));
+    expect(await screen.findByText(/failed/)).toBeInTheDocument();
   });
 
   it("is not offered on desktop, where the QR can just be scanned", () => {
     setUA(DESKTOP_UA);
     render(<PayActions qrUrl={QR} amount={1000} note="x" payerBankCode="VCB" />);
-    expect(screen.queryByRole("button", { name: /Lưu QR/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save QR/ })).not.toBeInTheDocument();
   });
 });
 
@@ -190,10 +190,10 @@ describe("PayActions — copy fallbacks", () => {
     Object.assign(navigator, { clipboard: { writeText } });
 
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" />);
-    fireEvent.click(screen.getByRole("button", { name: /Sao chép Số TK/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy Account/ }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("03924686701"));
-    expect(await screen.findByText("✓ Đã chép")).toBeInTheDocument();
+    expect(await screen.findByText("✓ Copied")).toBeInTheDocument();
   });
 
   it("copies a bare integer amount, ready to paste into a bank form", async () => {
@@ -201,7 +201,7 @@ describe("PayActions — copy fallbacks", () => {
     Object.assign(navigator, { clipboard: { writeText } });
 
     render(<PayActions qrUrl={QR} amount={107_000} note="Linh: T2" />);
-    fireEvent.click(screen.getByRole("button", { name: /Sao chép Số tiền/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy Amount/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("107000"));
   });
 
@@ -210,9 +210,9 @@ describe("PayActions — copy fallbacks", () => {
     Object.assign(navigator, { clipboard: { writeText } });
 
     render(<PayActions qrUrl={QR} amount={1000} note="x" />);
-    fireEvent.click(screen.getByRole("button", { name: /Sao chép Số TK/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Copy Account/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
-    expect(screen.queryByText("✓ Đã chép")).not.toBeInTheDocument();
+    expect(screen.queryByText("✓ Copied")).not.toBeInTheDocument();
   });
 });
 
@@ -233,14 +233,14 @@ describe("who sees the pay actions", () => {
     mockSession.memberId = 6;
     render(<BotMessage body="Tạm tính:" attachments={settlement(false)} roomId={3}
                        members={roster} />);
-    expect(screen.getByRole("button", { name: /Mở Vietcombank/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open Vietcombank/i })).toBeInTheDocument();
   });
 
   it("hides them from the creditor, who is owed rather than paying", () => {
     mockSession.memberId = 9;
     render(<BotMessage body="Tạm tính:" attachments={settlement(false)} roomId={3}
                        members={roster} />);
-    expect(screen.queryByRole("button", { name: /^Mở/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
     // The QR stays visible to everyone — handing a phone across the table works.
     expect(screen.getByAltText(/QR to transfer/)).toBeInTheDocument();
   });
@@ -249,14 +249,14 @@ describe("who sees the pay actions", () => {
     mockSession.memberId = 42;
     render(<BotMessage body="Tạm tính:" attachments={settlement(false)} roomId={3}
                        members={roster} />);
-    expect(screen.queryByRole("button", { name: /^Mở/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
   });
 
   it("hides them once the debt is settled, alongside the QR", () => {
     mockSession.memberId = 6;
     render(<BotMessage body="Tạm tính:" attachments={settlement(true)} roomId={3}
                        members={roster} />);
-    expect(screen.queryByRole("button", { name: /^Mở/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/không cần trả nữa/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing left to pay/)).toBeInTheDocument();
   });
 });

@@ -98,47 +98,64 @@ export function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** "4 lần · 12 ngày trước", or "chưa ăn" — the ledger's own count, in words.
+/** "4 visits · 12d ago", or "not eaten yet" — the ledger's own count, in words.
  *
  * Never editable and never re-derived here: the numbers arrive computed (design
  * D1), and this only chooses how to say them. */
 export function visitLabel(stats: PlaceStats): string {
-  if (!stats.times) return "chưa ăn lần nào";
+  if (!stats.times) return "not eaten yet";
   const days = stats.days_since;
   const when =
-    days == null ? null : days === 0 ? "hôm nay" : days === 1 ? "hôm qua" : `${days} ngày trước`;
-  return [`${stats.times} lần`, when].filter(Boolean).join(" · ");
+    days == null ? null : days === 0 ? "today" : days === 1 ? "yesterday" : `${days}d ago`;
+  return [`${stats.times} visit${stats.times === 1 ? "" : "s"}`, when].filter(Boolean).join(" · ");
 }
 
-const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** The weekday the room actually goes, as a word.
  *
  * Deliberately a sentence rather than a seven-bar chart: at this width a chart of
- * counts like [0,1,0,2,0,1,0] carries less than "hay ăn T5" does, and it would be
- * the only chart in the app. */
+ * counts like [0,1,0,2,0,1,0] carries less than "usually Thu" does, and it would
+ * be the only chart in the app. */
 export function rhythmLabel(stats: PlaceStats): string | null {
   const counts = WEEKDAYS.map((_, i) => stats.weekday_counts?.[String(i)] ?? 0);
   const top = Math.max(...counts, 0);
   if (top < 2) return null;             // one visit is not a rhythm
   const days = counts.map((c, i) => (c === top ? WEEKDAYS[i] : null)).filter(Boolean);
-  return `hay ăn ${days.join(", ")}`;
+  return `usually ${days.join(", ")}`;
 }
 
-/** `"2026-08-20"` → `"20/8"`, the way the room writes dates. */
+/** The price band, in English.
+ *
+ * `places._BANDS` stays Vietnamese in the backend on purpose: `suggest_lunch`
+ * takes a `budget` argument in the room's own words ("rẻ thôi") and compares it
+ * to the band it computed, so translating it there would break the model-facing
+ * contract. Translation belongs at the display edge, which is here. */
+const BANDS: Record<string, string> = { "rẻ": "cheap", "vừa": "mid", "đắt": "pricey" };
+
+export function bandLabel(band: string | null): string | null {
+  return band ? (BANDS[band] ?? band) : null;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** `"2026-08-20"` → `"20 Aug"`. Day-then-month, spelled, so it cannot be misread
+ * as a US-order numeric date by half the room and an ISO one by the other half. */
 export function shortDate(iso: string | null): string {
   if (!iso) return "";
   const [, m, d] = iso.split("-");
-  return m && d ? `${Number(d)}/${Number(m)}` : iso;
+  const month = MONTHS[Number(m) - 1];
+  return month && d ? `${Number(d)} ${month}` : iso;
 }
 
 /** Turn a failed write into something a human can act on.
  *
  * The server's own detail is preferred over any phrasing invented here: it is
- * already Vietnamese and already specific ("«Quán Bé Bự» đã có trong danh sách",
- * "Có người vừa sửa ghi nhớ — hãy tải lại"). A 409 means two different things
- * across these routes — a taken place name, or a stale etag — so mapping the
- * status to one sentence would tell half the callers the wrong thing.
+ * already specific ("«Quán Bé Bự» is already on the list", "Someone just changed
+ * the notes — reload"). A 409 means two different things across these routes — a
+ * taken place name, or a stale etag — so mapping the status to one sentence would
+ * tell half the callers the wrong thing.
  */
 export function writeError(e: unknown, fallback: string): string {
   return e instanceof ApiError && e.message ? e.message : fallback;

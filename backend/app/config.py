@@ -85,7 +85,7 @@ class Settings:
             pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "openrouter",
             pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
             pi_max_tools=_int_env("PI_MAX_TOOLS", 40),
-            pi_max_seconds=_int_env("PI_MAX_SECONDS", 120),
+            pi_max_seconds=_int_env("PI_MAX_SECONDS", 600),
             # Built-in pi tools available alongside the 14 money tools. Empty makes
             # money-safety structural (no `bash` = the model cannot compute money);
             # non-empty lets it work things out itself and re-enables the mechanism

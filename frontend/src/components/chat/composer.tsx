@@ -131,9 +131,9 @@ export function Composer({ onSend }: ComposerProps) {
     try {
       const next = await Promise.all(picked.map((f) => resizeImage(f)));
       setImages((prev) => [...prev, ...next].slice(0, MAX_IMAGES));
-      if (dropped > 0) setNotice(`Chỉ đính kèm được tối đa ${MAX_IMAGES} ảnh.`);
+      if (dropped > 0) setNotice(`At most ${MAX_IMAGES} images can be attached.`);
     } catch {
-      setNotice("Không xử lý được ảnh, thử lại nhé.");
+      setNotice("Could not process that image — try again.");
     } finally {
       setProcessing(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -234,7 +234,7 @@ export function Composer({ onSend }: ComposerProps) {
           role="status"
           className="mb-2 px-1 text-xs text-[var(--text-secondary)]"
         >
-          {processing ? "Đang xử lý ảnh…" : notice}
+          {processing ? "Processing image…" : notice}
         </p>
       )}
       {/* Capability hints — shown only while the input is empty, so they guide

@@ -24,7 +24,7 @@ describe("StatementCard via BotMessage", () => {
 
   it("says so plainly when there is nothing either way", () => {
     render(<BotMessage body="" attachments={{ ...att, owe: [], owed: [] }} roomId={3} />);
-    expect(screen.getByText(/không nợ ai, không ai nợ bạn/)).toBeInTheDocument();
+    expect(screen.getByText(/You owe nobody/)).toBeInTheDocument();
   });
 
   it("Mark paid records the meal and flips the row", async () => {

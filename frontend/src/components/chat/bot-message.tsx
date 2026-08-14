@@ -100,7 +100,7 @@ function SettlementCard({ attachments, members }: {
           )}
           {t.qr_url && t.settled && (
             <p className="self-center text-xs font-medium text-[var(--text-secondary)]">
-              ✓ Đã xong — không cần trả nữa
+              ✓ Settled — nothing left to pay
             </p>
           )}
         </div>
@@ -168,7 +168,7 @@ function RandomPickCard({ attachments }: { attachments: any }) {
       )}
       {candidates.length > 0 && (
         <div className="mt-2 text-xs text-[var(--text-secondary)]">
-          bốc trong {candidates.length} người: {candidates.map((c) => c.name).join(", ")}
+          picked from {candidates.length}: {candidates.map((c) => c.name).join(", ")}
         </div>
       )}
     </div>

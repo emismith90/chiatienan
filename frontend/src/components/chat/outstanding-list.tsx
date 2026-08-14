@@ -13,7 +13,7 @@ export function OutstandingList({ rows, selfId }: {
   rows: OutstandingRow[]; selfId?: number | null;
 }) {
   if (!rows || rows.length === 0) {
-    return <p className="text-xs text-[var(--text-secondary)]">Không ai nợ ai.</p>;
+    return <p className="text-xs text-[var(--text-secondary)]">Nobody owes anybody.</p>;
   }
   return (
     <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
