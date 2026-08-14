@@ -156,12 +156,16 @@
   {
     "name": "Bún đậu mẹt Trần Hữu Tước",
     "slug": "bun-dau-met-tran-huu-tuoc",
+    "address": "86 Trần Hữu Tước",
     "aliases": [
       "bún đậu mẹt",
       "bun dau met",
       "bún đậu trần hữu tước",
       "bun dau tran huu tuoc",
-      "bún đậu"
+      "bún đậu",
+      "anh linh",
+      "bún đậu anh linh",
+      "bun dau anh linh"
     ],
     "tags": [
       "bún đậu",
@@ -641,19 +645,25 @@
   {
     "name": "Bánh mì Patê Cột Đèn",
     "slug": "banh-mi-pate-cot-den",
+    "address": "71 Đặng Văn Ngữ",
     "aliases": [
       "patê cột đèn",
       "pate cot den",
       "bánh mì cột đèn",
       "banh mi cot den",
       "cột đèn",
-      "cot den"
+      "cot den",
+      "cột điện",
+      "cot dien",
+      "cột điện quán",
+      "bánh mì chảo"
     ],
     "tags": [
       "bánh mỳ",
       "xôi",
       "mua-về",
-      "gần"
+      "gần",
+      "bánh mì chảo"
     ],
     "price_hint": 40000
   },

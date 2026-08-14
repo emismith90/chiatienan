@@ -83,10 +83,18 @@ identity to attach any of this to and no way to count anything.
   `walk_minutes`, hand-set.
 - **D14 — Untried places are tagged, not hidden.** A place seeded from a directory
   listing has no history, no notes, and nobody's word for it. Tagged `chưa-thử` and
-  demoted in ranking unless the user asks for something new — otherwise 30 unknown
+  demoted in ranking unless the user asks for something new — otherwise 35 unknown
   places drown out the handful the room actually likes. This tag is what makes a
   directory import safe, and it is why Google Places discovery stays deferred: the
   import already covers breadth.
+- **D15 — Ambiguity breaks toward the place the room knows.** When a lookup returns
+  several candidates and exactly one is not `chưa-thử`, take it instead of asking. The
+  import created this case directly: "nem nướng" now matches four places, three of them
+  listings nobody has been to. Without the tie-break a directory import makes the room's
+  own daily haunt un-sayable — every mention becomes a disambiguation prompt, and the
+  feature is worse than before the import. Two or more *known* candidates still return
+  `ambiguous` and still ask; this only discards places that exist solely because a
+  directory listed them.
 
 ## Design
 
