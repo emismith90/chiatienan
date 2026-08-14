@@ -126,10 +126,17 @@ identity to attach any of this to and no way to count anything.
   the room names that restaurant, and a seed that deletes real speech to dodge a
   collision has moved the bug rather than fixed it.
 
-  Two guards, since the ambiguity cannot be seeded away:
+  **The operator overruled the "cô Trang" exception**, and was right to: "Bún riêu cô
+  Trang" is a full restaurant name, while a bare "cô Trang" is a person — two of them
+  in this room. Keeping the bare alias let `resolve_best` tie-break a note about a
+  colleague onto a bún riêu shop. The place keeps only its multi-word forms.
+
+  Three guards, since the ambiguity cannot be seeded away:
   1. **A seed lint** rejects any place alias reducing to a bare member nickname or given
-     name, `cô Trang` excepted by name. This is what caught "anh linh".
-  2. **Member and place resolution stay separate indexes**, chosen by which tool the model
+     name, with **no exceptions**. This is what caught "anh linh".
+  2. **A place wins a memo subject only on a confident tier**, never a tie-break, and
+     never when the text could also name a person — then it asks.
+  3. **Member and place resolution stay separate indexes**, chosen by which tool the model
      calls. The residual hazard is `_dropped_names` (`tools.py:88`): a place name read as
      a person makes `find_members` return a member, who is then added to the split as an
      eater. That is money-affecting, so it gets an explicit test rather than a comment.

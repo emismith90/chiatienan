@@ -30,11 +30,12 @@ logger = logging.getLogger("chiatienan")
 _FIELDS = ("name", "address", "aliases", "tags", "delivery", "walkable",
            "walk_minutes", "phone", "price_hint", "active")
 
-#: Place aliases that legitimately reduce to a member's name. "Bún riêu cô
-#: Trang" is genuinely how the room names that restaurant, and this room's Nhím
-#: banks as DINH HONG TRANG — deleting real speech to dodge the collision moves
-#: the bug rather than fixing it, so it is guarded by a test instead (D18).
-_LINT_EXCEPTIONS = {"co trang"}
+#: Deliberately EMPTY. An earlier version excepted "co trang", on the argument
+#: that it is how the room names that restaurant — but the operator overruled it:
+#: "Bún riêu cô Trang" is a full restaurant name and a bare "cô Trang" is a
+#: person (two of them in this room, DINH HONG TRANG and BUI THU TRANG). No place
+#: alias may reduce to a bare member name, with no exceptions (D18).
+_LINT_EXCEPTIONS: set[str] = set()
 
 
 def lint(rows: list[dict], *, member_names: list[str]) -> list[str]:

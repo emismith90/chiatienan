@@ -70,8 +70,22 @@ def test_lint_rejects_a_place_alias_that_is_a_bare_member_name():
     assert problems and "anh linh" in problems[0]
 
 
-def test_lint_allows_the_documented_co_trang_exception():
-    ok = [{"name": "Bún riêu cô Trang", "aliases": ["cô trang", "co trang"]}]
+def test_lint_rejects_the_bare_co_trang_alias_too():
+    """No exceptions. The operator's rule: "Bún riêu cô Trang" is a full
+    restaurant name, and a bare "cô Trang" is a person — two of them in this room
+    (DINH HONG TRANG, BUI THU TRANG). An earlier version excepted this alias on
+    the argument that it was real speech; that let a note about a colleague be
+    filed against a bún riêu shop, so the exception is gone.
+    """
+    bad = [{"name": "Bún riêu cô Trang", "aliases": ["cô trang", "co trang"]}]
+    problems = seed_places.lint(bad, member_names=["Nhím", "DINH HONG TRANG"])
+    assert problems, "a bare member-name alias must be rejected"
+
+
+def test_lint_allows_the_full_restaurant_name_as_an_alias():
+    """The multi-word form is unambiguous and must stay usable."""
+    ok = [{"name": "Bún riêu cô Trang",
+           "aliases": ["bún riêu cô trang", "bun rieu co trang"]}]
     assert seed_places.lint(ok, member_names=["Nhím", "DINH HONG TRANG"]) == []
 
 
