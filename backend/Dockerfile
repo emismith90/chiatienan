@@ -27,6 +27,13 @@ RUN pip install .
 COPY agent_sidecar ./agent_sidecar
 RUN cd agent_sidecar && npm ci --omit=dev --ignore-scripts
 
+# Curated place/observation seeds, so `python -m app.seed_places` runs inside the
+# container as the runbook documents. They are versioned data, not config: the
+# loader is idempotent precisely because re-seeding after adding aliases is an
+# expected recurring operation, and that is impossible if the files only exist in
+# the repo. Text-only and small (~40 KB).
+COPY seeds ./seeds
+
 RUN mkdir -p /data
 EXPOSE 8000
 
