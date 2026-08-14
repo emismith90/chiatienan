@@ -24,9 +24,11 @@ export function LedgerPanel({
   const showMine = mine && selfId != null;
 
   return (
-    <aside className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-[var(--text-primary)]">Ledger</h2>
+    // No outer <aside> and no visible heading: `SidePanel` owns the scroll
+    // container and the tab strip that names this view ("Sổ").
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <h2 className="sr-only">Sổ chi tiêu</h2>
+      <div className="flex items-center justify-end">
         {selfId != null && (
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-xs">
             <button type="button" onClick={() => setMine(true)}
@@ -69,6 +71,6 @@ export function LedgerPanel({
           </section>
         </>
       )}
-    </aside>
+    </div>
   );
 }

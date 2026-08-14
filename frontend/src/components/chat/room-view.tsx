@@ -11,7 +11,8 @@ import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
 import { LotterySpinner, looksLikeRandomRequest } from "./lottery-spinner";
 import { RoomSwitcher } from "./room-switcher";
-import { LedgerPanel } from "./ledger-panel";
+import { SidePanel, type PanelTab } from "./side-panel";
+import { MemberNotes } from "./member-notes";
 import { saveProfile } from "@/lib/rooms-store";
 
 interface Member {
@@ -182,10 +183,14 @@ function MemberChips({
 function MemberInfoDialog({
   member,
   selfId,
+  roomId,
+  knowledgeVersion,
   onClose,
 }: {
   member: Member;
   selfId: number | null;
+  roomId: number;
+  knowledgeVersion: number;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -250,6 +255,9 @@ function MemberInfoDialog({
             </div>
           )}
         </dl>
+        {/* What the bot remembers about this person, where the question actually
+            gets asked. Same rows and editor as the knowledge panel. */}
+        <MemberNotes roomId={roomId} memberId={member.id} version={knowledgeVersion} />
         <button
           type="button"
           onClick={onClose}
@@ -270,10 +278,14 @@ const dialogInputClass =
  * roster data already in hand (no extra fetch). */
 export function ProfileDialog({
   member,
+  roomId,
+  knowledgeVersion,
   onClose,
   onSaved,
 }: {
   member: Member;
+  roomId: number;
+  knowledgeVersion: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -398,6 +410,9 @@ export function ProfileDialog({
         )}
         {saved && !err && <p className="mt-3 text-sm text-[var(--text-secondary)]">Saved</p>}
 
+        {/* "Phoenix nhớ gì" about you — the case people most want to check. */}
+        <MemberNotes roomId={roomId} memberId={member.id} version={knowledgeVersion} />
+
         <div className="mt-5 space-y-2">
           <button
             type="button"
@@ -430,8 +445,10 @@ export function ProfileDialog({
 }
 
 export function RoomView({ roomId }: { roomId: number }) {
-  const { messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send, ledgerVersion } =
-    useRoom(roomId);
+  const {
+    messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send,
+    ledgerVersion, knowledgeVersion,
+  } = useRoom(roomId);
   const { memberId } = useSession();
   const online = useOnline();
   const [members, setMembers] = useState<Member[]>([]);
@@ -440,8 +457,14 @@ export function RoomView({ roomId }: { roomId: number }) {
   // A history answer in the chat can scope the ledger panel to its own period;
   // on a phone that also has to open the drawer, or the scoping is invisible.
   const [ledgerRange, setLedgerRange] = useState<{ from: string; to: string } | null>(null);
+  // Which side-panel tab is showing. Lifted here so the desktop column and the
+  // phone drawer stay in step, and reopening the drawer lands where you left it.
+  const [panelTab, setPanelTab] = useState<PanelTab>("ledger");
   const openLedgerRange = (range: { from: string; to: string }) => {
     setLedgerRange(range);
+    // A scoped history answer is about money, so it must land on the ledger tab
+    // even if the panel was last left on Bộ nhớ.
+    setPanelTab("ledger");
     setDrawerOpen(true);
   };
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -600,10 +623,13 @@ export function RoomView({ roomId }: { roomId: number }) {
       </div>
       </main>
 
-      {/* Desktop: persistent right column */}
-      <div className="hidden w-[260px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] lg:block">
-        <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion}
-                     range={ledgerRange} onClearRange={() => setLedgerRange(null)} />
+      {/* Desktop: persistent right column. 320px rather than 260: the knowledge
+          tab lists place cards with chips, and at 260 every one of them wrapped. */}
+      <div className="hidden w-[320px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] lg:block">
+        <SidePanel roomId={roomId} selfId={memberId} ledgerVersion={ledgerVersion}
+                   knowledgeVersion={knowledgeVersion} range={ledgerRange}
+                   onClearRange={() => setLedgerRange(null)}
+                   tab={panelTab} onTab={setPanelTab} />
       </div>
 
       {/* Phone/tablet: slide-over drawer */}
@@ -619,8 +645,10 @@ export function RoomView({ roomId }: { roomId: number }) {
             onClick={(e) => e.stopPropagation()}
             className="absolute right-0 top-0 h-full w-[82%] max-w-sm border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-xl"
           >
-            <LedgerPanel roomId={roomId} selfId={memberId} version={ledgerVersion}
-                         range={ledgerRange} onClearRange={() => setLedgerRange(null)} />
+            <SidePanel roomId={roomId} selfId={memberId} ledgerVersion={ledgerVersion}
+                       knowledgeVersion={knowledgeVersion} range={ledgerRange}
+                       onClearRange={() => setLedgerRange(null)}
+                       tab={panelTab} onTab={setPanelTab} />
           </div>
         </div>
       )}
@@ -629,6 +657,8 @@ export function RoomView({ roomId }: { roomId: number }) {
         (selectedMember.id === memberId ? (
           <ProfileDialog
             member={selectedMember}
+            roomId={roomId}
+            knowledgeVersion={knowledgeVersion}
             onClose={() => setSelectedMember(null)}
             onSaved={() => api.getMembers(roomId).then((m: Member[]) => setMembers(m)).catch(() => {})}
           />
@@ -636,6 +666,8 @@ export function RoomView({ roomId }: { roomId: number }) {
           <MemberInfoDialog
             member={selectedMember}
             selfId={memberId}
+            roomId={roomId}
+            knowledgeVersion={knowledgeVersion}
             onClose={() => setSelectedMember(null)}
           />
         ))}

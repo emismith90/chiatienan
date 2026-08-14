@@ -21,8 +21,11 @@ Why these four and not a table (design D4):
 ``text``    free Vietnamese prose, untouched. "Nhím đề xuất rồi lại đổi ý" is not
             table-shaped and schematising it would destroy the meaning.
 
-The file is hand-edited by the operator, so **a malformed line is skipped with a
-warning, never raised**: one stray line must cost one fact, not lunch.
+The file is editable two ways — the knowledge panel (:mod:`app.knowledge`) and a
+text editor on the box — so **a malformed line is skipped with a warning, never
+raised**: one stray line must cost one fact, not lunch. Every write here edits the
+raw line list in place, so the comments and unreadable lines the parser skips
+survive an edit made through the UI.
 """
 from __future__ import annotations
 

@@ -860,8 +860,18 @@ async def create_observation_route(room_id: int, body: ObservationIn,
             obs = observations.Observation(
                 when=None if body.standing else (body.when or today_ict()),
                 subject=body.subject, gate=gate, text=text)
+            # An identical line already there is a no-op, not a second line. Two
+            # byte-identical lines share a `line_id` (that is the price of deriving
+            # ids from content), so appending one would make the pair impossible to
+            # tell apart in the UI — and the second one carries no information
+            # anyway. Same shape as `add_place` on a duplicate slug.
+            existing = {o.line_id for o in observations.load(room_id)}
+            if obs.line_id in existing:
+                return {"ok": True, "id": obs.line_id, "already_existed": True,
+                        "etag": observations.file_etag(room_id)}
             observations.append(room_id, obs)
-            out = {"ok": True, "id": obs.line_id, "etag": observations.file_etag(room_id)}
+            out = {"ok": True, "id": obs.line_id, "already_existed": False,
+                   "etag": observations.file_etag(room_id)}
             trail = _knowledge_trail(
                 s, room_id, ctx,
                 f"đã thêm ghi nhớ về «{resolved['subject_label']}»: {text}")
@@ -898,6 +908,11 @@ async def patch_observation_route(room_id: int, line_id: str, body: ObservationP
             gate = current.gate
         updated = observations.Observation(
             when=when, subject=current.subject, gate=gate, text=text)
+        # Editing one line into an exact copy of another would give the pair the
+        # same content-derived id, so neither could be addressed again.
+        if updated.line_id != line_id and any(
+                o.line_id == updated.line_id for o in observations.load(room_id)):
+            raise HTTPException(422, "Đã có một ghi nhớ y hệt như vậy.")
         if not observations.replace_line(room_id, line_id, updated):
             raise HTTPException(404, "Không tìm thấy ghi nhớ đó.")
         with db.session() as s:

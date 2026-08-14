@@ -109,6 +109,157 @@ export const getLedger = (
       : `/api/rooms/${roomId}/ledger?period=${period}`,
   );
 
+// ------------------------------------------------- knowledge & memory panel
+
+/** Everything the ledger derives about one place. **Read-only, all of it** —
+ * design D1 computes these in Python precisely so nobody hand-types them. */
+export type PlaceStats = {
+  times: number;
+  last_on: string | null;
+  days_since: number | null;
+  /** Average VND per head from real meals, or the seed `price_hint` as a fallback. */
+  avg_per_head: number | null;
+  /** A tertile across this room's own places, not absolute VND. */
+  band: string | null;
+  weekday_counts: Record<string, number>;
+};
+
+export type KnowledgePlace = {
+  id: number;
+  /** Identity, and the `place:` subject in the observations file. Never editable. */
+  slug: string;
+  name: string;
+  aliases: string[];
+  tags: string[];
+  delivery: string[];
+  address: string | null;
+  phone: string | null;
+  walkable: boolean;
+  walk_minutes: number | null;
+  price_hint: number | null;
+  closed_until: string | null;
+  active: boolean;
+  untried: boolean;
+  note_count: number;
+  stats: PlaceStats;
+};
+
+export type GateKind = "busy" | "order-by" | "closes";
+
+/** One line of `observations.md`, parsed and labelled by the server. `standing`
+ * lines are rules and never age out; dated ones decay, and `stale` marks the ones
+ * already past the window the agent reads. */
+export type KnowledgeNote = {
+  id: string;
+  when: string | null;
+  standing: boolean;
+  subject: string;
+  subject_key: string;
+  subject_kind: "place" | "member" | "unknown";
+  subject_label: string;
+  /** The place/member row id, or null for an orphaned subject. Lets a caller that
+   * already holds a member find *their* notes without re-folding names. */
+  subject_id: number | null;
+  gate: string | null;
+  gate_kind: GateKind | null;
+  gate_label: string | null;
+  text: string;
+  stale: boolean;
+};
+
+export type MemorySection = {
+  index: number;
+  title: string;
+  date: string | null;
+  body: string;
+};
+
+export type KnowledgeData = {
+  /** Fingerprints of the two file-backed stores; handed back on write so a stale
+   * panel is refused (409) instead of clobbering a concurrent agent write. */
+  etags: { observations: string; memory: string };
+  places: KnowledgePlace[];
+  observations: KnowledgeNote[];
+  memory: {
+    sections: MemorySection[];
+    watermark: { through_id: number | null; through_at: string | null };
+  };
+  /** What a new note can be filed against — the editor's picker. */
+  subjects: { subject: string; label: string; kind: "place" | "member"; id: number }[];
+};
+
+export const getKnowledge = (roomId: number): Promise<KnowledgeData> =>
+  req(`/api/rooms/${roomId}/knowledge`);
+
+export type PlaceFields = {
+  name: string;
+  aliases?: string[];
+  tags?: string[];
+  delivery?: string[];
+  address?: string | null;
+  phone?: string | null;
+  walkable?: boolean;
+  walk_minutes?: number | null;
+  price_hint?: number | null;
+  closed_until?: string | null;
+};
+
+export const createPlace = (roomId: number, body: PlaceFields) =>
+  req(`/api/rooms/${roomId}/places`, { method: "POST", body: JSON.stringify(body) });
+
+/** Partial edit: omitted keys are left alone, an explicit `null` clears. `slug` is
+ * absent by design — renaming a place must not detach its notes. */
+export const patchPlace = (
+  roomId: number,
+  placeId: number,
+  patch: Partial<PlaceFields> & { active?: boolean },
+) =>
+  req(`/api/rooms/${roomId}/places/${placeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+
+/** Hides the place (`active=false`). Meals still reference it, so it is never a row delete. */
+export const deletePlace = (roomId: number, placeId: number) =>
+  req(`/api/rooms/${roomId}/places/${placeId}`, { method: "DELETE" });
+
+export type NoteFields = {
+  text: string;
+  standing?: boolean;
+  when?: string | null;
+  gate_kind?: GateKind | null;
+  gate_at?: string | null;
+};
+
+export const createNote = (roomId: number, body: NoteFields & { subject: string }) =>
+  req(`/api/rooms/${roomId}/observations`, { method: "POST", body: JSON.stringify(body) });
+
+export const patchNote = (
+  roomId: number,
+  id: string,
+  patch: Partial<NoteFields> & { etag: string },
+) =>
+  req(`/api/rooms/${roomId}/observations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+
+export const deleteNote = (roomId: number, id: string, etag: string) =>
+  req(`/api/rooms/${roomId}/observations/${id}?etag=${encodeURIComponent(etag)}`, {
+    method: "DELETE",
+  });
+
+export const patchMemorySection = (roomId: number, index: number, etag: string, body: string) =>
+  req(`/api/rooms/${roomId}/memory/sections/${index}`, {
+    method: "PATCH",
+    body: JSON.stringify({ etag, body }),
+  });
+
+export const deleteMemorySection = (roomId: number, index: number, etag: string) =>
+  req(`/api/rooms/${roomId}/memory/sections/${index}?etag=${encodeURIComponent(etag)}`, {
+    method: "DELETE",
+  });
+
 /** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
  * computes the amount from {to, meal_id}; client sends no money value). */
 export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>

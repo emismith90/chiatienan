@@ -281,6 +281,36 @@ def test_newlines_in_a_note_cannot_split_the_line(api_client_room):
     assert obs.load(room_id)[0].text == "Dòng một Dòng hai"
 
 
+def test_an_identical_note_is_a_no_op_not_a_second_line(api_client_room):
+    """Two byte-identical lines share a content-derived `line_id`, so neither could
+    be addressed again — and the second one says nothing new anyway."""
+    client, headers, room_id, _m = api_client_room
+    _seed_place(room_id, "Quán Bé Bự")
+    body = {"subject": "place:quan-be-bu", "text": "Phải gọi trước.", "standing": True}
+    first = client.post(f"/api/rooms/{room_id}/observations", headers=headers, json=body)
+    second = client.post(f"/api/rooms/{room_id}/observations", headers=headers, json=body)
+    assert first.json()["already_existed"] is False
+    assert second.json()["already_existed"] is True
+    assert first.json()["id"] == second.json()["id"]
+    assert len(obs.load(room_id)) == 1
+    # And the room is not told twice about one fact.
+    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
+    assert len([m for m in msgs if m["body"].startswith("📓")]) == 1
+
+
+def test_editing_a_note_into_a_copy_of_another_is_refused(api_client_room):
+    client, headers, room_id, _m = api_client_room
+    _seed_place(room_id, "Quán Bé Bự")
+    _write_obs(room_id,
+               "- always | place:quan-be-bu | - | Ghi nhớ A.\n"
+               "- always | place:quan-be-bu | - | Ghi nhớ B.\n")
+    target = next(o for o in obs.load(room_id) if o.text == "Ghi nhớ B.")
+    r = client.patch(f"/api/rooms/{room_id}/observations/{target.line_id}", headers=headers,
+                     json={"etag": obs.file_etag(room_id), "text": "Ghi nhớ A."})
+    assert r.status_code == 422
+    assert {o.text for o in obs.load(room_id)} == {"Ghi nhớ A.", "Ghi nhớ B."}
+
+
 def test_an_unresolvable_subject_is_refused(api_client_room):
     client, headers, room_id, _m = api_client_room
     r = client.post(f"/api/rooms/{room_id}/observations", headers=headers, json={

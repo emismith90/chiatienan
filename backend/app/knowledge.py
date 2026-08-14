@@ -58,7 +58,12 @@ class SubjectIndex:
                     self.members.setdefault(key, m)
 
     def resolve(self, subject: str) -> dict:
-        """``{"subject_key", "subject_kind", "subject_label"}`` for one raw subject.
+        """``{"subject_key", "subject_kind", "subject_label", "subject_id"}``.
+
+        ``subject_id`` is the row id, so a caller that already has a member or place
+        in hand can find its notes without re-implementing the folding rules — which
+        is the difference between "notes about this person" and "notes whose label
+        happens to match this person's display name".
 
         An unresolvable subject comes back as ``kind="unknown"`` with the raw string
         as its label, never dropped: an orphaned note is exactly the note someone
@@ -68,12 +73,14 @@ class SubjectIndex:
         if prefix == "place":
             if (p := self.places.get(rest)) is not None:
                 return {"subject_key": f"place:{p.slug}", "subject_kind": "place",
-                        "subject_label": p.name}
+                        "subject_label": p.name, "subject_id": p.id}
         elif prefix == "member":
             if (m := self.members.get(rest)) is not None:
                 return {"subject_key": f"member:{_member_key(m.nickname)}",
-                        "subject_kind": "member", "subject_label": m.display_name}
-        return {"subject_key": subject, "subject_kind": "unknown", "subject_label": subject}
+                        "subject_kind": "member", "subject_label": m.display_name,
+                        "subject_id": m.id}
+        return {"subject_key": subject, "subject_kind": "unknown",
+                "subject_label": subject, "subject_id": None}
 
     def options(self) -> list[dict]:
         """Everything a new note can be filed against — the editor's picker.
@@ -81,14 +88,14 @@ class SubjectIndex:
         Active rows only: a note about a hidden place or a departed member can be
         read and deleted, but there is no reason to help anyone write a new one.
         """
-        out = [{"subject": f"place:{p.slug}", "label": p.name, "kind": "place"}
+        out = [{"subject": f"place:{p.slug}", "label": p.name, "kind": "place", "id": p.id}
                for p in self.places.values() if p.active]
         seen: set[int] = set()
         for m in self.members.values():
             if m.active and m.id not in seen:
                 seen.add(m.id)
                 out.append({"subject": f"member:{_member_key(m.nickname)}",
-                            "label": m.display_name, "kind": "member"})
+                            "label": m.display_name, "kind": "member", "id": m.id})
         return sorted(out, key=lambda o: (o["kind"], o["label"]))
 
 
