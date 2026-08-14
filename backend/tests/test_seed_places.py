@@ -83,3 +83,44 @@ def test_shipped_seeds_pass_the_lint():
         "Giang", "Linh", "Nhím",
         "HOANG MINH GIANG", "NGUYEN ANH LINH", "DINH HONG TRANG",
     ]) == []
+
+
+def test_main_runs_end_to_end_as_the_cli_does(db, tmp_path, monkeypatch, capsys):
+    """Exercise `main()` end to end: rc, output, and the observations half.
+
+    Note this does NOT catch the definition-order bug that hit production on
+    2026-08-14 — verified by reintroducing it, and this test still passed. pytest
+    imports the module fully before calling `main()`, so a definition below the
+    `__main__` guard resolves anyway. The failure exists only under `python -m`,
+    where the guard fires *during* module execution.
+    `test_every_public_name_main_uses_is_defined_before_the_guard` is what guards
+    that; this one covers everything else about the CLI flow.
+    """
+    from app import db as db_mod
+    from app import memory as mem
+    from app import observations, seed_places
+
+    monkeypatch.setattr(mem, "_base_dir", lambda: tmp_path)
+    monkeypatch.setattr(db_mod, "get_db", lambda: db)
+
+    rc = seed_places.main(["app.seed_places", "1",
+                           str(SEEDS / "places-local.json")])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "backfill:" in out
+    # The observations half must actually have run, not merely been reachable.
+    assert "observations:" in out
+    assert len(observations.load(1)) == 42, out
+
+
+def test_every_public_name_main_uses_is_defined_before_the_guard():
+    """Structural guard: nothing main() calls may be defined after __main__."""
+    import inspect
+
+    from app import seed_places
+
+    src = inspect.getsource(seed_places)
+    guard = src.index('if __name__ == "__main__":')
+    for name in ("lint", "load_file", "install_observations", "main"):
+        assert src.index(f"def {name}(") < guard, \
+            f"{name} is defined after the __main__ guard — main() cannot see it"
