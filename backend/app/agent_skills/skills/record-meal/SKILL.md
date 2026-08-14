@@ -83,7 +83,7 @@ số tiền từng người phải trả, và không ai phát hiện được v�
 ## Hoá đơn bằng ảnh
 
 - Ảnh hoá đơn trong ngữ cảnh lượt này (kể cả người dùng dán ở tin nhắn ngay trước rồi mới
-  `@bot`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
+  `@phoenix`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
 - Đọc được ảnh KHÔNG thay thế bước xác định người ăn: vẫn phải `find_members`
   (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người"/"everyone"/"all") rồi mới
   `propose_meal`. Bỏ bước đó thì `participants` chỉ còn mình người nhắn — cả cái bill

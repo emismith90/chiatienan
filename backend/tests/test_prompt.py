@@ -13,7 +13,7 @@ def test_prompt_announces_attached_images():
     that was in it. Images ride on the UserMessage, invisible to the prompt."""
     from app.agent import _render_prompt
 
-    out = _render_prompt("@bot log đi", sender_name="Emi", image_count=1)
+    out = _render_prompt("@phoenix log đi", sender_name="Emi", image_count=1)
     assert "Ảnh kèm theo" in out
     assert "1 ảnh" in out
     assert "Đừng hỏi lại tổng tiền" in out
@@ -22,7 +22,7 @@ def test_prompt_announces_attached_images():
 def test_prompt_is_unchanged_when_no_image_is_attached():
     from app.agent import _render_prompt
 
-    assert "Ảnh kèm theo" not in _render_prompt("@bot số dư", sender_name="Emi")
+    assert "Ảnh kèm theo" not in _render_prompt("@phoenix số dư", sender_name="Emi")
 
 
 def test_the_system_prompt_puts_the_room_tools_first_and_bash_last():

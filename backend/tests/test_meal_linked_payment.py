@@ -42,7 +42,7 @@ def test_editing_a_committed_meal_keeps_its_quick_paid_money(db):
         d, _ = drafts.create_draft(s, room_id, {
             "payer_member_id": payer, "member_participants": [payer, tabu], "guests": [],
             "bill_total": 100_000, "adjustments": [], "dish": "pho", "initiator": None,
-            "note": None, "per_head_preview": 50_000, "raw_input": "@bot pho 100k",
+            "note": None, "per_head_preview": 50_000, "raw_input": "@phoenix pho 100k",
         })
         drafts.commit_draft(s, d.id, room_id, logged_by=str(payer))
         meal_id = s.get(RoomMessage, d.id).attachments["committed_meal_id"]

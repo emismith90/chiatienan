@@ -41,8 +41,8 @@ class Settings:
     pi_builtin_tools: tuple[str, ...]
     memory_window_weeks: int
     history_max_messages: int
-    # How far back to look for a bill image when the @bot message itself has
-    # none (people paste the bill, then say "@bot log đi" in a second message).
+    # How far back to look for a bill image when the @phoenix message itself has
+    # none (people paste the bill, then say "@phoenix log đi" in a second message).
     image_lookback_messages: int
     image_lookback_minutes: int
     # Bot

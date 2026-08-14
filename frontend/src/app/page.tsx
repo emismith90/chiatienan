@@ -1,11 +1,26 @@
 "use client";
 import { useSession } from "@/lib/session";
 import { RoomView } from "@/components/chat/room-view";
+import { PoweredBy } from "@/components/powered-by";
 
 export default function Home() {
   const { token, roomId, ready } = useSession();
 
-  if (!ready) return null;
+  // Session hydration used to render nothing at all — a blank page for as long
+  // as it took, which on a cold PWA launch is the first thing anyone sees. It
+  // is the natural place for the engine credit: the one moment the app has
+  // nothing else to say.
+  if (!ready) {
+    return (
+      <main
+        role="status"
+        aria-label="Loading chiatienan"
+        className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-[var(--bg-base)] p-8"
+      >
+        <PoweredBy variant="splash" />
+      </main>
+    );
+  }
 
   if (!token || !roomId) {
     return (
@@ -28,6 +43,9 @@ export default function Home() {
             >
               Create a room
             </a>
+          </div>
+          <div className="mt-6 border-t border-[var(--border)] pt-4">
+            <PoweredBy />
           </div>
         </div>
       </main>

@@ -11,7 +11,7 @@
 # Re-running run.sh stops any instance it previously started, then starts fresh.
 #
 # Env overrides: ADMIN_PASSWORD (default "devpass"), OPEN_ROUTER_KEY (default empty;
-# without it @bot replies error out, everything else works).
+# without it @phoenix replies error out, everything else works).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -119,7 +119,7 @@ cat <<EOF
   Logs : $DATA/backend.log   $DATA/frontend.log
   Stop : bash $HERE/stop.sh
 $( [ -z "$OPEN_ROUTER_KEY" ] && echo "
-  NOTE: OPEN_ROUTER_KEY unset -> @bot mentions will error. Everything
+  NOTE: OPEN_ROUTER_KEY unset -> @phoenix mentions will error. Everything
         else (join, chat, drafts, profile, live updates) works." )
 ────────────────────────────────────────────────────────────
 EOF

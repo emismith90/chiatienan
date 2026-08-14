@@ -1,7 +1,7 @@
 """FastAPI entrypoint — the PWA HTTP surface (design §5).
 
 Routes: room create/join/identify (accounts), profile (``/api/me``), room chat
-(list/post messages), the members roster, and the SSE stream. ``@bot`` mentions
+(list/post messages), the members roster, and the SSE stream. ``@phoenix`` mentions
 dispatch a background agent turn; the SSE stream heartbeats every 25s and tells
 slow clients to reconnect. Also keeps ``/health`` and the guarded
 ``/internal/bridge-smoke``.
@@ -527,7 +527,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         payload = chat.message_to_dict(m, s.get(Member, ctx.member_id))
         # An answer to the bot's own question counts as addressed to it, mention
         # or not — "1" / "2" / "tôi đã trả tiền Emi" were all dropped in
-        # production and retyped with @bot seconds later.
+        # production and retyped with @phoenix seconds later.
         answers_bot = not chat.mentions_bot(body.body) and chat.replies_to_bot_question(
             s, room_id, ctx.member_id, before_id=m.id,
         )

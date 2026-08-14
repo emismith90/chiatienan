@@ -37,7 +37,7 @@ def test_payment_proposal_creates_payment_draft(room, monkeypatch):
         return _FakeResult(payments)
 
     monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
-    msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice", "@bot alice trả bob rồi"))
+    msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice", "@phoenix alice trả bob rồi"))
     assert msg.kind == "payment_draft"
     transfers = (msg.attachments or {})["transfers"]
     assert len(transfers) == 1
@@ -58,7 +58,7 @@ def test_multi_payer_proposals_create_one_payment_draft(room, monkeypatch):
 
     monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
     msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice",
-                                        "@bot alice và bob trả carol rồi"))
+                                        "@phoenix alice và bob trả carol rồi"))
     assert msg.kind == "payment_draft"
     transfers = (msg.attachments or {})["transfers"]
     assert len(transfers) == 2
@@ -79,7 +79,7 @@ def test_same_pair_proposals_collapse_to_last(room, monkeypatch):
 
     monkeypatch.setattr("app.agent.run_turn", fake_run_turn)
     msg = asyncio.run(chat.run_bot_turn(db, ids["room"], ids["alice"], "Alice",
-                                        "@bot alice trả bob 100k à nhầm 150k"))
+                                        "@phoenix alice trả bob 100k à nhầm 150k"))
     assert msg.kind == "payment_draft"
     transfers = (msg.attachments or {})["transfers"]
     assert len(transfers) == 1

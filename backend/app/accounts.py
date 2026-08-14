@@ -66,7 +66,7 @@ def identify(session: Session, room: Room, *, nickname, pin) -> str | None:
     m = _member_by_nickname(session, room.id, nickname)
     if m is None or not m.active:
         # Removed (soft-deleted) accounts can't be signed into or re-claimed
-        # until an @bot `update_member active:true` restores them.
+        # until an @phoenix `update_member active:true` restores them.
         return None
     pin = str(pin).strip()
     if m.pin is None:

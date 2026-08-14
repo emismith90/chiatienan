@@ -360,9 +360,9 @@ def test_clear_command_posts_divider_and_skips_bot(client, monkeypatch):
 
 
 def test_clear_command_with_bot_mention_still_skips_bot(client, monkeypatch):
-    # "@bot /clear" matches BOTH is_clear_command (its regex allows an
-    # optional leading "@bot"/"@<handle>") AND mentions_bot (it contains an
-    # "@bot" token). This is the one case where the early `return` in the
+    # "@phoenix /clear" matches BOTH is_clear_command (its regex allows an
+    # optional leading "@phoenix"/"@<handle>") AND mentions_bot (it contains an
+    # "@phoenix" token). This is the one case where the early `return` in the
     # is_clear_command branch of post_message is load-bearing: without it,
     # this message would fall through to the mentions_bot branch too and
     # also fire a bot turn.
@@ -384,7 +384,7 @@ def test_clear_command_with_bot_mention_still_skips_bot(client, monkeypatch):
     monkeypatch.setattr("app.chat.clear_context", fake_clear, raising=False)
     monkeypatch.setattr("app.chat.run_bot_turn", fake_bot, raising=False)
 
-    r = client.post(f"/api/rooms/{room_id}/messages", json={"body": "@bot /clear"}, headers=headers)
+    r = client.post(f"/api/rooms/{room_id}/messages", json={"body": "@phoenix /clear"}, headers=headers)
     assert r.status_code == 200
 
     # allow the spawned background task to run

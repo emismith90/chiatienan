@@ -45,7 +45,7 @@ def _weekday_label(d: date) -> str:
 def _meal_chunk(meal: dict) -> str:
     """One meal as ``"<weekday> <dish>"``.
 
-    A meal logged without a dish name ("@bot I paid 335k, dũng giang, hưng, và
+    A meal logged without a dish name ("@phoenix I paid 335k, dũng giang, hưng, và
     khanh") used to contribute a bare weekday, so a two-meal note read
     ``"Giang Hoang: T5 bun cha rua xe, T6"`` — the payer sees a dangling day and
     reads the whole memo as wrong. :data:`_UNNAMED_MEAL` keeps every chunk

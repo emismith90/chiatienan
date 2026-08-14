@@ -47,7 +47,7 @@ async def test_a_plain_turn_hydrates_the_result(db, bridge):
         {"type": "turn_done", "final_text": "Đã ghi.", "tools": [], "error": None,
          "capped": False, "stats": {"tokens": 100}},
     ])
-    result = await agent.run_turn("@bot ghi bữa trưa", _ctx(db))
+    result = await agent.run_turn("@phoenix ghi bữa trưa", _ctx(db))
     assert result.final_text == "Đã ghi."
     assert result.error is None and result.turn_id
 
@@ -80,7 +80,7 @@ async def test_a_tool_call_round_trips_through_the_real_tool(db, bridge):
         {"type": "turn_done", "final_text": "Đã ghi.", "error": None},
     ])
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=ids[0])
-    result = await agent.run_turn("@bot 300k cả nhóm", ctx)
+    result = await agent.run_turn("@phoenix 300k cả nhóm", ctx)
 
     # The tool executed in Python, over the real DB — no arithmetic crossed the wire.
     assert result.tools[0].name == "propose_meal"
