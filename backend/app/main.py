@@ -519,71 +519,73 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
 
 @app.post("/api/rooms/{room_id}/qr-requests")
 async def qr_request(room_id: int, body: QrRequestIn, ctx: AuthCtx = Depends(require_session)):
-    """The ledger QR button: post the VietQR for everything the caller owes one
-    creditor, as a bot card in the chat.
+    """The ledger QR button: the VietQR for everything the caller owes one
+    creditor, returned to the caller for its own dialog.
 
     Fully deterministic — same `debt_breakdown` nets as a settlement, note from
-    `build_qr_note`, no LLM turn (design D3). The card reuses the `settlement`
-    attachment shape so `annotate_settled_transfers` retires the QR once paid.
-    Reads only; posts a message but never records a payment.
+    `build_qr_note`, no LLM turn (design D3). Read-only in every sense: it
+    records no payment and, since the QR now opens in a modal, posts no chat
+    message either. One person checking what they owe is not room news, and the
+    thread used to collect a settlement card per tap — each one carrying a live
+    QR that only `annotate_settled_transfers` could later retire.
+
+    Hence no `_agent_lock` either: nothing here writes, so the QR opens straight
+    away instead of queueing behind whatever turn the agent is mid-way through.
     """
     from app.notes import build_qr_note
     from app.qr import QRError, make_qr_url
 
     _check_room(ctx, room_id)
     db = get_db()
-    async with chat._agent_lock:
-        with db.session() as s:
-            last = ledger.last_settlement(s, room_id)
-            p = resolve_period("since_last", today=today_ict(),
-                               last_settlement_to=last.period_to if last else None)
-            edges = [e for e in ledger.debt_breakdown(s, room_id, p["from"], p["to"])
-                     if e.debtor == ctx.member_id and e.creditor == body.to
-                     and e.outstanding > 0]
-            amount = sum(e.outstanding for e in edges)
-            if amount <= 0:
-                raise HTTPException(409, "nothing outstanding for that member")
+    with db.session() as s:
+        last = ledger.last_settlement(s, room_id)
+        p = resolve_period("since_last", today=today_ict(),
+                           last_settlement_to=last.period_to if last else None)
+        edges = [e for e in ledger.debt_breakdown(s, room_id, p["from"], p["to"])
+                 if e.debtor == ctx.member_id and e.creditor == body.to
+                 and e.outstanding > 0]
+        amount = sum(e.outstanding for e in edges)
+        if amount <= 0:
+            raise HTTPException(409, "nothing outstanding for that member")
 
-            members = {mm.id: mm for mm in roster.list_members(s, room_id, include_inactive=True)}
-            payee, payer = members.get(body.to), members.get(ctx.member_id)
-            if payee is None:
-                raise HTTPException(404, "member not found")
+        members = {mm.id: mm for mm in roster.list_members(s, room_id, include_inactive=True)}
+        payee, payer = members.get(body.to), members.get(ctx.member_id)
+        if payee is None:
+            raise HTTPException(404, "member not found")
 
-            note = build_qr_note(
-                payer.display_name if payer else "",
-                [{"date": e.occurred_on, "dish": e.dish} for e in edges],
-                fallback=f"Chia tien an {p['to'].day}/{p['to'].month}",
-            )
-            try:
-                qr_url = make_qr_url(payee, amount, note)
-            except QRError as exc:
-                # Surface at the button — a card with no QR helps nobody.
-                raise HTTPException(409, str(exc))
+        note = build_qr_note(
+            payer.display_name if payer else "",
+            [{"date": e.occurred_on, "dish": e.dish} for e in edges],
+            fallback=f"Chia tien an {p['to'].day}/{p['to'].month}",
+        )
+        try:
+            qr_url = make_qr_url(payee, amount, note)
+        except QRError as exc:
+            # Surface at the button — a dialog with no QR helps nobody.
+            raise HTTPException(409, str(exc))
 
-            att = {
-                "type": "settlement",
-                "period": {"from": p["from"].isoformat() if p["from"] else None,
-                           "to": p["to"].isoformat()},
-                "transfers": [{
-                    "from_id": ctx.member_id,
-                    "from_name": payer.display_name if payer else "?",
-                    "to_id": body.to,
-                    "to_name": payee.display_name,
-                    "amount": amount,
-                    "note": note,
-                    "qr_url": qr_url,
-                }],
-                "requested": True,  # on-demand QR card, not a period settle
-            }
-            msg = chat.post_message(
-                s, room_id, None,
-                f"📱 Transfer QR {payer.display_name if payer else '?'}"
-                f" → {payee.display_name}: {amount:,}đ",
-                attachments=att, kind="bot",
-            )
-            msg_payload = chat.message_to_dict(msg, None)
-    await hub.publish(room_id, {"type": "message", **msg_payload})
-    return {"ok": True, "amount": amount}
+        return {
+            "ok": True,
+            "amount": amount,
+            "note": note,
+            "qr_url": qr_url,
+            "from": {"id": ctx.member_id,
+                     "name": payer.display_name if payer else "?",
+                     # The caller's own bank, so the dialog can offer "Open
+                     # <app>" without a second roster round-trip.
+                     "bank_code": payer.bank_code if payer else None},
+            "to": {"id": payee.id, "name": payee.display_name,
+                   "account_number": payee.account_number,
+                   "account_holder": payee.account_holder,
+                   "bank_code": payee.bank_code},
+            "period": {"from": p["from"].isoformat() if p["from"] else None,
+                       "to": p["to"].isoformat()},
+            # What the amount is made of — the dialog lists it, so nobody has to
+            # trust a bare total before scanning.
+            "meals": [{"meal_id": e.meal_id, "dish": e.dish,
+                       "date": e.occurred_on.isoformat(), "amount": e.outstanding}
+                      for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id))],
+        }
 
 
 @app.post("/api/rooms/{room_id}/messages")

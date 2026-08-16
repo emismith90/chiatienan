@@ -135,6 +135,15 @@ export function normalizeBankCode(raw: string | null | undefined): string | null
   return hit ? hit.code : null;
 }
 
+/** The bank's short name ("Vietcombank") for whatever was typed into
+ * `bank_code`, falling back to the raw string so an unrecognised code is still
+ * shown rather than swallowed. */
+export function bankNameFor(raw: string | null | undefined): string | null {
+  const code = normalizeBankCode(raw);
+  const hit = code ? BANKS.find((b) => b.code === code) : null;
+  return hit?.shortName ?? (raw?.trim() || null);
+}
+
 /** The bank app matching a payee's bank, if one exists.
  *
  * Note this is the *payee's* bank, used only as the opening guess for which app
