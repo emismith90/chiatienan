@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { fmt } from "@/lib/format";
 import * as api from "@/lib/api";
+import { QrDialog } from "./qr-dialog";
 
 interface Row {
   other_id?: number; creditor_id?: number; debtor_id?: number;
@@ -14,6 +15,7 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
   const [err, setErr] = useState(false);
   const [qrBusy, setQrBusy] = useState(false);
   const [qrErr, setQrErr] = useState<string | null>(null);
+  const [qr, setQr] = useState<api.QrRequest | null>(null);
   const creditorId = r.creditor_id ?? r.other_id!;
   async function pay() {
     if (busy || paid) return;
@@ -30,15 +32,16 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
       setBusy(false);
     }
   }
-  // The bot posts the QR card in the chat (SSE delivers it) — that is the
-  // success feedback; the row itself only reports failures (e.g. the creditor
-  // has no bank details yet: the server's 409 detail names the fix).
+  // The QR opens in a dialog on this row, not as a bot card in the chat: it
+  // answers a private question ("what do I owe Linh?") where it was asked, and
+  // the room is not told. Failures stay on the row — e.g. the creditor has no
+  // bank details yet, where the server's 409 detail names the fix.
   async function requestQr() {
     if (qrBusy) return;
     setQrBusy(true);
     setQrErr(null);
     try {
-      await api.requestQr(roomId, creditorId);
+      setQr(await api.requestQr(roomId, creditorId));
     } catch (e) {
       setQrErr(e instanceof Error ? e.message : "QR failed");
     } finally {
@@ -63,7 +66,7 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
         <span className="flex shrink-0 items-center gap-2">
           {err && <span className="text-xs font-medium text-[var(--danger)]">Failed — retry</span>}
           {!paid && (
-            <button type="button" onClick={requestQr} disabled={qrBusy} title="Bot posts the payment QR in chat"
+            <button type="button" onClick={requestQr} disabled={qrBusy} title="Show the payment QR"
                     className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-base)] disabled:opacity-50">
               {qrBusy ? "…" : "QR"}
             </button>
@@ -77,6 +80,7 @@ function OweRow({ r, roomId, onPaid }: { r: Row; roomId: number; onPaid?: () => 
         </span>
       </div>
       {qrErr && <p className="mt-1 text-xs font-medium text-[var(--danger)]">{qrErr}</p>}
+      {qr && <QrDialog qr={qr} onClose={() => setQr(null)} />}
     </li>
   );
 }

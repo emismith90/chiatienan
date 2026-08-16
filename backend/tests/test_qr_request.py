@@ -1,10 +1,10 @@
 """POST /api/rooms/{room_id}/qr-requests — the ledger QR button.
 
-Deterministic bot post: the server aggregates the caller's outstanding debt to
-one creditor (same `debt_breakdown` nets as settlement), builds the VietQR, and
-posts a `settlement`-shaped bot card — no LLM turn, money never through the
-model (design D3). Reusing the settlement shape means
-`annotate_settled_transfers` retires the QR automatically once paid.
+Deterministic read: the server aggregates the caller's outstanding debt to one
+creditor (same `debt_breakdown` nets as settlement), builds the VietQR and hands
+it back to the caller, who shows it in a dialog — no LLM turn, money never
+through the model (design D3). Nothing is posted to the chat and nothing is
+written, so a tap leaves no trace in the room.
 """
 from datetime import date
 
@@ -50,18 +50,30 @@ def test_qr_request_aggregates_all_outstanding_to_that_creditor(api_client_room)
     r = client.post(f"/api/rooms/{room_id}/qr-requests",
                     json={"to": m["Linh"]}, headers=gheaders)
     assert r.status_code == 200, r.text
-    assert r.json()["amount"] == 80_000
+    d = r.json()
+    assert d["amount"] == 80_000
+    assert d["from"]["id"] == m["Giang"] and d["to"]["id"] == m["Linh"]
+    assert d["to"]["name"] == "Linh" and d["to"]["account_number"] == "0123456789"
+    assert "amount=80000" in d["qr_url"]
+    assert "VCB-0123456789" in d["qr_url"]
+    assert d["note"]
+    # The breakdown behind the total, oldest meal first.
+    assert [x["dish"] for x in d["meals"]] == ["pho", "bun"]
+    assert [x["amount"] for x in d["meals"]] == [50_000, 30_000]
 
-    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
-    card = [x for x in msgs if (x.get("attachments") or {}).get("type") == "settlement"][-1]
-    t = card["attachments"]["transfers"][0]
-    assert t["from_id"] == m["Giang"] and t["to_id"] == m["Linh"]
-    assert t["amount"] == 80_000
-    assert "amount=80000" in t["qr_url"]
-    assert "VCB-0123456789" in t["qr_url"]
-    assert "80,000" in card["body"]
-    # fresh card: the read-time annotation must not mark it settled
-    assert t.get("settled") is not True
+
+def test_qr_request_posts_nothing_to_the_chat(api_client_room):
+    """The QR opens in a dialog for the caller alone — the room hears nothing."""
+    client, headers, room_id, m = api_client_room
+    _give_bank_details(m["Linh"])
+    _two_meals_owed_to_linh(room_id, m["Linh"], m["Giang"])
+    gheaders = _giang_headers(client, headers, room_id)
+
+    before = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
+    assert client.post(f"/api/rooms/{room_id}/qr-requests",
+                       json={"to": m["Linh"]}, headers=gheaders).status_code == 200
+    after = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
+    assert len(after) == len(before)
 
 
 def test_qr_request_409_when_nothing_outstanding(api_client_room):
@@ -81,27 +93,30 @@ def test_qr_request_409_when_payee_has_no_bank_details(api_client_room):
                     json={"to": m["Linh"]}, headers=gheaders)
     assert r.status_code == 409
     assert "bank" in r.json()["detail"].lower() or "Linh" in r.json()["detail"]
-    # and nothing was posted to the chat
-    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
-    assert not [x for x in msgs if (x.get("attachments") or {}).get("type") == "settlement"]
 
 
-def test_qr_request_card_retires_once_paid(api_client_room):
+def test_qr_request_drops_the_meals_already_paid(api_client_room):
+    """Pay one meal and the QR covers only what is still outstanding."""
     client, headers, room_id, m = api_client_room
     _give_bank_details(m["Linh"])
     _two_meals_owed_to_linh(room_id, m["Linh"], m["Giang"])
     gheaders = _giang_headers(client, headers, room_id)
 
-    assert client.post(f"/api/rooms/{room_id}/qr-requests",
-                       json={"to": m["Linh"]}, headers=gheaders).status_code == 200
+    led = client.get(f"/api/rooms/{room_id}/ledger", headers=gheaders).json()
+    first = led["me"]["owe"][0]
+    assert client.post(f"/api/rooms/{room_id}/payments/quick",
+                       json={"to": m["Linh"], "meal_id": first["meal_id"]},
+                       headers=gheaders).status_code == 200
 
-    # Pay both meals via quick-pay, then the card's QR must be annotated settled.
+    d = client.post(f"/api/rooms/{room_id}/qr-requests",
+                    json={"to": m["Linh"]}, headers=gheaders).json()
+    assert d["amount"] == 80_000 - first["amount"]
+    assert [x["meal_id"] for x in d["meals"]] != [first["meal_id"]]
+
+    # Pay the rest and there is nothing left to build a QR from.
     led = client.get(f"/api/rooms/{room_id}/ledger", headers=gheaders).json()
     for row in led["me"]["owe"]:
-        pr = client.post(f"/api/rooms/{room_id}/payments/quick",
-                         json={"to": m["Linh"], "meal_id": row["meal_id"]}, headers=gheaders)
-        assert pr.status_code == 200, pr.text
-
-    msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
-    card = [x for x in msgs if (x.get("attachments") or {}).get("type") == "settlement"][-1]
-    assert card["attachments"]["transfers"][0]["settled"] is True
+        client.post(f"/api/rooms/{room_id}/payments/quick",
+                    json={"to": m["Linh"], "meal_id": row["meal_id"]}, headers=gheaders)
+    assert client.post(f"/api/rooms/{room_id}/qr-requests",
+                       json={"to": m["Linh"]}, headers=gheaders).status_code == 409

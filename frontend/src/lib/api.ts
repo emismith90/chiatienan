@@ -298,9 +298,31 @@ export const deleteMemorySection = (roomId: number, index: number, etag: string)
 export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>
   req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
 
-/** Ask the bot to post the VietQR card covering everything the caller owes
- * `to` — deterministic server-side computation, no LLM turn. */
-export const requestQr = (roomId: number, to: number): Promise<{ ok: boolean; amount: number }> =>
+/** Everything the caller owes one creditor, as one payable VietQR.
+ *
+ * Deterministic server-side computation, no LLM turn. The caller shows it in a
+ * dialog: nothing is posted to the room and nothing is written, so tapping QR
+ * twice costs nothing and leaves no trace. */
+export type QrRequest = {
+  ok: boolean;
+  amount: number;
+  /** addInfo baked into the QR, and what the payer copies as the transfer note. */
+  note: string;
+  qr_url: string;
+  /** The caller. `bank_code` is their own — the app the pay actions open. */
+  from: { id: number; name: string; bank_code?: string | null };
+  to: {
+    id: number; name: string;
+    account_number?: string | null;
+    account_holder?: string | null;
+    bank_code?: string | null;
+  };
+  period: { from: string | null; to: string };
+  /** The meals this total is made of, oldest first. */
+  meals: { meal_id: number; dish: string | null; date: string; amount: number }[];
+};
+
+export const requestQr = (roomId: number, to: number): Promise<QrRequest> =>
   req(`/api/rooms/${roomId}/qr-requests`, { method: "POST", body: JSON.stringify({ to }) });
 
 export const getInvite = (roomId: number): Promise<{ invite_token: string }> =>
