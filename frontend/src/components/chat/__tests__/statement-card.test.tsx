@@ -46,6 +46,53 @@ describe("StatementCard via BotMessage", () => {
   });
 });
 
+const owedAtt = {
+  type: "statement", member: { id: 6, name: "Linh" },
+  period: { from: null, to: "2026-07-22" },
+  owe: [],
+  owed: [{ debtor_id: 9, name: "Giang", meal_id: 4, dish: "nem nuong", occurred_on: "2026-07-21", amount: 40000, status: "unpaid" }],
+};
+
+describe("Owed-to-you rows settle from the creditor's side too", () => {
+  it("Mark paid records the debtor's payment and flips the row", async () => {
+    const spy = vi.spyOn(api, "quickReceive").mockResolvedValue({ ok: true, payment_id: 2, amount: 40000 });
+    render(<BotMessage body="" attachments={owedAtt} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: /Mark paid by Giang/ }));
+    // `from` is the debtor: the caller is the creditor and the server fills the rest in.
+    expect(spy).toHaveBeenCalledWith(3, 9, 4);
+    await waitFor(() => expect(screen.getByText(/· paid/)).toBeInTheDocument());
+  });
+
+  it("leaves the row unpaid and says so when the call fails", async () => {
+    vi.spyOn(api, "quickReceive").mockRejectedValue(new Error("network"));
+    render(<BotMessage body="" attachments={owedAtt} roomId={3} />);
+    fireEvent.click(screen.getByRole("button", { name: /Mark paid by Giang/ }));
+    await waitFor(() => expect(screen.getByText(/Failed/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Mark paid by Giang/ })).toBeInTheDocument();
+    expect(screen.queryByText(/· paid/)).not.toBeInTheDocument();
+  });
+
+  it("offers no QR — you do not pay a debt owed to you", () => {
+    vi.spyOn(api, "quickReceive").mockResolvedValue({ ok: true, payment_id: 2, amount: 40000 });
+    render(<BotMessage body="" attachments={owedAtt} roomId={3} />);
+    expect(screen.queryByRole("button", { name: "QR" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the two directions apart when the same person is on both sides", () => {
+    const both = { ...att, owed: owedAtt.owed };
+    render(<BotMessage body="" attachments={both} roomId={3} />);
+    expect(screen.getByRole("button", { name: "Mark paid to Linh" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark paid by Giang" })).toBeInTheDocument();
+  });
+
+  it("shows nothing to tap on a row already settled", () => {
+    const paid = { ...owedAtt, owed: [{ ...owedAtt.owed[0], status: "paid" }] };
+    render(<BotMessage body="" attachments={paid} roomId={3} />);
+    expect(screen.queryByRole("button", { name: /Mark paid/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/· paid/)).toBeInTheDocument();
+  });
+});
+
 const qrPayload: api.QrRequest = {
   ok: true,
   amount: 61000,
