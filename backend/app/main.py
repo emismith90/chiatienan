@@ -17,7 +17,7 @@ from logging.handlers import RotatingFileHandler
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app import (accounts, chat, debug_api, drafts, knowledge, ledger, memory,
                  memos, observations, places, roster, rooms)
@@ -159,7 +159,23 @@ class MessageIn(BaseModel):
 
 
 class QuickPayIn(BaseModel):
-    to: int
+    """One meal's outstanding debt, marked settled from either end.
+
+    ``to`` names the creditor — the debtor tapping ⑦ on a "you owe" row, and the
+    only shape this had. ``from`` names the debtor, for the creditor tapping the
+    same button on an "owed to you" row ("Nhím already handed me the 40k").
+    Whichever is omitted is the caller, so the old ``{to, meal_id}`` body still
+    means exactly what it did.
+
+    The caller must be one of the two ends (enforced in the handler): this
+    button records a payment you were part of, never one between two other
+    people.
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    to: int | None = None
+    # `from` is a Python keyword, hence the alias — the wire name is `from`.
+    from_: int | None = Field(None, alias="from")
     meal_id: int
 
 
@@ -480,20 +496,34 @@ async def get_ledger(room_id: int, period: str = "since_last",
 @app.post("/api/rooms/{room_id}/payments/quick")
 async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
+    # Either end may tap it: the debtor marks "I paid Kun", the creditor marks
+    # "Nhím paid me". The side the body leaves out is the caller.
+    debtor = body.from_ if body.from_ is not None else ctx.member_id
+    creditor = body.to if body.to is not None else ctx.member_id
+    if debtor == creditor:
+        raise HTTPException(400, "a payment needs two different people")
+    if ctx.member_id not in (debtor, creditor):
+        # Recording a transfer you were not part of is a settlement, not a
+        # button tap — the agent's payment draft exists for that, with a card
+        # both sides can see before it is committed.
+        raise HTTPException(403, "you can only mark a payment you are part of")
     db = get_db()
     async with chat._agent_lock:
         with db.session() as s:
+            # No roster check on the two ids: `debt_breakdown` is scoped to this
+            # room, so an id from anywhere else simply has nothing outstanding
+            # and falls out of the 409 below.
             last = ledger.last_settlement(s, room_id)
             p = resolve_period("since_last", today=today_ict(),
                                last_settlement_to=last.period_to if last else None)
             edges = ledger.debt_breakdown(s, room_id, p["from"], p["to"])
             outstanding = sum(e.outstanding for e in edges
-                              if e.debtor == ctx.member_id and e.creditor == body.to
+                              if e.debtor == debtor and e.creditor == creditor
                               and e.meal_id == body.meal_id)
             if outstanding <= 0:
                 raise HTTPException(409, "nothing outstanding for that meal")
-            pay = ledger.record_payment(s, room_id=room_id, from_member_id=ctx.member_id,
-                                        to_member_id=body.to, amount=outstanding,
+            pay = ledger.record_payment(s, room_id=room_id, from_member_id=debtor,
+                                        to_member_id=creditor, amount=outstanding,
                                         meal_id=body.meal_id, logged_by=str(ctx.member_id))
             names = {mm.id: mm.display_name
                      for mm in roster.list_members(s, room_id, include_inactive=True)}
@@ -503,8 +533,8 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
             pay_att = {
                 "type": "payment",
                 "transfers": [{
-                    "from": {"id": ctx.member_id, "name": names.get(ctx.member_id, "?")},
-                    "to": {"id": body.to, "name": names.get(body.to, "?")},
+                    "from": {"id": debtor, "name": names.get(debtor, "?")},
+                    "to": {"id": creditor, "name": names.get(creditor, "?")},
                     "amount": outstanding,
                 }],
                 "meal_id": body.meal_id,

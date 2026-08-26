@@ -293,10 +293,20 @@ export const deleteMemorySection = (roomId: number, index: number, etag: string)
     method: "DELETE",
   });
 
+export type QuickPayResult = { ok: boolean; payment_id: number; amount: number };
+
 /** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
  * computes the amount from {to, meal_id}; client sends no money value). */
-export const quickPay = (roomId: number, to: number, mealId: number): Promise<{ ok: boolean; payment_id: number; amount: number }> =>
+export const quickPay = (roomId: number, to: number, mealId: number): Promise<QuickPayResult> =>
   req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
+
+/** The same button from the creditor's side: "Nhím already handed me the 40k".
+ *
+ * Same endpoint, same server-computed amount — only the end being named
+ * changes. `from` is the debtor; the caller is the creditor, so the server
+ * fills in the other half and refuses anything the caller is not part of. */
+export const quickReceive = (roomId: number, from: number, mealId: number): Promise<QuickPayResult> =>
+  req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ from, meal_id: mealId }) });
 
 /** Everything the caller owes one creditor, as one payable VietQR.
  *

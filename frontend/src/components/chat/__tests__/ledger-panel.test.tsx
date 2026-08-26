@@ -34,6 +34,26 @@ describe("LedgerPanel", () => {
     expect(api.quickPay).toHaveBeenCalledWith(3, 6, 2);
   });
 
+  it("settles an 'Owed to you' row from the creditor's side", async () => {
+    const owedData = {
+      ...data,
+      me: {
+        owe: [],
+        owed: [{ other_id: 9, name: "Giang", meal_id: 2, dish: "bun bo",
+                 occurred_on: "2026-07-21", amount: 61000, status: "unpaid" }],
+      },
+    };
+    vi.spyOn(api, "getLedger").mockResolvedValue(owedData as any);
+    const spy = vi.spyOn(api, "quickReceive")
+      .mockResolvedValue({ ok: true, payment_id: 2, amount: 61000 });
+    render(<LedgerPanel roomId={3} selfId={6} version={0} />);
+    await waitFor(() => expect(screen.getByText("Owed to you")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Mark paid by Giang/ }));
+    // Giang is the debtor; the caller (Linh) is the creditor the server infers.
+    expect(spy).toHaveBeenCalledWith(3, 9, 2);
+    await waitFor(() => expect(screen.getByText(/· paid/)).toBeInTheDocument());
+  });
+
   it("shows who owes whom and the timeline on 'Group'", async () => {
     render(<LedgerPanel roomId={3} selfId={9} version={0} />);
     await waitFor(() => expect(screen.getByText("You owe")).toBeInTheDocument());
