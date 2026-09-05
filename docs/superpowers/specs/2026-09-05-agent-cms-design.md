@@ -1,44 +1,60 @@
 # A headless CMS for Pi-harness agents, hosted in chiatienan — Design
 
-**Date:** 2026-09-05 · **Status:** draft for review — decisions in §10 are open
+**Date:** 2026-09-05 · **Status:** draft v2 — revised after operator feedback (§10 records
+what was decided and what is still open)
 **Builds on:** [`2026-08-12-cursor-to-pi-harness-design.md`](2026-08-12-cursor-to-pi-harness-design.md)
 (the sidecar boundary) · `TODO.md` "BIG: agent engine export/import"
 
-## 0. What is being asked, restated
+## 0. Scope, restated after feedback
 
-Two questions, in the order the ask put them:
+The CMS is **configuration + engine + a code registry**. Three things are explicitly out:
 
-**(a)** Take *everything* the Pi harness can be configured with, understand what each
-knob *is*, and decide what a CMS field for it would look like — or why there is none.
+| Out of scope | Why |
+|---|---|
+| Agent UI | the operator drives the agent with AG-UI over SSE already; the engine emits events, the UI is someone else's |
+| Admin identity / authoring roles | not wanted now; the shared `X-Admin-Password` header keeps guarding `/api/admin/*` |
+| A no-code tool builder | see §4.5 — code is supported, but as *registered plugins with a declared interface*, not as text in a form |
 
-**(b)** Evaluate this repository as the host for that CMS: an admin side that can
-configure everything about a **room**, up to and including standing up a *new
-business* (a bot that is not about lunch money) without touching the code paths
-that exist today.
+Two positions from draft v1 changed on feedback, and the change is the heart of v2:
 
-One pushback before anything else, because it shapes the whole design:
+1. **Code is in scope.** v1 said "the CMS only enables code developers ship". v2 makes
+   that precise and much more useful: the engine runs a **turn pipeline with named
+   stages and typed injection points**, code plugs into those stages as *plugins*
+   with a declared config schema, and the CMS stores *which plugins run where, with
+   what config*, per profile. Same idea as middleware in a web framework or
+   initialisation modules in a .NET CMS: developers write the module against a
+   published interface; the CMS composes and configures it. Nothing about how an
+   agent turn works is hard-wired any more — today's behaviour becomes the
+   **pre-built plugin set**.
+2. **Database, validation and eval are content types**, not side concerns. A
+   business declares the data it needs (§5.3), the invariants it enforces (§5.4) and
+   the cases it must keep passing (§5.5), and all three are versioned with the
+   profile and checked at publish.
 
-> **"All configuration Pi supports" is the wrong bar for a CMS, and hitting it would
-> make the CMS worse.** Roughly a third of Pi's surface configures an interactive
-> terminal (themes, keybindings, cursor, scrollbar, changelog collapse). A server bot
-> has no terminal, so those fields would be dead UI. Another third is *code*
-> (extensions in TypeScript, tool bodies) — a CMS that lets an editor type code and
-> ship it to a process that owns a money ledger is not a CMS, it is remote code
-> execution with a nicer form. So the inventory in §2 covers **all of it**, but each
-> knob gets one of three fates, and only the first becomes a CMS field.
+And two things the ask settled: a **room links to one agent** (its *manager*), a
+profile can back many rooms, and an agent can **invoke sub-agents** (§6). The second
+business is a **money ledger for poker / card games** (§7), chosen because it shares
+the netting-and-QR core with lunch and differs in exactly the places that stress the
+pack interface.
+
+One pushback survives from v1, because it is about Pi rather than about this design:
+
+> **"All configuration Pi supports" is the wrong bar.** Roughly a third of Pi's
+> surface configures an interactive terminal. The inventory in §2 covers **all of
+> it**, but each knob gets one of three fates, and only the first two reach the CMS.
 
 | Fate | Meaning | Examples |
 |---|---|---|
 | **CMS-native** | Text or a value an editor can own safely. Becomes a content field. | system prompt, skills, rules, model choice, thinking level, caps, compaction, bot handle |
-| **Catalogue** | Code that developers ship; the CMS only *enables, orders and parameterises* it. | tools / tool packs, extension hooks, providers |
+| **Code** | A plugin behind a pipeline injection point (§4). The CMS enables, orders and configures it; a developer wrote it against a declared interface. | tools / tool packs, validators, graders, extension hooks, providers |
 | **Not applicable** | Only meaningful with a human at a terminal. Documented, deliberately absent. | themes, keybindings, TUI mode, steering/follow-up queues, `/share` |
 
 ## 1. Where this repo already is
 
-The ask says "look at this repo as candidate". The audit is favourable, and the
-reason is one design decision already taken in the Pi port: **the sidecar takes the
-whole agent configuration as data, per turn.** `agent.py:148-171` builds the `run`
-command and `session.js:91-124` constructs a fresh Pi session from it:
+The audit is favourable, and the reason is one design decision already taken in the
+Pi port: **the sidecar takes the whole agent configuration as data, per turn.**
+`agent.py:148-171` builds the `run` command and `session.js:91-124` constructs a
+fresh Pi session from it:
 
 ```json
 {"type":"run",
@@ -54,47 +70,45 @@ command and `session.js:91-124` constructs a fresh Pi session from it:
 That object **is** an agent profile. Nothing in the sidecar reads a file, an env var
 or a constant for any of it except the OpenRouter base URL and key. So the CMS does
 not need to teach Pi anything new: it needs to *produce this object from content
-instead of from code*, per room. That is a much smaller project than "build a CMS
-for Pi", and it is the thing that makes this repo a good candidate.
+instead of from code*, per room, and to run the Python half of the turn through a
+pipeline instead of through `chat.run_bot_turn`'s one long function.
 
-What produces each field today, and how hard it is to move behind content:
+What produces each field today, and where it goes:
 
-| `run` field | Source today | Room-scoped? | Moves to content? |
+| `run` field | Source today | Room-scoped? | Becomes |
 |---|---|---|---|
-| `system` | `prompt.py` — one hard-coded Vietnamese string with two variables (`sender`, `today`) | no | **yes** — a template with named variables |
-| `skills` | five `SKILL.md` files under `app/agent_skills/skills/` | no | **yes** — already the right shape (frontmatter `name`/`description` + body) |
-| `context_files` | `agent_skills/rules/money-safety.mdc` | no | **yes** — "always-on rule" content type |
-| `tools` | `tools.build_tools()` — 19 `CustomTool`s, one flat dict | scoped at *execution* (`ToolContext.room_id`), not at *selection* | **catalogue** — enable/disable + description override per profile; bodies stay code |
-| `model`, `vision_model`, `thinking` | env `PI_MODEL`, `PI_VISION_MODEL`, `PI_THINKING` | no | **yes** — from a probed model catalogue |
-| `builtin_tools` | env `PI_BUILTIN_TOOLS` (default `read,write,bash`) | no | **yes, governed** — see §7 |
-| `max_tools`, `max_seconds` | env | no | **yes** |
-| `message` assembly | `agent._render_prompt` — section headers are hard-coded Vietnamese | no | **yes** — the section titles are content too |
-| memory policy | env `MEMORY_WINDOW_WEEKS`, `HISTORY_MAX_MESSAGES`, `IMAGE_LOOKBACK_*` | no | **yes** |
-| summariser prompt | `summarize._SUMMARY_PROMPT` constant | no | **yes** |
-| bot identity | env `BOT_HANDLE`; the name "Phoenix" and its origin story are inside `prompt.py` | no | **yes** |
-| post-turn rendering | `chat.py` `_settlement_body` etc. — server-side bodies per tool-result type | n/a | **catalogue** — a tool pack ships its renderers |
-| knowledge stores | `memory.md`, `observations.md`, `places` — per room, already editable in the UI | **yes** | already content; the CMS reuses `knowledge.py` |
+| `system` | `prompt.py` — one hard-coded Vietnamese string with two variables | no | **content** — a template with named variables |
+| `skills` | five `SKILL.md` files under `app/agent_skills/skills/` | no | **content** — already the right shape |
+| `context_files` | `agent_skills/rules/money-safety.mdc` | no | **content** — "always-on rule" |
+| `tools` | `tools.build_tools()` — 19 `CustomTool`s, one flat dict | scoped at *execution*, not at *selection* | **code** — a `ToolPack` plugin; per-tool enable/override is content |
+| `model`, `vision_model`, `thinking` | env | no | **content** — from a probed model catalogue |
+| `builtin_tools` | env (default `read,write,bash`) | no | **content, governed** — §8 |
+| `max_tools`, `max_seconds` | env | no | **content** |
+| `message` assembly | `agent._render_prompt` — hard-coded section headers | no | **code plugin** (`context` stage) with content-owned headers |
+| memory policy | env `MEMORY_WINDOW_WEEKS`, `HISTORY_MAX_MESSAGES`, `IMAGE_LOOKBACK_*` | no | **content** consumed by the `memory` and `images` plugins |
+| summariser prompt | `summarize._SUMMARY_PROMPT` | no | **content** |
+| bot identity | env `BOT_HANDLE`; "Phoenix" inside `prompt.py` | no | **content** (`persona`) |
+| reply checks | `moneyguard.unbacked_amounts` / `fabricated_commit`, inline in `chat.py:645-677` | n/a | **code plugins** at the `validate` stage, configured as `ValidationRule`s |
+| post-turn rendering | `chat.py` `_settlement_body` etc., an `if/elif` chain on result type | n/a | **code** — the pack's `render` |
+| draft cards | `drafts.create_draft` / `create_payment_draft`, two hard-coded kinds | n/a | **code** — the pack's `post_turn`, over a generalised draft kind |
+| knowledge stores | `memory.md`, `observations.md`, `places` — per room, editable in the UI | **yes** | already content; unchanged |
+| benchmark | `bench/` — corpus in Python files, graders, judge, world builder | n/a | **content + code** — cases and rubrics become content, graders and fixtures become plugins (§5.5) |
 
-Two observations from that table:
+Two observations:
 
-1. **Everything agent-shaped is global today; only the *data* is per room.** Every
-   room runs the same bot with the same tools. "Configure a room" therefore means
-   introducing the first per-room *configuration*, not extending an existing one.
-2. **The repo already has half a CMS.** The knowledge panel (`knowledge.py`, the
-   `PATCH /api/rooms/{id}/observations|memory` routes, `knowledge-panel.tsx`) is an
-   editor for per-room content with etag concurrency. The admin side proposed here
-   is the same pattern applied to *behaviour* instead of *facts*.
+1. **Everything agent-shaped is global today; only the data is per room.** "Configure
+   a room" means introducing the first per-room *configuration*.
+2. **The repo already has the pieces of a pipeline; they are just inlined.**
+   `run_bot_turn` does, in order: rollover, load memory, build history, carry images,
+   run the sidecar, pick the draft path, render the body, run moneyguard, persist,
+   publish superseded cards. That *is* the stage list in §4.1, written as one
+   function. Phase 1 is a refactor that names the stages without changing what any
+   of them does, and the benchmark proves it.
 
-What is **not** favourable, stated plainly:
-
-- The admin surface is one password header (`require_admin`) guarding room creation.
-  There is no admin identity, no audit trail, no roles. A CMS that can change which
-  model handles money needs at least "who changed what, when" (§7).
-- `chat.py` renders tool results into room bodies by `if/elif` on result type
-  (`chat.py:611-622`). A "new business" with different tools has nowhere to plug in
-  its own renderers without editing that chain. §5.4 fixes this.
-- `tools.build_tools` returns all 19 tools as one unit. There is no notion of a
-  *pack*, so "enable only member tools" is not expressible today.
+What is **not** favourable, plainly: `drafts.py` knows two draft kinds by name,
+`ledger.period_balances` derives balances from *meals* and *payments* specifically,
+and `chat.py` renders by `elif` on result type. A second money business cannot exist
+until those three become pack-provided (§7.3).
 
 ## 2. Pi's configuration surface, classified
 
@@ -106,7 +120,7 @@ a doc file it is named.
 
 | Pi concept | Where it lives in Pi | Fate | CMS equivalent |
 |---|---|---|---|
-| Provider (`KnownProvider` + custom) | `models.json` `providers.{name}` · `pi.registerProvider()` · `ProviderConfig` {`baseUrl`, `apiKey`, `api`, `headers`, `authHeader`, `models[]`, `oauth`} | **Catalogue** | `Provider` record: name, api type, base URL, header template. **The key never enters the CMS.** It is an env-var *reference* (`$OPEN_ROUTER_KEY`), exactly Pi's own `apiKey: "$VAR"` convention. |
+| Provider (`KnownProvider` + custom) | `models.json` `providers.{name}` · `pi.registerProvider()` · `ProviderConfig` {`baseUrl`, `apiKey`, `api`, `headers`, `authHeader`, `models[]`, `oauth`} | **Code** | `Provider` record: name, api type, base URL, header template. **The key never enters the CMS.** It is an env-var *reference* (`$OPEN_ROUTER_KEY`), exactly Pi's own `apiKey: "$VAR"` convention. |
 | Model (`Model<Api>`) | `id`, `name`, `api`, `reasoning`, `input: ["text","image"]`, `cost`, `contextWindow`, `maxTokens`, `thinkingLevelMap`, `samplingParams`, `compat` (incl. `compat.openRouterRouting` {`order`, `only`, `ignore`, `allow_fallbacks`, `require_parameters`, `data_collection`, `zdr`, `max_price`, `sort`}), `headers` | **CMS-native** | `Model` record with the same fields, **plus** `probe` (§7): last `bench.probe_models` verdict against this repo's real tool schemas. A model that has not passed the probe cannot be selected for a money profile. |
 | Default model / provider / thinking | `settings.json` `defaultProvider`, `defaultModel`, `defaultThinkingLevel` | **CMS-native** | on the profile: `model`, `vision_model`, `thinking_level` (`off\|minimal\|low\|medium\|high\|xhigh\|max` per `pi-agent-core`; Pi clamps to what the model's `thinkingLevelMap` allows) |
 | `thinkingBudgets` {minimal, low, medium, high} | `settings.json` | CMS-native (advanced) | optional per-profile token budgets |
@@ -131,9 +145,9 @@ a doc file it is named.
 | Pi concept | Where it lives | Fate | CMS equivalent |
 |---|---|---|---|
 | Built-in tools `read`, `bash`, `edit`, `write` (+ `grep`, `find`, `ls` via `createReadOnlyTools`) | `CreateAgentSessionOptions.tools[]` allowlist, `excludeTools[]`, `noTools: "all"\|"builtin"` | **CMS-native, governed** | profile `builtin_tools[]`. Default **empty** for any profile that has a money pack enabled (§7); the UI shows *why* when an editor turns `bash` on. Today's env default is `read,write,bash`, i.e. weaker than the Pi design's `tools: []` — the CMS is the chance to make the safe value the default. |
-| Custom tool (`ToolDefinition`: `name`, `label`, `description`, `promptSnippet`, `promptGuidelines[]`, `parameters` (TypeBox), `executionMode`, `execute()`, renderers) | `customTools[]` / `pi.registerTool()` | **Catalogue** | `ToolPack` (code) exposes tools; the profile stores per tool: `enabled`, `description_override`, `prompt_guidelines[]`, `execution_mode`. **Bodies and schemas never come from content** (D3: the tool owns the numbers; a content-edited schema would let an editor silently remove `required: ["total"]`). |
+| Custom tool (`ToolDefinition`: `name`, `label`, `description`, `promptSnippet`, `promptGuidelines[]`, `parameters` (TypeBox), `executionMode`, `execute()`, renderers) | `customTools[]` / `pi.registerTool()` | **Code** | `ToolPack` (code) exposes tools; the profile stores per tool: `enabled`, `description_override`, `prompt_guidelines[]`, `execution_mode`. **Bodies and schemas never come from content** (D3: the tool owns the numbers; a content-edited schema would let an editor silently remove `required: ["total"]`). |
 | Tool result shape (`content[]` blocks + `details`) | `AgentToolResult` | Catalogue | fixed by the pack |
-| `tool_call` / `tool_result` extension events (block, rewrite, approve) | `ExtensionAPI.on("tool_call")` | **Catalogue** (policy hooks) | a small set of sidecar-shipped policies the CMS can switch on per profile: e.g. *deny-list by name*, *max calls per tool per turn*, *require confirmation* — parameterised, never authored |
+| `tool_call` / `tool_result` extension events (block, rewrite, approve) | `ExtensionAPI.on("tool_call")` | **Code** (policy hooks) | a small set of sidecar-shipped policies the CMS can switch on per profile: e.g. *deny-list by name*, *max calls per tool per turn*, *require confirmation* — parameterised, never authored |
 | `user_bash` event, `bash` RPC command, `shellPath`, `shellCommandPrefix` | settings / RPC | **N/A** | no human shell in a room |
 
 ### 2.4 Session, memory, compaction
@@ -149,8 +163,8 @@ a doc file it is named.
 
 | Pi concept | Where it lives | Fate | CMS equivalent |
 |---|---|---|---|
-| Extension (`.pi/extensions/*.ts`, `extensionFactories`, `ExtensionAPI`: 30+ events, `registerTool`, `registerCommand`, `registerShortcut`, `registerFlag`, `registerMessageRenderer`, `registerProvider`, `sendMessage`, `appendEntry`, `exec`, `setActiveTools`, `setModel`) | `dist/core/extensions/types.d.ts` | **Catalogue** | An `Extension` in this system is a **sidecar-shipped factory with a JSON config schema**. The CMS lists the ones the sidecar exposes, and stores `{enabled, config}` per profile. Authoring TypeScript in the CMS is explicitly rejected (§0). Candidates worth shipping first: *tool-call policy* (`tool_call` → `{block, reason}` — Pi has **no built-in permission or sandbox layer**, `docs/security.md`; this hook is the only gate), *provider header injection* (`before_provider_headers`), *per-turn prompt/message injection* (`before_agent_start` → `{systemPrompt?, message?}`), *turn telemetry* (`agent_end` stats to our log line). |
-| Package (`package.json` `pi` manifest: `extensions[]`, `skills[]`, `prompts[]`, `themes[]`; sources `npm:`/`git:`/path; `autoload`, filters; `pi install`) | `docs/packages.md`, `PackageSource` | **Catalogue + export format** | Two uses. (1) *Import*: a Pi package is a legitimate way for a developer to hand the CMS a bundle of skills/prompts — the CMS reads `skills/**/SKILL.md` and `prompts/*.md` from a package and creates content from them. (2) *Export*: a published profile exports **as a Pi package** (`SKILL.md` files, `prompts/*.md`, `AGENTS.md`, `settings.json` with model/thinking/compaction), so the same agent can be run under stock `pi` for debugging or moved between deployments. This is the "engine export/import" item in `TODO.md`, given a concrete file format. |
+| Extension (`.pi/extensions/*.ts`, `extensionFactories`, `ExtensionAPI`: 30+ events, `registerTool`, `registerCommand`, `registerShortcut`, `registerFlag`, `registerMessageRenderer`, `registerProvider`, `sendMessage`, `appendEntry`, `exec`, `setActiveTools`, `setModel`) | `dist/core/extensions/types.d.ts` | **Code** | An `Extension` in this system is a **sidecar-shipped factory with a JSON config schema**. The CMS lists the ones the sidecar exposes, and stores `{enabled, config}` per profile. Authoring TypeScript in the CMS is explicitly rejected (§0). Candidates worth shipping first: *tool-call policy* (`tool_call` → `{block, reason}` — Pi has **no built-in permission or sandbox layer**, `docs/security.md`; this hook is the only gate), *provider header injection* (`before_provider_headers`), *per-turn prompt/message injection* (`before_agent_start` → `{systemPrompt?, message?}`), *turn telemetry* (`agent_end` stats to our log line). |
+| Package (`package.json` `pi` manifest: `extensions[]`, `skills[]`, `prompts[]`, `themes[]`; sources `npm:`/`git:`/path; `autoload`, filters; `pi install`) | `docs/packages.md`, `PackageSource` | **Code + export format** | Two uses. (1) *Import*: a Pi package is a legitimate way for a developer to hand the CMS a bundle of skills/prompts — the CMS reads `skills/**/SKILL.md` and `prompts/*.md` from a package and creates content from them. (2) *Export*: a published profile exports **as a Pi package** (`SKILL.md` files, `prompts/*.md`, `AGENTS.md`, `settings.json` with model/thinking/compaction), so the same agent can be run under stock `pi` for debugging or moved between deployments. This is the "engine export/import" item in `TODO.md`, given a concrete file format. |
 | Themes (`.pi/themes/*.json`), keybindings (`.pi/keybindings.json`), `tuiMode`, `editorPaddingX`, `outputPad`, `autocompleteMaxVisible`, `showHardwareCursor`, `fullscreenScrollbar`, `markdown.mermaid`, `externalEditor`, `collapseChangelog`, `quietStartup`, `terminal.*`, `images.*` | settings | **N/A** | terminal presentation. `images.blockImages` / `autoResize` are the only ones with a server analogue, and this repo already does its own image sanitising in `images.py`. |
 | Telemetry / update checks (`enableInstallTelemetry`, `enableAnalytics`, `PI_OFFLINE`, `PI_SKIP_VERSION_CHECK`) | settings / env | **N/A** (deployment) | set once in the container env |
 | Project trust (`defaultProjectTrust`, `project_trust` event) | settings | **N/A** | the synthetic cwd is never "a project" |
@@ -177,318 +191,383 @@ lookback, vision budget) · extension toggles + config · knowledge seeds
 That is the whole content model. Everything else Pi has is either code (catalogue)
 or a terminal (absent).
 
-## 3. Vocabulary: room, profile, business
+## 3. Vocabulary
 
-Three words the design uses precisely, because the ask uses "room" and "business"
-interchangeably and they must not be:
-
-- **Room** — what exists today: a group of members, a ledger, a chat, its own
-  memory files. A *tenant*. Rooms hold **data**.
-- **Agent profile** — a published, versioned configuration that says how the bot
-  behaves: prompt, skills, rules, models, tools, caps, memory policy. Profiles hold
-  **behaviour**. Many rooms can share one profile.
-- **Business** — a profile *plus* the tool packs and renderers it depends on, plus a
-  set of defaults for the data a new room of that kind starts with (seed places,
-  seed rules). "Lunch ledger" is one business; "office equipment lending" would be
-  another. A business is a **template a room is created from**, not something a room
-  can be switched to later (its tools write different tables).
-
-So "configure everything of a room" decomposes into: pick the room's profile (or
-give it a private one), add room-level *append sections* and knowledge, and manage
-its members — the last two already exist.
+| Word | Means | Holds |
+|---|---|---|
+| **Room** | a tenant: members, chat, ledger rows, memory files | data |
+| **Agent** | a named actor with a role (`manager` or `sub`) bound to one **profile version**, plus the list of sub-agents it may delegate to | identity + delegation |
+| **Profile** | versioned, published configuration: prompt, rules, skills, templates, models, caps, pipeline, tool packs, validation rules, eval suites | behaviour |
+| **Business** | a template: the packs, plugins and default profiles a room of this kind is created from, plus seed data | blueprint |
+| **Pipeline** | the ordered stages a turn passes through; each stage has a typed interface | the engine's shape |
+| **Plugin** | a code module registered against one stage, with an id and a JSON-Schema config | code |
+| **Tool pack** | the plugin kind that contributes tools, renderers, draft kinds, balance contributions and fixtures for one domain | code |
 
 ```
-Business (template)  ──creates──▶  Room (tenant, data)
-     │                                  │  agent_profile_id
-     └── default AgentProfile ◀─────────┘  + room-level append sections
-             │ versions (draft → published)
-             ├── Prompt, Rules[], Skills[], PromptTemplates[]
-             ├── models, thinking, caps, retry, memory policy
-             ├── ToolPack refs + per-tool overrides   (code, catalogued)
-             └── Extension refs + config              (code, catalogued)
+Business ──creates──▶ Room ──manager──▶ Agent ──▶ ProfileVersion (published snapshot)
+                                          │ delegates_to[]        │
+                                          └─▶ Agent (sub) ───────┘ (own profile version)
+ProfileVersion.spec = content fields + pipeline {stage: [{plugin, config}]}
+                    + tool_packs[{pack, tools{…}}] + validation[] + eval_suites[]
 ```
 
-## 4. Content model
+## 4. Code support: the turn pipeline
 
-Concrete enough to implement, small enough to fit the single-process SQLite the repo
-runs. Storage is SQLite tables with JSON columns; not files. Reason: the profile has
-to be versioned, published atomically, and joined to `rooms` — three things the
-existing `memory.md`-style file stores are bad at and a table is good at. Skill and
-rule *bodies* are text columns; on export they become files (§6).
+### 4.1 Stages
 
-```
-businesses            id, slug, name, description, tool_packs JSON[], default_profile_id,
-                      seed JSON {places[], observations[]}, created_at
-agent_profiles        id, business_id, name, published_version_id NULL, created_at
-agent_profile_versions
-                      id, profile_id, version INT, status draft|published|retired,
-                      spec JSON  (the whole resolved spec, §4.1),
-                      created_by, created_at, published_at, note
-prompts / rules / skills / prompt_templates
-                      id, business_id, slug, title, body TEXT, frontmatter JSON,
-                      updated_by, updated_at          — the *editable* source
-rooms                 + agent_profile_id NULL (NULL → business default)
-                      + agent_overrides JSON  {append_sections[], handle?, language?}
-admin_users           id, email, role owner|editor|viewer, password_hash, created_at
-audit_log             id, actor, action, entity, entity_id, before JSON, after JSON, at
-model_catalogue       provider, model_id, name, input[], context_window, max_tokens,
-                      cost JSON, reasoning, probe JSON {ok, checked_at, schemas[], notes}
-```
-
-A `version.spec` is a *snapshot*: publishing copies the referenced prompt/rule/skill
-bodies into the spec so a later edit to a skill does not change what a published room
-runs until someone publishes again. Editors edit sources; rooms run snapshots.
-
-### 4.1 The spec — what one published version contains
-
-This is the CMS's output and the sidecar's input. It is the `run` command from §1
-with the per-turn parts (`message`, `images`, `cwd`) removed and the per-room parts
-resolved at dispatch time.
-
-```jsonc
-{
-  "persona":   { "handle": "phoenix", "aliases": ["bot"], "name": "Phoenix", "language": "vi" },
-  "prompt":    { "body": "Bạn là **{{persona.name}}** …", "append": ["…room-level…"] },
-  "rules":     [ { "slug": "money-safety", "content": "…" } ],
-  "skills":    [ { "name": "record-meal", "description": "…", "body": "…", "delivery": "inline" } ],
-  "templates": [ { "name": "clear", "kind": "builtin" },
-                 { "name": "rules", "kind": "template", "content": "Nhắc lại luật: $@" } ],
-  "models":    { "text": "~deepseek/deepseek-v4-flash-latest",
-                 "vision": "qwen/qwen3-vl-30b-a3b-instruct",
-                 "thinking": "medium", "thinking_budgets": null },
-  "retry":     { "enabled": true, "maxRetries": 3, "baseDelayMs": 2000 },
-  "caps":      { "max_tools": 40, "max_seconds": 120 },
-  "builtin_tools": [],
-  "tool_packs": [ { "pack": "lunch_ledger", "tools": {
-                     "propose_meal": { "enabled": true },
-                     "suggest_lunch": { "enabled": true, "description": "…override…" },
-                     "pick_random":  { "enabled": false } } } ],
-  "extensions": [ { "id": "tool_call_policy", "config": { "max_per_tool": 6 } } ],
-  "memory":    { "history_max_messages": 200, "window_weeks": 10,
-                 "image_lookback_messages": 10, "image_lookback_minutes": 120,
-                 "vision_history_max_messages": 60,
-                 "summary_prompt": "Bạn đang tóm tắt …" },
-  "settings":  { "compaction": { "enabled": false } }   // passthrough → SettingsManager.inMemory
-}
-```
-
-**Template variables** available to `prompt.body` and `append`: `persona.*`,
-`today` (ICT), `sender.name`, `sender.member_id`, `room.name`, `room.language`.
-Rendering is Python-side (`prompt.py` becomes a renderer, not a string). The set is
-closed and documented in the editor; unknown variables fail validation at save time,
-not at 12:05 when someone asks who pays.
-
-### 4.2 Why bodies are inline in the spec but sources are rows
-
-Because the two have different consumers. An editor wants "the record-meal skill"
-with history and a diff. The sidecar wants "the bytes this room runs right now" with
-no joins and no chance that a half-saved edit lands mid-turn. Snapshot-on-publish
-serves both, and it is how every headless CMS with a publish step works.
-
-## 5. Architecture
-
-### 5.1 Read side — the resolver (the only change on the hot path)
+This is the list that needs sign-off before Phase 1, because every plugin is written
+against it. Stage names are stable identifiers; the Python protocol per stage is in
+§4.2. Left column is the Python engine; the right column is the sidecar, where Pi's
+own extension events are the injection points.
 
 ```
-chat.run_bot_turn(room_id, …)
-   └─ profiles.resolve(session, room_id) -> ResolvedProfile   # spec + room overrides, cached
-        └─ agent.run_turn(text, ctx, profile=…)                # builds the run command from it
-              └─ sidecar (unchanged protocol; new optional fields: settings, extensions)
+Python engine (one turn)                          Node sidecar (inside the Pi run)
+──────────────────────────────────────────         ─────────────────────────────────────
+ 1 resolve   room → Agent → ProfileVersion          before_agent_start   final prompt/message tweak
+ 2 gate      may this message start a turn?         tool_call            allow / block / rewrite args
+ 3 context   memory · history · images · knowledge  tool_result          patch / annotate result
+ 4 prompt    render system + message from content   before_provider_*    headers, request body
+ 5 model     text vs vision · thinking · caps        agent_end            stats → telemetry
+ 6 run       sidecar turn; per tool call ⤵
+      6a validate_args   JSON Schema + ValidationRules(scope=tool_args)
+      6b execute         the pack's tool body
+      6c validate_result ValidationRules(scope=tool_result)
+ 7 validate  reply-level rules (moneyguard, narration, language)
+ 8 render    body + attachments from structured results   ← exactly one pack owns this
+ 9 persist   messages, drafts, superseded cards, events
+10 after     rollover · eval capture · telemetry · sub-agent bookkeeping
 ```
 
-`resolve()` returns the published spec for `rooms.agent_profile_id` (else the
-business default), applies `rooms.agent_overrides`, and caches by
-`(version_id, room_id)`. It is the *only* thing the turn path learns about the CMS.
-`run_turn`'s frozen signature gains one keyword, `profile=None`, defaulting to a
-profile built from today's code and env — so the 14 monkeypatch sites and every
-existing test keep passing, and Phase 1 (§8) can ship with **zero behaviour change**
-and prove it with the existing benchmark.
+Stages 1, 5, 6 and 8 are **single-owner** (the engine, the engine, the sidecar, the
+pack). Stages 2, 3, 4, 7, 9, 10 and 6a/6c are **ordered lists of plugins**; the
+profile decides which and in what order. Today's behaviour is the pre-built set:
 
-### 5.2 Write side — the headless API
+| Stage | Pre-built plugin (today's code, relocated) | Config it takes |
+|---|---|---|
+| gate | `mention_gate` (`chat.mentions_bot`), `slash_command` (`/clear`, prompt templates) | handle, aliases |
+| context | `long_term_memory` (`memory.load_memory` + `_maybe_rollover`), `recent_history` (`build_history`), `image_lookback` (`recent_images`), `knowledge` (places/observations for the suggest path) | window weeks, max messages, lookback, vision budget |
+| prompt | `template_prompt` (renders `prompt.body` + `append`), `sections_message` (`_render_prompt`) | section headers |
+| validate | `unbacked_amounts`, `fabricated_commit`, `strip_narration`¹ | severity: warn / block, replacement body |
+| after | `rollover_summary`, `turn_log_line`, `eval_capture` (records the turn as a candidate eval case) | summary prompt, sampling rate |
 
-All under `/api/admin/…`, guarded by an admin session (cookie or bearer), not the
-shared `X-Admin-Password` header. JSON in, JSON out, etags on every editable entity
-(the pattern `knowledge.py` already uses).
+¹ `strip_narration` runs in the sidecar today (`turn.js`); it stays there as a sidecar plugin.
+Listing it here is about *configuration*, not location.
 
-```
-GET/POST        /api/admin/businesses
-GET/PATCH       /api/admin/businesses/{id}
-GET/POST        /api/admin/businesses/{id}/{prompts|rules|skills|templates}
-GET/PATCH/DEL   /api/admin/businesses/{id}/{…}/{slug}          (etag required on write)
-GET/POST        /api/admin/profiles                              (create from business)
-GET             /api/admin/profiles/{id}/versions
-POST            /api/admin/profiles/{id}/versions               (draft from sources, or from a version)
-POST            /api/admin/profiles/{id}/versions/{v}/publish    (runs validation + gates, §7)
-POST            /api/admin/profiles/{id}/versions/{v}/preview    (dry-run a turn in a sandbox room)
-GET             /api/admin/catalogue/{tool-packs|extensions|models}
-POST            /api/admin/catalogue/models/{id}/probe           (runs bench.probe_models)
-PATCH           /api/admin/rooms/{id}                            (agent_profile_id, agent_overrides)
-GET             /api/admin/rooms/{id}/resolved                   (what this room runs, verbatim)
-GET             /api/admin/profiles/{id}/versions/{v}/export     (Pi package zip, §6)
-POST            /api/admin/import                                (Pi package zip → draft)
-GET             /api/admin/audit
+### 4.2 Interfaces
+
+Deliberately small. A plugin is a module exposing one object:
+
+```python
+class Plugin(Protocol):
+    id: str                          # "chiatienan.memory.long_term", stable, namespaced
+    stage: Stage                     # Literal["gate","context","prompt","validate_args", …]
+    config_schema: dict              # JSON Schema; the CMS validates config against it
+    handles_money: bool = False      # §8 governance
+    def run(self, ctx: TurnContext, config: dict) -> TurnContext | Verdict: ...
 ```
 
-"Headless" here means the same thing it means for a content CMS: the admin UI is
-one client of this API and nothing in it is only reachable through the UI. The
-benchmark runner and the export/import CLI are the other clients.
+`TurnContext` is one mutable dataclass carried through the stages — room, sender,
+message, images, resolved profile, the `memory`/`history`/`knowledge` texts, the
+rendered `system`/`message`, the chosen model, the `TurnResult` after stage 6, the
+rendered `body`/`attachments`, and an append-only `trace` of which plugin did what
+(this trace is what `GET /api/admin/rooms/{id}/turns/{turn_id}` shows, and what eval
+capture stores). A `validate*` plugin returns a `Verdict(ok, severity, reason, patch)`
+instead of a context; `block` short-circuits to a configured reply, `warn` logs.
 
-### 5.3 Admin UI
-
-A `/admin` route group in the existing Next.js app, same component library, same
-`api.ts` client. Screens: Businesses · Profile editor (tabs: Persona, Prompt,
-Rules, Skills, Commands, Models, Tools, Memory, Advanced) · Version history with
-diff · Rooms (bind profile, edit append sections) · Catalogue · Audit. The knowledge
-panel that exists today is linked from the Rooms screen, not duplicated.
-
-### 5.4 Tool packs — how code plugs in without editing `chat.py`
-
-Today `tools.build_tools` is one function and `chat.py` renders results by a chain of
-`elif attachments["type"] == …`. A pack is the minimum interface that lets a second
-business exist without touching either:
+A **tool pack** is a plugin with a wider surface:
 
 ```python
 class ToolPack(Protocol):
-    id: str                                  # "lunch_ledger"
-    def tools(self, ctx: ToolContext) -> dict[str, CustomTool]: ...
-    def render(self, result) -> tuple[str, dict] | None:       # body, attachments
-        ...                                  # the _settlement_body / _meal_body chain, moved
-    def post_turn(self, db, room_id, result) -> list[RoomMessage]:
-        ...                                  # the draft-card creation in run_bot_turn, moved
-    seed: Callable[[db, room_id], None] | None  # seed_places for a new room
+    id: str;  handles_money: bool
+    def tools(self, ctx: ToolContext) -> dict[str, CustomTool]: ...        # the bodies
+    def draft_kinds(self) -> dict[str, DraftKind]: ...                     # e.g. "expense_draft" → commit(), patch schema
+    def render(self, result) -> tuple[str, dict] | None: ...               # body, attachments
+    def balance_contributions(self, session, room_id, window) -> list[DebtEdge]: ...
+    def fixtures(self) -> dict[str, FixtureStep]: ...                      # eval world building, §5.5
+    def seed(self, session, room_id) -> None: ...                          # new room of this business
+    def models(self) -> list[type[Base]]: ...                              # its own tables, if any (§5.3)
 ```
 
-`lunch_ledger` is the first and only pack: **a move, not a rewrite.** Every tool body,
-renderer and draft path is byte-identical, relocated behind the protocol, and the
-benchmark corpus is the proof. A registry (`packs/__init__.py`) lists installed
-packs; the catalogue endpoint reads it. A developer adds a business by adding a
-package; an editor cannot, and that is the intended line.
+`balance_contributions` is the one method that makes a second money business
+possible: `ledger.period_balances` stops reading `meals` directly and instead sums
+`DebtEdge`s from every enabled pack. `money.net_transfers`, QR building,
+settlements, payments and the roster stay in the core, shared by every pack.
 
-### 5.5 Sidecar changes
+Sidecar plugins are Pi extension factories (`(pi, config) => void`) exported from a
+registry module; the `run` command names them with their config and `session.js`
+passes the resolved list as `extensionFactories`. Same shape, other language.
 
-Small and additive to the `run` command:
+### 4.3 Discovery and versioning
 
-- `settings` → `SettingsManager.inMemory(settings)` passed to `createAgentSession`.
-- `extensions[]` → looked up in a sidecar-side registry of factories; each factory
-  receives its `config` and is passed via `DefaultResourceLoader.extensionFactories`.
-- `tools.promptGuidelines` / `label` → forwarded into `proxyTool` (Pi already
-  supports both on `ToolDefinition`).
-- `skills[].delivery === "discoverable"` → written to a per-turn temp dir under
-  `agent_dir` and passed via `additionalSkillPaths`, only when `read` is enabled;
-  otherwise validation rejects the combination before publish.
+Plugins live **on disk, in the repo or in installed Python packages**, and register
+through an entry-point group (`chiatienan.plugins`) plus a module-level `PLUGIN`
+object. On startup the engine builds the registry; `GET /api/admin/registry` lists
+every plugin with its stage, config schema and `handles_money`. A profile version
+references plugins by id; publishing fails if an id is not in the registry or its
+config does not validate. A plugin id is a contract: changing behaviour means a new
+id (`…long_term@2`), and old published versions keep running the old one until they
+are republished — the same snapshot discipline as skill bodies.
 
-Nothing about the boundary rule of the Pi design changes: Python still owns content
-and data, the sidecar still owns everything about how Pi runs.
+### 4.4 Why not store code in the database
 
-## 6. Export / import — the Pi package as the interchange format
+It was considered, because "code support in the CMS" can be read that way. Rejected
+for this system, for three reasons that are about *money* rather than taste:
 
-`TODO.md` asks for "engine export/import: mounting point vs skeleton, what to
-export, import flow with sanitize". This design answers it by adopting Pi's own
-package layout rather than inventing one:
+1. **No review boundary.** A plugin on disk goes through a pull request, CI and the
+   benchmark; a plugin in a text field goes live on save.
+2. **No type contract.** The value of a defined pipeline is that a plugin can be
+   tested against `TurnContext` in isolation. Dynamically `exec`'d code has no such
+   test until it runs against a real room.
+3. **D3.** The one invariant this codebase protects is that the model never computes
+   money. A hot-loaded plugin with DB access is a second place that invariant could
+   silently break.
+
+What *is* reasonable later, and is left as a Phase 7+ question: a small, sandboxed
+**expression language** for `ValidationRule` predicates (`sum(cash_outs) == sum(buy_ins) + house`)
+so a business can add an invariant without a deploy. Expressions, not statements;
+no I/O; evaluated by the engine.
+
+### 4.5 What an editor can still not do
+
+Write a tool body, change a tool's parameter schema, add a stage. Those are pull
+requests. Everything else about how a turn behaves — which plugins, in which order,
+with which config, which tools are on, which invariants must hold — is content.
+
+## 5. Content model v2
+
+Storage is SQLite tables with JSON columns, versioned by snapshot-on-publish: editors
+edit *sources* (prompt, rule, skill rows); publishing copies the referenced bodies into
+one `spec` JSON, so a room runs a snapshot that a later edit cannot change mid-turn.
+
+### 5.1 Behaviour entities
 
 ```
-<profile>-v<N>/
-  package.json          {"name": …, "pi": {"skills": ["./skills"], "prompts": ["./prompts"]},
-                         "chiatienan": { "spec": { …the §4.1 spec minus bodies… } }}
-  AGENTS.md             rules, concatenated in order (Pi reads this as context)
-  SYSTEM.md             rendered prompt body with {{variables}} left intact
-  skills/<name>/SKILL.md
-  prompts/<name>.md
-  settings.json         {"defaultProvider","defaultModel","defaultThinkingLevel","compaction",…}
+businesses               id, slug, name, tool_packs[], plugins_allowed[], seed JSON
+agents                   id, business_id, slug, name, role manager|sub, profile_id,
+                         delegates_to[] (agent ids), max_depth, created_at
+agent_profiles           id, business_id, name, published_version_id NULL
+agent_profile_versions   id, profile_id, version, status, spec JSON, created_at, published_at, note
+prompts / rules / skills / prompt_templates
+                         id, business_id, slug, title, body TEXT, frontmatter JSON, etag
+rooms                    + manager_agent_id, + agent_overrides JSON {append_sections[], handle?, language?}
+model_catalogue          provider, model_id, name, input[], context_window, max_tokens, cost, probe JSON
 ```
 
-- **Skeleton vs mounting point:** the skeleton is everything above (behaviour); the
-  mounting point is the room (data). Export never includes room data — no members,
-  no ledger, no `memory.md` — so a bundle is shareable by construction.
-- **Sanitise on import:** a bundle is a *draft*, never auto-published. Import
-  validates frontmatter, template variables, tool references against installed
-  packs (unknown tool → error, not silently dropped), and strips anything under
-  `extensions/` — code is not accepted through this door (§0).
-- **Round trip with stock `pi`:** because the layout is a real Pi package,
-  `pi -e ./<profile>-v<N>` runs the same prompt, skills and rules under the
-  interactive TUI against `bash`-less tools — a debugging aid the current setup
-  does not have. The money tools are absent there (they are Python); that is
-  expected and the skills say so.
+The published **spec** is the `run` command of §1 minus the per-turn parts, i.e.
+`persona {handle, aliases, name, language}`, `prompt {body, append[]}`, `rules[]`,
+`skills[] {name, description, body, delivery inline|discoverable}`, `templates[]`,
+`models {text, vision, thinking, thinking_budgets}`, `retry`, `caps {max_tools,
+max_seconds}`, `builtin_tools[]`, `memory {…}`, `settings {…}` (passthrough to
+`SettingsManager.inMemory`) — plus four blocks v2 adds:
 
-## 7. Governance — what publishing checks
+```jsonc
+"pipeline":   { "gate": [{"plugin":"chiatienan.gate.mention","config":{}}],
+                "context": [{"plugin":"chiatienan.memory.long_term","config":{"window_weeks":10}},
+                            {"plugin":"chiatienan.history.recent","config":{"max_messages":200,"vision_max_messages":60}},
+                            {"plugin":"chiatienan.images.lookback","config":{"messages":10,"minutes":120}}],
+                "validate":[{"plugin":"chiatienan.money.unbacked_amounts","config":{"severity":"warn"}},
+                            {"plugin":"chiatienan.money.fabricated_commit","config":{"severity":"block"}}],
+                "after":   [{"plugin":"chiatienan.memory.rollover","config":{"summary_prompt":"…"}}] },
+"tool_packs": [ {"pack":"lunch_ledger","tools":{"pick_random":{"enabled":false}}} ],
+"validation": [ …ValidationRule refs, §5.4… ],
+"eval":       { "suites": ["lunch-typical"], "gate": {"tool_selection":1.0,"ledger_state":1.0} }
+```
 
-The bot owns real money. A CMS that makes it *easier* to change what runs must make
-it *harder* to change it wrongly. Publishing a version runs, in order:
+### 5.2 Agent entity
 
-1. **Schema validation** of the spec; unknown template variables; skills with
-   `delivery: discoverable` but no `read` in `builtin_tools`.
-2. **Money-safety gate.** If any enabled pack declares `handles_money: true`
-   (`lunch_ledger` does) and `builtin_tools` contains `bash`, `write` or `edit`,
-   publishing requires an explicit `override_reason` and writes it to the audit
-   log. The rationale is the one already in `session.js:toolOptionsFor`: without
-   `bash` the rule "never compute money" is structural rather than requested.
-3. **Model probe gate.** `models.text` and `models.vision` must have a passing
-   `probe` against the enabled packs' real schemas within N days
-   (`bench.probe_models` — exists; the CMS calls it and stores the result). The
-   Pi design §12 records why: a catalogue claiming `tools: true` shipped a model
-   that emitted nothing for `propose_meal`.
-4. **Benchmark smoke (optional, recommended for the money business).** Run the
-   `typical` corpus once against the draft (`bench.run --profile-version …`) and
-   refuse to publish on a `tool_selection` or `ledger_state` drop. Prose graders
-   are reported, not blocking — the same asymmetry the Pi design set.
-5. **Audit + rollback.** Every publish is a row; `published_version_id` moves; the
-   previous version stays `published`-capable so rollback is one call.
+`agents.role = manager` is what a room binds to. `delegates_to` lists the sub-agents
+the manager may call; the engine turns each into a tool (§6). A sub-agent has its own
+profile, therefore its own prompt, tools, model and pipeline — a cheap text model for
+"summarise the week" next to a vision model for "read this bill" is the obvious use.
 
-Admin identity is the prerequisite: `admin_users` with a password hash and roles,
-replacing the one shared header for everything under `/api/admin`. The old
-`X-Admin-Password` stays for `POST /api/rooms` and `/internal/*` until migrated.
+### 5.3 Database content type — `Collection`
 
-## 8. Phases
+Two ways a business gets data, and the design is honest about which is which:
 
-Each phase ends green on the existing suites plus its own tests; Phase 1 is
-additionally gated on the benchmark showing no change.
+| | Pack-owned tables | `Collection` (CMS-defined) |
+|---|---|---|
+| Defined by | code (`ToolPack.models()`, SQLAlchemy, additive migrations as today) | content: name, JSON Schema, indexed fields |
+| Stored in | its own tables | one `documents` table: `room_id, collection, doc_id, data JSON, created/updated` |
+| Tools | hand-written, arithmetic inside | **generated**: `{collection}_find`, `{collection}_upsert`, `{collection}_delete`, schema-validated |
+| Use when | numbers are derived from rows (balances, splits, netting) | facts the agent should remember and look up (a rota, a wishlist, a set of house rules) |
+| Money? | yes | **no** — `handles_money` is false and stays false; the generated tools refuse numeric aggregation by construction |
+
+Poker's games and buy-ins are pack-owned (§7). A "who brings cards next Friday" rota
+is a `Collection`. Both are content-visible: the admin API lists a pack's tables
+read-only and a collection's documents read-write.
+
+### 5.4 Validation content type — `ValidationRule`
+
+A rule is *a validator plugin + config + scope*, attached to a profile:
+
+```jsonc
+{ "id": "chips-conserved", "scope": "tool_args", "tool": "propose_game",
+  "plugin": "chiatienan.validate.sum_equals",
+  "config": { "left": "$.buy_ins[*].amount", "right": ["$.cash_outs[*].amount", "$.house"], "tolerance": 0 },
+  "on_fail": "return_error" }            // the tool answers {ok:false, error} so the model asks — tools.py:8 convention
+```
+
+Scopes: `tool_args` (before execute), `tool_result` (after), `reply` (stage 7),
+`content` (at save time — template variables, frontmatter, tool ids). Pre-built
+validators: `json_schema`, `sum_equals`, `non_negative`, `member_exists`,
+`unique_members`, `unbacked_amounts`, `fabricated_commit`, `no_narration`,
+`language_is`. `on_fail` for `reply` scope is `warn` or `block_with(body)`; for tool
+scopes it is `return_error`, which keeps the "ask, don't guess" behaviour the model
+already knows.
+
+### 5.5 Eval content types
+
+The benchmark under `bench/` already has every concept; v2 makes them content so a
+business ships with its own regression suite and publishing can run it.
+
+```
+eval_cases    id, business_id, slug, message, images[], actor, day,
+              world JSON [ {fixture: "meal_confirmed", …}, … ],     ← fixture steps a pack provides
+              expect JSON { tools[], args{}, ledger{}, empty? }, tags[], source manual|captured, review bool
+eval_suites   id, business_id, slug, case_ids[], graders[{plugin, config}], judge {model, rubric_id}
+rubrics       id, business_id, slug, body TEXT                       ← the prose-quality rubric is content
+eval_runs     id, suite_id, profile_version_id, started, finished, records JSON, summary JSON, status
+```
+
+Mapping to what exists: `bench.corpus` → `eval_cases` (the `typical` corpus is imported
+on Phase 4 as the lunch suite, ids preserved); `bench.graders.grade_*` → grader plugins
+(`tool_selection`, `ledger_state`, `prose_quality`, `cost_latency`); `bench.judge`
+rubric string → `rubrics`; `bench.world.build_world` → `ToolPack.fixtures()` — the pack
+knows how to put a room into "meal confirmed" or "game recorded" state, the engine
+only sequences steps and freezes the clock. `eval_capture` (stage 10) writes real
+turns as `source: captured, review: true` cases, which is how the prod corpus was
+meant to be built and never was (the Pi plan, Task 7 Step 6).
+
+## 6. Agents and sub-agents
+
+Pi has no sub-agent facility (`docs/usage.md`, confirmed by the inventory), and the
+Pi design already decided orchestration lives in Python where tools and validation
+are. So delegation is **a generated tool and a nested pipeline run**:
+
+- For each `delegates_to` entry the engine adds a tool `ask_<sub-slug>(task: string)`
+  to the manager's tool list, with the sub-agent's `description` from its profile.
+- Executing it runs stages 1–8 for the sub-agent in the **same room** with the same
+  `ToolContext`, `depth+1`, and caps that are the *minimum* of the manager's remaining
+  budget and the sub-agent's own (`max_tools`, `max_seconds`). `max_depth` on the
+  agent stops recursion; a sub-agent's `delegates_to` is honoured only within it.
+- The tool returns `{text, results}` — the sub-agent's final text **and** its
+  structured tool results. The manager's model sees the text. The engine merges
+  `results` into the manager's `TurnResult.tools` so the pack's `render` and the
+  reply validators see every number a tool produced, whoever called it.
+
+That last point is D3 applied across agents. A sub-agent's prose is a source of
+"unbacked" numbers exactly like the manager's, and the same `unbacked_amounts`
+validator checks the final body against the *union* of tool results. What a
+sub-agent may not do is `propose_*` a draft on the manager's behalf silently: draft
+creation happens in the manager's `post_turn`, from structured results, so a card is
+always attributable to a tool call in the trace.
+
+Sub-agent turns are recorded in the trace as nested spans and shown in the room's
+live timeline as child events (`agent.sub.started/finished` under the parent
+`turn_id`) — additive to the frozen `agent.*` set, so the existing UI ignores them
+and an AG-UI mapping can nest them.
+
+## 7. The second business: a poker / card-game ledger
+
+### 7.1 Why this one
+
+It shares the *core* with lunch — members, cash payments between members, "who pays
+whom" netting, VietQR, periods, statements — and differs in the *domain*: money does
+not flow from one payer to many eaters; it flows through a **pot**. Each game night,
+every player buys in (money in) and cashes out (money out); a player's net is
+`cash_out − buy_in`; the table's nets sum to zero, less whatever the house/rake took.
+That is a different ledger shape with a hard invariant, which is exactly what tests
+whether the pack interface is real.
+
+### 7.2 The pack, sketched
+
+| | |
+|---|---|
+| Tables (pack-owned) | `games (id, room_id, played_on, note, voided…)`, `game_entries (game_id, member_id, buy_in, cash_out)`, optional `house` amount on the game |
+| Tools | shared from core: `find_members`, `propose_payment`, `settle_period`, `member_statement`, `get_period_summary`, member CRUD. New: `propose_game(entries[{member, buy_in, cash_out}], house?, day_word?)` → draft card; `void_game`; `game_history` |
+| Draft kind | `game_draft` — editable per-player buy-in / cash-out, commit writes `games` + `game_entries` |
+| Balance contributions | for each game, edges from net losers to net winners, proportional (a deterministic rule the pack owns, same spirit as `split_with_guests`); `money.net_transfers` then minimises transfers as it does today |
+| Validation | `chips-conserved`: Σ buy_in = Σ cash_out + house (tolerance 0, `on_fail: return_error` so the model asks "who is short?"); `non_negative` on both; `unique_members` |
+| Skills | `record-game`, `poker-balances`; rules: the same `money-safety` rule verbatim — it is business-agnostic |
+| Renderers | `game_result` body ("#12 — 5 players, pot 2,500,000đ • winners / losers") built server-side from the result dict |
+| Eval | golden games with known nets; a settle case; an ambiguous-cash-out case that must ask |
+| Seed | none (no places); a `Collection` "house-rules" is a natural optional extra |
+
+### 7.3 What poker forces in the core — the real deliverable of Phase 6
+
+1. `drafts.py` stops knowing `expense_draft` and `payment_draft` by name; a draft
+   carries `kind`, and `commit_any` dispatches to the pack's `DraftKind.commit`.
+2. `ledger.period_balances` becomes `Σ pack.balance_contributions(...)` over enabled
+   packs, then payments FIFO as today. `lunch_ledger` contributes what `build_debt_edges`
+   builds now, byte-identical.
+3. `chat.py`'s render chain becomes `pack.render(result)` — the first pack that
+   claims a result type wins, in profile order.
+4. The eval world builder takes fixture steps from packs.
+
+Each of those is a refactor with a byte-identical lunch path and the benchmark as the
+oracle, which is why they are scheduled *before* the poker pack exists.
+
+## 8. Governance — what publishing checks
+
+No admin identity, by decision. `audit_log.actor` records the caller's self-reported
+name header until that changes. Publishing a version runs, in order:
+
+1. **Schema validation** — spec shape; every plugin id in the registry and its config
+   valid against `config_schema`; every tool id in an enabled pack; template variables
+   known; skills with `delivery: discoverable` but no `read` in `builtin_tools`.
+2. **Money-safety gate** — any enabled pack or plugin with `handles_money` **and**
+   `bash`/`write`/`edit` in `builtin_tools` requires an `override_reason` in the
+   publish call, written to the audit log.
+3. **Model probe gate** — `models.text` and `models.vision` must have a passing
+   `probe` against the enabled packs' real schemas within N days.
+4. **Eval gate** — the suites named in `spec.eval.suites` run against the draft;
+   publish is refused if a money grader (`tool_selection`, `ledger_state`) drops
+   below `spec.eval.gate`. Prose graders report, never block.
+5. **Rollback** — `published_version_id` moves; the previous version stays
+   publishable so rollback is one call.
+
+## 9. Phases
 
 | # | Deliverable | Behaviour change | Proof |
 |---|---|---|---|
-| **1** | `profiles.py` resolver + tables; a **seeded default profile built from today's `prompt.py`, skill files, rule file and env**; `run_turn(profile=)` keyword; sidecar accepts `settings`/`extensions` (ignored when absent) | **none** | 751 backend + 65 sidecar tests unchanged; `bench.run --corpus typical --repeat 3` equal to `pi-typical-r3.json`; `GET /api/admin/rooms/{id}/resolved` byte-equals the current `run` command |
-| **2** | Admin identity + audit; headless API for prompts/rules/skills/templates/models/caps/memory; publish with gates 1–3; `/admin` UI for those tabs; room binding | opt-in per room | API tests; a room bound to an edited profile runs the edit, an unbound room does not |
-| **3** | `ToolPack` protocol; `lunch_ledger` moved behind it; per-tool enable/override; `chat.py` renders through the pack | none for existing rooms | benchmark equality again; a test business with two stub tools runs end-to-end in a test room |
-| **4** | Export/import as Pi package; `bench.run --profile-version`; publish gate 4 | none | round-trip test: export → import → spec equality; `pi -e` smoke documented |
-| **5** | Extension catalogue in the sidecar (tool-call policy, provider headers, telemetry) + config UI | opt-in | sidecar tests per factory |
+| **1** | Pipeline runner + `TurnContext` + plugin registry; today's `run_bot_turn` body split into the pre-built plugins of §4.1; `profiles.resolve()` returning a **seeded default profile built from today's `prompt.py`, skill files, rule file and env**; `run_turn(profile=)` keyword; sidecar accepts `settings`/`extensions` (ignored when absent) | **none** | 751 backend + 65 sidecar tests unchanged; `bench.run --corpus typical --repeat 3` equal to `pi-typical-r3.json`; `GET /api/admin/rooms/{id}/resolved` byte-equals today's `run` command |
+| **2** | Headless API for businesses, profiles, versions, prompts/rules/skills/templates, models, pipeline config, validation rules; publish with gates 1–3; room → agent binding; `GET …/registry`, `GET …/turns/{id}` trace | opt-in per room | API tests; a room bound to an edited profile runs the edit, an unbound room does not |
+| **3** | `ToolPack` protocol; `lunch_ledger` moved behind it; per-tool enable/override; generalised drafts, `balance_contributions`, pack render (§7.3) | none | benchmark equality; a stub pack with two tools runs end-to-end in a test room |
+| **4** | Eval content types; `bench` corpus imported as the lunch suite; graders and fixtures as plugins; `eval_runs`; publish gate 4; `eval_capture` | none | the imported suite reproduces `pi-typical-r3.json` verdicts; a captured turn appears as a `review: true` case |
+| **5** | `Collection` content type + generated tools + `documents` table | opt-in | schema-validated CRUD through the model in a test room; aggregation refused |
+| **6** | `poker_ledger` pack: tables, tools, draft kind, contributions, validation, skills, eval suite; a poker business | new business only | its suite green; the lunch suite unchanged |
+| **7** | Agents + sub-agents: `ask_<sub>` tools, nested pipeline runs, depth/caps, nested trace and events | opt-in | a manager delegating to a summariser sub-agent passes `unbacked_amounts` on the merged results |
+| **8** | Export/import as a Pi package (`package.json` with a `pi` manifest, `skills/*/SKILL.md`, `prompts/*.md`, `AGENTS.md` for rules, `SYSTEM.md`, `settings.json`; behaviour only, never room data; import lands as a draft and strips `extensions/`); sidecar extension registry (tool-call policy, provider headers, telemetry) | none | round-trip equality; `pi -e` smoke |
 
-Phase 1 is deliberately the boring one. It is also the one that makes every later
-phase safe, because from then on "what does this room run" has one answer and one
-endpoint.
+Phase 1 is the refactor everything else stands on, and it is the one that must ship
+with the benchmark unchanged to the digit.
 
-## 9. What this design does not do, on purpose
+## 10. Decisions
 
-- **No code authoring in the CMS** — no TypeScript extensions, no Python tools, no
-  schema editing. New tools are a developer deliverable (a pack). A "generic HTTP
-  tool" that an editor could point at a URL is a plausible Phase 6 for
-  *non-money* businesses; it is not in scope here because it reopens the D3 wire.
-- **No Pi RPC mode, no Pi session files** — decided in the Pi design for reasons
-  that still hold.
-- **No multi-process** — the resolver cache is in-process like everything else;
-  the single-writer constraint stands.
-- **No terminal-only settings** — listed in §2.5 so nobody asks twice.
+**Decided by the operator (2026-09-05):**
 
-## 10. Decisions needed before Phase 1
+- A room links to **one agent** (its manager); a profile backs **many** rooms.
+- Agents may invoke **sub-agents** → §6.
+- **Code is in scope**, as pipeline plugins with defined injection points → §4.
+- **Database, validation and eval are content types** → §5.3–5.5.
+- **No admin identity / authoring roles** for now.
+- Agent UI is **out**: AG-UI over SSE, owned elsewhere.
+- Second business: **poker / card-game money ledger** → §7.
 
-1. **Profile granularity.** Recommendation: *profiles are shared; rooms bind to one
-   and may add append sections.* The alternative (every room owns a full private
-   profile) is simpler to reason about and worse to operate: seven rooms, one prompt
-   fix, seven edits. Say if you want per-room forks anyway.
-2. **Where admin identity comes from.** Recommendation: a local `admin_users` table
-   with email + password, owner/editor/viewer, because the app has no IdP today and
-   the README lists RBAC as out of scope. If Niteco SSO is the real target, say so
-   now — it changes Phase 2, not the content model.
-3. **Business #2.** The design supports a second business but does not pick one.
-   Naming a concrete candidate (even a toy) before Phase 3 keeps the `ToolPack`
-   protocol honest — a protocol with one implementation is a guess.
-4. **Storage.** Recommendation: SQLite tables as above. The alternative — a
-   `profiles/<id>/` directory of Markdown files under `DATA_DIR`, git-style — is
-   attractive for diffing and matches `memory.md`, but publishing atomically and
-   joining to rooms gets hand-rolled. Tables, with the Pi-package export giving the
-   file view for free.
-5. **Default `builtin_tools` for the seeded profile.** Today's env default is
-   `read,write,bash`. Phase 1 must copy it to stay behaviour-neutral. The question
-   is whether Phase 2 flips the *default* for new profiles to `[]` (recommended, and
-   what the Pi design intended) while leaving the seeded one as-is.
+**Still open, needed before Phase 1 starts:**
+
+1. **The stage list in §4.1.** Names and the single-owner / list distinction are the
+   contract every plugin is written against. Confirm or rename.
+2. **Plugins on disk (recommended, §4.3) vs. code in the database (§4.4).** The
+   recommendation is firm; say if you disagree and why.
+3. **Sub-agent limits** — proposed `max_depth: 2` and caps = min(parent remaining,
+   own). Enough for manager → specialist; not enough for agent trees.
+4. **Poker invariant** — treat rake/tips as an explicit `house` line (recommended,
+   keeps Σ exact) or allow a tolerance? Tolerance is how a wrong cash-out becomes a
+   silently absorbed number.
+5. **`Collection` storage** — one `documents` JSON table, room-scoped (recommended),
+   vs. a table per collection. The generated tools never aggregate, so the JSON
+   table costs nothing that matters.
 
 ## Appendix A — Pi configuration inventory (verified)
 
