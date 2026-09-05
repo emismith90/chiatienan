@@ -59,6 +59,8 @@ class Kernel:
             runtime=self.default_spec.runtime, fallback=self.default_spec)
         self._pipelines: dict[str, Pipeline] = {}
         self.store.on_change.append(self.invalidate)
+        from app.modelprobe import BenchModelProbe
+        self.probe = BenchModelProbe()
 
     def resolve(self, space_id: int | str) -> ProfileSpec:
         return self.resolver.resolve(str(space_id))

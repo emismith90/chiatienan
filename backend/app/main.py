@@ -302,6 +302,19 @@ async def create_room(body: RoomIn, _=Depends(require_admin)):
     return out
 
 
+# The kernos content plane's admin API (plan Task 2.5): businesses, sources,
+# profiles, versions, publish, agents, space bindings, catalogue, audit — all
+# behind the same admin password as room creation. Rooms are spaces with
+# `space_id = str(room_id)`.
+from kernos.api import admin_router  # noqa: E402
+
+app.include_router(
+    admin_router(lambda: __import__("app.kernel", fromlist=["kernel_for"]).kernel_for(get_db()),
+                 dependencies=[Depends(require_admin)]),
+    prefix="/api/admin",
+)
+
+
 @app.get("/api/admin/rooms/{room_id}/resolved")
 async def admin_resolved_profile(room_id: int, _=Depends(require_admin)):
     """What this room's bot runs, verbatim (kernos plan Task 1.9).
