@@ -26,7 +26,8 @@ from __future__ import annotations
 import contextlib
 from datetime import date, datetime, time
 
-from app import clock, drafts, ledger
+from app import clock
+from app.packs import lunch_fixtures
 from app.clock import ICT
 from app.models import Member, Room
 
@@ -65,30 +66,9 @@ def _seed_room(db, case) -> tuple[int, dict[str, int]]:
 
 
 def _draft_payload(step: dict, ids: dict[str, int]) -> dict:
-    """The draft a prior step creates.
-
-    `items` / `adjustments` / `discount_split` are passed through when the step has
-    them — a production meal seeded without its `items` splits evenly instead of
-    per dish, so the ledger the next turn reads would be a *different* room's. The
-    shares themselves are never copied: `drafts.create_draft` recomputes them from
-    these inputs, which is the same code that produced the numbers being replayed.
-    """
-    payload = {
-        "payer_member_id": ids[step["payer"]],
-        "member_participants": [ids[p] for p in step["participants"]],
-        "guests": step.get("guests", []),
-        "bill_total": step["total"],
-        "adjustments": [{**entry, "member": ids[entry["member"]]}
-                        for entry in step.get("adjustments") or []],
-        "per_head_preview": 0,
-        "raw_input": step.get("message") or f'bench:{step["id"]}',
-    }
-    if step.get("items"):
-        payload["items"] = [{**entry, "member": ids[entry["member"]]}
-                            for entry in step["items"]]
-    if step.get("discount_split"):
-        payload["discount_split"] = step["discount_split"]
-    return payload
+    """See :func:`app.packs.lunch_fixtures.draft_payload` — the fixtures moved into the
+    lunch pack (plan Task 3.1); this name stays for the tests that import it."""
+    return lunch_fixtures.draft_payload(step, ids)
 
 
 def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
@@ -106,43 +86,17 @@ def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
     room_id, ids = _seed_room(db, case)
     draft_by_step: dict[str, int] = {}
 
+    # The step kinds are the lunch pack's fixtures (`app.packs.lunch_fixtures`):
+    # the bench sequences them and freezes the clock, the pack knows how to put a
+    # room into "meal confirmed" or "payment recorded" state.
+    fixtures = lunch_fixtures.FIXTURES
     for step in case.prior_steps:
         kind = step["kind"]
         with frozen_clock(step["day"]):
             actor = ids.get(step.get("actor"))
-
-            if kind == "add_member":
-                with db.session() as s:
-                    member = Member(room_id=room_id,
-                                    display_name=step["new_member"].upper(),
-                                    nickname=step["new_member"], pin="1")
-                    s.add(member); s.flush()
-                    ids[step["new_member"]] = member.id
-
-            elif kind in ("meal_confirmed", "leave_pending"):
-                with db.session() as s:
-                    draft, _ = drafts.create_draft(s, room_id, _draft_payload(step, ids))
-                    draft_by_step[step["id"]] = draft.id
-                    if kind == "meal_confirmed":
-                        drafts.commit_draft(s, draft.id, room_id, logged_by=str(actor))
-
-            elif kind == "confirm_pending":
-                with db.session() as s:
-                    drafts.commit_draft(s, draft_by_step[step["ref"]], room_id,
-                                        logged_by=str(actor))
-
-            elif kind == "payment":
-                with db.session() as s:
-                    ledger.record_payment(s, room_id=room_id,
-                                          from_member_id=ids[step["from"]],
-                                          to_member_id=ids[step["to"]],
-                                          amount=step["amount"], logged_by=str(actor))
-
-            elif kind == "settle":
-                # Read-only: it changes nothing, so a prior settle needs no replay.
-                pass
-
-            else:
+            run = fixtures.get(kind)
+            if run is None:
                 raise ValueError(f'{case.id}: unknown prior step kind {kind!r} in {step["id"]}')
+            run(db, room_id, step, ids, draft_by_step, actor)
 
     return room_id, ids, draft_by_step

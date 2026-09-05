@@ -28,9 +28,10 @@ from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
 from kernos.kernel import Pipeline
+from kernos.packs import PackRegistry
 from kernos.plugins import (
-    ImageLookback, MemoryLoad, ModelPassthrough, RecentHistory, Rollover, SectionsMessage,
-    TemplatePrompt,
+    Cards as KernelCards, ImageLookback, MemoryLoad, ModelPassthrough, PackRender, RecentHistory,
+    Rollover, SectionsMessage, TemplatePrompt,
 )
 from kernos.registry import Registry
 
@@ -39,13 +40,19 @@ class Kernel:
     def __init__(self, db: Database, resolver: Resolver | None = None) -> None:
         self.db = db
         self.adapters: HostAdapters = build_adapters(db)
+        from app.packs import LunchLedgerPack, LunchPlacesPack
+        self.packs = PackRegistry()
+        self.packs.register_all([LunchLedgerPack(), LunchPlacesPack()])
+        render = PackRender(self.packs)
+        cards = KernelCards(self.adapters, self.packs)
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
             ImageLookback(self.adapters), SectionsMessage(), TemplatePrompt(self.adapters),
             ModelPassthrough(),
-            PhoenixSystemPrompt(), LegacyRunTurn(), LunchRender(),
-            FabricatedCommit(), UnbackedAmounts(), Cards(self.adapters),
+            PhoenixSystemPrompt(), LegacyRunTurn(), render, cards,
+            LunchRender(render), Cards(cards),
+            FabricatedCommit(), UnbackedAmounts(),
         ])
         self.default_spec = build_default_spec(settings)
         self.store = ContentStore(db.session)

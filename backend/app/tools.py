@@ -83,6 +83,9 @@ class ToolContext:
     engine_spec: object | None = None
     system_override: str | None = None
     message_override: str | None = None
+    # Which packs/tools the resolved profile enables (`spec.tool_packs`, dumped), set
+    # by the pipeline's run plugin (plan Task 3.1). `None` = today's 19 tools.
+    tool_config: dict | None = None
 
 
 def _err(message: str) -> dict:
@@ -399,7 +402,8 @@ _SETTLE_SCHEMA = {
 # Tool implementations
 # --------------------------------------------------------------------------- #
 
-def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
+def _legacy_build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
+    """All 19 tools, in the order this module has always listed them."""
     db = ctx.db
 
     def find_members(args, _tool_ctx=None) -> dict:
@@ -1384,16 +1388,37 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     }
 
 
-def tool_manifest() -> list[dict]:
+def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
+    """The tools this turn may call.
+
+    With no ``tool_config`` on the context — every test fake, the bench, the probe —
+    this is today's 19 tools in today's order. With one, the enabled packs are asked,
+    the per-tool overrides applied, and the result put back into legacy order so the
+    manifest the sidecar receives is stable (review F7).
+    """
+    if ctx.tool_config is None:
+        return _legacy_build_tools(ctx)
+    from app.kernel import kernel_for
+    from app.packs import LEGACY_ORDER
+    from kernos.packs import compose_tools
+
+    composed = compose_tools(kernel_for(ctx.db).packs, ctx.tool_config.get("packs", []), ctx)
+    ordered = [n for n in LEGACY_ORDER if n in composed] + [n for n in composed if n not in LEGACY_ORDER]
+    return {n: CustomTool(execute=composed[n].execute, description=composed[n].description,
+                          input_schema=composed[n].schema) for n in ordered}
+
+
+def tool_manifest(ctx: ToolContext | None = None) -> list[dict]:
     """`[{name, description, schema}]` for the sidecar's `run` command.
 
-    Built from `build_tools` against a throwaway context so the manifest can never
-    drift from the tools that actually execute — the model must be told about
-    exactly the schema the tool will validate against.
+    Built from `build_tools` so the manifest can never drift from the tools that
+    actually execute — the model must be told about exactly the schema the tool will
+    validate against. With a ``ctx`` the per-turn tool selection applies; without one
+    (the schema fixture, the probe) it is the full legacy set.
     """
-    from app.db import Database
-
-    ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
+    if ctx is None:
+        from app.db import Database
+        ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
     return [
         {"name": name, "description": tool.description, "schema": tool.input_schema}
         for name, tool in build_tools(ctx).items()

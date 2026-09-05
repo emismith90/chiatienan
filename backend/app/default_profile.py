@@ -13,7 +13,7 @@ from app.agent import _read_context_files, _read_skills
 from app.config import Settings, settings as _settings
 from app.prompt import SYSTEM_PROMPT_TEMPLATE
 from kernos.content import (
-    Caps, Memory, Models, Persona, PipelineEntry, ProfileSpec, Prompt, Rule, Runtime, Skill,
+    Caps, Memory, Models, Persona, PipelineEntry, ProfileSpec, Prompt, Rule, Runtime, Skill, ToolPackRef,
 )
 
 #: Rules whose content is money-safety are tagged so the self-change scope can
@@ -67,5 +67,6 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
             ],
             "persist": [e(id="app.persist.cards", version="1")],
         },
+        tool_packs=[ToolPackRef(pack="lunch_ledger"), ToolPackRef(pack="lunch_places")],
         meta={"handles_money": True},
     )

@@ -19,13 +19,17 @@ from pathlib import Path
 import pytest
 
 BACKEND = Path(__file__).resolve().parent.parent
-LAYERS = ("kernos", "ledger_core", "packs", "app")
+LAYERS = ("kernos", "ledger_core", "packs", "app", "bench")
 ALLOWED = {
     "kernos": {"kernos"},
     "ledger_core": {"kernos", "ledger_core"},
     "packs": {"kernos", "ledger_core", "packs"},
     "app": {"kernos", "ledger_core", "packs", "app"},
+    "bench": {"kernos", "ledger_core", "packs", "app", "bench"},
 }
+
+#: The one documented lazy import of a dev-only package (review Phase 2 F9, Phase 3 F6).
+EXCEPTIONS = {("app/modelprobe.py", "bench")}
 
 
 def _imports(path: Path) -> set[str]:
@@ -47,7 +51,7 @@ def _violations(layer: str) -> list[str]:
     bad: list[str] = []
     for path in sorted(root.rglob("*.py")):
         for target in _imports(path) & set(LAYERS):
-            if target not in ALLOWED[layer]:
+            if target not in ALLOWED[layer] and (str(path.relative_to(BACKEND)), target) not in EXCEPTIONS:
                 bad.append(f"{path.relative_to(BACKEND)} imports {target}")
     return bad
 

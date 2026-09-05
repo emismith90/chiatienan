@@ -18,6 +18,8 @@ class LegacyRunTurn(BasePlugin):
         tool_ctx = ctx.tool_ctx
         if ctx.profile is not None:
             tool_ctx.engine_spec = ctx.profile.to_engine_spec()
+            tool_ctx.tool_config = ({"packs": [t.model_dump() for t in ctx.profile.tool_packs]}
+                                    if ctx.profile.tool_packs else None)
         tool_ctx.system_override = ctx.system
         tool_ctx.message_override = ctx.message
         emit = ctx.sink.emit_raw if ctx.sink is not None else None

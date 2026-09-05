@@ -137,7 +137,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
 
     engine = PiEngine(get_bridge())
     result = await engine.run(spec, turn_id=turn_id, message=message, images=list(images or []),
-                              tools=tool_manifest(), call_tool=call_tool, emit=emit)
+                              tools=tool_manifest(ctx), call_tool=call_tool, emit=emit)
     stats = result.stats or {}
 
     # One line per turn so the log mirror (and /internal/debug/logs) shows where a
