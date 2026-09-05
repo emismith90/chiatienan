@@ -291,6 +291,28 @@ async def create_room(body: RoomIn, _=Depends(require_admin)):
     return out
 
 
+@app.get("/api/admin/rooms/{room_id}/resolved")
+async def admin_resolved_profile(room_id: int, _=Depends(require_admin)):
+    """What this room's bot runs, verbatim (kernos plan Task 1.9).
+
+    The resolved profile, the engine half the sidecar receives, and the pipeline
+    with every plugin's version and config — the one place to answer "what does
+    this room run" without reading code or env. Phase 2 makes it per room.
+    """
+    from dataclasses import asdict
+
+    from app.kernel import kernel_for
+
+    kernel = kernel_for(get_db())
+    spec = kernel.resolve(room_id)
+    return {
+        "room_id": room_id,
+        "spec": spec.model_dump(),
+        "engine_spec": asdict(spec.to_engine_spec()),
+        "pipeline": kernel.pipeline_for(spec).describe(),
+    }
+
+
 @app.post("/api/rooms/create")
 async def create_room_public(body: RoomCreateIn):
     """Anyone can start a room: creates the room + its first member + a session.

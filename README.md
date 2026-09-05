@@ -36,7 +36,8 @@ Caddy (auto-TLS)
                                    │
    room chat ── @phoenix ────────┤  chat.py     @phoenix detect + dispatch (serialized)
    live updates ◀── SSE ──────────┤  realtime.py in-process RoomHub pub/sub
-                                   │  agent.py    shim → agent_sidecar (Node, Pi on OpenRouter)
+                                   │  kernel.py   kernos pipeline: the turn as ordered plugins
+                                   │  agent.py    shim → kernos.engine.pi → agent_sidecar (Node, Pi)
                                    │  tools.py    CustomTools (all arithmetic + QR)
                                    │  drafts.py   editable expense-draft lifecycle
                                    │  ledger/roster/accounts/qr/money/periods
@@ -81,11 +82,25 @@ Caddy (auto-TLS)
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
-| `agent.py` | ~200-line shim: builds the run command, forwards `agent.*` events, executes tools, hydrates `TurnResult` |
-| `pi_bridge.py` | the sidecar subprocess: JSONL framing and `req_id` demultiplexing. No pi semantics |
+| `kernel.py` | kernos composition root: registry of plugins, host adapters, resolver → the pipeline `chat.run_bot_turn` runs |
+| `plugins/` | this app's pipeline plugins: persona prompt, the `run_turn` seam, lunch renderers, money validators, draft cards |
+| `hostadapters.py` · `default_profile.py` | the kernos host adapters over this app's modules; the seeded default profile (today's bot as a `ProfileSpec`) |
+| `agent.py` | shim over `kernos.engine.pi.PiEngine`: builds the `EngineSpec`, executes tools, logs one line; `run_turn`'s signature is frozen |
+| `pi_bridge.py` | shim over `kernos.engine.pi.PiBridge`: sidecar path, our key name, `PI_*` defaults, the per-process singleton |
 | `agent_sidecar/` | **Node.** Owns the whole Pi harness: provider, session, event normalization, turn caps, answer assembly |
 | `realtime.py` | In-process `RoomHub` pub/sub feeding the SSE streams |
 | `pi_smoke.py` | Guarded sidecar liveness check (B3) |
+
+### The agent kernel (`backend/kernos/`)
+
+`kernos` is a host-agnostic framework the bot now runs on — a turn pipeline with
+typed stages, a plugin registry with schema-validated configs, an `Engine`
+protocol (Pi is the first engine), host adapter protocols, and a versioned
+`ProfileSpec`. chiatienan is its first host; `tests/test_layering.py` enforces that
+nothing under `kernos/` imports the app. Design:
+[`docs/superpowers/specs/2026-09-05-agent-cms-design.md`](docs/superpowers/specs/2026-09-05-agent-cms-design.md);
+plan: [`docs/superpowers/plans/2026-09-05-agent-os-framework.md`](docs/superpowers/plans/2026-09-05-agent-os-framework.md).
+`GET /api/admin/rooms/{id}/resolved` (admin password) shows what a room runs.
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 

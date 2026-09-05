@@ -283,7 +283,25 @@ values.
 
 **PR 1c ends here.**
 
-**Phase 1 — state of play:** _(filled as tasks complete)_
+**Phase 1 — state of play (2026-09-05):** Tasks 1.0–1.10 done on
+`claude/headless-cms-pi-harness-nn18pb`, as three commit groups (1a `6a9ae46`, 1b
+`d5e4f6f`, 1c from `919ac17`).
+
+| check | result |
+|---|---|
+| backend `pytest -q` | 1057 passed, 1 skipped (986 + 1 before Phase 1; every pre-existing test unedited — `git diff origin/main -- backend/tests` lists only new files) |
+| sidecar `node --test` | 69 / 69 (65 + 4 for `settings`/`extensions`) |
+| golden fixtures (Task 1.0) | 9 / 9 replay byte-identical through the pipeline |
+| `GET /api/admin/rooms/{id}/resolved` | `engine_spec` equals `agent.default_engine_spec()`; pipeline lists today's plugins in order |
+| benchmark `bench.run --corpus typical --repeat 3` | **not run here** — no `OPEN_ROUTER_KEY` in this environment. Run where the key exists before merging and record the results commit hash here. Note the benchmark exercises `run_turn` (the engine move), not the pipeline; the golden fixtures cover the swap. |
+
+Deviations from the task text, all behaviour-neutral: the runner does not execute
+`resolve` (the pipeline is built *from* the resolved profile, so `Kernel.resolve`
+runs before it); `kernos.context.images` takes no lookback config yet because
+`chat.recent_images` still reads its window from env (Phase 2 moves it to the
+profile's `memory` block); `HistorySource.render` accepts `bot_label` and
+chiatienan's adapter ignores it until Phase 3, since `chat._render_messages` writes
+the label itself today.
 
 ---
 
