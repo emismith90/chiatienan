@@ -564,17 +564,180 @@ default to `[]` for new profiles is decision 5 in the design and is still open.
 
 ## Phase 3 — Packs and the ledger domain
 
-- **3.1** `ToolPack` protocol (§4.2) and `DraftKind`; `kernos.packs` registry alongside
-  plugins.
-- **3.2** Extract `ledger_core` from `app`: `money.py`, `ledger.py`, `qr.py`,
-  `periods.py`, `roster.py`, `drafts.py` (generalised over `DraftKind`), `moneyguard.py`,
-  member models. `app` re-exports for one release.
-- **3.3** `packs/lunch_ledger`: tools (from `tools.py`), renderers (from `app.plugins.render`),
-  draft kinds, `balance_contributions` (from `build_debt_edges`), `fixtures` (from
-  `bench.world`), `seed` (from `seed_places`), models (`Meal`, `MealShare`, `Place`).
-- **3.4** `ledger.period_balances` → Σ `pack.balance_contributions` then payments FIFO;
-  `chat` render → first pack that claims the result type.
-- **Proof:** benchmark equality again; a stub pack with two tools runs end to end.
+**Goal:** a second business can exist. That needs (a) a `ToolPack` interface the kernel
+runs through, (b) the money domain both lunch and poker share extracted into
+`ledger_core`, (c) the lunch business as a real pack, and (d) the three places the host
+still hard-codes lunch — balances, draft commits, the render chain — generalised.
+Every step is behaviour-neutral for lunch; the golden fixtures and the full suite
+(with no pre-existing test edited) are the oracle, the benchmark where a key exists.
+
+**Gate:** a Fable review of this section before Task 3.1.
+
+### Facts that shape this phase (from the code, 2026-09-05)
+
+- Tests import `app.models` (28 files), `app.tools` (17), `app.money` (6), `app.periods`,
+  `app.qr`, `app.places`… Every module that moves keeps an `app.*` shim that re-exports
+  the same names, or the "no pre-existing test edited" rule fails.
+- `ledger.py` derives balances from **meals** specifically (`period_balances`,
+  `debt_breakdown`, `period_transfer_inputs`) and `DebtEdge` carries `meal_id` and
+  `dish`. Payments may be **linked to a meal** (`Payment.meal_id`) and FIFO application
+  uses that link.
+- `drafts.py` is two things glued together: draft **payload** logic (normalise items,
+  signature for supersede, `_EDITABLE`, commit → `ledger.record_meal`) and draft
+  **persistence** as `RoomMessage` rows of kind `expense_draft`/`payment_draft` via
+  `chat.post_message`. The first is domain; the second is the host's `CardStore`.
+- `qr.py` reads `settings.qr_base_url/qr_template`; `ledger.py` reads `app.clock`;
+  `seed_places.py` reads `app.db.get_db`. None of that may survive in `ledger_core`.
+- **SQLAlchemy foreign keys cannot cross declarative bases.** `Meal.room_id → rooms.id`
+  and `MealShare.member_id → members.id` are FKs into host tables. If the ledger tables
+  move to a `ledger_core` base they either lose those constraints (plain indexed
+  integers, as `kn_*` already does with `space_id`) or the models are composed with
+  declarative mixins on the host's base. Existing production tables keep whatever
+  constraints they were created with either way; only fresh installs differ.
+- Places / observations / memos / knowledge (~1,300 lines) are lunch **domain** but are
+  also the host's knowledge panel and its memory files. They are not money.
+
+### Decisions taken for this phase
+
+1. **Four PRs, each behaviour-neutral:** 3a pack interface with a thin lunch wrapper
+   living in `app`; 3b `ledger_core` extraction with shims; 3c the real
+   `packs/lunch_ledger`; 3d generalised balances, draft kinds and render.
+2. **Ledger tables move to `ledger_core.models` on their own base; cross-package
+   references become plain indexed integers** (`room_id`, member ids), validated in
+   code where it matters (`roster` already does). Same table names, same columns, no
+   data migration. Rationale: the `kn_*` tables set the precedent, mixins would force
+   every host to compose the models, and a poker pack needs the same freedom for
+   `games`/`game_entries`. Stated cost: a fresh install has no DB-level FK from
+   `meals` to `rooms`/`members`. `Member`, `Room`, `Session`, `RoomMessage`, `Place`
+   stay host models.
+3. **`DebtEdge` generalises to `(debtor, creditor, ref_kind, ref_id, label, occurred_on,
+   amount)`**; `meal_id`/`dish` become `ref_kind="meal"`/`label`. `Payment.meal_id`
+   becomes the generic link `(ref_kind, ref_id)` **in Python only** — the column keeps
+   its name (`meal_id`) and a `ref_kind` column is added additively with default
+   `"meal"`, so existing rows are unchanged.
+4. **Contributions, not balances, are the pack interface:** `pack.contributions(session,
+   space_id, window) -> list[DebtEdge]`. The core sums edges from every enabled pack,
+   applies payments FIFO as today, and derives statements, outstanding pairs and
+   transfers from that one list. `lunch_ledger.contributions` is today's
+   `build_debt_edges(period_transfer_inputs(...))`, so the numbers cannot move.
+5. **Two lunch packs.** `packs/lunch_ledger` (money: meals, payments, settlement, member
+   CRUD) and `app/packs/places.py` (find_places, suggest_lunch, remember, forget,
+   add_place) — the second stays in the host until Phase 5 gives knowledge a
+   framework home, because it is welded to the host's memory files and panel.
+6. **Tool selection is content, tool bodies are code.** `profile.tool_packs[]` lists
+   enabled packs with per-tool `{enabled, description}`; `app.tools.build_tools` becomes
+   the composition point that asks the enabled packs and applies the overrides. The
+   filter reaches it through `ToolContext.tool_config` (same seam as `engine_spec`).
+   `tool_manifest()` follows the same filter so the model is told exactly what it may
+   call.
+7. **`bench.world` fixture steps become `pack.fixtures()`**, keyed by today's step
+   kinds (`add_member`, `meal_confirmed`, `leave_pending`, `confirm_pending`,
+   `payment`); `bench.world.build_world` dispatches to them, so Phase 4 inherits a
+   pack-provided world builder without a second implementation.
+
+### Task 3.1 (PR 3a): the `ToolPack` interface and a thin lunch wrapper in the host
+
+**Files:** create `backend/kernos/packs.py`, `backend/kernos/plugins/render.py`,
+`backend/kernos/plugins/persist.py`; create `backend/app/packs/{__init__.py,lunch.py,places.py}`;
+modify `backend/app/tools.py` (filter), `backend/app/default_profile.py`, `backend/app/kernel.py`;
+tests `backend/tests/kernos/test_packs.py`, `backend/tests/test_app_packs.py`.
+
+- [ ] `kernos/packs.py`: `ToolPack` protocol — `id`, `version`, `handles_money`,
+      `tools(ctx) -> dict[str, PackTool]` (`PackTool(name, description, schema, execute)`),
+      `draft_kinds() -> dict[str, DraftKind]` (`DraftKind(kind, commit(session, space_id,
+      payload, logged_by) -> Any, editable: frozenset[str])`), `render(result) -> Outcome |
+      None`, `contributions(session, space_id, window) -> list`, `fixtures() ->
+      dict[str, Callable]`, `seed(session, space_id)`, `models() -> list[type]`. Plus a
+      `PackRegistry` (`register`, `get(id)`, `describe()`), the `apply_tool_overrides(tools,
+      spec.tool_packs)` helper, and `packs_for(spec, registry)` in profile order.
+- [ ] `kernos.plugins.render.PackRender` (`kernos.render.packs@1`, stage `render`): asks
+      each enabled pack in profile order; the first `Outcome` wins; none → `Body(final_text
+      or the engine's empty-turn body, None, claimed_by_pack = not final_text)`. The
+      empty-turn body text moves to a kernel helper with the same three branches.
+- [ ] `kernos.plugins.persist.Cards` (`kernos.persist.cards@1`): today's
+      `app.persist.cards` over `CardStore`/`MessageStore` — it is already host-agnostic;
+      the cancelled-card republish reads `result.all_results("cancel_draft")` through the
+      pack's declared `cancel_tool` name rather than a literal.
+- [ ] `app/packs/lunch.py`: `LunchLedgerPack` **wrapping today's modules** — `tools()`
+      from `app.tools.build_tools` (money tools only), `draft_kinds()` from `app.drafts`
+      (`expense_draft`, `payment_draft`), `render()` = today's `app.plugins.render.LunchRender`
+      decision, `fixtures()` from `bench.world`'s step kinds re-homed into the pack (the
+      bench imports them back), `handles_money=True`. `app/packs/places.py`: the five
+      places tools + `seed_places`.
+- [ ] `app/tools.py`: `ToolContext.tool_config: dict | None = None`; `build_tools(ctx)`
+      composes from the kernel's pack registry when the seam is set and applies
+      enable/description overrides; `tool_manifest(ctx=None)` follows. With the seam
+      unset (the 18 fakes, the bench) it returns exactly today's 19 tools.
+- [ ] Seeded profile: `tool_packs = [{"pack": "lunch_ledger"}, {"pack": "lunch_places"}]`;
+      render/persist stages switch to the kernel plugins; `app.render.lunch` and
+      `app.persist.cards` stay registered. Boot re-sync republishes (boot-managed).
+- [ ] Proof: golden 9/9; a test profile with `pick_random` disabled has no `pick_random`
+      in the manifest the engine receives and the tool is refused if called; full suite
+      unedited.
+- [ ] Commit: `kernos: ToolPack interface, pack render/persist plugins, lunch as a wrapped pack`
+
+### Task 3.2 (PR 3b): extract `ledger_core`
+
+**Files:** create `backend/ledger_core/{__init__.py,models.py,schema.py,money.py,periods.py,
+qr.py,roster.py,ledger.py,drafts.py,moneyguard.py,notes.py}`; modify the corresponding
+`backend/app/*.py` into re-export shims; modify `backend/app/db.py`, `backend/app/models.py`.
+
+- [ ] Move `money.py`, `periods.py`, `moneyguard.py`, `notes.py` verbatim (pure).
+- [ ] `qr.py`: `make_qr_url(member, amount, *, base_url, template)`; the `app.qr` shim
+      binds `settings`. `roster.py`: takes the `Member` model as a module-level
+      `configure(member_model=...)` or, simpler, `ledger_core.models` **owns `Member`
+      too**? — **No**: `Member` carries auth (`pin`, sessions) and stays host; `roster`
+      functions take the member class as a parameter with the shim binding it.
+- [ ] `ledger_core/models.py`: `Base`, `Meal`, `MealShare`, `Payment` (+ additive
+      `ref_kind` default `"meal"`), `Settlement`; `room_id`/member ids as indexed
+      `Integer` (decision 2). `ledger_core.bind(engine)` = create + additive sync
+      (reuse `kernos.content.schema.sync_additive_columns`). `app/models.py` re-exports
+      the four classes; `Database.create_all` calls `ledger_core.bind`.
+- [ ] `ledger_core/ledger.py`: today's `ledger.py` with `clock` injected (`Clock`
+      protocol from kernos) and `DebtEdge` generalised (decision 3); `record_meal`,
+      `record_payment`, `void_meal`, `period_*`, `debt_breakdown`, `statement_for`,
+      `outstanding_pairs`, `period_timeline`, `record_settlement`, `last_settlement`.
+- [ ] `ledger_core/drafts.py`: the **payload half** — `sync_items`, `signature`,
+      `EDITABLE`, `commit_meal_payload(session, space_id, payload, logged_by)`,
+      `commit_payment_payload(...)`, `recommit(...)`. The `RoomMessage` half stays in
+      `app/drafts.py`, which now calls into it.
+- [ ] Proof: full suite unedited; `test_layering` green (`ledger_core → kernos` only);
+      the benchmark where a key exists.
+- [ ] Commit: `ledger_core: the money domain, extracted behind app.* shims`
+
+### Task 3.3 (PR 3c): the real `packs/lunch_ledger`
+
+- [ ] Move the money tools out of `app/tools.py` into `packs/lunch_ledger/tools.py`
+      (importing `ledger_core` and `kernos` only), the render decision into
+      `packs/lunch_ledger/render.py`, the fixtures into `packs/lunch_ledger/fixtures.py`;
+      `app/packs/lunch.py` becomes a one-line registration. `app/tools.py` keeps
+      `ToolContext`, `CustomTool`, `build_tools`, `tool_manifest` as the host's
+      composition point (the 17 test files import them).
+- [ ] `bench.world` imports the fixtures from the pack; `bench.probe_models._tool_schemas`
+      reads the manifest through the composition point.
+- [ ] Proof: full suite unedited; layering green (`packs → kernos, ledger_core`).
+- [ ] Commit: `packs: lunch_ledger owns the money tools, render and fixtures`
+
+### Task 3.4 (PR 3d): generalise what the host still hard-codes
+
+- [ ] `ledger_core.ledger.period_balances` / `debt_breakdown` / transfers take the edge
+      list from `Σ pack.contributions(...)` (decision 4); `lunch_ledger.contributions`
+      returns exactly today's edges; a test asserts `debt_breakdown` equality before and
+      after over the golden ledgers (`tests/golden/scenario_week.py`).
+- [ ] `app/drafts.commit_any` dispatches on `pack.draft_kinds()`; the commit/recommit
+      routes in `main.py` call it unchanged.
+- [ ] `chat.py` loses the last lunch literals: `_settlement_body` and friends move to
+      the pack's render module; the chat module keeps `post_message`, history, memory.
+- [ ] Proof: golden 9/9; full suite unedited; a stub pack with two tools and one draft
+      kind runs a turn end to end in a test space (`tests/test_stub_pack.py`).
+- [ ] Commit: `kernos/ledger_core: balances from pack contributions; drafts and render by pack`
+
+### Task 3.5: Docs and state of play
+
+- [ ] Design §4.2/§7.3 updated with the interface as built and decision 2's FK note;
+      README module table; plan state of play.
+
+**Phase 3 — state of play:** _(filled as tasks complete)_
 
 ## Phase 4 — Observe and eval
 
