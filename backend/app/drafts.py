@@ -10,84 +10,21 @@ ledger writes go through :func:`app.ledger.record_meal` — the LLM never writes
 """
 from __future__ import annotations
 
-from datetime import date
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import chat, ledger
 from app.models import Meal, Member, RoomMessage
-from app.money import MoneyError, itemized_adjustments, normalize_items, prorate_items
+from ledger_core import drafts as core
+from ledger_core.drafts import DRAFT_KINDS  # noqa: F401  (re-exported)
 
-DRAFT_KINDS = ("expense_draft", "payment_draft")
-
-_EDITABLE = {
-    "payer_member_id", "member_participants", "guests", "bill_total",
-    "adjustments", "items", "discount_split", "dish", "initiator", "note",
-    # The place guess rides the card the user already confirms (D3), so a wrong
-    # one is a single tap to fix rather than a separate approval flow.
-    "place_id",
-}
-
-
-def _sync_items(att: dict) -> dict:
-    """Re-derive ``adjustments`` from the itemized ``items``, in place.
-
-    In itemized mode ``items`` (per-person list prices off the bill) is the
-    single source of truth and ``adjustments`` is only its ledger encoding — so
-    every write path recomputes it here rather than trusting whatever the client
-    (or the model) sent. Editing a total, a price, or the guest list on the card
-    therefore re-prorates the discount instead of leaving a stale split behind.
-
-    No-op for an ordinary equal-split draft. Raises :class:`MoneyError` if the
-    items no longer describe a valid split (e.g. a participant was added on the
-    card without a price).
-    """
-    items = att.get("items")
-    if not items:
-        return att
-    if att.get("guests"):
-        raise MoneyError("Per-item split does not support cash guests yet — drop the guests or split evenly.")
-    participants = [int(x) for x in att.get("member_participants") or []]
-    items = normalize_items(items, participants)
-    # The card patches a fixed field list that does not include discount_split,
-    # so it is read back off the draft: editing a price must not silently switch
-    # an equal-delta split to proportional.
-    shares = prorate_items(int(att.get("bill_total") or 0),
-                           {i["member"]: i["amount"] for i in items},
-                           discount_split=att.get("discount_split") or "proportional")
-    att["items"] = items
-    att["adjustments"] = [{"member": m, "amount": a}
-                          for m, a in itemized_adjustments(int(att["bill_total"]), shares).items()]
-    return att
-
-
-def _int_or_none(value) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _draft_signature(att: dict) -> tuple:
-    """What a draft proposes, reduced to an identity for spotting a re-proposal.
-
-    The amount is deliberately NOT part of it: a re-proposal is usually a
-    *correction* of the amount (production had 324,000đ re-proposed as
-    324,200đ), so keying on it would miss every case worth catching.
-    """
-    if att.get("type") == "payment_draft":
-        return ("payment", frozenset(
-            (_int_or_none(t.get("from_member_id")), _int_or_none(t.get("to_member_id")))
-            for t in att.get("transfers") or []
-        ))
-    return (
-        "meal",
-        _int_or_none(att.get("payer_member_id")),
-        frozenset(_int_or_none(x) for x in att.get("member_participants") or []),
-        att.get("occurred_on"),
-    )
-
+# The payload half of a draft lives in ``ledger_core.drafts`` (plan Task 3.2); these
+# names stay for the modules and tests that import them from here.
+_EDITABLE = core.EDITABLE
+_sync_items = core.sync_items
+_int_or_none = core.int_or_none
+_draft_signature = core.draft_signature
+_adjustments_map = core.adjustments_map
 
 def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list[RoomMessage]:
     """Mark pending drafts that ``new_att`` re-proposes as ``superseded``.
@@ -162,10 +99,6 @@ def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> 
     return m
 
 
-def _adjustments_map(att: dict) -> dict[int, int]:
-    return {int(a["member"]): int(a["amount"]) for a in att.get("adjustments") or []}
-
-
 def _all_member_names(session: Session, room_id: int) -> dict[int, str]:
     """Display names for EVERY member of the room, active or not.
 
@@ -206,27 +139,8 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("This draft has already been processed.")
-    if (att.get("payer_member_id") is None or att.get("bill_total") is None
-            or not att.get("member_participants")):
-        raise ledger.LedgerError("The draft is missing required fields to record.")
-    _sync_items(att)  # authoritative recompute: the card's items win over stored adjustments
-
-    res = ledger.record_meal(
-        session,
-        room_id=room_id,
-        payer_member_id=int(att["payer_member_id"]),
-        participants=[int(x) for x in att["member_participants"]],
-        total_amount=int(att["bill_total"]),
-        adjustments=_adjustments_map(att),
-        guests=[str(g) for g in att.get("guests") or []],
-        dish=att.get("dish"),
-        place_id=att.get("place_id"),
-        initiator=att.get("initiator"),
-        note=att.get("note"),
-        occurred_on=date.fromisoformat(att["occurred_on"]) if att.get("occurred_on") else None,
-        raw_input=att.get("raw_input"),
-        logged_by=logged_by,
-    )
+    core.require_meal_fields(att)
+    res = core.record_meal_payload(session, room_id, att, logged_by=logged_by)
     meal_msg = _meal_message(session, room_id, att, res)
 
     att["status"] = "committed"
@@ -258,16 +172,11 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     for k in _EDITABLE:
         if k in patch:
             att[k] = patch[k]
-    _sync_items(att)
     ledger.void_meal(session, meal.id, room_id=room_id, by=logged_by)
-    res = ledger.record_meal(
-        session, room_id=room_id, payer_member_id=int(att["payer_member_id"]),
-        participants=[int(x) for x in att["member_participants"]],
-        total_amount=int(att["bill_total"]), adjustments=_adjustments_map(att),
-        guests=[str(g) for g in att.get("guests") or []], dish=att.get("dish"),
-        initiator=att.get("initiator"), note=att.get("note"),
-        raw_input=att.get("raw_input"), logged_by=logged_by, occurred_on=meal.occurred_on,
-    )
+    # The re-record keeps the original meal's date and, as before the extraction,
+    # does not carry the card's `place_id` (the recommit route never did).
+    res = core.record_meal_payload(session, room_id, {**att, "place_id": None},
+                                   logged_by=logged_by, occurred_on=meal.occurred_on)
     # An edit is a void + re-record under a new id, so anything already paid
     # against the old meal (⑦ quick-pay) follows it — otherwise the payer's own
     # statement shows their share as unpaid while the settlement counts it.
@@ -303,18 +212,8 @@ def commit_payment_draft(session: Session, draft_id: int, room_id: int,
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("This draft has already been processed.")
-    transfers = att.get("transfers") or []
-    if not transfers:
-        raise ledger.LedgerError("The draft has no transfers to record.")
-    for t in transfers:
-        if t.get("from_member_id") is None or t.get("to_member_id") is None or not t.get("amount"):
-            raise ledger.LedgerError("A transfer is missing required fields.")
-    for t in transfers:
-        ledger.record_payment(
-            session, room_id=room_id,
-            from_member_id=int(t["from_member_id"]), to_member_id=int(t["to_member_id"]),
-            amount=int(t["amount"]), note=t.get("note"), logged_by=logged_by,
-        )
+    transfers = core.require_transfers(att)
+    core.record_payment_transfers(session, room_id, transfers, logged_by=logged_by)
     names = _all_member_names(session, room_id)
     pay_att = {
         "type": "payment",

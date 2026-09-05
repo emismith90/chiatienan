@@ -1,0 +1,131 @@
+"""Deterministic period resolution (ICT date math).
+
+Pure functions over ``date`` objects — no clock, no DB. Callers pass ``today``
+(computed in Asia/Ho_Chi_Minh) and, for ``since_last``, the ``period_to`` of the
+last committed settlement. "Week" is Monday–Sunday.
+
+A resolved period is a half-open-feeling inclusive date range used to query
+``meals.occurred_on``: ``{"from": date | None, "to": date}``. ``from = None``
+means "from the beginning of the ledger" (no committed settlement yet).
+"""
+from __future__ import annotations
+
+from calendar import monthrange
+from datetime import date, timedelta
+
+_KEYWORDS = {"since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"}
+
+
+def _week_monday(d: date) -> date:
+    return d - timedelta(days=d.weekday())  # Monday=0
+
+
+def resolve_period(
+    keyword: str | None,
+    *,
+    today: date,
+    last_settlement_to: date | None = None,
+    explicit_from: date | None = None,
+    explicit_to: date | None = None,
+) -> dict:
+    """Resolve a period keyword into ``{"from", "to", "keyword"}``.
+
+    Supported keywords (unknown/blank → ``since_last``):
+      * ``since_last`` — ``(last_settlement_to, today]``; if never settled, the
+        whole ledger up to today (``from = None``).
+      * ``this_week`` / ``last_week`` — Mon–Sun of the current / previous week.
+      * ``today`` / ``yesterday`` — a single day.
+      * ``this_month`` — 1st … last day of the current month.
+      * ``explicit`` — the caller-supplied ``explicit_from``/``explicit_to``
+        (``explicit_to`` defaults to ``today``).
+
+    Supplying ``explicit_from``/``explicit_to`` implies ``explicit``. Previously
+    they were honoured ONLY with ``keyword="explicit"`` and otherwise silently
+    dropped, so a ``settle_period`` call carrying ``from``/``to`` and no keyword
+    fell back to ``since_last`` — the whole ledger — and reported it under the
+    date range that had been asked for. A named keyword still wins if both are
+    given, since that is the caller being explicit about wanting the keyword.
+    """
+    kw = (keyword or "").strip().lower()
+    if kw not in _KEYWORDS:
+        kw = "explicit" if (explicit_from or explicit_to) else "since_last"
+
+    if kw == "since_last":
+        if last_settlement_to is None:
+            return {"from": None, "to": today, "keyword": kw}
+        return {"from": last_settlement_to + timedelta(days=1), "to": today, "keyword": kw}
+
+    if kw == "this_week":
+        monday = _week_monday(today)
+        return {"from": monday, "to": monday + timedelta(days=6), "keyword": kw}
+
+    if kw == "last_week":
+        monday = _week_monday(today) - timedelta(days=7)
+        return {"from": monday, "to": monday + timedelta(days=6), "keyword": kw}
+
+    if kw == "today":
+        return {"from": today, "to": today, "keyword": kw}
+
+    if kw == "yesterday":
+        y = today - timedelta(days=1)
+        return {"from": y, "to": y, "keyword": kw}
+
+    if kw == "this_month":
+        first = today.replace(day=1)
+        last = today.replace(day=monthrange(today.year, today.month)[1])
+        return {"from": first, "to": last, "keyword": kw}
+
+    # explicit
+    if explicit_from is None and explicit_to is None:
+        # `keyword="explicit"` with no dates carries **no information**, so this is
+        # not a guess about intent: it is the same request as no keyword at all.
+        # It used to raise, and the raise reached the model as
+        # `ValueError: explicit period requires explicit_from and/or explicit_to`
+        # — three times in one benchmark run, from `get_period_summary` on messages
+        # that named no date ("viết cụ thể từng ngày"). Each cost a wasted round
+        # trip on a turn that then took 59–120s. The returned `keyword` says
+        # `since_last`, so the reply still reports the window it actually used.
+        return resolve_period("since_last", today=today,
+                              last_settlement_to=last_settlement_to)
+    return {
+        "from": explicit_from,
+        "to": explicit_to or today,
+        "keyword": kw,
+    }
+
+
+_WEEKDAYS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+    "thu 2": 0, "thu 3": 1, "thu 4": 2, "thu 5": 3, "thu 6": 4, "thu 7": 5, "chu nhat": 6,
+    "t2": 0, "t3": 1, "t4": 2, "t5": 3, "t6": 4, "t7": 5, "cn": 6,
+}
+
+
+def _strip_accents(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def resolve_date(word: str, *, today: date) -> date:
+    """A single day from a weekday/relative word or dd/mm[/yyyy] (ICT).
+
+    Weekday words resolve to the most recent matching day at or before ``today``
+    (a group logs *past* lunches). Raises ``ValueError`` if unparseable.
+    """
+    raw = (word or "").strip().lower()
+    w = _strip_accents(raw).strip()
+    if w in ("hom nay", "today", "nay"):
+        return today
+    if w in ("hom qua", "yesterday", "qua"):
+        return today - timedelta(days=1)
+    if w in _WEEKDAYS:
+        target = _WEEKDAYS[w]
+        delta = (today.weekday() - target) % 7
+        return today - timedelta(days=delta)
+    import re
+    md = re.fullmatch(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", w)
+    if md:
+        day, month, year = int(md[1]), int(md[2]), md[3]
+        y = today.year if year is None else (2000 + int(year) if len(year) == 2 else int(year))
+        return date(y, month, day)
+    raise ValueError(f"Không hiểu ngày: {word!r}")

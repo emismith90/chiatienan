@@ -15,9 +15,14 @@ from datetime import date, datetime
 
 from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
                         UniqueConstraint, text)
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from app import clock as _clock
 from app.clock import now_ict
+import ledger_core
+# The ledger's tables live in ledger_core (plan Task 3.2) and are re-exported here for
+# every module and test that imports them from `app.models`.
+from ledger_core.models import Meal, MealShare, Payment, Settlement  # noqa: F401
 
 
 class Base(DeclarativeBase):
@@ -136,74 +141,7 @@ class RoomMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
 
 
-class Meal(Base):
-    __tablename__ = "meals"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
-    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    payer_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
-    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
-    note: Mapped[str | None] = mapped_column(String(400))
-    raw_input: Mapped[str | None] = mapped_column(Text)
-    dish: Mapped[str | None] = mapped_column(String(120))
-    place_id: Mapped[int | None] = mapped_column(ForeignKey("places.id"), nullable=True, index=True)
-    initiator: Mapped[str | None] = mapped_column(String(120))
-    guests: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
-    source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)  # web|admin
-    logged_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) of the logging session
-    voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    voided_by: Mapped[str | None] = mapped_column(String(120))
-    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
-
-    shares: Mapped[list["MealShare"]] = relationship(
-        back_populates="meal", cascade="all, delete-orphan"
-    )
-
-
-class MealShare(Base):
-    __tablename__ = "meal_shares"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    meal_id: Mapped[int] = mapped_column(ForeignKey("meals.id"), nullable=False, index=True)
-    member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
-    share_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
-
-    meal: Mapped[Meal] = relationship(back_populates="shares")
-
-
-class Settlement(Base):
-    __tablename__ = "settlements"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
-    period_from: Mapped[date | None] = mapped_column(Date)  # None = from ledger start
-    period_to: Mapped[date] = mapped_column(Date, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
-    requested_by: Mapped[str | None] = mapped_column(String(120))  # member id (str) who requested the settle
-    transfers: Mapped[list] = mapped_column(JSON, default=list, nullable=False)  # snapshot
-
-
-class Payment(Base):
-    """An ad-hoc cash payment between two members (outside meals/settlements).
-
-    Adjusts balances directly (payer's balance += amount, payee's -= amount);
-    carries no shares. Append-only; corrections are a void + new payment.
-    """
-    __tablename__ = "payments"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False, index=True)
-    from_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
-    to_member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)  # VND
-    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    meal_id: Mapped[int | None] = mapped_column(ForeignKey("meals.id"), nullable=True, default=None)
-    note: Mapped[str | None] = mapped_column(String(400))
-    source: Mapped[str] = mapped_column(String(20), default="web", nullable=False)
-    logged_by: Mapped[str | None] = mapped_column(String(120))
-    voided: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    voided_by: Mapped[str | None] = mapped_column(String(120))
-    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_ict)
+# ledger_core reads members and the clock through this host (review F3): the member
+# table stays here because it carries auth, and the clock is looked up on `app.clock`
+# at call time so `frozen_clock` keeps working.
+ledger_core.configure(member_model=Member, now=lambda: _clock.now_ict())

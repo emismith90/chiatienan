@@ -46,6 +46,8 @@ from app.clock import now_ict
 from app.config import settings
 from app.db import get_db
 from app.models import Base, Member, Room, RoomMessage
+from kernos.content.models import Base as _ContentBase
+from ledger_core.models import Base as _LedgerBase
 
 log = logging.getLogger("chiatienan.debug")
 
@@ -69,9 +71,19 @@ _REDACT = {
 _PLACEHOLDER = "[redacted]"
 
 
+def _all_tables() -> dict:
+    """Every table this deployment owns: the host's, the ledger's and the content
+    plane's (review Phase 3 F2 — the ledger tables moved bases and must stay
+    exportable)."""
+    out = dict(Base.metadata.tables)
+    out.update(_LedgerBase.metadata.tables)
+    out.update(_ContentBase.metadata.tables)
+    return out
+
+
 def dumpable_tables() -> list[str]:
     """Exportable table names, ``sessions`` removed."""
-    return sorted(set(Base.metadata.tables) - _FORBIDDEN_TABLES)
+    return sorted(set(_all_tables()) - _FORBIDDEN_TABLES)
 
 
 def require_key(x_debug_key: str | None = Header(default=None)) -> None:
@@ -269,7 +281,7 @@ async def tables(_=Header(default=None, alias="X-Debug-Key")):
     with get_db().session() as s:
         info = {}
         for name in dumpable_tables():
-            t = Base.metadata.tables[name]
+            t = _all_tables()[name]
             info[name] = {
                 "rows": s.scalar(select(func.count()).select_from(t)),
                 "columns": [c.name for c in t.columns],
@@ -292,9 +304,9 @@ async def table_csv(
     through this parameter.
     """
     require_key(_)
-    if table in _FORBIDDEN_TABLES or table not in Base.metadata.tables:
+    if table in _FORBIDDEN_TABLES or table not in _all_tables():
         raise HTTPException(status_code=404, detail=f"unknown table (see /internal/debug/tables)")
-    t = Base.metadata.tables[table]
+    t = _all_tables()[table]
     redact = _REDACT.get(table, set())
     cols = [c.name for c in t.columns]
 

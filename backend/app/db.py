@@ -138,14 +138,17 @@ class Database:
     def create_all(self) -> None:
         """Bring the schema up to the models: missing tables, then missing columns.
 
-        The kernos content plane's ``kn_`` tables live in the same database and are
-        brought up here too, with the same additive discipline (plan Task 2.4).
+        The ledger's tables (``ledger_core``, plan Task 3.2) and the kernos content
+        plane's ``kn_`` tables (Task 2.4) live in the same database and are brought up
+        here too, with the same additive discipline.
         """
-        from kernos.content import bind
+        from kernos.content import bind as bind_content
+        from ledger_core import bind as bind_ledger
 
         Base.metadata.create_all(self.engine)
         _sync_additive_columns(self.engine)
-        bind(self.engine)
+        bind_ledger(self.engine)
+        bind_content(self.engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
