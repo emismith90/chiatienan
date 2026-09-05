@@ -312,7 +312,24 @@ them, a publish step with gates, a resolver that maps a space to what it runs, a
 a mountable admin API — with every existing room still running the seeded default
 byte for byte until someone binds it to something else.
 
-**Gate:** a Fable review of this section before Task 2.1 (goal: review gate per phase).
+**Gate:** a Fable review of this section before Task 2.1 — done 2026-09-05, verdict
+**GO WITH CHANGES**; thirteen findings, all accepted and folded into the tasks below.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | blocker | Boot creates no `kn_sources`, so the first human draft's per-kind snapshot would replace the seeded rules/skills with nothing | boot seeds sources from the skill/rule files; snapshot replaces per kind; test "draft from an untouched seeded profile equals the published spec" (2.2, 2.4) |
+| 2 | blocker | `runtime.cwd/agent_dir` would be stored as content (boot layer, §0.3); per-environment values break re-sync and let an agent move `bash`'s cwd | `runtime` stripped from stored specs; the host injects it at resolve; excluded from re-sync equality (2.2, 2.4) |
+| 3 | major | Gate 5 blacklist misses `extensions`, `settings` (raw Pi passthrough incl. `packages[]`, `shellPath`), `runtime`, `caps`; deleting `meta.handles_money` would bypass gate 2 | all added; a removed `meta.handles_money` counts as a blacklisted change (2.3) |
+| 4 | major | `actor: "boot"` from the request body bypasses every gate | bypass is `bypass_gates=True` on `store.publish`, only `ensure_seeded` passes it; router rejects `boot*` actors, defaults to `admin` (2.2, 2.5) |
+| 5 | major | `Kernel.pipeline_for` keyed by `id(spec)` can serve a stale pipeline after id reuse | key = sha256 of the pipeline dict; `Kernel.invalidate()` clears both caches (2.4) |
+| 6 | major | `prompt.body`/`prompt.append` are inert while `app.prompt.phoenix` renders from code, so binding `append_sections` would do nothing | **new Task 2.7**: `kernos.prompt.template` with `{{var}}` and `{{#if}}…{{else}}…{{/if}}`; the seeded prompt becomes content, asserted equal to `build_system_prompt` for every sender case; `append` honoured |
+| 7 | major | Rollback re-runs gate 3; after the seeded probes age out, the incident path needs a network probe | rollback skips gate 3 (the version passed when published); `override_reason` accepted (2.2) |
+| 8 | major | `ProfileSpec` is mutable; in-place overrides would leak between spaces | `frozen=True` on every spec model; overrides via `model_copy(update=…)`; `BindingOverrides(extra="forbid")` (2.1, 2.4) |
+| 9 | minor | `bench` is not in the prod image and imports `app` | `app/modelprobe.py` imports `bench.probe_models` inside the method; 501 on `ImportError` (2.5) |
+| 10 | minor | `kn_businesses.default_*_id` ↔ `kn_agents.business_id` FK cycle; no way to pick the default business later; timestamp format | `kn_agents.is_default` (one per business, enforced in the store); `DbResolver(default_business_slug=…)`; UTC `isoformat(timespec="seconds")` (2.1, 2.4) |
+| 11 | minor | Etag excludes `title`; `If-Match` mismatch should be 412; binding to a non-manager; no retire route | etag includes title; 412 / 409 / 422 as stated; `PUT /binding` 422 unless `role == manager`; `POST …/retire` (2.2, 2.5) |
+| 12 | minor | Seeding happens on the first turn, not at boot | `main.py` startup hook calls `kernel_for(get_db())` (2.4) |
+| 13 | — | Sizing | PR 2a = 2.1–2.3 (framework only), PR 2b = 2.4 + 2.7, PR 2c = 2.5–2.6 |
 
 ### Decisions taken for this phase (deviations from the design text, with reasons)
 
@@ -339,27 +356,35 @@ byte for byte until someone binds it to something else.
   version (gates re-run). "The previous version stays publishable" (design §9) is
   therefore literal.
 - **Actors are strings** (`boot`, `admin`, `agent:<slug>`), recorded on every version
-  and audit row; there is no identity system (decided).
+  and audit row; there is no identity system (decided). `boot` is not acceptable from
+  the API; gate bypass is a code-level flag only `ensure_seeded` passes.
+- **`runtime` is never stored.** Stored specs omit `runtime`; the host injects its
+  paths when resolving. Re-sync compares stored specs, so an environment's paths can
+  never trigger a republish.
+- **The seeded prompt becomes content in Phase 2** (Task 2.7), rendered by
+  `kernos.prompt.template`, and is asserted equal to `build_system_prompt` for every
+  sender case so the change is behaviour-neutral.
 
 ### Task 2.1: Content tables and `bind()`
 
 **Files:** create `backend/kernos/content/{models.py,schema.py}`; tests `backend/tests/kernos/test_content_models.py`.
 
 - [ ] `models.py`: its own `Base`; tables `kn_businesses (id, slug UNIQUE, name,
-      description, tool_packs JSON, plugins_allowed JSON, seed JSON,
-      default_profile_id, default_agent_id, created_at)`, `kn_profiles (id,
+      description, tool_packs JSON, plugins_allowed JSON, seed JSON, created_at)`, `kn_profiles (id,
       business_id FK, name, managed_by, published_version_id, created_at)`,
       `kn_profile_versions (id, profile_id FK, version INT, status, spec JSON, actor,
       note, created_at, published_at; UNIQUE(profile_id, version))`, `kn_sources (id,
       business_id FK, kind, slug, title, body TEXT, frontmatter JSON, etag, updated_by,
       updated_at; UNIQUE(business_id, kind, slug))`, `kn_agents (id, business_id FK,
-      slug, name, role, profile_id FK, delegates_to JSON, capabilities JSON, max_depth,
-      created_at; UNIQUE(business_id, slug))`, `kn_space_bindings (space_id PK,
+      slug, name, role, is_default BOOL, profile_id FK, delegates_to JSON, capabilities
+      JSON, max_depth, created_at; UNIQUE(business_id, slug))` — one `is_default` per
+      business, enforced in the store, `kn_space_bindings (space_id PK,
       agent_id FK, overrides JSON, updated_at)`, `kn_model_catalogue (id, provider,
       model_id UNIQUE, name, input JSON, context_window, max_tokens, cost JSON,
       reasoning, probe JSON, updated_at)`, `kn_audit_log (id, actor, action, entity,
-      entity_id, before JSON, after JSON, at)`. Timestamps are UTC ISO strings the
-      framework writes itself (no host clock dependency at the schema level).
+      entity_id, before JSON, after JSON, at)`. Timestamps are UTC `isoformat(timespec="seconds")` strings the framework writes
+      itself. Every spec model gets `frozen=True` (finding 8) and a `BindingOverrides`
+      model (`append_sections`, `handle`, `language`; `extra="forbid"`) is added.
 - [ ] `schema.py`: `bind(engine)` = `Base.metadata.create_all` + a generic
       `sync_additive_columns(engine, metadata)` (the pattern of `app.db`, parameterised
       by metadata; `app.db` keeps its own copy for now).
@@ -373,26 +398,28 @@ byte for byte until someone binds it to something else.
 
 - [ ] `ContentStore(session_factory)`. Businesses: `create/get/list/update`. Sources:
       `put_source(business_id, kind, slug, *, title, body, frontmatter, actor,
-      if_match=None)` — etag = sha256 of `(kind, slug, body, frontmatter)`; a mismatched
-      `if_match` raises `Conflict`; `delete_source(..., if_match)`; `list_sources(kind=)`.
+      if_match=None)` — etag = sha256 of `(kind, slug, title, body, frontmatter)`; a mismatched
+      `if_match` raises `PreconditionFailed` (HTTP 412); `delete_source(..., if_match)`; `list_sources(kind=)`.
 - [ ] Profiles: `create_profile(business_id, name, *, managed_by="human")`,
       `get/list`. Versions: `create_draft(profile_id, *, actor, from_version=None,
       note=None) -> version`: the new spec is the previous published spec (or
       `from_version`'s, or the business's `seed["spec"]` when none) with the business's
       **sources snapshotted in**: `rules` ← kind `rule` (tags from frontmatter),
       `skills` ← kind `skill` (description/delivery from frontmatter), `templates` ←
-      kind `template`, `prompt.body` ← kind `prompt` slug `system` when present.
+      kind `template`, `prompt.body` ← kind `prompt` slug `system` when present. **Snapshot replaces per
+      kind**, and the stored spec always omits `runtime` (finding 2).
       `update_draft(version_id, patch: dict, *, actor)` — deep-merges JSON into a
       **draft** only (anything else raises), re-validates as `ProfileSpec`.
-- [ ] `publish(version_id, *, actor, override_reason=None, gates)` — runs the gates
-      (Task 2.3); on success: status `published`, previous published → `superseded`,
+- [ ] `publish(version_id, *, actor, override_reason=None, gates, bypass_gates=False)` —
+      runs the gates (Task 2.3) unless `bypass_gates` (only `ensure_seeded` passes it); on success: status `published`, previous published → `superseded`,
       `profile.published_version_id` moves, `profile.managed_by = "human"` unless actor
       is `boot`, audit row with before/after version ids and the override reason.
-      `rollback(profile_id, version_id, *, actor, gates)` — same path for a
-      `superseded` version. `retire(version_id)` for drafts/superseded.
+      `rollback(profile_id, version_id, *, actor, gates, override_reason=None)` — same
+      path for a `superseded` version, **skipping gate 3** (it passed when published). `retire(version_id)` for drafts/superseded.
 - [ ] Audit: `log(actor, action, entity, entity_id, before, after)`; `audit(limit, since)`.
 - [ ] Tests: etag conflict; draft snapshots sources and a later source edit does not
-      change it; update_draft rejects a published version; publish flips statuses and
+      change it; a draft from a seeded profile whose sources are untouched equals the
+      published spec (finding 1); update_draft rejects a published version; publish flips statuses and
       writes audit; rollback republishes; `managed_by` flips to human on a human publish.
 - [ ] Commit: `kernos: ContentStore with snapshot-on-publish and audit`
 
@@ -414,10 +441,12 @@ byte for byte until someone binds it to something else.
          the max age, else fail.
       5. **reflexivity** — when `actor` starts with `agent:`: `blacklisted_changes(previous,
          spec)` non-empty → fail. Blacklist: `builtin_tools`, `models`, `tool_packs`,
-         `pipeline`, `eval`, any `validation[]` entry with `on_fail == "block"`, any
-         `rules[]` entry tagged `money`, `meta.handles_money`.
+         `pipeline`, `eval`, `extensions`, `settings`, `runtime`, `caps`, any
+         `validation[]` entry with `on_fail == "block"`, any `rules[]` entry tagged
+         `money`, and `meta.handles_money` (a removed key counts as a change).
       Gate 4 (eval) is a hook, `eval_gate: Callable | None`, wired in Phase 4.
-      Actor `boot` bypasses every gate (the seeded profile *is* today's behaviour).
+      There is no actor-based bypass (finding 4); `store.publish(bypass_gates=True)`
+      is the only way around the gates and only boot seeding uses it.
 - [ ] Tests, one per gate plus the boot bypass and the "models unchanged needs no
       probe" case.
 - [ ] Commit: `kernos: publish gates 1, 2, 3 and 5`
@@ -428,21 +457,25 @@ byte for byte until someone binds it to something else.
 modify `backend/app/kernel.py`, `backend/app/db.py`; tests `backend/tests/kernos/test_resolver.py`,
 `backend/tests/test_boot_seed.py`.
 
-- [ ] `DbResolver(store, *, fallback: ProfileSpec)`: `resolve(space_id)` → binding →
-      agent → profile → published version → `ProfileSpec`, **applying binding
-      overrides** (`append_sections` → `prompt.append`, `handle`, `language`); no
-      binding → the default business's default agent; no content → `fallback`. Cached
-      by `(version_id, space_id)`; `invalidate()` on publish/bind.
+- [ ] `DbResolver(store, *, default_business_slug, runtime: Runtime, fallback:
+      ProfileSpec)`: `resolve(space_id)` → binding → agent → profile → published version
+      → `ProfileSpec` with the host's `runtime` injected and binding overrides applied
+      by `model_copy` (never in place; finding 8); no binding → the default business's
+      `is_default` agent; no content → `fallback`. Cached by `(version_id, space_id)`;
+      `invalidate()` on publish/bind, called by the store through a hook.
 - [ ] `boot.py`: `ensure_seeded(store, *, business_slug, business_name, agent_slug,
-      spec, catalogue_rows, actor="boot")` — idempotent; creates business/profile
-      (`managed_by="boot"`)/version 1 published/manager agent on first run; on later
-      runs republishes only when `managed_by == "boot"` and the spec differs; upserts
-      the catalogue rows.
+      spec, sources, catalogue_rows)` — idempotent; creates business, **its sources
+      from the skill/rule files (finding 1)**, profile (`managed_by="boot"`), version 1
+      published with `bypass_gates=True`, the `is_default` manager agent; on later runs
+      re-puts changed sources and republishes only when `managed_by == "boot"` and the
+      stored spec (without `runtime`) differs; upserts the catalogue rows.
 - [ ] `app/db.py`: `Database.create_all()` also calls `kernos.content.bind(engine)`.
       `app/kernel.py`: `Kernel` builds the store, runs `ensure_seeded` with
       `build_default_spec(settings)` and the two configured models' 2026-08-12 probe
       records, and uses `DbResolver` with the static spec as fallback; `Kernel.resolve`
-      accepts a `space_id` string too (rooms are `str(room_id)`).
+      accepts a `space_id` string too (rooms are `str(room_id)`); `pipeline_for` is
+      keyed by a hash of the pipeline dict and `Kernel.invalidate()` clears both caches
+      (finding 5); `main.py` gains a startup hook that builds the kernel (finding 12).
 - [ ] Verify: the nine golden fixtures still replay byte-identical (resolved from the
       DB now); full suite green; `GET …/resolved` unchanged.
 - [ ] Commit: `kernos: DbResolver and boot seeding; chiatienan resolves from the content plane`
@@ -456,23 +489,52 @@ tests `backend/tests/test_admin_api.py`.
       `GET /registry`, `GET /plugins/{id}/{version}/schema`; `GET|POST /businesses`,
       `GET|PATCH /businesses/{id}`; `GET|POST /businesses/{id}/sources`,
       `GET|PUT|DELETE /businesses/{id}/sources/{kind}/{slug}` (`If-Match` on PUT/DELETE →
-      409 on mismatch, `ETag` on GET); `GET|POST /profiles`, `GET /profiles/{id}`,
+      412 on mismatch, `ETag` on GET); `GET|POST /profiles`, `GET /profiles/{id}`,
       `GET|POST /profiles/{id}/versions`, `GET|PATCH /profiles/{id}/versions/{v}`,
-      `POST /profiles/{id}/versions/{v}/publish` (`{actor?, override_reason?}` → 422 with
-      the gate failures), `POST /profiles/{id}/rollback`; `GET|POST /agents`,
-      `GET|PATCH /agents/{id}`; `GET|PUT|DELETE /spaces/{space_id}/binding`;
+      `POST /profiles/{id}/versions/{v}/publish` (`{actor?, override_reason?}`; actor
+      defaults to `admin`, `boot*` rejected with 422; gate failures → 422 with the list;
+      state conflicts → 409), `POST /profiles/{id}/versions/{v}/retire`,
+      `POST /profiles/{id}/rollback`; `GET|POST /agents`,
+      `GET|PATCH /agents/{id}`; `GET|PUT|DELETE /spaces/{space_id}/binding` (422 unless the agent's `role == manager`;
+      overrides validated as `BindingOverrides`);
       `GET /spaces/{space_id}/resolved`; `GET /catalogue/models`,
       `POST /catalogue/models/{model_id}/probe` (runs the host `ModelProbe` if
       configured, else 501); `GET /audit`.
 - [ ] chiatienan: mount under `/api/admin` behind `require_admin`; keep
-      `GET /api/admin/rooms/{id}/resolved` as an alias of the spaces route; provide a
-      `ModelProbe` that wraps `bench.probe_models` (network; not exercised in tests).
+      `GET /api/admin/rooms/{id}/resolved` as an alias of the spaces route; provide
+      `app/modelprobe.py`, a `ModelProbe` that imports `bench.probe_models` inside the
+      method and reports 501 on `ImportError` (finding 9; `bench` is not in the image).
 - [ ] Tests: every route with a `TestClient`; an edited source → draft → publish →
       bound room runs the edit (assert through `GET …/resolved` **and** a golden-style
       `run_bot_turn` with a fake engine seeing the new `skills`); an unbound room still
       resolves to the seeded default; publish refused on each gate with the failure
       list in the body.
 - [ ] Commit: `kernos: mountable admin router; chiatienan mounts it`
+
+### Task 2.7: The prompt becomes content — `kernos.prompt.template`
+
+**Files:** create `backend/kernos/plugins/template.py`; modify `backend/app/default_profile.py`,
+`backend/app/kernel.py`; tests `backend/tests/kernos/test_template.py`, `backend/tests/test_prompt_content.py`.
+
+- [ ] A deliberately tiny renderer: `{{path.to.var}}` substitution and
+      `{{#if path}}…{{else}}…{{/if}}` (nestable, truthiness = non-empty / not None). No
+      loops, no expressions, no I/O. Unknown variables fail at render **and** at
+      publish (gate 1 validates the body against the closed variable set).
+- [ ] Variables: `persona.handle|name|aliases|language`, `sender.name`,
+      `sender.member_id`, `today` (from the host `Clock`), `space.id`. The closed set
+      is documented in the plugin's `config_schema` description.
+- [ ] Plugin `kernos.prompt.template@1`, stage `prompt`: `ctx.system = render(body) +
+      "\n\n".join(prompt.append)`.
+- [ ] `app/default_profile.py`: `prompt.body` = today's `build_system_prompt` text
+      turned into a template with the `{{#if sender.name}}` / `{{#if sender.member_id}}`
+      blocks; the seeded pipeline's `prompt` stage becomes `[kernos.prompt.template,
+      kernos.prompt.sections]`. `app.prompt.phoenix` stays registered for profiles that
+      name it.
+- [ ] **Equivalence test:** for every combination of `sender_name ∈ {None, "An"}` and
+      `sender_id ∈ {None, 7}` with a frozen `today`, the rendered template equals
+      `build_system_prompt(...)` exactly. The golden fixtures and the seam test keep
+      passing; `GET …/resolved` now shows the prompt as content.
+- [ ] Commit: `kernos: prompt template plugin; the seeded prompt becomes content`
 
 ### Task 2.6: Docs and state of play
 
