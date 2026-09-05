@@ -74,6 +74,15 @@ class ToolContext:
     # ``propose_meal`` can refuse to quietly leave that person out of the split
     # — see :func:`_dropped_names`.
     unknown_names: dict[str, str] = field(default_factory=dict)
+    # The kernos seam (plan Task 1.4, review finding 1). When a pipeline resolved
+    # a profile it puts the engine spec and the rendered system/message here, and
+    # ``agent.run_turn`` uses them instead of building from ``settings``. ``None``
+    # means "build as today". Riding on ``ToolContext`` — the one argument every
+    # test fake of ``run_turn`` ignores — is what lets the frozen six-argument
+    # signature stay frozen.
+    engine_spec: object | None = None
+    system_override: str | None = None
+    message_override: str | None = None
 
 
 def _err(message: str) -> dict:

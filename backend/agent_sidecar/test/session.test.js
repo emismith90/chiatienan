@@ -152,3 +152,43 @@ test("builtin tools are allowlisted ALONGSIDE the money tools, never instead", (
     ["read", "write", "bash", "propose_meal", "settle_period"]);
   assert.equal(options.noTools, undefined);
 });
+
+// --------------------------------------------------------------------------- //
+// profile `settings` and `extensions` (kernos, plan Task 1.4)
+// --------------------------------------------------------------------------- //
+
+import { buildSettingsManager } from "../session.js";
+import { _resetExtensions, knownExtensions, registerExtension, resolveExtensions } from "../extensions.js";
+
+test("no settings on the command means no SettingsManager — today's construction", () => {
+  assert.equal(buildSettingsManager(undefined), null);
+  assert.equal(buildSettingsManager(null), null);
+  assert.equal(buildSettingsManager({}), null);
+  assert.equal(buildSettingsManager([]), null);
+});
+
+test("a settings block becomes an in-memory SettingsManager carrying its values", () => {
+  const sm = buildSettingsManager({ compaction: { enabled: false }, defaultThinkingLevel: "low" });
+  assert.ok(sm);
+  assert.equal(sm.getCompactionEnabled(), false);
+  assert.equal(sm.getDefaultThinkingLevel(), "low");
+});
+
+test("the extension registry is empty in Phase 1 and an unknown id fails loudly", () => {
+  _resetExtensions();
+  assert.deepEqual(knownExtensions(), []);
+  assert.deepEqual(resolveExtensions(undefined), []);
+  assert.deepEqual(resolveExtensions([]), []);
+  assert.throws(() => resolveExtensions(["tool_call_policy"]), /unknown sidecar extension "tool_call_policy"/);
+});
+
+test("a registered extension resolves to an inline factory that receives its config", () => {
+  _resetExtensions();
+  const seen = [];
+  registerExtension("echo", (pi, config) => seen.push([pi, config]));
+  const [ext] = resolveExtensions([{ id: "echo", config: { max: 3 } }, "echo"]);
+  assert.equal(ext.name, "echo");
+  ext.factory("PI");
+  assert.deepEqual(seen, [["PI", { max: 3 }]]);
+  _resetExtensions();
+});
