@@ -571,7 +571,24 @@ still hard-codes lunch — balances, draft commits, the render chain — general
 Every step is behaviour-neutral for lunch; the golden fixtures and the full suite
 (with no pre-existing test edited) are the oracle, the benchmark where a key exists.
 
-**Gate:** a Fable review of this section before Task 3.1.
+**Gate:** a Fable review of this section before Task 3.1 — done 2026-09-05, verdict
+**GO WITH CHANGES**; eight findings, all verified and accepted:
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| F1 | high | Switching the seeded pipeline to `kernos.render.packs` in 3a edits three id-pinning tests and makes the golden prove a path prod (human-published) would not run | 3a keeps `app.render.lunch` / `app.persist.cards` as the seeded ids and makes them one-line delegates to the kernel plugins, so both ids run one code path; the ids switch in 3d together with the (branch-added, not pre-existing) pin tests |
+| F2 | high | `debug_api.dumpable_tables()` enumerates `app.models.Base.metadata` only — moving the ledger tables would drop `meals.csv` from the prod export API | 3.2: union of the app, `ledger_core` and `kn_` metadata; a test asserts `meals` is listed |
+| F3 | high | `record_meal`/`record_payment` query the host `Member` to raise "does not exist"; `Meal.place_id → places.id` is also a host FK | `ledger_core` gets a `MemberDirectory` protocol (`ids_in_space`, `names`) bound by the host shim; `place_id` joins the dropped-FK list |
+| F4 | medium | `contributions(session, space_id, window)` invites re-windowing edges before FIFO — the exact bug `debt_breakdown` fixed | `contributions(session, space_id)` returns **all** edges; the core runs FIFO then windows by `occurred_on`, as today |
+| F5 | medium | `DebtEdge.meal_id`/`dish` are on the wire (statement bodies, `main.py` filters, frontend cards) | rename on the dataclass only, with `meal_id`/`dish` kept as read-only properties; every serialiser keeps emitting them |
+| F6 | medium | `app/packs/lunch.py` importing `bench.world` pulls `bench` into the app graph and the prod image | fixtures live in `app/packs/lunch_fixtures.py` from 3a and `bench.world` imports them; `bench` joins the layering test with `app → bench` forbidden except the documented lazy import in `app/modelprobe.py` |
+| F7 | low | Manifest identity: order is pinned by `test_tools_manifest.py` and the sidecar fixture; the literal order interleaves money and places tools | `build_tools` composes then reorders to `LEGACY_ORDER`; a test asserts the order; `run_turn` calls `tool_manifest(ctx)` so the per-turn filter reaches the model |
+| F8 | low | `PackTool.execute` must stay sync; `models()` binds per pack; empty-turn strings are host text; draft stamping belongs to the kernel | execute sync; `Database.create_all` calls each pack's `bind`; the three empty-turn strings are `PackRender` config with today's text as defaults; `PackRender` stamps `raw_input`/`logged_by`/`turn_id` after the pack returns a `Draft` |
+
+Also confirmed by the gate: `propose_meal`'s place guess is the money pack's **only** places
+dependency, so 3c injects a `PlaceResolver` through `ToolContext` and the two-pack split
+holds; `period_balances` has no app callers (test-only), so reimplementing it over
+contributions is safe.
 
 ### Facts that shape this phase (from the code, 2026-09-05)
 
@@ -603,7 +620,7 @@ Every step is behaviour-neutral for lunch; the golden fixtures and the full suit
    living in `app`; 3b `ledger_core` extraction with shims; 3c the real
    `packs/lunch_ledger`; 3d generalised balances, draft kinds and render.
 2. **Ledger tables move to `ledger_core.models` on their own base; cross-package
-   references become plain indexed integers** (`room_id`, member ids), validated in
+   references become plain indexed integers** (`room_id`, member ids, `place_id`), validated in
    code where it matters (`roster` already does). Same table names, same columns, no
    data migration. Rationale: the `kn_*` tables set the precedent, mixins would force
    every host to compose the models, and a poker pack needs the same freedom for
@@ -616,7 +633,7 @@ Every step is behaviour-neutral for lunch; the golden fixtures and the full suit
    its name (`meal_id`) and a `ref_kind` column is added additively with default
    `"meal"`, so existing rows are unchanged.
 4. **Contributions, not balances, are the pack interface:** `pack.contributions(session,
-   space_id, window) -> list[DebtEdge]`. The core sums edges from every enabled pack,
+   space_id) -> list[DebtEdge]` — every edge, unwindowed (F4). The core sums edges from every enabled pack,
    applies payments FIFO as today, and derives statements, outstanding pairs and
    transfers from that one list. `lunch_ledger.contributions` is today's
    `build_debt_edges(period_transfer_inputs(...))`, so the numbers cannot move.
@@ -651,9 +668,10 @@ tests `backend/tests/kernos/test_packs.py`, `backend/tests/test_app_packs.py`.
       `PackRegistry` (`register`, `get(id)`, `describe()`), the `apply_tool_overrides(tools,
       spec.tool_packs)` helper, and `packs_for(spec, registry)` in profile order.
 - [ ] `kernos.plugins.render.PackRender` (`kernos.render.packs@1`, stage `render`): asks
-      each enabled pack in profile order; the first `Outcome` wins; none → `Body(final_text
-      or the engine's empty-turn body, None, claimed_by_pack = not final_text)`. The
-      empty-turn body text moves to a kernel helper with the same three branches.
+      each enabled pack in profile order; the first `Outcome` wins; a `Draft` is stamped
+      with `raw_input`/`logged_by`/`turn_id` by the kernel, never by the pack (F8d); none
+      → `Body(final_text or empty-turn body, None, claimed_by_pack = not final_text)`. The
+      three empty-turn strings are plugin config with today's English as defaults (F8c).
 - [ ] `kernos.plugins.persist.Cards` (`kernos.persist.cards@1`): today's
       `app.persist.cards` over `CardStore`/`MessageStore` — it is already host-agnostic;
       the cancelled-card republish reads `result.all_results("cancel_draft")` through the
@@ -661,16 +679,18 @@ tests `backend/tests/kernos/test_packs.py`, `backend/tests/test_app_packs.py`.
 - [ ] `app/packs/lunch.py`: `LunchLedgerPack` **wrapping today's modules** — `tools()`
       from `app.tools.build_tools` (money tools only), `draft_kinds()` from `app.drafts`
       (`expense_draft`, `payment_draft`), `render()` = today's `app.plugins.render.LunchRender`
-      decision, `fixtures()` from `bench.world`'s step kinds re-homed into the pack (the
-      bench imports them back), `handles_money=True`. `app/packs/places.py`: the five
+      decision, `fixtures()` from `app/packs/lunch_fixtures.py` — the five `bench.world` step
+      kinds re-homed there, and `bench.world` imports them back (F6) — `handles_money=True`. `app/packs/places.py`: the five
       places tools + `seed_places`.
 - [ ] `app/tools.py`: `ToolContext.tool_config: dict | None = None`; `build_tools(ctx)`
       composes from the kernel's pack registry when the seam is set and applies
       enable/description overrides; `tool_manifest(ctx=None)` follows. With the seam
-      unset (the 18 fakes, the bench) it returns exactly today's 19 tools.
+      unset (the 18 fakes, the bench) it returns exactly today's 19 tools **in today's
+      order** (`LEGACY_ORDER`, asserted; F7); `run_turn` calls `tool_manifest(ctx)`.
 - [ ] Seeded profile: `tool_packs = [{"pack": "lunch_ledger"}, {"pack": "lunch_places"}]`;
-      render/persist stages switch to the kernel plugins; `app.render.lunch` and
-      `app.persist.cards` stay registered. Boot re-sync republishes (boot-managed).
+      the render/persist ids stay `app.render.lunch` / `app.persist.cards`, now one-line
+      delegates to `PackRender` / the kernel `Cards` (F1). The kernel ids are registered
+      too; the seeded pipeline switches to them in 3d.
 - [ ] Proof: golden 9/9; a test profile with `pick_random` disabled has no `pick_random`
       in the manifest the engine receives and the tool is refused if called; full suite
       unedited.
@@ -694,13 +714,16 @@ qr.py,roster.py,ledger.py,drafts.py,moneyguard.py,notes.py}`; modify the corresp
       (reuse `kernos.content.schema.sync_additive_columns`). `app/models.py` re-exports
       the four classes; `Database.create_all` calls `ledger_core.bind`.
 - [ ] `ledger_core/ledger.py`: today's `ledger.py` with `clock` injected (`Clock`
-      protocol from kernos) and `DebtEdge` generalised (decision 3); `record_meal`,
+      protocol from kernos), a `MemberDirectory` protocol for the existence checks (F3),
+      and `DebtEdge` generalised with `meal_id`/`dish` kept as properties (F5); `record_meal`,
       `record_payment`, `void_meal`, `period_*`, `debt_breakdown`, `statement_for`,
       `outstanding_pairs`, `period_timeline`, `record_settlement`, `last_settlement`.
 - [ ] `ledger_core/drafts.py`: the **payload half** — `sync_items`, `signature`,
       `EDITABLE`, `commit_meal_payload(session, space_id, payload, logged_by)`,
       `commit_payment_payload(...)`, `recommit(...)`. The `RoomMessage` half stays in
       `app/drafts.py`, which now calls into it.
+- [ ] `app/debug_api.dumpable_tables()` unions the app, `ledger_core` and `kn_` metadata;
+      test asserts `meals` is listed (F2).
 - [ ] Proof: full suite unedited; `test_layering` green (`ledger_core → kernos` only);
       the benchmark where a key exists.
 - [ ] Commit: `ledger_core: the money domain, extracted behind app.* shims`
@@ -721,11 +744,14 @@ qr.py,roster.py,ledger.py,drafts.py,moneyguard.py,notes.py}`; modify the corresp
 ### Task 3.4 (PR 3d): generalise what the host still hard-codes
 
 - [ ] `ledger_core.ledger.period_balances` / `debt_breakdown` / transfers take the edge
-      list from `Σ pack.contributions(...)` (decision 4); `lunch_ledger.contributions`
+      list from `Σ pack.contributions(session, space_id)` — unwindowed; the core windows
+      after FIFO as today (F4); `lunch_ledger.contributions`
       returns exactly today's edges; a test asserts `debt_breakdown` equality before and
       after over the golden ledgers (`tests/golden/scenario_week.py`).
 - [ ] `app/drafts.commit_any` dispatches on `pack.draft_kinds()`; the commit/recommit
       routes in `main.py` call it unchanged.
+- [ ] The seeded pipeline switches to `kernos.render.packs` / `kernos.persist.cards` and
+      the three id-pin tests added on this branch are updated with it (F1).
 - [ ] `chat.py` loses the last lunch literals: `_settlement_body` and friends move to
       the pack's render module; the chat module keeps `post_message`, history, memory.
 - [ ] Proof: golden 9/9; full suite unedited; a stub pack with two tools and one draft
