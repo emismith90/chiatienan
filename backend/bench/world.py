@@ -27,9 +27,11 @@ import contextlib
 from datetime import date, datetime, time
 
 from app import clock
-from app.packs import lunch_fixtures
 from app.clock import ICT
+from app.hostadapters import RoomCards
 from app.models import Member, Room
+from app.packs import lunch_ledger_pack
+from packs.lunch_ledger import fixtures as lunch_fixtures
 
 
 @contextlib.contextmanager
@@ -66,9 +68,36 @@ def _seed_room(db, case) -> tuple[int, dict[str, int]]:
 
 
 def _draft_payload(step: dict, ids: dict[str, int]) -> dict:
-    """See :func:`app.packs.lunch_fixtures.draft_payload` — the fixtures moved into the
-    lunch pack (plan Task 3.1); this name stays for the tests that import it."""
+    """See :func:`packs.lunch_ledger.fixtures.draft_payload` — the fixtures moved into
+    the lunch pack (plan Tasks 3.1, 3.3); this name stays for the tests that import it."""
     return lunch_fixtures.draft_payload(step, ids)
+
+
+class _World:
+    """The host services a pack's fixtures build a world through (see
+    ``packs.lunch_ledger.fixtures``): members and cards are this host's tables."""
+
+    def __init__(self, db, room_id: int) -> None:
+        self.db, self.space_id = db, room_id
+        self._cards = RoomCards(db)
+
+    def session(self):
+        return self.db.session()
+
+    def add_member(self, *, display_name: str, nickname: str) -> int:
+        with self.db.session() as s:
+            member = Member(room_id=self.space_id, display_name=display_name, nickname=nickname, pin="1")
+            s.add(member); s.flush()
+            return member.id
+
+    def create_card(self, kind: str, payload: dict) -> int:
+        card, _superseded = self._cards.create(self.space_id, kind, payload)
+        return card.id
+
+    def commit_card(self, card_id: int, actor) -> None:
+        from app import drafts
+        with self.db.session() as s:
+            drafts.commit_any(s, card_id, self.space_id, logged_by=str(actor))
 
 
 def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
@@ -86,10 +115,11 @@ def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
     room_id, ids = _seed_room(db, case)
     draft_by_step: dict[str, int] = {}
 
-    # The step kinds are the lunch pack's fixtures (`app.packs.lunch_fixtures`):
+    # The step kinds are the lunch pack's fixtures (`packs.lunch_ledger.fixtures`):
     # the bench sequences them and freezes the clock, the pack knows how to put a
-    # room into "meal confirmed" or "payment recorded" state.
-    fixtures = lunch_fixtures.FIXTURES
+    # room into "meal confirmed" or "payment recorded" state — through `_World`.
+    fixtures = lunch_ledger_pack().fixtures()
+    world = _World(db, room_id)
     for step in case.prior_steps:
         kind = step["kind"]
         with frozen_clock(step["day"]):
@@ -97,6 +127,6 @@ def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
             run = fixtures.get(kind)
             if run is None:
                 raise ValueError(f'{case.id}: unknown prior step kind {kind!r} in {step["id"]}')
-            run(db, room_id, step, ids, draft_by_step, actor)
+            run(world, step, ids, draft_by_step, actor)
 
     return room_id, ids, draft_by_step

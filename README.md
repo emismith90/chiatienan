@@ -78,7 +78,8 @@ Caddy (auto-TLS)
 | `rooms.py` | Room create + lookup by invite token / id |
 | `chat.py` | Persist/list messages, `@phoenix` detection, agent dispatch (serialized), deterministic bot-reply rendering |
 | `drafts.py` | Expense-draft lifecycle: persist, edit, commit, supersede, cancel |
-| `tools.py` | The LLM-facing `CustomTool` set (find/propose/void/period/balances/settle + member CRUD) |
+| `tools.py` | The host's tool composition point: `ToolContext`, `CustomTool`, `build_tools` (the enabled packs' tools in the legacy order), `tool_manifest` |
+| `packs/` | this host's packs: the registration of the framework's `lunch_ledger` (QR builder + place resolver injected), `lunch_places` (restaurants, memos), `room_members` (member CRUD) |
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
@@ -90,6 +91,16 @@ Caddy (auto-TLS)
 | `agent_sidecar/` | **Node.** Owns the whole Pi harness: provider, session, event normalization, turn caps, answer assembly |
 | `realtime.py` | In-process `RoomHub` pub/sub feeding the SSE streams |
 | `pi_smoke.py` | Guarded sidecar liveness check (B3) |
+
+### The lunch ledger as a pack (`backend/packs/lunch_ledger/`)
+
+The money tools (find/propose/void/period/statement/summary/settle/payment/draw/cancel),
+the outcome decision and the deterministic reply bodies, the two draft kinds and the
+eval-world fixtures — importing `kernos` and `ledger_core` only. What it needs from a
+host is injected: the card store, clock and draw on the per-turn context, the QR builder
+and place resolver at registration (`app/packs/lunch.py`). `tests/test_lunch_ledger_pack.py`
+runs it against a stub host; `ledger_core/` is the money domain underneath (meals,
+payments, FIFO debt edges, netting, periods, VietQR) that lunch and poker share.
 
 ### The agent kernel (`backend/kernos/`)
 

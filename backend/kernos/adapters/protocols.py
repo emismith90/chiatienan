@@ -73,6 +73,16 @@ class CardStore(Protocol):
 
     def get(self, space_id: str, card_id: Any) -> Any | None: ...
 
+    def pending(self, space_id: str) -> list[Any]:
+        """Cards still awaiting a human's confirmation, oldest first."""
+        ...
+
+    def cancel(self, space_id: str, card_id: Any) -> Any:
+        """Mark a pending card cancelled and return it; raises ``ValueError`` (or a
+        subclass) when there is no such pending card — the pack turns that into a
+        clarifying question for the model."""
+        ...
+
 
 @runtime_checkable
 class Completion(Protocol):

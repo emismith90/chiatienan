@@ -40,9 +40,9 @@ class Kernel:
     def __init__(self, db: Database, resolver: Resolver | None = None) -> None:
         self.db = db
         self.adapters: HostAdapters = build_adapters(db)
-        from app.packs import LunchLedgerPack, LunchPlacesPack
+        from app.packs import host_packs
         self.packs = PackRegistry()
-        self.packs.register_all([LunchLedgerPack(), LunchPlacesPack()])
+        self.packs.register_all(host_packs())
         render = PackRender(self.packs)
         cards = KernelCards(self.adapters, self.packs)
         self.registry = Registry()

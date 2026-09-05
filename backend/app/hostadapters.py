@@ -94,6 +94,14 @@ class RoomCards:
             card = s.get(RoomMessage, card_id) if card_id else None
             return card if card is not None and card.room_id == _room(space_id) else None
 
+    def pending(self, space_id) -> list[RoomMessage]:
+        with self._db.session() as s:
+            return drafts.list_pending_drafts(s, _room(space_id))
+
+    def cancel(self, space_id, card_id) -> RoomMessage:
+        with self._db.session() as s:
+            return drafts.update_draft(s, card_id, _room(space_id), {"status": "cancelled"})
+
 
 class ChatCompletion:
     """The summariser, looked up on ``app.chat`` at call time so the tests that

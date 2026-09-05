@@ -3,7 +3,7 @@ from app import chat
 from app.agent import ToolInvocation, TurnResult
 from app.hostadapters import build_adapters
 from app.default_profile import build_default_spec
-from app.packs import LunchLedgerPack, LunchPlacesPack
+from app.packs import host_packs
 from app.plugins.persist import Cards
 from app.plugins.prompt import PhoenixSystemPrompt
 from app.plugins.render import LunchRender
@@ -19,7 +19,7 @@ from tests.test_ledger import _seed_room
 
 def _packs():
     reg = PackRegistry()
-    reg.register_all([LunchLedgerPack(), LunchPlacesPack()])
+    reg.register_all(host_packs())
     return reg
 
 

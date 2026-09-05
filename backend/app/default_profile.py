@@ -67,6 +67,7 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
             ],
             "persist": [e(id="app.persist.cards", version="1")],
         },
-        tool_packs=[ToolPackRef(pack="lunch_ledger"), ToolPackRef(pack="lunch_places")],
+        tool_packs=[ToolPackRef(pack="lunch_ledger"), ToolPackRef(pack="room_members"),
+                    ToolPackRef(pack="lunch_places")],
         meta={"handles_money": True},
     )

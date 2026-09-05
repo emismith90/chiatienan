@@ -120,6 +120,17 @@ class InMemoryCards:
     def get(self, space_id, card_id):
         return next((m for m in self._history._messages.get(space_id, []) if m.id == card_id), None)
 
+    def pending(self, space_id):
+        return [m for m in self._history._messages.get(space_id, [])
+                if (m.attachments or {}).get("status") == "pending"]
+
+    def cancel(self, space_id, card_id):
+        card = self.get(space_id, card_id)
+        if card is None or (card.attachments or {}).get("status") != "pending":
+            raise ValueError(f"Draft #{card_id} not found.")
+        card.attachments = {**card.attachments, "status": "cancelled"}
+        return card
+
 
 class CannedCompletion:
     def __init__(self, text: str = "") -> None:

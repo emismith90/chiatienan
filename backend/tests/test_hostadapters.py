@@ -1,5 +1,6 @@
 """chiatienan's kernos adapters are delegation; these tests pin that they delegate
 to the right thing with the right arguments."""
+import pytest
 from datetime import timedelta
 
 from app import chat
@@ -69,3 +70,19 @@ async def test_completion_is_looked_up_on_chat_at_call_time(monkeypatch, db):
     monkeypatch.setattr("app.chat.summarize_messages", fake, raising=False)
     assert await build_adapters(db).completion.complete("txt", kind="rollover") == "rollover:txt"
     assert build_adapters(db).clock.today() == now_ict().date()
+
+
+def test_cards_pending_and_cancel_are_the_draft_store(db):
+    from app import drafts, ledger
+    room_id, m = _seed_room(db, 2)
+    cards = build_adapters(db).cards
+    card, _ = cards.create(str(room_id), "expense_draft", {
+        "payer_member_id": m[0], "member_participants": m, "guests": [], "bill_total": 100_000,
+        "adjustments": [], "per_head_preview": 50_000, "raw_input": "x"})
+    assert [c.id for c in cards.pending(str(room_id))] == [card.id]
+    assert cards.cancel(str(room_id), card.id).attachments["status"] == "cancelled"
+    assert cards.pending(str(room_id)) == []
+    with db.session() as s:
+        assert drafts.list_pending_drafts(s, room_id) == []
+    with pytest.raises(ledger.LedgerError):
+        cards.cancel(str(room_id), card.id)

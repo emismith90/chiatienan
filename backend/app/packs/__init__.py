@@ -1,12 +1,15 @@
-"""chiatienan's packs (plan Task 3.1).
+"""chiatienan's packs (plan Tasks 3.1, 3.3).
 
-Phase 3a: thin wrappers over today's modules, so the pack interface, the per-tool
-content overrides and the kernel render/persist plugins are real before any domain
-code moves. 3b/3c move the money domain to ``ledger_core`` and ``packs/lunch_ledger``;
-``lunch_places`` stays here until the framework has a home for knowledge (Phase 5).
+``lunch_ledger`` is the framework's (``packs/lunch_ledger``), registered here with
+this host's QR builder and place resolver; ``lunch_places`` and ``room_members`` are
+host packs — the first is welded to the host's memory files and knowledge panel
+until Phase 5 gives the framework a home for knowledge, the second administers
+sign-in accounts, which are the host's.
 """
-from app.packs.lunch import LunchLedgerPack  # noqa: F401
-from app.packs.places import LunchPlacesPack  # noqa: F401
+from app.packs.lunch import lunch_ledger_pack
+from app.packs.members import MEMBER_TOOLS, RoomMembersPack
+from app.packs.places import PLACES_TOOLS, LunchPlacesPack
+from packs.lunch_ledger import MONEY_TOOLS, LunchLedgerPack  # noqa: F401
 
 #: The 19 tools in the order `app.tools` has always listed them — pinned by
 #: `test_tools_manifest.py` and the sidecar's schema fixture (review F7).
@@ -16,5 +19,9 @@ LEGACY_ORDER = (
     "settle_period", "add_member", "update_member", "delete_member",
     "find_places", "suggest_lunch", "remember", "forget", "add_place", "propose_payment",
 )
-MONEY_TOOLS = frozenset(LEGACY_ORDER) - {"find_places", "suggest_lunch", "remember", "forget", "add_place"}
-PLACES_TOOLS = frozenset(LEGACY_ORDER) - MONEY_TOOLS
+assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
+
+
+def host_packs() -> list:
+    """Every pack this host registers with its kernel, fresh instances."""
+    return [lunch_ledger_pack(), LunchPlacesPack(), RoomMembersPack()]

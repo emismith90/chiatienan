@@ -19,6 +19,11 @@ from typing import Any, Callable, Protocol, runtime_checkable
 from kernos.kernel.context import Outcome
 
 
+def err(message: str) -> dict:
+    """The clarifying-question result every pack tool returns instead of raising."""
+    return {"ok": False, "error": message}
+
+
 @dataclass
 class PackTool:
     name: str

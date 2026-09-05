@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from kernos.adapters import (
@@ -64,3 +65,17 @@ async def test_canned_completion_and_fixed_clock():
     assert await c.complete("p", kind="rollover") == "- summary" and c.calls == [("p", "rollover")]
     clock = FixedClock(datetime(2026, 9, 5, 8, tzinfo=timezone.utc))
     assert clock.today().isoformat() == "2026-09-05"
+
+
+def test_cards_pending_and_cancel():
+    h = InMemoryHistory()
+    cards = InMemoryCards(h)
+    a, _ = cards.create("s", "expense_draft", {"bill_total": 1})
+    b, _ = cards.create("s", "payment_draft", {"transfers": []})
+    assert [c.id for c in cards.pending("s")] == [a.id, b.id] and cards.pending("other") == []
+    assert cards.cancel("s", a.id).attachments["status"] == "cancelled"
+    assert [c.id for c in cards.pending("s")] == [b.id]
+    with pytest.raises(ValueError):
+        cards.cancel("s", a.id)          # no longer pending
+    with pytest.raises(ValueError):
+        cards.cancel("s", 999)

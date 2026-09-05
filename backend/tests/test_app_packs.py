@@ -1,28 +1,29 @@
-"""The wrapped lunch packs (plan Task 3.1): partition, legacy order, per-tool content."""
+"""The lunch packs (plan Tasks 3.1, 3.3): partition, legacy order, per-tool content."""
 import pytest
 
 import app.agent as agent_mod
 from app import chat
 from app.agent import TurnResult
 from app.kernel import kernel_for
-from app.packs import LEGACY_ORDER, MONEY_TOOLS, PLACES_TOOLS, LunchLedgerPack, LunchPlacesPack
+from app.packs import LEGACY_ORDER, MEMBER_TOOLS, MONEY_TOOLS, PLACES_TOOLS, LunchPlacesPack, RoomMembersPack, lunch_ledger_pack
 from app.tools import ToolContext, _legacy_build_tools, build_tools, tool_manifest
 from kernos.content import ToolPackRef
 from kernos.packs import PackError
 from tests.test_ledger import _seed_room
 
 
-def test_the_two_packs_partition_the_legacy_tools_in_legacy_order(db):
+def test_the_three_packs_partition_the_legacy_tools_in_legacy_order(db):
     room_id, m = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id)
     legacy = _legacy_build_tools(ctx)
     assert tuple(legacy) == LEGACY_ORDER and len(LEGACY_ORDER) == 19
-    money, places = LunchLedgerPack().tools(ctx), LunchPlacesPack().tools(ctx)
-    assert set(money) == MONEY_TOOLS and set(places) == PLACES_TOOLS and not (MONEY_TOOLS & PLACES_TOOLS)
-    assert MONEY_TOOLS | PLACES_TOOLS == set(LEGACY_ORDER)
-    # composed through the seam with both packs on: same names, same order, same schemas
+    money, places, members = lunch_ledger_pack().tools(ctx), LunchPlacesPack().tools(ctx), RoomMembersPack().tools(ctx)
+    assert set(money) == MONEY_TOOLS and set(places) == PLACES_TOOLS and set(members) == MEMBER_TOOLS
+    assert not (MONEY_TOOLS & PLACES_TOOLS) and not (MONEY_TOOLS & MEMBER_TOOLS) and not (PLACES_TOOLS & MEMBER_TOOLS)
+    assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
+    # composed through the seam with all packs on: same names, same order, same schemas
     kernel_for(db)
-    ctx.tool_config = {"packs": [{"pack": "lunch_ledger"}, {"pack": "lunch_places"}]}
+    ctx.tool_config = {"packs": [{"pack": "lunch_ledger"}, {"pack": "room_members"}, {"pack": "lunch_places"}]}
     composed = build_tools(ctx)
     assert list(composed) == list(legacy)
     assert [(n, t.description, t.input_schema) for n, t in composed.items()] == \
@@ -50,7 +51,7 @@ async def test_a_bound_profile_without_pick_random_never_offers_it_to_the_engine
     pid = k.seed_report["profile_id"]
     d = k.store.create_draft(pid, actor="admin")
     k.store.update_draft(d["id"], {"tool_packs": [{"pack": "lunch_ledger", "tools": {"pick_random": {"enabled": False}}},
-                                                  {"pack": "lunch_places"}]}, actor="admin")
+                                                  {"pack": "room_members"}, {"pack": "lunch_places"}]}, actor="admin")
     k.store.publish(d["id"], actor="admin", gates=k.gates, override_reason="test")
     seen = {}
 

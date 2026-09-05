@@ -728,18 +728,62 @@ qr.py,roster.py,ledger.py,drafts.py,moneyguard.py,notes.py}`; modify the corresp
       the benchmark where a key exists.
 - [ ] Commit: `ledger_core: the money domain, extracted behind app.* shims`
 
-### Task 3.3 (PR 3c): the real `packs/lunch_ledger`
+### Task 3.3 (PR 3c): the real `packs/lunch_ledger` — done
 
-- [ ] Move the money tools out of `app/tools.py` into `packs/lunch_ledger/tools.py`
-      (importing `ledger_core` and `kernos` only), the render decision into
-      `packs/lunch_ledger/render.py`, the fixtures into `packs/lunch_ledger/fixtures.py`;
-      `app/packs/lunch.py` becomes a one-line registration. `app/tools.py` keeps
-      `ToolContext`, `CustomTool`, `build_tools`, `tool_manifest` as the host's
-      composition point (the 17 test files import them).
-- [ ] `bench.world` imports the fixtures from the pack; `bench.probe_models._tool_schemas`
-      reads the manifest through the composition point.
-- [ ] Proof: full suite unedited; layering green (`packs → kernos, ledger_core`).
-- [ ] Commit: `packs: lunch_ledger owns the money tools, render and fixtures`
+- [x] Money tools out of `app/tools.py` into `packs/lunch_ledger/tools.py` (imports
+      `kernos` and `ledger_core` only), the render decision **and the deterministic
+      bodies** into `packs/lunch_ledger/render.py`, the fixtures into
+      `packs/lunch_ledger/fixtures.py`; `app/packs/lunch.py` is the registration
+      (`LunchLedgerPack(qr=app.qr.make_qr_url, place_resolver=resolve_place)`).
+      `app/tools.py` keeps `ToolContext`, `CustomTool`, `build_tools`, `tool_manifest`
+      and a `_legacy_build_tools` that composes the host's packs in `LEGACY_ORDER`.
+- [x] `bench.world` takes the fixtures from `lunch_ledger_pack().fixtures()` and runs
+      them through a `_World` (members and cards are the host's tables);
+      `bench.probe_models._tool_schemas` was already on the composition point.
+- [x] Proof: full suite unedited (1111 passed, 1 skipped; sidecar 69/69); golden 9/9;
+      layering green with `packs/` now present; `tests/test_lunch_ledger_pack.py` runs
+      the pack against a stub host (in-memory card store, stub QR, no place resolver,
+      its own clock and draw) with no `app` import on the pack side.
+- [x] Commit: `packs: lunch_ledger owns the money tools, render and fixtures`
+
+**Deviations from the task text, and why:**
+
+1. **Member CRUD is a host pack, `room_members`** (`app/packs/members.py`), not part of
+   `lunch_ledger`. `add_member`/`update_member`/`delete_member` create sign-in accounts
+   (`app.accounts`: PIN, sessions, aliases) — the host's Principal, per design §3 — so
+   they cannot live under `packs/`. Any ledger business on this host (poker too)
+   enables `room_members` next to its own pack; the seeded profile's `tool_packs` is now
+   `[lunch_ledger, room_members, lunch_places]` and boot re-syncs it. Tool order and
+   the manifest are unchanged (`LEGACY_ORDER` still governs).
+2. **What the pack needs from a host is an explicit, duck-typed contract**, documented
+   at the top of `packs/lunch_ledger/tools.py`: on the per-turn context `db.session()`,
+   `space_id`, `sender_member_id`, `turn_mentions`, `unknown_names`, `cards`
+   (`kernos.adapters.CardStore`), `today()`, `choice()`; at registration `qr(payee,
+   amount, note)` and an optional `place_resolver(session, space_id, text) → (place,
+   confident)`. `ToolContext` grew `cards`/`today`/`choice` (filled by `app.tools._inject`
+   so the pre-existing tests that patch `app.tools.today_ict` and `app.tools.random.choice`
+   still steer the tools) and a `space_id` property over `room_id`.
+3. **`CardStore` gained `pending(space_id)` and `cancel(space_id, card_id)`** — the two
+   draft-store operations `settle_period` and `cancel_draft` need; `RoomCards` delegates to
+   `app.drafts`, `InMemoryCards` implements them for tests. `cancel` raises `ValueError`
+   (a `LedgerError` is one) and the pack turns it into a clarifying question.
+4. **Fixtures build through a `world`** (`space_id`, `session()`, `add_member`,
+   `create_card`, `commit_card`) rather than the host's `Member`/`drafts` modules —
+   the only way `fixtures()` can live in `packs/`. `bench.world._World` is the host's.
+5. **The reply bodies moved with the decision** (`render_bot_attachments`,
+   `_settlement_body`, `_settle_blocked_body`, `_statement_body`, `_summary_body`,
+   `_random_pick_body`): `decide()` calls them, and a pack under `packs/` cannot import
+   `app.chat`. `app.chat` re-exports them for `tests/test_chat_bodies.py` and
+   `bench.graders`. This is the first half of 3.4's "chat.py loses the last lunch
+   literals"; `_meal_body`, `_payment_body` and `_FABRICATED_COMMIT_BODY` stay for 3d
+   (they belong to the commit routes and the validator, not to `render`).
+6. **`DraftKind.commit` now points at `ledger_core.drafts.record_meal_payload` and a
+   `record_payment_transfers` wrapper** — the domain half of a commit, with the
+   documented `(session, space_id, payload, *, logged_by)` shape — instead of the host's
+   `app.drafts.commit_draft`. Nothing calls `DraftKind.commit` yet; 3.4's `commit_any`
+   dispatch will (card load and status flip stay host-side).
+7. `kernos.packs.err(message)` is the `{"ok": False, "error": …}` convention as a
+   function, shared by the three packs.
 
 ### Task 3.4 (PR 3d): generalise what the host still hard-codes
 
