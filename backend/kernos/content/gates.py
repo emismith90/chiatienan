@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from kernos.content.spec import ProfileSpec
 from kernos.registry.registry import ConfigError, Registry, RegistryError
+from kernos.template import ALLOWED_VARS, validate as validate_template
 
 MONEY_TOOLS = frozenset({"bash", "write", "edit"})
 
@@ -97,6 +98,9 @@ class PublishGates:
             pipeline = None
         if any(s.delivery == "discoverable" for s in parsed.skills) and "read" not in parsed.builtin_tools:
             failures.append(GateFailure("schema", "a skill with delivery=discoverable needs 'read' in builtin_tools"))
+        for where, body in (("prompt.body", parsed.prompt.body), *((f"prompt.append[{i}]", a) for i, a in enumerate(parsed.prompt.append))):
+            for problem in validate_template(body, ALLOWED_VARS):
+                failures.append(GateFailure("schema", f"{where}: {problem}"))
         # 2 — money safety
         handles_money = bool(parsed.meta.get("handles_money"))
         if pipeline is not None:

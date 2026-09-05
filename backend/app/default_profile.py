@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.agent import _read_context_files, _read_skills
 from app.config import Settings, settings as _settings
+from app.prompt import SYSTEM_PROMPT_TEMPLATE
 from kernos.content import (
     Caps, Memory, Models, Persona, PipelineEntry, ProfileSpec, Prompt, Rule, Runtime, Skill,
 )
@@ -25,10 +26,10 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
     e = PipelineEntry
     return ProfileSpec(
         persona=Persona(handle=s.bot_handle, aliases=["bot"], name="Phoenix", language="vi"),
-        # The system prompt is code in Phase 1 (`app.prompt.phoenix`, review finding 8):
-        # `prompt.build_system_prompt` has conditionals a `{{var}}` template cannot
-        # express yet. Phase 2 decides the template syntax and moves it to content.
-        prompt=Prompt(body="", append=[]),
+        # The system prompt is content (plan Task 2.7): the same template `app.prompt`
+        # renders from code, rendered per turn by `kernos.prompt.template` with the
+        # closed variable set. `test_prompt_content.py` pins the two paths equal.
+        prompt=Prompt(body=SYSTEM_PROMPT_TEMPLATE, append=[]),
         rules=[Rule(slug=f["path"], content=f["content"],
                     tags=["money"] if f["path"] in _MONEY_RULES else [])
                for f in _read_context_files()],
@@ -54,7 +55,7 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
                 e(id="kernos.context.images", version="1"),
             ],
             "prompt": [
-                e(id="app.prompt.phoenix", version="1"),
+                e(id="kernos.prompt.template", version="1"),
                 e(id="kernos.prompt.sections", version="1"),
             ],
             "model": [e(id="kernos.model.passthrough", version="1")],

@@ -136,9 +136,16 @@ class Database:
         self._sessionmaker = sessionmaker(bind=self.engine, expire_on_commit=False, future=True)
 
     def create_all(self) -> None:
-        """Bring the schema up to the models: missing tables, then missing columns."""
+        """Bring the schema up to the models: missing tables, then missing columns.
+
+        The kernos content plane's ``kn_`` tables live in the same database and are
+        brought up here too, with the same additive discipline (plan Task 2.4).
+        """
+        from kernos.content import bind
+
         Base.metadata.create_all(self.engine)
         _sync_additive_columns(self.engine)
+        bind(self.engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:

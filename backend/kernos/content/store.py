@@ -254,16 +254,19 @@ class ContentStore:
                      note: str | None = None, base_spec: dict | None = None) -> dict:
         with self._session() as s:
             p = self._profile(s, profile_id)
+            # Base precedence: an explicit `from_version`, an explicit `base_spec` (boot
+            # re-sync passes today's code/env here — it must win over what is
+            # published), the published spec, then the business seed.
             if from_version is not None:
                 v = s.scalar(select(m.ProfileVersion).where(m.ProfileVersion.profile_id == profile_id,
                                                             m.ProfileVersion.version == from_version))
                 if v is None:
                     raise NotFound(f"profile {profile_id} has no version {from_version}")
                 base = v.spec
-            elif p.published_version_id is not None:
-                base = s.get(m.ProfileVersion, p.published_version_id).spec
             elif base_spec is not None:
                 base = base_spec
+            elif p.published_version_id is not None:
+                base = s.get(m.ProfileVersion, p.published_version_id).spec
             else:
                 business = s.get(m.Business, p.business_id)
                 base = (business.seed or {}).get("spec")

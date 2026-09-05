@@ -101,6 +101,17 @@ app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)
 
 
+@app.on_event("startup")
+async def _boot_kernel() -> None:
+    """Build the kernos kernel at boot (plan Task 2.4): seeds or re-syncs the default
+    profile and surfaces a bad plugin config at deploy rather than on the first turn."""
+    from app.kernel import kernel_for
+
+    report = kernel_for(get_db()).seed_report
+    if report.get("actions"):
+        log.info("[kernos] boot: %s", "; ".join(report["actions"]))
+
+
 @app.on_event("shutdown")
 async def _stop_sidecar() -> None:
     """Terminate the agent sidecar with the app.
