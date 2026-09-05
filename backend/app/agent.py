@@ -44,29 +44,13 @@ _RULES_DIR = Path(__file__).resolve().parent / "agent_skills" / "rules"
 def _render_prompt(user_text: str, *, sender_name: str | None = None,
                    memory: str | None = None, history: str | None = None,
                    image_count: int = 0) -> str:
-    """Assemble the turn's user message.
+    """Assemble the turn's user message — see :func:`kernos.plugins.render_sections`,
+    which this delegates to with the default (Vietnamese) section headers. Kept
+    here because the pipeline's ``app.run.legacy`` seam and the tests call it by
+    this name; ``sender_name`` is accepted for signature compatibility."""
+    from kernos.plugins import render_sections
 
-    ``image_count`` is announced in the text because the images themselves ride on
-    the message, invisible to the prompt: in production the bill was attached and
-    the model still asked for the total that was in it, then read that same total
-    off the image one turn later. The history renders past images as ``[ảnh: N]``
-    for the same reason — this covers the current turn.
-
-    The system prompt is **no longer prepended** here: the sidecar has a real
-    ``systemPromptOverride``, so ``build_system_prompt`` goes out as ``system``.
-    """
-    sections = []
-    if memory:
-        sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
-    if history:
-        sections.append(f"# Lịch sử hội thoại (gần đây)\n{history.strip()}")
-    if image_count:
-        sections.append(
-            f"# Ảnh kèm theo\nLượt này có {image_count} ảnh (thường là hoá đơn) — "
-            "ĐỌC ảnh trước khi trả lời. Đừng hỏi lại tổng tiền / giá từng món nếu ảnh đã có."
-        )
-    sections.append(f"# Tin nhắn người dùng\n{user_text.strip()}")
-    return "\n\n".join(sections)
+    return render_sections(user_text, memory=memory, history=history, image_count=image_count)
 
 
 def _read_skills() -> list[dict]:

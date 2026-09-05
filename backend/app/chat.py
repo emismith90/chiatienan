@@ -19,7 +19,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import memory, moneyguard
+from app import memory
 from app.clock import now_ict
 from app.config import settings
 from app.db import Database
@@ -539,185 +539,64 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     ``expense_draft`` for a human to edit/commit. The draft write itself
     (``drafts.create_draft``, which persists the new draft and retires any
     pending draft it re-proposes, without recording anything) runs under the
-    SAME lock as ``run_turn``, so the ledger's single-writer property covers
+    SAME lock as the model turn, so the ledger's single-writer property covers
     this path too.
 
-    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
-    :func:`app.agent.run_turn` for live ``agent.*`` progress.
-    """
-    from app import drafts
-    from app.agent import run_turn
-    from app.tools import ToolContext
+    Since plan Task 1.8 the body is the kernos pipeline: the room resolves to a
+    profile, and the stages — rollover, memory, history, image carry-over, prompt,
+    the model turn, the outcome decision, the reply validators, persistence — run
+    as plugins in the order the profile lists them (``app/default_profile.py`` is
+    today's order). What each plugin does is the block this function used to
+    contain, moved with its comments; ``tests/test_run_bot_turn_golden.py`` pins
+    that the result is byte-identical.
 
-    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
-                       sender_name=member_name, turn_mentions=[])
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives live
+    ``agent.*`` progress, and, after the lock is released, the republished cards
+    whose buttons must disappear.
+    """
+    from app.kernel import kernel_for
+    from app.tools import ToolContext
+    from kernos.kernel import LegacyAgentEventSink, Principal, TurnContext, flush
+
+    kernel = kernel_for(db)
+    spec = kernel.resolve(room_id)
+    ctx = TurnContext(
+        space_id=str(room_id),
+        principal=Principal(member_id, member_name),
+        text=text,
+        images=list(images or []),
+        before_id=before_id,
+        profile=spec,
+        tool_ctx=ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
+                             sender_name=member_name, turn_mentions=[]),
+        sink=LegacyAgentEventSink(emit),
+    )
 
     async with _agent_lock:
-        await _maybe_rollover(db, room_id)
-        mem_text = memory.load_memory(room_id)
-        with db.session() as s:
-            history = build_history(
-                s, room_id, watermark=memory.read_watermark(room_id),
-                before_id=before_id, limit=settings.history_max_messages,
-            )
-            # "bill pasted, then @phoenix in the next message" is the normal way
-            # people use this — carry the recent bill into the turn.
-            if not images:
-                images = recent_images(s, room_id, before_id=before_id) or None
-        result = await run_turn(text, ctx, images=images, emit=emit,
-                                memory=mem_text or None, history=history or None)
+        await kernel.pipeline_for(spec).run(ctx)
 
-        # A meal turn never writes directly: the LLM only proposes, and the
-        # turn ends with an editable draft card for the human to confirm
-        # (design D3, money-safety).
-        proposal = result.last_result("propose_meal")
-        # Collapse multiple proposals for the SAME (from,to) pair to the LAST
-        # one (a model self-correction "100k… actually 150k"), preserving order.
-        # Distinct pairs (real multi-payer) are untouched.
-        _by_pair: dict[tuple[int, int], dict] = {}
-        for p in result.all_results("propose_payment"):
-            if p.get("type") == "payment_draft":
-                _by_pair[(p["from_member_id"], p["to_member_id"])] = {
-                    "from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
-                    "amount": p["amount"], "note": p.get("note")}
-        payment_transfers = list(_by_pair.values())
-        # Cards this turn retired by re-proposing them, published below so their
-        # Confirm/Cancel buttons disappear everywhere instead of lingering as a
-        # pending draft that blocks the next settle.
-        superseded_payloads: list[dict] = []
-        if proposal:
-            payload = {k: proposal.get(k) for k in (
-                "payer_member_id", "member_participants", "guests", "bill_total",
-                "adjustments", "items", "discount_split", "dish", "initiator", "note",
-                "per_head_preview", "occurred_on")}
-            payload["raw_input"] = text
-            payload["logged_by"] = str(member_id)
-            payload["turn_id"] = result.turn_id
-            with db.session() as s:
-                new_msg, superseded = drafts.create_draft(s, room_id, payload)
-                superseded_payloads = [message_to_dict(m, None) for m in superseded]
-        elif payment_transfers:
-            payload = {"transfers": payment_transfers, "turn_id": result.turn_id}
-            with db.session() as s:
-                new_msg, superseded = drafts.create_payment_draft(s, room_id, payload)
-                superseded_payloads = [message_to_dict(m, None) for m in superseded]
-        else:
-            attachments = render_bot_attachments(result)
-
-            # Money turns get a body built server-side from the tool-result
-            # dict, so the visible text can never disagree with the
-            # QR/attachment numbers (the LLM's `final_text` is never used for
-            # the amounts themselves).
-            if attachments and attachments.get("type") == "settlement":
-                body = _settlement_body(attachments)
-            elif attachments and attachments.get("type") == "settle_blocked":
-                body = _settle_blocked_body(attachments)
-            elif attachments and attachments.get("type") == "statement":
-                body = _statement_body(attachments)
-            elif attachments and attachments.get("type") == "summary":
-                body = _summary_body(attachments)
-            elif attachments and attachments.get("type") == "random_pick":
-                body = _random_pick_body(attachments)
-            else:
-                body = result.final_text or _empty_turn_body(result)
-                # The one path where money reaches the room as LLM prose. Report
-                # it (see app.moneyguard); enforcing comes after the log is quiet.
-                if result.final_text:
-                    # …except for the one class that is wrong however the numbers
-                    # were obtained: prose that says the ledger was written when
-                    # no tool wrote it. 2026-08-14, room 3 — a bill photo and
-                    # "log this for all" came back in 6.1s with `tools=0` as a
-                    # word-perfect forgery of `_meal_body`: "Đã ghi #14 — Texas
-                    # Chicken: Bạch Mai trả tổng 793,760đ • …". There was no meal
-                    # #14, "Bạch Mai" is the branch on the receipt rather than
-                    # anyone in the room, and the split listed six of seven
-                    # members. Nothing distinguished it from a real confirmation,
-                    # so the room believed it, and asking again just reproduced
-                    # it. Reporting is not enough for this one: the message must
-                    # not be posted.
-                    #
-                    # `meal_exists` is what makes that stick across repeats. The
-                    # forgery was posted, so its numbers joined the room's own
-                    # history, and the history legitimately backs amounts — which
-                    # quietly cleared every retelling (three more over 44
-                    # minutes, `tools=0` each time). The ledger cannot be talked
-                    # round: "Đã ghi #14" is checked against `meals`.
-                    forged = moneyguard.fabricated_commit(
-                        body, f"{text}\n{history or ''}", result.tools,
-                        meal_exists=lambda mid: _meal_exists(db, room_id, mid),
-                    )
-                    if forged is not None:
-                        log.error(
-                            "suppressed fabricated commit: room=%s turn=%s amounts=%s "
-                            "images=%d tools=%s text=%r",
-                            room_id, result.turn_id, forged, len(images or []),
-                            [inv.name for inv in result.tools], body[:400],
-                        )
-                        body = _FABRICATED_COMMIT_BODY
-                    else:
-                        # The history counts as the user having said it. A number the
-                        # room stated two messages ago and the bot repeats back
-                        # ("bạn nói tổng 324k") is not invented money, and flagging it
-                        # buries the alerts that matter — the benchmark's `p102`/`p104`
-                        # replies were reported as unbacked for quoting a total from the
-                        # conversation they were handed.
-                        stray = moneyguard.unbacked_amounts(
-                            body, f"{text}\n{history or ''}", result.tools)
-                        if stray:
-                            # images=N matters for triage. Replaying four days of
-                            # production through this: of the alerts that survive a
-                            # tool-output allow-set, all but one were prices the model
-                            # read off a bill photo — correct, but unattributable by
-                            # construction because image content is not text. Those
-                            # stay a warning; the forgeries above are what blocks.
-                            log.warning(
-                                "unbacked money in reply: room=%s turn=%s amounts=%s images=%d tools=%s",
-                                room_id, result.turn_id, stray, len(images or []),
-                                [inv.name for inv in result.tools],
-                            )
-
-            with db.session() as s:
-                new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
-
-            # No ledger:changed here any more: settle_period is read-only, so a
-            # settlement cannot alter a balance. Meal and payment commits emit it
-            # from their own routes.
-
-        # A draft the bot cancelled on request is the same situation as a
-        # superseded one: open clients still show its buttons until the card
-        # itself is republished.
-        cancelled_ids = [r.get("draft_id") for r in result.all_results("cancel_draft")]
-        if cancelled_ids:
-            with db.session() as s:
-                for draft_id in cancelled_ids:
-                    card = s.get(RoomMessage, draft_id) if draft_id else None
-                    if card is not None and card.room_id == room_id:
-                        superseded_payloads.append(message_to_dict(card, None))
-
+    # A card this turn superseded or cancelled is republished so open clients stop
+    # showing its buttons — outside the lock, exactly where it was emitted before.
     if emit:
-        for stale in superseded_payloads:
-            await emit({"type": "message", **stale})
+        await flush(ctx.pending_events, ctx.sink)
 
-    return new_msg
+    return ctx.persisted
 
 
 async def _maybe_rollover(db: Database, room_id: int) -> None:
     """Fold messages older than the recent window into ``memory.md`` and advance
-    the watermark. No-op when nothing has aged out. Caller holds ``_agent_lock``."""
-    cutoff = now_ict() - timedelta(weeks=settings.memory_window_weeks)
-    with db.session() as s:
-        wm = memory.read_watermark(room_id)
-        aged = memory.messages_to_summarize(s, room_id, watermark=wm, older_than=cutoff)
-        if not aged:
-            return
-        through_id = aged[-1].id
-        rendered = _render_messages(s, room_id, aged)
-    summary = await summarize_messages(rendered, kind="rollover")
-    if summary:
-        memory.append_summary(room_id, summary_text=summary, through_id=through_id,
-                              through_at=now_ict().isoformat(), header="Auto-saved (older than 10 weeks)")
-    # On a blank/failed summary we leave the watermark untouched so the aged
-    # messages are retried next turn — never silently dropped.
+    the watermark. No-op when nothing has aged out. Caller holds ``_agent_lock``.
+
+    The logic lives in :func:`kernos.plugins.rollover_once` (the pipeline's first
+    ``context`` plugin); this wrapper runs it through this host's adapters with the
+    env-configured window, so there is one implementation, not two.
+    """
+    from app.hostadapters import build_adapters
+    from kernos.plugins import rollover_once
+
+    await rollover_once(str(room_id), adapters=build_adapters(db),
+                        window_weeks=settings.memory_window_weeks,
+                        header="Auto-saved (older than 10 weeks)", kind="rollover")
 
 
 async def clear_context(db: Database, room_id: int, *, up_to_id: int, emit=None) -> RoomMessage:
