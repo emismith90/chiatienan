@@ -542,7 +542,25 @@ tests `backend/tests/test_admin_api.py`.
       decisions above.
 - [ ] Commit: `docs: Phase 2 state of play`
 
-**Phase 2 — state of play:** _(filled as tasks complete)_
+**Phase 2 — state of play (2026-09-05):** Tasks 2.1–2.7 done, as three commit groups
+(2a `3596c1f` framework only; 2b `f3b0a2b` prompt-as-content, resolver, boot, wiring;
+2c from the commit after). 
+
+| check | result |
+|---|---|
+| backend `pytest -q` | 1094 passed, 1 skipped; every pre-existing test unedited |
+| golden fixtures | 9 / 9 replay byte-identical with the profile resolved from the database |
+| prompt as content | the template renders equal to the pre-change `build_system_prompt` for every sender case, from code and through `kernos.prompt.template` (`tests/legacy_prompt.py` is the oracle) |
+| resolved spec | `== build_default_spec(settings)`; engine half `== agent.default_engine_spec()` |
+| admin API | end-to-end: source edit → draft → publish → bind → the bound room's turn hands the engine the edit; the unbound room does not |
+| gates | each refused with its failure list; a human publish to the seeded profile needs an `override_reason` because today's env enables `bash` on a money profile — by design |
+
+Two things found while implementing, both fixed before commit: `create_draft`
+ignored an explicit `base_spec` once a version was published (boot re-sync would
+never have seen a changed env), and registry lookup errors were not mapped to HTTP
+statuses. One consequence to know: with `PI_BUILTIN_TOOLS=read,write,bash` (today's
+default) every human publish of the lunch profile requires a reason; flipping the
+default to `[]` for new profiles is decision 5 in the design and is still open.
 
 ## Phase 3 — Packs and the ledger domain
 

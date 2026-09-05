@@ -495,17 +495,25 @@ so a generic editor can render it; the framework does not ship an editor.
 ### 5.1 Behaviour entities
 
 ```
-businesses               id, slug, name, tool_packs[], plugins_allowed[], seed JSON
-agents                   id, business_id, slug, name, role manager|sub, profile_id,
-                         delegates_to[] (agent ids), max_depth, created_at
-agent_profiles           id, business_id, name, published_version_id NULL
-agent_profile_versions   id, profile_id, version, status, spec JSON, created_at, published_at, note
-prompts / rules / skills / prompt_templates
-                         id, business_id, slug, title, body TEXT, frontmatter JSON, etag
-spaces (host-owned)      the host stores manager_agent_id + agent_overrides JSON on its own tenant row
-                         and passes them to resolve(); chiatienan adds both columns to `rooms`
-model_catalogue          provider, model_id, name, input[], context_window, max_tokens, cost, probe JSON
+kn_businesses            id, slug, name, tool_packs[], plugins_allowed[], seed JSON
+kn_agents                id, business_id, slug, name, role manager|sub, is_default, profile_id,
+                         delegates_to[] (agent ids), capabilities JSON, max_depth, created_at
+kn_profiles              id, business_id, name, managed_by boot|human, published_version_id NULL
+kn_profile_versions      id, profile_id, version, status draft|published|superseded|retired,
+                         spec JSON (never includes runtime), actor, note, created_at, published_at
+kn_sources               id, business_id, kind prompt|rule|skill|template, slug, title, body TEXT,
+                         frontmatter JSON, etag (over kind, slug, title, body, frontmatter)
+kn_space_bindings        space_id PK, agent_id, overrides JSON — framework-owned (Phase 2 review), so a
+                         host needs no schema change to bind a space; chiatienan's `rooms` is untouched
+kn_model_catalogue       provider, model_id, name, input[], context_window, max_tokens, cost, probe JSON
+kn_audit_log             actor, action, entity, entity_id, before, after, at
 ```
+
+As built in Phase 2 (see the plan's Phase 2 decisions): one `kn_sources` table with a
+`kind` column; bindings framework-owned; `runtime` never stored and injected by the
+host at resolve; the seeded profile `managed_by = boot` and re-synced from code/env on
+every start until a human publishes; gate 3 applies to model *changes*; there is no
+actor-based gate bypass.
 
 The published **spec** is the `run` command of §1 minus the per-turn parts, i.e.
 `persona {handle, aliases, name, language}`, `prompt {body, append[]}`, `rules[]`,

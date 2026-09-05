@@ -100,7 +100,13 @@ protocol (Pi is the first engine), host adapter protocols, and a versioned
 nothing under `kernos/` imports the app. Design:
 [`docs/superpowers/specs/2026-09-05-agent-cms-design.md`](docs/superpowers/specs/2026-09-05-agent-cms-design.md);
 plan: [`docs/superpowers/plans/2026-09-05-agent-os-framework.md`](docs/superpowers/plans/2026-09-05-agent-os-framework.md).
-`GET /api/admin/rooms/{id}/resolved` (admin password) shows what a room runs.
+The content plane (Phase 2) is live: the bot's prompt, rules, skills, models, caps and
+pipeline are versioned content in `kn_` tables, seeded from code on first boot and
+re-synced while unedited. The admin API under `/api/admin/*` (admin password) edits
+sources with ETags, drafts and publishes versions through the gates (schema,
+money-safety, model probe, reflexivity), binds a room to an agent, and shows what a
+room runs at `GET /api/admin/spaces/{room_id}/resolved`. Rooms nobody binds keep
+running the seeded default, byte for byte.
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
