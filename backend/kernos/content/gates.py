@@ -1,0 +1,146 @@
+"""Publish gates (design §9; review findings 3, 4, 7).
+
+Numbering follows the design: 1 schema, 2 money-safety, 3 model probe, 4 eval
+(a hook, wired in Phase 4), 5 reflexivity. There is no actor-based bypass — the
+only way around the gates is ``ContentStore.publish(bypass_gates=True)``, which
+boot seeding alone uses.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
+
+from pydantic import ValidationError
+
+from kernos.content.spec import ProfileSpec
+from kernos.registry.registry import ConfigError, Registry, RegistryError
+
+MONEY_TOOLS = frozenset({"bash", "write", "edit"})
+
+#: Spec paths an agent may never publish a change to (design §8.3 + finding 3).
+BLACKLIST_FIELDS = ("builtin_tools", "models", "tool_packs", "pipeline", "eval",
+                    "extensions", "settings", "runtime", "caps")
+
+
+@dataclass(frozen=True)
+class GateFailure:
+    gate: str
+    message: str
+
+    def as_tuple(self) -> tuple[str, str]:
+        return self.gate, self.message
+
+
+class _UtcClock:
+    def now(self) -> datetime:
+        return datetime.now(timezone.utc)
+
+
+def _dump(spec: ProfileSpec | dict | None) -> dict | None:
+    if spec is None:
+        return None
+    return spec.model_dump() if isinstance(spec, ProfileSpec) else dict(spec)
+
+
+def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec | dict) -> list[str]:
+    """Paths of ``spec`` that differ from ``previous`` and are off-limits to an agent.
+
+    A missing ``previous`` means everything blacklisted that is non-default counts —
+    an agent cannot create a profile from nothing either.
+    """
+    new, old = _dump(spec), _dump(previous) or {}
+    changed: list[str] = []
+    for field in BLACKLIST_FIELDS:
+        if new.get(field) != old.get(field):
+            changed.append(field)
+    new_block = [v for v in new.get("validation", []) if v.get("on_fail") == "block"]
+    old_block = [v for v in old.get("validation", []) if v.get("on_fail") == "block"]
+    if new_block != old_block:
+        changed.append("validation[on_fail=block]")
+    new_money = [r for r in new.get("rules", []) if "money" in (r.get("tags") or [])]
+    old_money = [r for r in old.get("rules", []) if "money" in (r.get("tags") or [])]
+    if new_money != old_money:
+        changed.append("rules[tag=money]")
+    # A removed key is a change too (finding 3): compare presence and value.
+    if ("handles_money" in new.get("meta", {})) != ("handles_money" in old.get("meta", {})) \
+            or new.get("meta", {}).get("handles_money") != old.get("meta", {}).get("handles_money"):
+        changed.append("meta.handles_money")
+    return changed
+
+
+class PublishGates:
+    def __init__(self, registry: Registry, catalogue: Any, *, clock: Any | None = None,
+                 probe_max_age_days: int = 30, money_tools: frozenset[str] = MONEY_TOOLS,
+                 eval_gate: Callable[[ProfileSpec], list[GateFailure]] | None = None) -> None:
+        self._registry = registry
+        self._catalogue = catalogue          # anything with get_model(model_id) -> dict | None
+        self._clock = clock or _UtcClock()
+        self._max_age = timedelta(days=probe_max_age_days)
+        self._money_tools = money_tools
+        self._eval_gate = eval_gate
+
+    def check(self, spec: ProfileSpec | dict, *, previous: ProfileSpec | dict | None,
+              actor: str, override_reason: str | None = None,
+              skip_probe: bool = False) -> list[GateFailure]:
+        failures: list[GateFailure] = []
+        # 1 — schema
+        try:
+            parsed = spec if isinstance(spec, ProfileSpec) else ProfileSpec.model_validate(spec)
+        except ValidationError as exc:
+            return [GateFailure("schema", f"spec does not validate: {exc.errors()[0]['msg']} at "
+                                          f"/{'/'.join(str(p) for p in exc.errors()[0]['loc'])}")]
+        try:
+            pipeline = self._registry.build_pipeline(parsed.pipeline_dict())
+        except (ConfigError, RegistryError, ValueError) as exc:
+            failures.append(GateFailure("schema", str(exc)))
+            pipeline = None
+        if any(s.delivery == "discoverable" for s in parsed.skills) and "read" not in parsed.builtin_tools:
+            failures.append(GateFailure("schema", "a skill with delivery=discoverable needs 'read' in builtin_tools"))
+        # 2 — money safety
+        handles_money = bool(parsed.meta.get("handles_money"))
+        if pipeline is not None:
+            handles_money = handles_money or any(
+                getattr(plugin, "handles_money", False)
+                for entries in pipeline._stages.values() for plugin, _ in entries)
+        risky = sorted(set(parsed.builtin_tools) & self._money_tools)
+        if handles_money and risky and not override_reason:
+            failures.append(GateFailure(
+                "money", f"a money-handling profile enables {risky}; publish needs an override_reason"))
+        # 3 — model probe, for models that changed
+        if not skip_probe:
+            prev = _dump(previous) or {}
+            prev_models = prev.get("models", {})
+            for key in ("text", "vision"):
+                model_id = getattr(parsed.models, key)
+                if not model_id or model_id == prev_models.get(key):
+                    continue
+                failure = self._probe_failure(model_id)
+                if failure:
+                    failures.append(GateFailure("probe", f"models.{key}={model_id!r}: {failure}"))
+        # 4 — eval (Phase 4 hook)
+        if self._eval_gate is not None:
+            failures.extend(self._eval_gate(parsed))
+        # 5 — reflexivity
+        if actor.startswith("agent:"):
+            changed = blacklisted_changes(previous, parsed)
+            if changed:
+                failures.append(GateFailure(
+                    "reflexivity", f"an agent may only propose changes to {changed}; publish refused"))
+        return failures
+
+    def _probe_failure(self, model_id: str) -> str | None:
+        row = self._catalogue.get_model(model_id) if self._catalogue is not None else None
+        probe = (row or {}).get("probe") or {}
+        if not probe.get("ok"):
+            return "no passing probe on record (run POST /catalogue/models/{id}/probe)"
+        checked_at = probe.get("checked_at")
+        try:
+            when = datetime.fromisoformat(str(checked_at).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return f"probe has no parseable checked_at ({checked_at!r})"
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if self._clock.now() - when > self._max_age:
+            return f"probe from {checked_at} is older than {self._max_age.days} days"
+        return None

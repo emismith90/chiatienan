@@ -18,7 +18,11 @@ from kernos.engine.base import EngineSpec
 
 
 class _Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Every spec model is strict and **frozen**: a resolved profile is shared between
+    turns and spaces, so nothing may mutate it in place — overrides go through
+    ``model_copy`` (review finding 8)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class Persona(_Strict):
@@ -157,3 +161,28 @@ class ProfileSpec(_Strict):
 
     def pipeline_dict(self) -> dict[str, list[dict]]:
         return {stage: [e.model_dump() for e in entries] for stage, entries in self.pipeline.items()}
+
+    def stored(self) -> dict:
+        """The JSON the content plane persists: everything but ``runtime``, which is
+        boot-layer and injected by the host at resolve time (review finding 2)."""
+        return self.model_dump(exclude={"runtime"})
+
+    def with_runtime(self, runtime: "Runtime") -> "ProfileSpec":
+        return self.model_copy(update={"runtime": runtime})
+
+
+class BindingOverrides(_Strict):
+    """What a space may change about the profile it is bound to (design §3):
+    add-only prompt sections, and the persona's handle/language."""
+
+    append_sections: list[str] = Field(default_factory=list)
+    handle: str | None = None
+    language: str | None = None
+
+    def apply(self, spec: ProfileSpec) -> ProfileSpec:
+        if not (self.append_sections or self.handle or self.language):
+            return spec
+        prompt = spec.prompt.model_copy(update={"append": [*spec.prompt.append, *self.append_sections]})
+        persona_update = {k: v for k, v in (("handle", self.handle), ("language", self.language)) if v}
+        persona = spec.persona.model_copy(update=persona_update) if persona_update else spec.persona
+        return spec.model_copy(update={"prompt": prompt, "persona": persona})
