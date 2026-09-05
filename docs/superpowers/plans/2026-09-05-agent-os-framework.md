@@ -307,24 +307,180 @@ the label itself today.
 
 ## Phase 2 — The content plane
 
-- **2.1** `kn_` tables (`businesses, agents, profiles, profile_versions, prompts, rules,
-  skills, prompt_templates, model_catalogue, audit_log`) under `kernos.content.models`
-  with its own `Base`; `kernos.bind(engine)`; additive column sync reusing the pattern of
-  `db._sync_additive_columns`. `rooms` gains `manager_agent_id`, `agent_overrides`.
-- **2.2** Sources CRUD with etags (the `knowledge.py` pattern); draft version from sources;
-  snapshot-on-publish; `DbResolver` (space → agent → published version, cached by
-  version id); `StaticResolver` remains for hosts without a DB.
-- **2.3** Publish gates 1, 2, 3, 5 (§9); `override_reason` in the audit log; the
-  probe is a host-provided `ModelProbe` (chiatienan's wraps `bench.probe_models`,
-  keeping `bench → app` out of `kernos`); `handles_money` is read from plugins and from
-  the seeded profile's metadata until Phase 3 adds packs.
-- **2.4** Mountable admin router `kernos.api.admin_router(os)` with the §5.2 routes,
-  `GET …/registry`, `GET …/plugins/{id}/schema`; chiatienan mounts it under `/api/admin`
-  behind `require_admin`.
-- **2.5** Boot: on first start with empty tables, insert the seeded default business,
-  agent, profile and version from `build_default_spec` — a fresh install runs today's bot.
-- **Proof:** a room bound to an edited profile runs the edit; an unbound room runs the
-  seeded default; API tests for every route; publish refused on each gate.
+**Goal:** profiles become data: sources an editor changes, versions that snapshot
+them, a publish step with gates, a resolver that maps a space to what it runs, and
+a mountable admin API — with every existing room still running the seeded default
+byte for byte until someone binds it to something else.
+
+**Gate:** a Fable review of this section before Task 2.1 (goal: review gate per phase).
+
+### Decisions taken for this phase (deviations from the design text, with reasons)
+
+- **Space bindings are a framework table**, `kn_space_bindings(space_id, agent_id,
+  overrides)`, not a column on the host's tenant row (design §5.1 said host-owned).
+  A new host then needs no schema change to bind a space; chiatienan's `rooms`
+  table stays untouched. `resolve(space_id)` reads the binding itself.
+- **One `kn_sources` table** with a `kind` column (`prompt | rule | skill | template`)
+  instead of four tables of identical shape. Same content model, less DDL.
+- **Boot re-syncs the seeded profile.** The seeded business's default profile is
+  `managed_by = "boot"`: on every start, if `build_default_spec()` differs from its
+  published spec (env or code changed), boot publishes a new version with actor
+  `boot`, gates bypassed. The moment a human publishes to that profile it becomes
+  `managed_by = "human"` and boot leaves it alone. This is what keeps env the source
+  of truth for an unedited install — the zero-behaviour-change promise across
+  deploys, not just across this refactor.
+- **Gate 3 (model probe) applies to model *changes*.** A publish whose `models` equal
+  the currently published version's needs no fresh probe; one that changes them needs
+  a catalogue row with `probe.ok` within `probe_max_age_days` (default 30). Boot seeds
+  the catalogue with the two configured models and the 2026-08-12 probe results the
+  Pi plan recorded, so day one is consistent.
+- **Version status** is `draft | published | superseded | retired`. Publishing moves the
+  previous `published` to `superseded`; `rollback(version)` republishes a superseded
+  version (gates re-run). "The previous version stays publishable" (design §9) is
+  therefore literal.
+- **Actors are strings** (`boot`, `admin`, `agent:<slug>`), recorded on every version
+  and audit row; there is no identity system (decided).
+
+### Task 2.1: Content tables and `bind()`
+
+**Files:** create `backend/kernos/content/{models.py,schema.py}`; tests `backend/tests/kernos/test_content_models.py`.
+
+- [ ] `models.py`: its own `Base`; tables `kn_businesses (id, slug UNIQUE, name,
+      description, tool_packs JSON, plugins_allowed JSON, seed JSON,
+      default_profile_id, default_agent_id, created_at)`, `kn_profiles (id,
+      business_id FK, name, managed_by, published_version_id, created_at)`,
+      `kn_profile_versions (id, profile_id FK, version INT, status, spec JSON, actor,
+      note, created_at, published_at; UNIQUE(profile_id, version))`, `kn_sources (id,
+      business_id FK, kind, slug, title, body TEXT, frontmatter JSON, etag, updated_by,
+      updated_at; UNIQUE(business_id, kind, slug))`, `kn_agents (id, business_id FK,
+      slug, name, role, profile_id FK, delegates_to JSON, capabilities JSON, max_depth,
+      created_at; UNIQUE(business_id, slug))`, `kn_space_bindings (space_id PK,
+      agent_id FK, overrides JSON, updated_at)`, `kn_model_catalogue (id, provider,
+      model_id UNIQUE, name, input JSON, context_window, max_tokens, cost JSON,
+      reasoning, probe JSON, updated_at)`, `kn_audit_log (id, actor, action, entity,
+      entity_id, before JSON, after JSON, at)`. Timestamps are UTC ISO strings the
+      framework writes itself (no host clock dependency at the schema level).
+- [ ] `schema.py`: `bind(engine)` = `Base.metadata.create_all` + a generic
+      `sync_additive_columns(engine, metadata)` (the pattern of `app.db`, parameterised
+      by metadata; `app.db` keeps its own copy for now).
+- [ ] Tests: bind on a fresh SQLite creates every table; a second bind is a no-op; a
+      column added to a model appears on an existing table.
+- [ ] Commit: `kernos: content tables and bind()`
+
+### Task 2.2: `ContentStore` — sources, drafts, publish, rollback, audit
+
+**Files:** create `backend/kernos/content/store.py`; tests `backend/tests/kernos/test_content_store.py`.
+
+- [ ] `ContentStore(session_factory)`. Businesses: `create/get/list/update`. Sources:
+      `put_source(business_id, kind, slug, *, title, body, frontmatter, actor,
+      if_match=None)` — etag = sha256 of `(kind, slug, body, frontmatter)`; a mismatched
+      `if_match` raises `Conflict`; `delete_source(..., if_match)`; `list_sources(kind=)`.
+- [ ] Profiles: `create_profile(business_id, name, *, managed_by="human")`,
+      `get/list`. Versions: `create_draft(profile_id, *, actor, from_version=None,
+      note=None) -> version`: the new spec is the previous published spec (or
+      `from_version`'s, or the business's `seed["spec"]` when none) with the business's
+      **sources snapshotted in**: `rules` ← kind `rule` (tags from frontmatter),
+      `skills` ← kind `skill` (description/delivery from frontmatter), `templates` ←
+      kind `template`, `prompt.body` ← kind `prompt` slug `system` when present.
+      `update_draft(version_id, patch: dict, *, actor)` — deep-merges JSON into a
+      **draft** only (anything else raises), re-validates as `ProfileSpec`.
+- [ ] `publish(version_id, *, actor, override_reason=None, gates)` — runs the gates
+      (Task 2.3); on success: status `published`, previous published → `superseded`,
+      `profile.published_version_id` moves, `profile.managed_by = "human"` unless actor
+      is `boot`, audit row with before/after version ids and the override reason.
+      `rollback(profile_id, version_id, *, actor, gates)` — same path for a
+      `superseded` version. `retire(version_id)` for drafts/superseded.
+- [ ] Audit: `log(actor, action, entity, entity_id, before, after)`; `audit(limit, since)`.
+- [ ] Tests: etag conflict; draft snapshots sources and a later source edit does not
+      change it; update_draft rejects a published version; publish flips statuses and
+      writes audit; rollback republishes; `managed_by` flips to human on a human publish.
+- [ ] Commit: `kernos: ContentStore with snapshot-on-publish and audit`
+
+### Task 2.3: Publish gates
+
+**Files:** create `backend/kernos/content/gates.py`; tests `backend/tests/kernos/test_gates.py`.
+
+- [ ] `GateFailure(gate, message)`; `PublishGates(registry, catalogue, *, clock,
+      probe_max_age_days=30, money_tools=frozenset({"bash","write","edit"}))` with
+      `check(spec, *, previous, actor, override_reason) -> list[GateFailure]`:
+      1. **schema** — `ProfileSpec` validates; `registry.build_pipeline` succeeds
+         (every id@version known, every config valid, single-owner stages satisfied);
+         `skills[].delivery == "discoverable"` requires `"read" in builtin_tools`.
+      2. **money** — `handles_money = spec.meta.get("handles_money") or any plugin in the
+         pipeline has handles_money`; with any of `money_tools` in `builtin_tools` and
+         no `override_reason` → fail.
+      3. **probe** — for each of `models.text`, `models.vision` that differs from
+         `previous`: catalogue row exists with `probe.ok` and `probe.checked_at` within
+         the max age, else fail.
+      5. **reflexivity** — when `actor` starts with `agent:`: `blacklisted_changes(previous,
+         spec)` non-empty → fail. Blacklist: `builtin_tools`, `models`, `tool_packs`,
+         `pipeline`, `eval`, any `validation[]` entry with `on_fail == "block"`, any
+         `rules[]` entry tagged `money`, `meta.handles_money`.
+      Gate 4 (eval) is a hook, `eval_gate: Callable | None`, wired in Phase 4.
+      Actor `boot` bypasses every gate (the seeded profile *is* today's behaviour).
+- [ ] Tests, one per gate plus the boot bypass and the "models unchanged needs no
+      probe" case.
+- [ ] Commit: `kernos: publish gates 1, 2, 3 and 5`
+
+### Task 2.4: `DbResolver`, boot seeding, and the host wiring
+
+**Files:** modify `backend/kernos/content/resolve.py`; create `backend/kernos/content/boot.py`;
+modify `backend/app/kernel.py`, `backend/app/db.py`; tests `backend/tests/kernos/test_resolver.py`,
+`backend/tests/test_boot_seed.py`.
+
+- [ ] `DbResolver(store, *, fallback: ProfileSpec)`: `resolve(space_id)` → binding →
+      agent → profile → published version → `ProfileSpec`, **applying binding
+      overrides** (`append_sections` → `prompt.append`, `handle`, `language`); no
+      binding → the default business's default agent; no content → `fallback`. Cached
+      by `(version_id, space_id)`; `invalidate()` on publish/bind.
+- [ ] `boot.py`: `ensure_seeded(store, *, business_slug, business_name, agent_slug,
+      spec, catalogue_rows, actor="boot")` — idempotent; creates business/profile
+      (`managed_by="boot"`)/version 1 published/manager agent on first run; on later
+      runs republishes only when `managed_by == "boot"` and the spec differs; upserts
+      the catalogue rows.
+- [ ] `app/db.py`: `Database.create_all()` also calls `kernos.content.bind(engine)`.
+      `app/kernel.py`: `Kernel` builds the store, runs `ensure_seeded` with
+      `build_default_spec(settings)` and the two configured models' 2026-08-12 probe
+      records, and uses `DbResolver` with the static spec as fallback; `Kernel.resolve`
+      accepts a `space_id` string too (rooms are `str(room_id)`).
+- [ ] Verify: the nine golden fixtures still replay byte-identical (resolved from the
+      DB now); full suite green; `GET …/resolved` unchanged.
+- [ ] Commit: `kernos: DbResolver and boot seeding; chiatienan resolves from the content plane`
+
+### Task 2.5: The admin router
+
+**Files:** create `backend/kernos/api/{__init__.py,admin.py}`; modify `backend/app/main.py`;
+tests `backend/tests/test_admin_api.py`.
+
+- [ ] `admin_router(get_kernel, *, dependencies=())` → `fastapi.APIRouter`. Routes:
+      `GET /registry`, `GET /plugins/{id}/{version}/schema`; `GET|POST /businesses`,
+      `GET|PATCH /businesses/{id}`; `GET|POST /businesses/{id}/sources`,
+      `GET|PUT|DELETE /businesses/{id}/sources/{kind}/{slug}` (`If-Match` on PUT/DELETE →
+      409 on mismatch, `ETag` on GET); `GET|POST /profiles`, `GET /profiles/{id}`,
+      `GET|POST /profiles/{id}/versions`, `GET|PATCH /profiles/{id}/versions/{v}`,
+      `POST /profiles/{id}/versions/{v}/publish` (`{actor?, override_reason?}` → 422 with
+      the gate failures), `POST /profiles/{id}/rollback`; `GET|POST /agents`,
+      `GET|PATCH /agents/{id}`; `GET|PUT|DELETE /spaces/{space_id}/binding`;
+      `GET /spaces/{space_id}/resolved`; `GET /catalogue/models`,
+      `POST /catalogue/models/{model_id}/probe` (runs the host `ModelProbe` if
+      configured, else 501); `GET /audit`.
+- [ ] chiatienan: mount under `/api/admin` behind `require_admin`; keep
+      `GET /api/admin/rooms/{id}/resolved` as an alias of the spaces route; provide a
+      `ModelProbe` that wraps `bench.probe_models` (network; not exercised in tests).
+- [ ] Tests: every route with a `TestClient`; an edited source → draft → publish →
+      bound room runs the edit (assert through `GET …/resolved` **and** a golden-style
+      `run_bot_turn` with a fake engine seeing the new `skills`); an unbound room still
+      resolves to the seeded default; publish refused on each gate with the failure
+      list in the body.
+- [ ] Commit: `kernos: mountable admin router; chiatienan mounts it`
+
+### Task 2.6: Docs and state of play
+
+- [ ] README: admin API summary; plan state of play; design §5.1 updated for the
+      decisions above.
+- [ ] Commit: `docs: Phase 2 state of play`
+
+**Phase 2 — state of play:** _(filled as tasks complete)_
 
 ## Phase 3 — Packs and the ledger domain
 
