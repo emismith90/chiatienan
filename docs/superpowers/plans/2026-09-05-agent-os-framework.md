@@ -227,7 +227,7 @@ supplies today's env values.
       `spec = resolver.resolve(room_id)`, `await pipeline.run(ctx)` under `_agent_lock`,
       return `ctx.persisted_message`. The `run` stage plugin calls
       **`app.agent.run_turn` looked up at call time** (see Global constraints).
-- [ ] Verify: `pytest -q` — **all 751 pass unedited**. Any edit to an existing test is
+- [ ] Verify: `pytest -q` — **all 986 pass (1 skipped) unedited**. Any edit to an existing test is
       a behaviour change and must be justified in the commit message, or reverted.
 - [ ] Verify: `node --test` green; `npm test` green (untouched).
 - [ ] Commit: `chat: run the @phoenix turn through the kernos pipeline (no behaviour change)`
