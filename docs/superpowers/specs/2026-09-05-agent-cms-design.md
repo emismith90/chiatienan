@@ -82,7 +82,7 @@ What produces each field today, and where it goes:
 | `context_files` | `agent_skills/rules/money-safety.mdc` | no | **content** — "always-on rule" |
 | `tools` | `tools.build_tools()` — 19 `CustomTool`s, one flat dict | scoped at *execution*, not at *selection* | **code** — a `ToolPack` plugin; per-tool enable/override is content |
 | `model`, `vision_model`, `thinking` | env | no | **content** — from a probed model catalogue |
-| `builtin_tools` | env (default `read,write,bash`) | no | **content, governed** — §8 |
+| `builtin_tools` | env (default `read,write,bash`) | no | **content, governed** — §9 |
 | `max_tools`, `max_seconds` | env | no | **content** |
 | `message` assembly | `agent._render_prompt` — hard-coded section headers | no | **code plugin** (`context` stage) with content-owned headers |
 | memory policy | env `MEMORY_WINDOW_WEEKS`, `HISTORY_MAX_MESSAGES`, `IMAGE_LOOKBACK_*` | no | **content** consumed by the `memory` and `images` plugins |
@@ -262,7 +262,7 @@ class Plugin(Protocol):
     id: str                          # "chiatienan.memory.long_term", stable, namespaced
     stage: Stage                     # Literal["gate","context","prompt","validate_args", …]
     config_schema: dict              # JSON Schema; the CMS validates config against it
-    handles_money: bool = False      # §8 governance
+    handles_money: bool = False      # §9 governance
     def run(self, ctx: TurnContext, config: dict) -> TurnContext | Verdict: ...
 ```
 
@@ -507,7 +507,114 @@ whether the pack interface is real.
 Each of those is a refactor with a byte-identical lunch path and the benchmark as the
 oracle, which is why they are scheduled *before* the poker pack exists.
 
-## 8. Governance — what publishing checks
+## 8. AI-ready: an agent can drive the CMS
+
+The operator's requirement: an agent may **update itself, evaluate itself, and read
+its own logs** — drive the CMS — *if permitted*. Pi already gestures at this: its
+docs open with "pi can create skills, ask it to build one", and `ExtensionAPI` lets
+an extension `setModel`, `setThinkingLevel` and `setActiveTools` mid-session. Those
+are ephemeral and ungated. This design makes the same capability **durable and gated**,
+and it reuses the one pattern this codebase trusts most.
+
+### 8.1 The rule: the agent proposes, the gate or a human commits
+
+Every ledger write here goes through a draft card: `propose_meal` never records, a
+person taps Confirm. Self-modification follows the identical rule. An agent may
+create a **draft version** of a profile and run evals against it; it may not move
+`published_version_id` unless its capabilities say so *and* the publish gates (§9)
+pass — and the gates apply to an agent-made publish exactly as to a human one,
+unconditionally. There is no "the agent is confident" path around the model probe or
+the money-safety check.
+
+### 8.2 The `cms_admin` tool pack
+
+The headless API of Phase 2 is exposed to agents as a tool pack, so the CMS is
+operable from inside a turn with no second integration:
+
+| Tool | What it does | Needs capability |
+|---|---|---|
+| `cms_get_profile()` | the agent's own resolved spec, with version and sources | `cms.read` |
+| `cms_get_turns(since, filter)` / `cms_get_turn_trace(turn_id)` | the per-turn trace (§4.2): plugins run, validators fired, tool calls, model, cost, `capped`, moneyguard warnings | `cms.read` |
+| `cms_get_eval_results(suite, version)` | latest run summaries and per-case verdicts | `cms.read` |
+| `cms_draft_change(kind, slug, body, rationale)` | edit a prompt / rule / skill / template / memory setting / warn-level validation rule into a **new draft version**; returns a diff | `cms.draft` |
+| `cms_run_eval(suite, version)` | run a suite against a draft; returns verdicts and cost | `cms.eval` |
+| `cms_propose_publish(version, rationale)` | opens a **change proposal** for a human | `cms.draft` |
+| `cms_publish(version)` | publish directly — only within the *self-change scope* (§8.3) and only after gates | `cms.publish` |
+| `cms_add_eval_case(turn_id, expect, tags)` | turn a real turn (usually a failure it just saw) into a `review: true` regression case | `cms.eval` |
+| `cms_log(level, message, data)` | write a structured line into the room's turn trace and the app log | `cms.read` |
+
+The pack is `handles_money: false` and contains no arithmetic; it is HTTP-free
+(direct Python calls into the same modules the admin API uses), so nothing new
+listens on a port.
+
+### 8.3 Capabilities and the self-change scope
+
+Permission is per **agent**, not per room, because it is the agent that acts:
+
+```jsonc
+"capabilities": { "cms": ["read", "draft", "eval"] }          // default for a manager
+"capabilities": { "cms": ["read", "draft", "eval", "publish"], // a steward agent
+                  "self_change_scope": ["prompt.append", "skills", "rules", "templates",
+                                        "memory", "validation.warn"] }
+```
+
+Inside `self_change_scope` an agent with `cms.publish` may publish **its own** profile
+after the gates pass. Outside it — `builtin_tools`, `models`, `tool_packs`,
+`pipeline`, any validation rule with `severity: block`, any other agent's profile —
+the most an agent can ever do is open a proposal. The scope list is content, so the
+operator can widen it per agent; it can never include the blacklist above, which is
+enforced in code. Every agent-made change carries `actor: agent:<slug>` in the audit
+log and the rationale the agent gave.
+
+### 8.4 What a proposal looks like
+
+A `change_proposal` row (draft version, rationale, diff, the eval run it cites,
+status) — and, in this app, **a card in the room**, because the room chat is the UI
+we have: "Phoenix proposes to change skill `record-meal` (+3 −1 lines): *bill photos
+without names were being itemised; adds the even-split rule*. Eval: 105/105 tool
+selection, 60/60 ledger. **Approve · Reject · View diff**". Approve publishes through
+the gates; the card is a `RoomMessage` of a new kind, rendered by the `cms_admin`
+pack like any other draft. A headless client sees the same proposal at
+`GET /api/admin/proposals`.
+
+### 8.5 Self-eval and self-review loops
+
+Two loops, both bounded:
+
+- **In-turn**: the agent may call `cms_draft_change` → `cms_run_eval` → adjust, up to
+  `max_self_iterations` (default 3) and a token/cost budget per turn, both content.
+  Each eval run costs real model calls; the budget is what stops "one more try".
+- **Scheduled**: a *steward* agent (role `sub`, or a dedicated manager for an ops
+  room) runs on a schedule with a fixed brief: read the last N turns' traces, list
+  moneyguard warnings, `capped` turns and eval failures, propose at most one change
+  with a rationale and an eval run attached. This is the `eval_capture` plugin's
+  natural consumer, and it is how the prod corpus finally gets built with a reviewer
+  in the loop.
+
+### 8.6 Logging, made queryable for the agent
+
+The turn **trace** (§4.2) is the log: which plugins ran, every validator verdict, tool
+calls with args and results, model, tokens, cost, elapsed, `capped`, sub-agent spans.
+It is stored per turn (`turn_traces` table, retention configurable) and exposed both to
+humans (`GET /api/admin/rooms/{id}/turns/{turn_id}`) and to agents (`cms_get_turn_trace`).
+The existing one-line `[agent] turn … done` log stays as the human-readable summary;
+`cms_log` lets an agent add structured lines of its own. Nothing here is a second
+observability stack: the trace is what eval capture, proposals and the admin timeline
+all read.
+
+### 8.7 What this adds to the content model and the phases
+
+```
+agents            + capabilities JSON, + max_self_iterations, + self_change_scope[]
+change_proposals  id, agent_id, profile_version_id, rationale, diff JSON, eval_run_id,
+                  status pending|approved|rejected|auto_published, decided_by, decided_at
+turn_traces       id, room_id, turn_id, agent_id, started, finished, trace JSON, summary JSON
+```
+
+Phase **9** (after 2, 4 and 7): the `cms_admin` pack, capabilities, proposals and the
+proposal card, the two loops, and a steward brief as a shipped prompt template.
+
+## 9. Governance — what publishing checks
 
 No admin identity, by decision. `audit_log.actor` records the caller's self-reported
 name header until that changes. Publishing a version runs, in order:
@@ -526,7 +633,7 @@ name header until that changes. Publishing a version runs, in order:
 5. **Rollback** — `published_version_id` moves; the previous version stays
    publishable so rollback is one call.
 
-## 9. Phases
+## 10. Phases
 
 | # | Deliverable | Behaviour change | Proof |
 |---|---|---|---|
@@ -539,10 +646,12 @@ name header until that changes. Publishing a version runs, in order:
 | **7** | Agents + sub-agents: `ask_<sub>` tools, nested pipeline runs, depth/caps, nested trace and events | opt-in | a manager delegating to a summariser sub-agent passes `unbacked_amounts` on the merged results |
 | **8** | Export/import as a Pi package (`package.json` with a `pi` manifest, `skills/*/SKILL.md`, `prompts/*.md`, `AGENTS.md` for rules, `SYSTEM.md`, `settings.json`; behaviour only, never room data; import lands as a draft and strips `extensions/`); sidecar extension registry (tool-call policy, provider headers, telemetry) | none | round-trip equality; `pi -e` smoke |
 
+| **9** | AI-ready (§8): `cms_admin` tool pack, agent capabilities and self-change scope, change proposals + room card, in-turn and scheduled self-eval loops, `turn_traces` | opt-in per agent | a steward agent turns a failing captured turn into an eval case, drafts a skill edit, runs the suite, and opens a proposal a human approves; an out-of-scope edit can only become a proposal |
+
 Phase 1 is the refactor everything else stands on, and it is the one that must ship
 with the benchmark unchanged to the digit.
 
-## 10. Decisions
+## 11. Decisions
 
 **Decided by the operator (2026-09-05):**
 
@@ -553,6 +662,8 @@ with the benchmark unchanged to the digit.
 - **No admin identity / authoring roles** for now.
 - Agent UI is **out**: AG-UI over SSE, owned elsewhere.
 - Second business: **poker / card-game money ledger** → §7.
+- **AI-ready**: an agent may update, evaluate and log itself through the CMS when
+  permitted → §8; the agent proposes, the gates or a human commit.
 
 **Still open, needed before Phase 1 starts:**
 
@@ -568,6 +679,10 @@ with the benchmark unchanged to the digit.
 5. **`Collection` storage** — one `documents` JSON table, room-scoped (recommended),
    vs. a table per collection. The generated tools never aggregate, so the JSON
    table costs nothing that matters.
+6. **Self-publish** — is an agent ever allowed to publish without a human? Proposed:
+   yes, but only with `cms.publish`, only inside its `self_change_scope`, and only
+   after every gate passes; everything else is a proposal card. The alternative
+   (never) is safer and slower; say which you want as the default for managers.
 
 ## Appendix A — Pi configuration inventory (verified)
 
