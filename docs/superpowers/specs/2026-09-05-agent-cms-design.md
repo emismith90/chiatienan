@@ -1,53 +1,105 @@
-# A headless CMS for Pi-harness agents, hosted in chiatienan — Design
+# Agent OS — a portable framework for Pi-harness agents, with the CMS as its configuration plane
 
-**Date:** 2026-09-05 · **Status:** draft v2 — revised after operator feedback (§10 records
-what was decided and what is still open)
+**Date:** 2026-09-05 · **Status:** draft v3 — reframed as a framework after operator
+feedback; §11 records decisions taken and open
+**Implementation plan:** [`../plans/2026-09-05-agent-os-framework.md`](../plans/2026-09-05-agent-os-framework.md)
 **Builds on:** [`2026-08-12-cursor-to-pi-harness-design.md`](2026-08-12-cursor-to-pi-harness-design.md)
 (the sidecar boundary) · `TODO.md` "BIG: agent engine export/import"
 
-## 0. Scope, restated after feedback
+## 0. What this is
 
-The CMS is **configuration + engine + a code registry**. Three things are explicitly out:
+A **framework** for running LLM agents on the Pi harness inside any application, with
+three properties the operator asked for in this order:
 
-| Out of scope | Why |
+1. **Every behaviour is configured by content**, and the same content is editable by
+   humans and, under permission, by the agents themselves.
+2. **Code is first-class**: developers extend the system through a defined turn
+   pipeline with typed injection points, never by editing the core.
+3. **Portable**: chiatienan is the *first host application*, not the framework. A
+   second application mounts the same framework, writes its own packs, and gets the
+   CMS, the data plane, the observability plane and the eval plane for free.
+
+The name "Agent OS" is a framing, not a promise of a scheduler or isolation. It is
+used because the mapping is real and it keeps the layering honest (§0.1): a small
+kernel, components that each publish a configuration schema, and a content plane (the
+CMS) that instantiates those schemas per business, profile and space. "The CMS
+controls the setup of the OS" is exactly right, in the sense that manifests control a
+cluster or `/etc` controls a Unix box: **content configures a component; it never
+implements one** (§0.2).
+
+### 0.1 Layers
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Host application        chiatienan (rooms, chat, SSE, PWA)  ·  your next app │
+│                         mounts the framework, implements the host adapters    │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Business packs          lunch_ledger · poker_ledger · …   (tools, renderers,  │
+│                         draft kinds, fixtures, seeds, own tables)             │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Domain libraries        ledger_core (members, payments, netting, QR, periods) │
+│                         reusable across packs of one domain, not framework    │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Framework  (kernos)                                                          │
+│   kernel      turn pipeline, TurnContext, stages, plugins, caps, trace       │
+│   registry    plugin discovery, config schemas → generated content types     │
+│   engine      Engine protocol; PiEngine (bridge + sidecar) is the first      │
+│   content     the CMS: sources, profiles, versions, publish, gates, proposals│
+│   agents      Agent entity, delegation, capabilities                         │
+│   data        Collections (schema-validated documents) + generated tools     │
+│   observe     turn traces, logging, eval capture                             │
+│   eval        cases, suites, graders, judge, runner, fixtures                │
+│   api         mountable FastAPI router + os_admin tool pack                  │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Boot layer              env: DB URL, DATA_DIR, provider key ref, sidecar path│
+│                         code: gate enforcement, plugin blacklist, seeded      │
+│                         default profile — exists before any content does     │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+Two rules keep the layers real, and both are tested (plan, Task 1.1):
+
+- **The framework never imports a host or a pack.** `kernos` has no knowledge of
+  rooms, meals, VND or Phoenix. It knows *spaces*, *principals*, *turns*, *profiles*.
+- **A host never reaches around the framework.** chiatienan talks to Pi only through
+  `kernos.engine`; it renders replies only through its packs.
+
+### 0.2 The two rules that make "content controls everything" plausible
+
+**Content configures; code implements.** An editor or agent may change *which* memory
+plugin runs and its window, *which* validators fire and at what severity, *which*
+tools are enabled, *which* model handles vision, *which* stage runs which plugins in
+what order. None of them can change what a plugin does when it runs. That is the line
+that makes an agent editing its own setup safe rather than reckless.
+
+**Content types are generated from the registry, not hand-written per component.**
+Every plugin declares a `config_schema`. That schema *is* its content type. The CMS is
+a schema-driven editor: it reads the registry and, for each plugin, knows how to
+render, validate, version and publish an instance of that schema. Add a plugin and its
+content type exists with no CMS change — the same mechanism as custom resource
+definitions in Kubernetes or code-first content types in a .NET CMS. Only the rich-text
+types are hand-designed: prompt, rule, skill, prompt template, rubric. Rule of thumb:
+one content type per component, never one per knob.
+
+### 0.3 Boot layer and reflexivity
+
+The CMS runs on the OS, so a small set of things must exist before any content does
+and can never be content: the database URL and data directory, the provider key
+*reference*, the sidecar path, the publish gates and their thresholds, the plugin
+blacklist for self-change, and the **seeded default profile** (built from code on first
+boot so a fresh install runs today's behaviour with zero content). Reflexivity follows:
+an agent must not be able to change the thing that judges its change, so gates,
+thresholds and the blacklist are outside every self-change scope, and an eval always
+runs the *candidate* profile against the *current* suite and gates (§9).
+
+### 0.4 Out of scope
+
+| Out | Why |
 |---|---|
-| Agent UI | the operator drives the agent with AG-UI over SSE already; the engine emits events, the UI is someone else's |
-| Admin identity / authoring roles | not wanted now; the shared `X-Admin-Password` header keeps guarding `/api/admin/*` |
-| A no-code tool builder | see §4.5 — code is supported, but as *registered plugins with a declared interface*, not as text in a form |
-
-Two positions from draft v1 changed on feedback, and the change is the heart of v2:
-
-1. **Code is in scope.** v1 said "the CMS only enables code developers ship". v2 makes
-   that precise and much more useful: the engine runs a **turn pipeline with named
-   stages and typed injection points**, code plugs into those stages as *plugins*
-   with a declared config schema, and the CMS stores *which plugins run where, with
-   what config*, per profile. Same idea as middleware in a web framework or
-   initialisation modules in a .NET CMS: developers write the module against a
-   published interface; the CMS composes and configures it. Nothing about how an
-   agent turn works is hard-wired any more — today's behaviour becomes the
-   **pre-built plugin set**.
-2. **Database, validation and eval are content types**, not side concerns. A
-   business declares the data it needs (§5.3), the invariants it enforces (§5.4) and
-   the cases it must keep passing (§5.5), and all three are versioned with the
-   profile and checked at publish.
-
-And two things the ask settled: a **room links to one agent** (its *manager*), a
-profile can back many rooms, and an agent can **invoke sub-agents** (§6). The second
-business is a **money ledger for poker / card games** (§7), chosen because it shares
-the netting-and-QR core with lunch and differs in exactly the places that stress the
-pack interface.
-
-One pushback survives from v1, because it is about Pi rather than about this design:
-
-> **"All configuration Pi supports" is the wrong bar.** Roughly a third of Pi's
-> surface configures an interactive terminal. The inventory in §2 covers **all of
-> it**, but each knob gets one of three fates, and only the first two reach the CMS.
-
-| Fate | Meaning | Examples |
-|---|---|---|
-| **CMS-native** | Text or a value an editor can own safely. Becomes a content field. | system prompt, skills, rules, model choice, thinking level, caps, compaction, bot handle |
-| **Code** | A plugin behind a pipeline injection point (§4). The CMS enables, orders and configures it; a developer wrote it against a declared interface. | tools / tool packs, validators, graders, extension hooks, providers |
-| **Not applicable** | Only meaningful with a human at a terminal. Documented, deliberately absent. | themes, keybindings, TUI mode, steering/follow-up queues, `/share` |
+| Agent UI | the operator drives the agent with AG-UI over SSE; the framework emits typed turn events and ships an AG-UI mapping (§12.4), the UI is someone else's |
+| Admin identity / roles | not wanted now; the host guards `/api/admin/*` as it sees fit |
+| A no-code tool builder | §4.4; code is supported as registered plugins, not as text in a form |
+| Pi's terminal surface | §2 lists it as N/A |
 
 ## 1. Where this repo already is
 
@@ -111,6 +163,15 @@ and `chat.py` renders by `elif` on result type. A second money business cannot e
 until those three become pack-provided (§7.3).
 
 ## 2. Pi's configuration surface, classified
+
+Each knob gets one of three fates, and only the first two reach the CMS:
+
+| Fate | Meaning | Examples |
+|---|---|---|
+| **CMS-native** | Text or a value an editor can own safely. Becomes a content field. | system prompt, skills, rules, model choice, thinking level, caps, compaction, bot handle |
+| **Code** | A plugin behind a pipeline injection point (§4). The CMS enables, orders and configures it; a developer wrote it against a declared interface. | tools / tool packs, validators, graders, extension hooks, providers |
+| **Not applicable** | Only meaningful with a human at a terminal. Documented, deliberately absent. | themes, keybindings, TUI mode, steering/follow-up queues, `/share` |
+
 
 Verified against the installed `@earendil-works/pi-coding-agent@0.84.1`
 (`dist/**/*.d.ts` and `docs/`), not from memory. Where a claim comes from a type or
@@ -193,35 +254,40 @@ or a terminal (absent).
 
 ## 3. Vocabulary
 
-| Word | Means | Holds |
-|---|---|---|
-| **Room** | a tenant: members, chat, ledger rows, memory files | data |
-| **Agent** | a named actor with a role (`manager` or `sub`) bound to one **profile version**, plus the list of sub-agents it may delegate to | identity + delegation |
-| **Profile** | versioned, published configuration: prompt, rules, skills, templates, models, caps, pipeline, tool packs, validation rules, eval suites | behaviour |
-| **Business** | a template: the packs, plugins and default profiles a room of this kind is created from, plus seed data | blueprint |
-| **Pipeline** | the ordered stages a turn passes through; each stage has a typed interface | the engine's shape |
-| **Plugin** | a code module registered against one stage, with an id and a JSON-Schema config | code |
-| **Tool pack** | the plugin kind that contributes tools, renderers, draft kinds, balance contributions and fixtures for one domain | code |
+Framework words first; the chiatienan word each maps to is in the last column.
+
+| Word | Means | Holds | In chiatienan |
+|---|---|---|---|
+| **Space** | a tenant and conversation scope: the unit a turn happens in and data is partitioned by | data | room |
+| **Principal** | whoever sent the message: id, display name, capabilities | identity | member |
+| **Agent** | a named actor with a role (`manager` or `sub`), bound to one **profile version**, with the sub-agents it may delegate to and its `capabilities` | identity + delegation | the bot (Phoenix) |
+| **Profile** | versioned, published configuration: prompt, rules, skills, templates, models, caps, pipeline, packs, validation, eval suites | behaviour | today's `prompt.py` + skill files + env |
+| **Business** | a template: the packs, plugins and default profiles a space of this kind is created from, plus seed data | blueprint | "lunch" |
+| **Pipeline** | the ordered stages a turn passes through; each stage has a typed interface | the kernel's shape | `run_bot_turn` |
+| **Plugin** | a code module registered against one stage, with an id, a version and a JSON-Schema config | code | the inlined steps of `run_bot_turn` |
+| **Tool pack** | the plugin kind that contributes tools, renderers, draft kinds, fixtures and seeds for one domain | code | `tools.py` + `drafts.py` + the render chain |
+| **Engine** | what actually runs the model loop for one turn given a spec, message and tools | code | the Pi sidecar |
+| **Host adapters** | the interfaces a host implements so the framework can read history, memory and knowledge and emit events | code | `chat.build_history`, `memory.py`, `realtime.py` |
 
 ```
-Business ──creates──▶ Room ──manager──▶ Agent ──▶ ProfileVersion (published snapshot)
-                                          │ delegates_to[]        │
-                                          └─▶ Agent (sub) ───────┘ (own profile version)
+Business ──creates──▶ Space ──manager──▶ Agent ──▶ ProfileVersion (published snapshot)
+                                           │ delegates_to[]        │
+                                           └─▶ Agent (sub) ───────┘ (own profile version)
 ProfileVersion.spec = content fields + pipeline {stage: [{plugin, config}]}
                     + tool_packs[{pack, tools{…}}] + validation[] + eval_suites[]
 ```
 
-## 4. Code support: the turn pipeline
+## 4. The kernel: the turn pipeline
 
 ### 4.1 Stages
 
 This is the list that needs sign-off before Phase 1, because every plugin is written
 against it. Stage names are stable identifiers; the Python protocol per stage is in
-§4.2. Left column is the Python engine; the right column is the sidecar, where Pi's
+§4.2. Left column is the Python kernel; the right column is the sidecar, where Pi's
 own extension events are the injection points.
 
 ```
-Python engine (one turn)                          Node sidecar (inside the Pi run)
+Python kernel (one turn)                          Node sidecar (inside the Pi run)
 ──────────────────────────────────────────         ─────────────────────────────────────
  1 resolve   room → Agent → ProfileVersion          before_agent_start   final prompt/message tweak
  2 gate      may this message start a turn?         tool_call            allow / block / rewrite args
@@ -238,7 +304,7 @@ Python engine (one turn)                          Node sidecar (inside the Pi ru
 10 after     rollover · eval capture · telemetry · sub-agent bookkeeping
 ```
 
-Stages 1, 5, 6 and 8 are **single-owner** (the engine, the engine, the sidecar, the
+Stages 1, 5, 6 and 8 are **single-owner** (the kernel, the kernel, the engine, the
 pack). Stages 2, 3, 4, 7, 9, 10 and 6a/6c are **ordered lists of plugins**; the
 profile decides which and in what order. Today's behaviour is the pre-built set:
 
@@ -333,11 +399,57 @@ Write a tool body, change a tool's parameter schema, add a stage. Those are pull
 requests. Everything else about how a turn behaves — which plugins, in which order,
 with which config, which tools are on, which invariants must hold — is content.
 
-## 5. Content model v2
+
+### 4.6 The Engine protocol and the host adapters
+
+The kernel is host-agnostic because everything host-shaped sits behind a protocol:
+
+```python
+class Engine(Protocol):                      # stage 6
+    async def run(self, spec: EngineSpec, message: str, images: list[Image],
+                  tools: list[ToolSpec], call_tool: ToolExecutor,
+                  emit: EventSink) -> TurnResult: ...
+# PiEngine = today's pi_bridge.py + agent_sidecar/, generalised. EngineSpec is the
+# `run` command of §1 minus tools/message/images. A second engine (a direct
+# provider loop, another harness) implements the same protocol; nothing above
+# stage 6 notices.
+
+class HistorySource(Protocol):               # used by the recent_history plugin
+    def render(self, space_id, *, since_id, limit, before_id) -> str: ...
+class MemoryStore(Protocol):                 # used by long_term_memory / rollover
+    def load(self, space_id) -> str; def append(self, space_id, section) -> None
+    def watermark(self, space_id) -> int; def set_watermark(self, space_id, value) -> None
+class KnowledgeSource(Protocol):             # optional; what `knowledge.py` provides
+    def snapshot(self, space_id) -> dict: ...
+class EventSink(Protocol):                   # turn events → SSE / AG-UI / logs
+    async def emit(self, event: TurnEvent) -> None: ...
+class MessageStore(Protocol):                # stage 9 persistence of the reply and cards
+    def post(self, space_id, *, author, kind, body, attachments) -> MessageRef: ...
+```
+
+chiatienan implements each with what it has (`build_history`, `memory.py`,
+`knowledge.py`, `RoomHub`, `chat.post_message`). A new host implements the same six
+interfaces and nothing else to run an agent. The framework ships an in-memory
+implementation of every adapter for tests and for the minimal example host (§12.3).
+
+## 5. The content plane (the CMS)
 
 Storage is SQLite tables with JSON columns, versioned by snapshot-on-publish: editors
 edit *sources* (prompt, rule, skill rows); publishing copies the referenced bodies into
 one `spec` JSON, so a room runs a snapshot that a later edit cannot change mid-turn.
+
+### 5.0 Storage and generated types
+
+The framework owns its tables under its own SQLAlchemy `Base` with an `kn_` prefix
+(`kn_profiles`, `kn_profile_versions`, …), created by `kernos.bind(engine)` next
+to the host's tables in the same database — one file for SQLite hosts, one schema for
+others. Nothing in `kernos` references a host table; the join to a host's tenant is
+the opaque `space_id` string the host passes in.
+
+Plugin configuration is not a table per plugin. A profile version's `spec.pipeline`
+holds `{plugin, version, config}` triples, validated at save against the plugin's
+`config_schema` from the registry (§0.2). The admin API exposes each plugin's schema
+so a generic editor can render it; the framework does not ship an editor.
 
 ### 5.1 Behaviour entities
 
@@ -349,7 +461,8 @@ agent_profiles           id, business_id, name, published_version_id NULL
 agent_profile_versions   id, profile_id, version, status, spec JSON, created_at, published_at, note
 prompts / rules / skills / prompt_templates
                          id, business_id, slug, title, body TEXT, frontmatter JSON, etag
-rooms                    + manager_agent_id, + agent_overrides JSON {append_sections[], handle?, language?}
+spaces (host-owned)      the host stores manager_agent_id + agent_overrides JSON on its own tenant row
+                         and passes them to resolve(); chiatienan adds both columns to `rooms`
 model_catalogue          provider, model_id, name, input[], context_window, max_tokens, cost, probe JSON
 ```
 
@@ -493,7 +606,16 @@ whether the pack interface is real.
 | Eval | golden games with known nets; a settle case; an ambiguous-cash-out case that must ask |
 | Seed | none (no places); a `Collection` "house-rules" is a natural optional extra |
 
-### 7.3 What poker forces in the core — the real deliverable of Phase 6
+### 7.3 What poker forces out of the host and into `ledger_core`
+
+Everything poker and lunch share is not framework and not host: members with bank
+details, cash payments between members, debt edges and FIFO payment application,
+`net_transfers`, VietQR, periods, statements, settlements, the two-step draft card.
+That is a **domain library**, `ledger_core`, that both packs import. Extracting it is
+most of Phase 3's work and is what makes the pack interface honest — a pack is what a
+business *adds* to the domain, and the domain is what two businesses *share*.
+
+### 7.4 What poker forces in the kernel and the host — the real deliverable of Phase 6
 
 1. `drafts.py` stops knowing `expense_draft` and `payment_draft` by name; a draft
    carries `kind`, and `commit_any` dispatches to the pack's `DraftKind.commit`.
@@ -526,7 +648,7 @@ pass — and the gates apply to an agent-made publish exactly as to a human one,
 unconditionally. There is no "the agent is confident" path around the model probe or
 the money-safety check.
 
-### 8.2 The `cms_admin` tool pack
+### 8.2 The `os_admin` tool pack
 
 The headless API of Phase 2 is exposed to agents as a tool pack, so the CMS is
 operable from inside a turn with no second integration:
@@ -573,7 +695,7 @@ status) — and, in this app, **a card in the room**, because the room chat is t
 we have: "Phoenix proposes to change skill `record-meal` (+3 −1 lines): *bill photos
 without names were being itemised; adds the even-split rule*. Eval: 105/105 tool
 selection, 60/60 ledger. **Approve · Reject · View diff**". Approve publishes through
-the gates; the card is a `RoomMessage` of a new kind, rendered by the `cms_admin`
+the gates; the card is a `RoomMessage` of a new kind, rendered by the `os_admin`
 pack like any other draft. A headless client sees the same proposal at
 `GET /api/admin/proposals`.
 
@@ -611,7 +733,7 @@ change_proposals  id, agent_id, profile_version_id, rationale, diff JSON, eval_r
 turn_traces       id, room_id, turn_id, agent_id, started, finished, trace JSON, summary JSON
 ```
 
-Phase **9** (after 2, 4 and 7): the `cms_admin` pack, capabilities, proposals and the
+Phase **9** (after 2, 4 and 7): the `os_admin` pack, capabilities, proposals and the
 proposal card, the two loops, and a steward brief as a shipped prompt template.
 
 ## 9. Governance — what publishing checks
@@ -630,26 +752,34 @@ name header until that changes. Publishing a version runs, in order:
 4. **Eval gate** — the suites named in `spec.eval.suites` run against the draft;
    publish is refused if a money grader (`tool_selection`, `ledger_state`) drops
    below `spec.eval.gate`. Prose graders report, never block.
-5. **Rollback** — `published_version_id` moves; the previous version stays
+5. **Reflexivity** — an agent-initiated publish is refused if the diff touches any
+   gate threshold, any `severity: block` rule, the plugin blacklist, `builtin_tools`,
+   `models`, `tool_packs` or `pipeline` (§0.3); those are proposals only, whatever the
+   agent's capabilities say. The eval in gate 4 runs the *candidate* profile against
+   the *current* suite.
+6. **Rollback** — `published_version_id` moves; the previous version stays
    publishable so rollback is one call.
 
 ## 10. Phases
 
+The task-by-task plan is in
+[`../plans/2026-09-05-agent-os-framework.md`](../plans/2026-09-05-agent-os-framework.md).
+In one table:
+
 | # | Deliverable | Behaviour change | Proof |
 |---|---|---|---|
-| **1** | Pipeline runner + `TurnContext` + plugin registry; today's `run_bot_turn` body split into the pre-built plugins of §4.1; `profiles.resolve()` returning a **seeded default profile built from today's `prompt.py`, skill files, rule file and env**; `run_turn(profile=)` keyword; sidecar accepts `settings`/`extensions` (ignored when absent) | **none** | 751 backend + 65 sidecar tests unchanged; `bench.run --corpus typical --repeat 3` equal to `pi-typical-r3.json`; `GET /api/admin/rooms/{id}/resolved` byte-equals today's `run` command |
-| **2** | Headless API for businesses, profiles, versions, prompts/rules/skills/templates, models, pipeline config, validation rules; publish with gates 1–3; room → agent binding; `GET …/registry`, `GET …/turns/{id}` trace | opt-in per room | API tests; a room bound to an edited profile runs the edit, an unbound room does not |
-| **3** | `ToolPack` protocol; `lunch_ledger` moved behind it; per-tool enable/override; generalised drafts, `balance_contributions`, pack render (§7.3) | none | benchmark equality; a stub pack with two tools runs end-to-end in a test room |
-| **4** | Eval content types; `bench` corpus imported as the lunch suite; graders and fixtures as plugins; `eval_runs`; publish gate 4; `eval_capture` | none | the imported suite reproduces `pi-typical-r3.json` verdicts; a captured turn appears as a `review: true` case |
-| **5** | `Collection` content type + generated tools + `documents` table | opt-in | schema-validated CRUD through the model in a test room; aggregation refused |
-| **6** | `poker_ledger` pack: tables, tools, draft kind, contributions, validation, skills, eval suite; a poker business | new business only | its suite green; the lunch suite unchanged |
-| **7** | Agents + sub-agents: `ask_<sub>` tools, nested pipeline runs, depth/caps, nested trace and events | opt-in | a manager delegating to a summariser sub-agent passes `unbacked_amounts` on the merged results |
-| **8** | Export/import as a Pi package (`package.json` with a `pi` manifest, `skills/*/SKILL.md`, `prompts/*.md`, `AGENTS.md` for rules, `SYSTEM.md`, `settings.json`; behaviour only, never room data; import lands as a draft and strips `extensions/`); sidecar extension registry (tool-call policy, provider headers, telemetry) | none | round-trip equality; `pi -e` smoke |
+| **1** | `kernos` package: kernel (pipeline, `TurnContext`, stages, plugins, trace), registry, `Engine` protocol with `PiEngine` (today's bridge + sidecar, generalised), host adapter protocols; chiatienan's `run_bot_turn` becomes the pipeline with today's steps as pre-built plugins; a **seeded default profile built from code**; import-rule test | **none** | 751 backend + 65 sidecar tests unchanged; benchmark equality when a key is available; the resolved profile byte-equals today's `run` command |
+| **2** | Content plane: `kn_` tables, sources, versions, publish with gates 1–3 and 5, resolver space → agent → version, mountable admin router, plugin schemas exposed | opt-in per space | API tests; a bound space runs the edit, an unbound one does not |
+| **3** | `ToolPack` protocol; `ledger_core` extracted; `lunch_ledger` pack; generalised drafts, balance contributions, pack render | none | benchmark equality; a stub pack runs end-to-end in a test space |
+| **4** | Observe + eval: `kn_turn_traces`, eval types, `bench` imported as the lunch suite, graders and fixtures as plugins, gate 4, `eval_capture` | none | imported suite reproduces `pi-typical-r3.json`; a captured turn appears as a `review: true` case |
+| **5** | Data plane: `Collection` + generated tools + `kn_documents` | opt-in | schema-validated CRUD through the model; aggregation refused |
+| **6** | `poker_ledger` pack and business | new business only | its suite green; lunch suite unchanged |
+| **7** | Agents + sub-agents | opt-in | merged results pass `unbacked_amounts` |
+| **8** | AI-ready: `os_admin` pack, capabilities, self-change scope, proposals + card, loops | opt-in per agent | steward scenario in §8.5 passes end to end |
+| **9** | Portability: minimal example host, AG-UI event mapping, Pi-package export/import, sidecar extension registry, packaging for PyPI/npm | none | the example host runs a "hello" business with no chiatienan code on its path |
 
-| **9** | AI-ready (§8): `cms_admin` tool pack, agent capabilities and self-change scope, change proposals + room card, in-turn and scheduled self-eval loops, `turn_traces` | opt-in per agent | a steward agent turns a failing captured turn into an eval case, drafts a skill edit, runs the suite, and opens a proposal a human approves; an out-of-scope edit can only become a proposal |
-
-Phase 1 is the refactor everything else stands on, and it is the one that must ship
-with the benchmark unchanged to the digit.
+Phase 1 is the refactor everything stands on and must ship with the benchmark
+unchanged to the digit.
 
 ## 11. Decisions
 
@@ -664,6 +794,10 @@ with the benchmark unchanged to the digit.
 - Second business: **poker / card-game money ledger** → §7.
 - **AI-ready**: an agent may update, evaluate and log itself through the CMS when
   permitted → §8; the agent proposes, the gates or a human commit.
+- **Framework, not app feature**: Agent OS is a portable framework (§0, §12); chiatienan
+  is its first host; the CMS is its configuration plane.
+- **Review before code**: a second reviewer passes over this design and the plan before
+  Phase 1 starts (plan, Task 0).
 
 **Still open, needed before Phase 1 starts:**
 
@@ -679,10 +813,69 @@ with the benchmark unchanged to the digit.
 5. **`Collection` storage** — one `documents` JSON table, room-scoped (recommended),
    vs. a table per collection. The generated tools never aggregate, so the JSON
    table costs nothing that matters.
-6. **Self-publish** — is an agent ever allowed to publish without a human? Proposed:
+6. **Package name** — `kernos` is the working name (free on PyPI at the time of
+   writing; `agentos` and `agentkernel` are taken). Rename freely before Phase 9 publishes anything.
+7. **Self-publish** — is an agent ever allowed to publish without a human? Proposed:
    yes, but only with `cms.publish`, only inside its `self_change_scope`, and only
    after every gate passes; everything else is a proposal card. The alternative
    (never) is safer and slower; say which you want as the default for managers.
+
+## 12. Packaging and portability
+
+### 12.1 Repository layout (Phase 1 onward)
+
+```
+backend/
+  kernos/            the framework — Python package, no imports from app/ or packs/
+    kernel/  registry/  engine/  content/  agents/  data/  observe/  eval/  api/
+    adapters/memory.py    in-memory HistorySource/MemoryStore/… for tests and examples
+  kernos_sidecar/    the Node runtime (today's agent_sidecar/, generalised; no money comments)
+  ledger_core/            domain library: members, payments, netting, QR, periods, drafts
+  packs/
+    lunch_ledger/         business pack; imports ledger_core and kernos
+    poker_ledger/
+  app/                    chiatienan host: FastAPI routes, rooms, chat, SSE, host adapters, plugins/
+  examples/minimal_host/  Phase 9: a 100-line host proving the framework runs without chiatienan
+```
+
+Same repo, separate packages, one dependency direction:
+`app → packs → ledger_core → kernos`, and `app → kernos`. A test walks the
+import graph and fails on any edge pointing the other way. Extraction to its own
+repository and to PyPI/npm is a `git subtree split` when a second host exists, not
+before — a framework with one user is a guess, and the plan schedules the second host
+(§12.3) as the moment to split.
+
+### 12.2 What a host implements
+
+Six protocols (§4.6) and two decisions: how it maps its tenant to `space_id`, and
+where it mounts the admin router. Everything else is content and packs. The framework
+ships: the kernel, `PiEngine`, the content plane and its API, the data plane, traces,
+eval, the `os_admin` pack, the AG-UI mapping, and in-memory adapters.
+
+### 12.3 The minimal example host
+
+A single-file FastAPI app with one space, one agent, a "hello" pack with one tool, the
+in-memory adapters, and the `os_admin` pack enabled. It exists to prove the layering
+(no chiatienan module on its import path) and to be the template for the operator's
+next application. It is the acceptance test of Phase 9.
+
+### 12.4 Events and AG-UI
+
+The kernel emits typed `TurnEvent`s: `run.started`, `text.delta`, `tool.start`,
+`tool.result`, `run.finished`, `run.error`, `sub.started`, `sub.finished`,
+`validation.warned`, `validation.blocked`. chiatienan's `EventSink` maps them to the
+frozen `agent.*` SSE names its UI consumes. The framework also ships an
+`agui.EventSink` that maps the same events to AG-UI's `RUN_STARTED`,
+`TEXT_MESSAGE_CONTENT`, `TOOL_CALL_START/ARGS/END`, `RUN_FINISHED`, `RUN_ERROR`, so a
+new host gets an AG-UI-compatible stream by choosing that sink.
+
+### 12.5 Versioning
+
+`kernos` follows semver. The stage list (§4.1), the six host protocols, the
+`Plugin`/`ToolPack` protocols, `TurnContext`'s public fields, the `EngineSpec` shape and
+the `kn_` schema are the public surface; a breaking change to any of them is a major
+version. Plugin ids carry their own version (`…long_term@2`), so a framework minor can
+add a plugin without moving anything a published profile references.
 
 ## Appendix A — Pi configuration inventory (verified)
 
