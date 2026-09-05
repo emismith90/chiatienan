@@ -23,10 +23,11 @@ the existing test suites and benchmark are the proof.
   plan moves arithmetic into the kernel, the sidecar or a model's prose.
 - **`run_turn`'s signature and `TurnResult`'s shape are frozen**
   (`run_turn(user_text, ctx, images=None, emit=None, memory=None, history=None)`).
-  14 `monkeypatch.setattr` sites across 4 test files patch `app.agent.run_turn` or
-  `app.chat.run_bot_turn`; Phase 1 must keep both names importable from those modules
-  and must look them up **at call time** (module attribute, not a captured reference)
-  so the patches keep working.
+  18 `monkeypatch.setattr` sites across 4 test files (`test_chat.py` 11,
+  `test_chat_payment_turn.py` 3, `test_bill_image_carryover.py` 2, `test_api.py` 2) patch
+  `app.agent.run_turn` or `app.chat.run_bot_turn`; Phase 1 keeps both names importable,
+  looks them up **at call time**, and passes the resolved spec through
+  `ToolContext.engine_spec` — the one argument every fake ignores (review finding 1).
 - **The `agent.*` SSE event names are frozen** — the frontend consumes them.
 - **Layering is a test, not a convention.** `kernos` imports neither `app`, `packs`
   nor `ledger_core`; `ledger_core` imports neither `app` nor `packs`; `packs` never
@@ -49,36 +50,78 @@ the existing test suites and benchmark are the proof.
 
 ### Task 0.1: Second-reviewer pass over the design and this plan
 
-- [ ] Hand both documents to an independent reviewer with repository access and a
-      brief to attack: layering leaks, Phase 1 behaviour drift, the frozen contracts,
-      D3 across sub-agents, the reflexivity clause, the stage list, and anything the
-      plan cannot verify.
-- [ ] Record the findings and their disposition in the section below. Anything that
-      changes an interface is fixed in the design *before* Task 1.1 starts.
-- [ ] Commit: `docs(kernos): record the pre-implementation review`
+- [x] An independent reviewer (a second Fable instance, read-only, with the repository)
+      attacked the v3 design and this plan. Verdict: **NO-GO as written; GO WITH CHANGES
+      once findings 1–6 are fixed in the docs.** All fourteen findings were verified
+      against the code and dispositioned below; the design is now v3.1.
+- [x] Commit: `docs(kernos): record the pre-implementation review`
 
-**Findings and dispositions:** _(filled by Task 0.1)_
+**Findings and dispositions:**
+
+| # | Sev | Finding (verified) | Disposition |
+|---|---|---|---|
+| 1 | blocker | "Look up `app.agent.run_turn` at call time" leaves `prompt`/`model` stages dead: `run_turn` builds `system`/`message` itself from `settings`; its frozen 6-arg signature cannot take a spec, and the 13 fakes in `test_chat.py`/`test_bill_image_carryover.py` declare that exact signature. 18 patch sites, not 14 (`test_chat.py` has 11). | **Accepted.** The spec rides on the one argument every fake ignores: `ToolContext` gains `engine_spec: EngineSpec \| None = None` plus `system`/`message` overrides; `run_turn` uses them when present, else builds as today (Task 1.4). Constraints corrected to 18 sites. |
+| 2 | blocker | Moving `_maybe_rollover` to `after` changes behaviour: today it runs first under the lock, so the ageing turn sees the new summary and the advanced watermark. It also calls the summariser (an LLM call) which no protocol covered. | **Accepted.** `kernos.context.rollover` is the first `context` plugin; `Completion` protocol added (§4.6). |
+| 3 | blocker | `validate → render` inverts `chat.py`: moneyguard only runs on the free-prose fallback; a generic pre-render validator would warn on settlement bodies and could block a settle turn saying "Đã ghi". `fabricated_commit` needs `meal_exists` + history. | **Accepted.** Order is `render → validate → persist`; `render` yields an `outcome` (draft \| body with `claimed_by_pack`); validators no-op when claimed; `TurnContext` gains `before_id`, `history`, `tool_ctx`. |
+| 4 | blocker | `backed_amounts` counts numbers in tool *results*; an `ask_<sub>` result carrying prose launders hallucinated numbers; merging results lets `last_result("propose_meal")` pick a sub-agent's draft. | **Accepted.** Sub-agent invocations tagged `from_agent`; their `text` excluded from the recorded result; drafts read from untagged invocations only (§6). |
+| 5 | major | Six protocols are not enough: drafts with supersede, the summariser, ledger lookup, clock, superseded-card republish (not an `agent.*` event), `RoomHub` busy markers; `HistorySource` would bake `phoenix:` in. | **Accepted.** Added `CardStore`, `Completion`, `Clock`; `message.republished` event; `bot_label` parameter; busy markers documented host-side (§4.6, §12.4). |
+| 6 | major | The benchmark calls `app.agent.run_turn` directly (`bench/run.py:122`) and never enters `run_bot_turn`; it proves the engine move, not the pipeline swap. | **Accepted.** Task 1.0 records golden fixtures from the *current* `run_bot_turn` for five branches before any code moves; Task 1.8 replays them through the pipeline. |
+| 7 | major | `pi_bridge._child_env` reads `settings.pi_model`; `SIDECAR_DIR` is relative to `app/` — both break layering; three log lines for one turn. | **Accepted.** Both become constructor parameters; exactly one `[agent] turn` log line, kept in `run_turn` (Task 1.4). |
+| 8 | major | `build_system_prompt` has conditionals (`who` sentence, `member_id`) pinned by `test_prompt.py`; pure `{{var}}` cannot reproduce it. | **Accepted.** Phase 1 keeps the persona block as code (`app.prompt.phoenix` plugin); template conditionals are a Phase 2 content-plane decision (§0.2). |
+| 9 | major | Gating happens in `main.py:626-655` before `run_bot_turn`; `/clear` never enters a turn; `replies_to_bot_question` missing. | **Accepted.** `gate` is a host-invoked kernel helper, not a stage; Phase 1 leaves `main.py` untouched (§4.1). |
+| 10 | major | Reflexivity holes: `eval.suites` not blacklisted; `rules` in scope includes `money-safety`; `cms_add_eval_case` seeds the judging suite; a `sub` steward cannot reach `auto_published`. | **Accepted.** `eval.*` and rules tagged `money` blacklisted; gate 4 runs `review: false` only; steward auto-publish limited to its own profile (§8.3, §8.5, §9). |
+| 11 | major | `get(id, version=None)` → latest breaks snapshot discipline; identical `id@version` with a changed schema is undetectable. | **Accepted.** Version mandatory in published specs; registry stores a schema hash and refuses a mismatch (§4.3). |
+| 12 | minor | Unverifiable proofs: benchmark needs a key; "pass unedited" unenforced; Phase 4 "reproduces r3 verdicts" impossible across 3 non-deterministic repeats; "byte-equals" must exclude `req_id`/`turn_id`. | **Accepted.** Benchmark run manually with the results commit hash recorded; a diff check on `backend/tests/` (Task 1.8); Phase 4 proof is `bench.regrade` of stored r3 records through the grader plugins; equivalence excludes ids and freezes `today`. |
+| 13 | minor | Phase numbers inconsistent (§8.7, §7.4); gate 2 needs pack `handles_money` before packs exist; `kernos.content.probe` wrapping `bench` breaks layering; Phase 1 too big for one PR. | **Accepted.** Numbers fixed; Phase 2 reads `handles_money` from plugins and from the seeded profile's metadata until Phase 3; the probe is a host-provided `ModelProbe`; Phase 1 is cut into three PRs (1a/1b/1c below). |
+| 14 | minor | `Plugin.run` sync vs async work; `Verdict.patch` untyped; `TurnContext` missing fields Task 1.8 uses; Python `model` stage duplicates `resolveModel` in `session.js`; superseded emits would move inside the lock. | **Accepted.** `run` is async; `Verdict.replacement: Body \| None`; fields added; `model` stage is a passthrough in Phase 1 (the sidecar keeps routing); `pending_events` flushed after the lock. |
+
+Verified correct by the reviewer: the §1 `run` field inventory; `SettingsManager.inMemory`
+and `extensionFactories` as real options; `run_turn` never raises; the `test_api` fakes
+accept `*a, **k`; the images carry-over and `before_id` threading; the sidecar's
+`summarize` being specified-not-inherited; 65 sidecar tests; `require_admin` for Task 1.9;
+the layering test design.
 
 ---
 
 ## Phase 1 — The kernel, with today's behaviour as plugins (zero behaviour change)
 
-Order matters: primitives first, then the engine behind a protocol, then the host
-adapters, then the plugins, then the swap of `run_bot_turn`, then the proof.
+Three pull requests, each independently green and each proving something:
+
+| PR | Tasks | Proves |
+|---|---|---|
+| **1a** | 1.0 – 1.4 | the engine moves behind a protocol with no production path changed (benchmark-provable) |
+| **1b** | 1.5 – 1.7 | adapters, plugins and the seeded profile exist and are unit-tested; no production path touched |
+| **1c** | 1.8 – 1.10 | the swap: `run_bot_turn` runs the pipeline and the golden fixtures replay byte-identical |
+
+### Task 1.0: Record golden fixtures from the current `run_bot_turn` (before anything moves)
+
+**Files:** create `backend/tests/golden/turn_fixtures.py`, `backend/tests/test_run_bot_turn_golden.py`.
+
+- [ ] Drive today's `chat.run_bot_turn` with a fake `run_turn` (the shape the 11 fakes in
+      `test_chat.py` use) for five branches: meal draft (`propose_meal`), payment draft
+      (`propose_payment`), settlement body (`settle_period`), free-prose fallback with an
+      unbacked amount (warn path), and a fabricated-commit body (block path). Also the
+      cancelled-draft republish.
+- [ ] For each, record: the persisted `RoomMessage` (kind, body, attachments), every
+      `emit`ted event in order, and the superseded/cancelled payloads. Store as Python
+      literals with `turn_id`/ids normalised; freeze `now_ict`.
+- [ ] The test asserts the current code reproduces the fixtures. It must pass
+      **before** Task 1.1 and stay untouched through 1.10.
+- [ ] Commit: `tests: golden fixtures for run_bot_turn's five outcome branches`
 
 ### Task 1.1: Package skeleton and the layering test
 
-**Files:** create `backend/kernos/__init__.py`, `backend/kernos/{kernel,registry,engine,content,adapters}/__init__.py`;
+**Files:** create `backend/kernos/__init__.py`, `backend/kernos/{kernel,registry,engine,content,adapters,plugins}/__init__.py`;
 create `backend/tests/test_layering.py`; modify `backend/pyproject.toml`.
 
 - [ ] Add `kernos*`, `ledger_core*`, `packs*` to `[tool.setuptools.packages.find] include`
       and `jsonschema>=4` to `dependencies`.
 - [ ] `test_layering.py`: parse every `.py` under `backend/{kernos,ledger_core,packs,app}`
-      with `ast`, collect top-level package of each import, assert the allowed edges
-      only: `app → {kernos, ledger_core, packs, app}`, `packs → {kernos, ledger_core, packs}`,
-      `ledger_core → {kernos, ledger_core}`, `kernos → {kernos}`. Missing directories
-      are skipped so the test passes before Phase 3 creates them.
-- [ ] Verify: `pytest tests/test_layering.py -q` passes; `pytest -q` count unchanged.
+      with `ast`, collect the top-level package of each import, assert only the allowed
+      edges: `app → {kernos, ledger_core, packs, app, bench-free}`, `packs → {kernos,
+      ledger_core, packs}`, `ledger_core → {kernos, ledger_core}`, `kernos → {kernos}`.
+      Missing directories are skipped so the test passes before Phase 3.
+- [ ] Verify: `pytest -q` — 986 passed + the new ones; nothing edited.
 - [ ] Commit: `kernos: package skeleton and the layering test`
 
 ### Task 1.2: Kernel primitives
@@ -86,171 +129,159 @@ create `backend/tests/test_layering.py`; modify `backend/pyproject.toml`.
 **Files:** create `backend/kernos/kernel/{context.py,plugin.py,pipeline.py,events.py}`;
 create `backend/tests/kernos/test_pipeline.py`.
 
-- [ ] `context.py`: `Stage` (`StrEnum`: `resolve, gate, context, prompt, model, run,
-      validate_args, validate_result, validate, render, persist, after`);
-      `TurnContext` dataclass (space_id, principal, text, images, profile, memory,
-      history, knowledge, system, message, model, vision_model, thinking, caps,
-      result: TurnResult | None, body, attachments, trace: list[dict], stopped: bool,
-      reply_override: str | None); `Verdict(ok, severity: "warn"|"block", reason,
-      patch=None)`.
+- [ ] `context.py`: `Stage` (`StrEnum`: `resolve, context, prompt, model, run,
+      validate_args, validate_result, render, validate, persist, after`); `Draft(kind,
+      payload)`, `Body(text, attachments, claimed_by_pack)`, `Outcome = Draft | Body`;
+      `TurnContext` dataclass with exactly the fields of design §4.2 (`space_id, principal,
+      turn_id, text, images, before_id, depth, profile, memory, history, knowledge, system,
+      message, model, vision_model, thinking, caps, tool_ctx, result, outcome, persisted,
+      superseded, pending_events, trace`); `Verdict(ok, severity, reason, replacement)`.
 - [ ] `plugin.py`: `Plugin` protocol (`id`, `version`, `stage`, `config_schema`,
-      `handles_money`, `run(ctx, config)`), `PluginRef(plugin, version, config)`.
-- [ ] `pipeline.py`: `Pipeline(stages: dict[Stage, list[tuple[Plugin, dict]]])` with
-      `async run(ctx)`: iterate stages in order; list stages run every plugin in order;
-      a `Verdict` with `block` sets `ctx.stopped` and `reply_override` and skips to
-      `persist`; every plugin appends `{stage, plugin, version, ms, outcome}` to
-      `ctx.trace`; a plugin exception is recorded and re-raised (the caller decides).
-      Single-owner stages (`resolve`, `model`, `run`, `render`) must have exactly one
-      entry — validated at construction.
-- [ ] `events.py`: `TurnEvent` dataclass + the typed names of §12.4; a
-      `LegacyAgentEventSink` that maps them to the frozen `agent.*` dicts.
-- [ ] Tests: stage order; block short-circuits; trace shape; single-owner enforcement;
-      exception recorded in trace.
-- [ ] Commit: `kernos: TurnContext, Plugin protocol, Pipeline runner, TurnEvent`
+      `handles_money`, `async run(ctx, config)`), `PluginRef(id, version, config)`.
+- [ ] `pipeline.py`: `Pipeline(stages)`; `async run(ctx)`: stages in order; list stages
+      run each plugin; a `block` verdict replaces `ctx.outcome` and skips to `persist`;
+      every plugin appends `{stage, plugin, version, ms, outcome}` to `ctx.trace`; an
+      exception is recorded then re-raised. Single-owner stages (`resolve, model, run,
+      render`) must have exactly one entry, checked at construction. `pending_events` are
+      **not** emitted by the pipeline; the caller flushes them after its lock.
+- [ ] `events.py`: `TurnEvent` + the §12.4 names incl. `message.republished`;
+      `LegacyAgentEventSink` mapping to the frozen `agent.*` dicts and the
+      `{"type":"message", …}` republish.
+- [ ] Tests: order; block short-circuit; trace shape; single-owner enforcement;
+      exception recorded; events not auto-flushed.
+- [ ] Commit: `kernos: TurnContext, Outcome, Plugin protocol, Pipeline runner, TurnEvent`
 
 ### Task 1.3: Registry
 
-**Files:** create `backend/kernos/registry/{__init__.py,registry.py}`; create
-`backend/tests/kernos/test_registry.py`.
+**Files:** create `backend/kernos/registry/registry.py`; tests `backend/tests/kernos/test_registry.py`.
 
-- [ ] `Registry.register(plugin)` (duplicate id+version is an error), `get(id, version=None)`
-      (latest when omitted), `list()`, `validate_config(id, version, config)` via
-      `jsonschema.Draft202012Validator`, `describe()` → `[{id, version, stage,
-      config_schema, handles_money}]` (the admin API's registry payload), and
+- [ ] `Registry.register(plugin)` — duplicate `id@version` with an identical schema hash
+      is idempotent; with a different hash it raises. `get(id, version)` — **version
+      required**. `list()`, `validate_config(...)` via `jsonschema.Draft202012Validator`
+      (error message carries the JSON-pointer path), `describe()`, `schema_hash(plugin)`,
       `load_entry_points(group="kernos.plugins")`.
-- [ ] `build_pipeline(registry, spec_pipeline: dict) -> Pipeline` — resolves
-      `{plugin, version, config}` triples, validates each config, raises a single
-      aggregated error naming every bad triple.
-- [ ] Tests incl. an invalid config rejected with the JSON-pointer path in the message.
-- [ ] Commit: `kernos: plugin registry with schema-validated pipeline construction`
+- [ ] `build_pipeline(registry, spec_pipeline)` — resolves `{id, version, config}` triples,
+      aggregates every validation error into one exception.
+- [ ] Commit: `kernos: plugin registry with mandatory versions and schema hashes`
 
-### Task 1.4: `Engine` protocol and `PiEngine`
+### Task 1.4: `Engine` protocol and `PiEngine` — the seam the fakes ignore
 
-**Files:** create `backend/kernos/engine/{base.py,pi/__init__.py,pi/bridge.py,pi/engine.py}`;
-modify `backend/app/pi_bridge.py` and `backend/app/agent.py` to thin re-exports.
+**Files:** create `backend/kernos/engine/{base.py,pi/bridge.py,pi/engine.py}`; modify
+`backend/app/pi_bridge.py`, `backend/app/agent.py`, `backend/app/tools.py` (`ToolContext`).
 
-- [ ] `base.py`: `EngineSpec` (system, skills, context_files, model, vision_model,
-      thinking, builtin_tools, max_tools, max_seconds, cwd, agent_dir, settings: dict,
-      extensions: list), `ToolSpec(name, description, schema)`, `Engine` protocol
-      `run(spec, message, images, tools, call_tool, emit) -> TurnResult`.
-- [ ] `pi/bridge.py`: **move** `app/pi_bridge.py` here unchanged except: the sidecar
-      entry and the key-env names become constructor parameters with today's values as
-      defaults; `get_bridge()` stays in `app.pi_bridge` as a thin wrapper so
-      `test_pi_bridge.py` and `pi_smoke.py` pass unedited.
-- [ ] `pi/engine.py`: `PiEngine(bridge)` implements `Engine.run` with the body of
-      today's `agent.run_turn` loop (`agent.*` forwarding, `tool_call` → `call_tool`,
-      `turn_done` hydration, the one-line log). `TurnResult`/`ToolInvocation` move to
-      `kernos/engine/base.py`; `app.agent` re-exports them (import path unchanged).
-- [ ] `app/agent.py`: `run_turn(...)` keeps its frozen signature and body shape but
-      builds an `EngineSpec` from `settings`/`prompt.py`/skill files exactly as today
-      and calls `PiEngine`. `_render_prompt`, `_read_skills`, `_read_context_files`
-      stay here for Task 1.7 to reuse.
-- [ ] Sidecar: `session.js` accepts optional `settings` (→ `SettingsManager.inMemory`)
-      and `extensions` (looked up in a new `extensions.js` registry; empty today),
-      both ignored when absent. Add tests in `test/session.test.js`.
-- [ ] Verify: `pytest -q` unchanged; `node --test` +N new, none failing.
-- [ ] Commit: `kernos: Engine protocol; PiEngine wraps the bridge and the turn loop`
+- [ ] `base.py`: `EngineSpec`, `ToolSpec`, `TurnResult`, `ToolInvocation` (with
+      `from_agent: str | None = None`), `Engine` protocol.
+- [ ] `pi/bridge.py`: move `app/pi_bridge.py` here with **constructor parameters** for
+      `sidecar_entry`, `key_env`, `pi_key_env`, and `child_env_defaults: dict` (what
+      `_child_env` used to read from `settings`). `app.pi_bridge` becomes a shim that
+      constructs it with today's values and keeps `get_bridge()`, `BridgeError`,
+      `SIDECAR_DIR`, `SIDECAR_ENTRY`, `KEY_ENV`, `PI_KEY_ENV` importable
+      (`test_pi_bridge.py`, `pi_smoke.py`, `main.py` import them).
+- [ ] `pi/engine.py`: `PiEngine(bridge)` — the loop body of today's `run_turn`
+      (`agent.*` forwarding, `tool_call` → `call_tool`, `turn_done` hydration). **No log
+      line here.**
+- [ ] `app/tools.py`: `ToolContext` gains `engine_spec: EngineSpec | None = None`,
+      `system_override: str | None = None`, `message_override: str | None = None`
+      (defaulted; every existing constructor call and fake is unaffected).
+- [ ] `app/agent.py`: `run_turn(...)` frozen signature. If `ctx.engine_spec` is set it is
+      used (with the overrides for `system`/`message`); otherwise the spec is built exactly
+      as today. Either way it calls `PiEngine` and logs the **one** `[agent] turn … done`
+      line. `TurnResult`/`ToolInvocation` re-exported from here.
+- [ ] Equivalence test: with `engine_spec=None`, the command handed to the bridge is
+      field-for-field what today's code builds (ids excluded, `today` frozen).
+- [ ] Sidecar: `session.js` accepts optional `settings` → `SettingsManager.inMemory` and
+      `extensions` → a new `extensions.js` registry (empty); ignored when absent; tests.
+- [ ] Verify: `pytest -q` 986 + new, nothing edited; `node --test` green. Benchmark where a
+      key exists; record the results file's commit hash here.
+- [ ] Commit: `kernos: Engine protocol; PiEngine behind run_turn via ToolContext.engine_spec`
+
+**PR 1a ends here.**
 
 ### Task 1.5: Host adapter protocols and chiatienan's implementations
 
 **Files:** create `backend/kernos/adapters/{protocols.py,memory.py}`; create
-`backend/app/hostadapters.py`; tests `backend/tests/kernos/test_adapters_inmemory.py`.
+`backend/app/hostadapters.py`; tests.
 
-- [ ] `protocols.py`: `HistorySource`, `MemoryStore`, `KnowledgeSource`, `EventSink`,
-      `MessageStore`, `ToolExecutor` exactly as §4.6.
-- [ ] `memory.py`: in-memory implementations of all six (for tests and the example host).
-- [ ] `app/hostadapters.py`: `RoomHistory` (wraps `chat.build_history`), `RoomMemory`
-      (wraps `memory.py`), `RoomKnowledge` (wraps `knowledge.snapshot`), `SseSink`
-      (wraps the `emit` coroutine + `LegacyAgentEventSink`), `RoomMessages`
-      (wraps `chat.post_message`). Pure delegation; no logic.
+- [ ] `protocols.py`: `HistorySource` (`render(space_id, *, bot_label, since_id, limit,
+      before_id)`), `MemoryStore`, `KnowledgeSource`, `EventSink`, `MessageStore`,
+      `CardStore`, `Completion`, `Clock`, `ToolExecutor` — as design §4.6.
+- [ ] `memory.py`: in-memory implementations of every protocol.
+- [ ] `app/hostadapters.py`: pure delegation to `chat.build_history`, `memory.py`,
+      `knowledge.snapshot`, the SSE `emit`, `chat.post_message`, `drafts.create_draft` /
+      `create_payment_draft`, `summarize.summarize_messages`, `clock.now_ict/today_ict`.
 - [ ] Commit: `kernos: host adapter protocols, in-memory adapters, chiatienan adapters`
 
 ### Task 1.6: Today's behaviour as plugins
 
-**Files:** create `backend/kernos/plugins/{gate.py,context.py,prompt.py,after.py}`
-(host-agnostic); create `backend/app/plugins/{gate.py,validate.py,render.py,persist.py}`
-(chiatienan-specific until Phase 3 moves them into packs); tests per plugin.
+**Files:** create `backend/kernos/plugins/{context.py,prompt.py}` (host-agnostic);
+create `backend/app/plugins/{prompt.py,run.py,render.py,validate.py,persist.py}`.
 
 Each plugin is a **move** of an existing block, with its comments. Where today's code
-reads `settings.*`, the plugin reads `config[...]` and the seeded profile (Task 1.7)
-supplies today's env values.
+reads `settings.*`, the plugin reads `config[...]`; the seeded profile supplies today's
+values.
 
-| Plugin id | Stage | Moved from |
-|---|---|---|
-| `kernos.context.memory` | context | `run_bot_turn`: `_maybe_rollover` + `memory.load_memory` (rollover itself is `after`; here only the load) |
-| `kernos.context.history` | context | `build_history(...)` call with watermark/limit |
-| `kernos.context.images` | context | `recent_images(...)` carry-over |
-| `kernos.prompt.template` | prompt | `prompt.build_system_prompt` → renders `spec.prompt.body` with the closed variable set; Phase 1's body is the *current string* with `{{sender.name}}`, `{{sender.member_id}}`, `{{today}}` substituted |
-| `kernos.prompt.sections` | prompt | `agent._render_prompt` (section headers from config) |
-| `kernos.after.rollover` | after | `_maybe_rollover` |
-| `kernos.after.turn_log` | after | the `[agent] turn … done` log line |
-| `app.gate.mention` | gate | `mentions_bot` / `is_clear_command` (`/clear` stays a code command) |
-| `app.validate.fabricated_commit` | validate | `chat.py:645-656` block, severity `block` |
-| `app.validate.unbacked_amounts` | validate | `chat.py:664-677`, severity `warn` |
-| `app.render.lunch` | render | the `_settlement_body … _random_pick_body` chain + `_empty_turn_body` |
-| `app.persist.drafts` | persist | the `propose_meal` / `propose_payment` draft branches, `post_message`, superseded/cancelled card republish |
+| Plugin id | Stage | Moved from | Note |
+|---|---|---|---|
+| `kernos.context.rollover` | context (first) | `_maybe_rollover` | via `Completion` + `MemoryStore` |
+| `kernos.context.memory` | context | `memory.load_memory` | |
+| `kernos.context.history` | context | `build_history(...)` | `bot_label` from `persona.handle` |
+| `kernos.context.images` | context | `recent_images(...)` carry-over | only when `ctx.images` is empty |
+| `kernos.prompt.sections` | prompt | `agent._render_prompt` | section headers from config |
+| `app.prompt.phoenix` | prompt | `prompt.build_system_prompt` | code in Phase 1 (finding 8) |
+| `kernos.model.passthrough` | model | — | the sidecar keeps routing text/vision |
+| `app.run.legacy` | run | — | sets `tool_ctx.engine_spec` + overrides, then calls **`app.agent.run_turn` looked up at call time** |
+| `app.render.lunch` | render | the `_settlement_body … _random_pick_body` chain, `_empty_turn_body`, and the *decision* between meal draft / payment draft / body | yields `Draft` or `Body(claimed_by_pack=…)` |
+| `app.validate.fabricated_commit` | validate | `chat.py:645-656` | `block`; needs `_meal_exists` (app code) |
+| `app.validate.unbacked_amounts` | validate | `chat.py:664-677` | `warn` |
+| `app.persist.cards` | persist | `drafts.create_*`, `post_message`, superseded + cancelled collection | fills `persisted`, `superseded`, `pending_events` |
 
-- [ ] Implement each; unit-test each against the same fixtures the `test_chat*.py`
-      files use today (import their helpers, do not copy them).
-- [ ] Commit per group: `kernos: context/prompt/after plugins` ·
-      `app: gate/validate/render/persist plugins`
+- [ ] Implement each with unit tests reusing `test_chat*.py` helpers (import, do not copy).
+- [ ] Commit per group.
 
 ### Task 1.7: Seeded default profile and the resolver
 
 **Files:** create `backend/kernos/content/{spec.py,resolve.py}`; create
-`backend/app/default_profile.py`; tests `backend/tests/kernos/test_spec.py`,
-`backend/tests/test_default_profile.py`.
+`backend/app/default_profile.py`; tests.
 
-- [ ] `spec.py`: `ProfileSpec` (pydantic) with the §5.1 shape (persona, prompt, rules,
-      skills, templates, models, retry, caps, builtin_tools, memory, settings, pipeline,
-      tool_packs, validation, eval). `to_engine_spec(...)` produces the `EngineSpec`.
-- [ ] `resolve.py`: `Resolver` protocol `resolve(space_id) -> ProfileSpec`; Phase 1's
-      `StaticResolver(spec)`.
-- [ ] `app/default_profile.py`: `build_default_spec(settings)` reads `prompt.py`'s
-      string (turned into a template), the five `SKILL.md`, `money-safety.mdc`, and
-      every `PI_*`/memory env value into a `ProfileSpec` whose `pipeline` lists the
-      Task 1.6 plugins in today's order.
-- [ ] **Equivalence test:** `to_engine_spec(build_default_spec(settings))` plus the
-      rendered prompt/message equals, field for field, the `run` command
-      `app.agent.run_turn` builds today for the same inputs (assert on the dict, not
-      on a golden file, so a settings change fails loudly).
-- [ ] Commit: `kernos: ProfileSpec, StaticResolver, and chiatienan's seeded default profile`
+- [ ] `spec.py`: `ProfileSpec` (pydantic) per design §5.1; `to_engine_spec(...)`.
+- [ ] `resolve.py`: `Resolver` protocol; `StaticResolver(spec)`.
+- [ ] `app/default_profile.py`: `build_default_spec(settings)` from `prompt.py`, the five
+      `SKILL.md`, `money-safety.mdc` (tagged `money`), every `PI_*`/memory env value, and
+      the Task 1.6 plugin list in today's order with today's values.
+- [ ] Equivalence test: `to_engine_spec(build_default_spec(settings))` equals the
+      `engine_spec=None` command from Task 1.4 (ids excluded, `today` frozen).
+- [ ] Commit: `kernos: ProfileSpec, StaticResolver, chiatienan's seeded default profile`
+
+**PR 1b ends here.**
 
 ### Task 1.8: `run_bot_turn` becomes the pipeline
 
-**Files:** modify `backend/app/chat.py`; create `backend/app/kernel.py` (composition root).
+**Files:** modify `backend/app/chat.py`; create `backend/app/kernel.py`.
 
-- [ ] `app/kernel.py`: builds the `Registry` (registers Task 1.6 plugins), the
-      `StaticResolver(build_default_spec(settings))`, the `PiEngine`, the host adapters,
-      and exposes `get_pipeline(spec)`.
-- [ ] `chat.run_bot_turn(...)`: same signature; body becomes: build `TurnContext`,
-      `spec = resolver.resolve(room_id)`, `await pipeline.run(ctx)` under `_agent_lock`,
-      return `ctx.persisted_message`. The `run` stage plugin calls
-      **`app.agent.run_turn` looked up at call time** (see Global constraints).
-- [ ] Verify: `pytest -q` — **all 986 pass (1 skipped) unedited**. Any edit to an existing test is
-      a behaviour change and must be justified in the commit message, or reverted.
-- [ ] Verify: `node --test` green; `npm test` green (untouched).
+- [ ] `app/kernel.py`: composition root — registry with the Task 1.6 plugins,
+      `StaticResolver(build_default_spec(settings))`, `PiEngine`, adapters, `get_pipeline(spec)`.
+- [ ] `chat.run_bot_turn(...)`: same signature; builds `TurnContext`, resolves, runs the
+      pipeline under `_agent_lock`, flushes `pending_events` **after** the lock (as
+      `chat.py:697-699` does today), returns `ctx.persisted`.
+- [ ] Verify: `pytest -q` — every pre-existing test passes **unedited**;
+      `git diff --name-only <base> -- backend/tests | grep -v 'tests/kernos/\|test_layering\|golden/turn_fixtures\|test_run_bot_turn_golden'`
+      prints nothing. The Task 1.0 golden test passes against the pipeline.
+- [ ] Verify: `node --test`; `npm test` untouched.
 - [ ] Commit: `chat: run the @phoenix turn through the kernos pipeline (no behaviour change)`
 
-### Task 1.9: The resolved-profile endpoint and the proof
+### Task 1.9: The resolved-profile endpoint
 
-**Files:** modify `backend/app/main.py`; tests `backend/tests/test_admin_resolved.py`.
-
-- [ ] `GET /api/admin/rooms/{room_id}/resolved` (guarded by `require_admin`): returns
-      `{spec, engine_spec, pipeline: [{stage, plugin, version, config}], trace_sample}`.
-- [ ] Test: the `engine_spec` for a seeded room equals the command Task 1.7's
-      equivalence test asserts.
-- [ ] Benchmark (where a key exists): `python -m bench.run --corpus typical --repeat 3`
-      and `bench.report --compare` against `pi-typical-r3.json`; record the result in
-      this file under "Phase 1 — state of play".
-- [ ] Commit: `admin: expose the resolved profile; record the Phase 1 benchmark`
+- [ ] `GET /api/admin/rooms/{room_id}/resolved` (guarded by `require_admin`): `{spec,
+      engine_spec, pipeline, trace_sample}`; test equals the Task 1.7 command.
+- [ ] Commit: `admin: expose the resolved profile`
 
 ### Task 1.10: Docs
 
-- [ ] README "Architecture" and the backend-modules table: add `kernos/`, note that
-      `agent.py`/`pi_bridge.py` are shims over `kernos.engine.pi`.
-- [ ] `TODO.md`: point the export/import item at the plan.
+- [ ] README architecture + module table; `TODO.md` pointer. Record the Phase 1 benchmark
+      run (commit hash of the results file, or "not run here").
 - [ ] Commit: `docs: kernos in the README`
+
+**PR 1c ends here.**
 
 **Phase 1 — state of play:** _(filled as tasks complete)_
 
@@ -265,8 +296,10 @@ supplies today's env values.
 - **2.2** Sources CRUD with etags (the `knowledge.py` pattern); draft version from sources;
   snapshot-on-publish; `DbResolver` (space → agent → published version, cached by
   version id); `StaticResolver` remains for hosts without a DB.
-- **2.3** Publish gates 1, 2, 3, 5 (§9); `override_reason` in the audit log;
-  `bench.probe_models` wrapped as `kernos.content.probe`.
+- **2.3** Publish gates 1, 2, 3, 5 (§9); `override_reason` in the audit log; the
+  probe is a host-provided `ModelProbe` (chiatienan's wraps `bench.probe_models`,
+  keeping `bench → app` out of `kernos`); `handles_money` is read from plugins and from
+  the seeded profile's metadata until Phase 3 adds packs.
 - **2.4** Mountable admin router `kernos.api.admin_router(os)` with the §5.2 routes,
   `GET …/registry`, `GET …/plugins/{id}/schema`; chiatienan mounts it under `/api/admin`
   behind `require_admin`.
@@ -297,7 +330,8 @@ supplies today's env values.
 - **4.3** Import `bench.corpus` typical/week/meals as the lunch suite, ids preserved;
   rubric as content.
 - **4.4** Gate 4; `eval_capture` plugin.
-- **Proof:** the imported suite reproduces `pi-typical-r3.json` verdicts.
+- **Proof:** `bench.regrade` of the stored `pi-typical-r3.json` records through the
+  grader plugins yields identical verdicts (no model calls; deterministic).
 
 ## Phase 5 — Data plane
 

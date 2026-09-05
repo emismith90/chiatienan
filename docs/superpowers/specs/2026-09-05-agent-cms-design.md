@@ -1,7 +1,7 @@
 # Agent OS — a portable framework for Pi-harness agents, with the CMS as its configuration plane
 
-**Date:** 2026-09-05 · **Status:** draft v3 — reframed as a framework after operator
-feedback; §11 records decisions taken and open
+**Date:** 2026-09-05 · **Status:** draft v3.1 — reframed as a framework after operator feedback, then revised
+after an independent review (plan, Task 0.1); §11 records decisions taken and open
 **Implementation plan:** [`../plans/2026-09-05-agent-os-framework.md`](../plans/2026-09-05-agent-os-framework.md)
 **Builds on:** [`2026-08-12-cursor-to-pi-harness-design.md`](2026-08-12-cursor-to-pi-harness-design.md)
 (the sidecar boundary) · `TODO.md` "BIG: agent engine export/import"
@@ -80,6 +80,15 @@ content type exists with no CMS change — the same mechanism as custom resource
 definitions in Kubernetes or code-first content types in a .NET CMS. Only the rich-text
 types are hand-designed: prompt, rule, skill, prompt template, rubric. Rule of thumb:
 one content type per component, never one per knob.
+
+Three things the rule does not give for free, so they are designed explicitly: **cross-
+references** between content items (a pipeline entry naming a rule, a suite naming cases)
+are validated at publish against the same version snapshot, never by foreign key alone;
+**schema evolution** is a new plugin version (§4.3), and a published spec keeps the old
+one until republished — there is no in-place migration of published specs; and
+**conditionals in prompt templates** ("say the sender's id only when known") are a
+syntax decision the content plane makes in Phase 2, so Phase 1 keeps the persona block
+as code.
 
 ### 0.3 Boot layer and reflexivity
 
@@ -289,32 +298,43 @@ own extension events are the injection points.
 ```
 Python kernel (one turn)                          Node sidecar (inside the Pi run)
 ──────────────────────────────────────────         ─────────────────────────────────────
- 1 resolve   room → Agent → ProfileVersion          before_agent_start   final prompt/message tweak
- 2 gate      may this message start a turn?         tool_call            allow / block / rewrite args
- 3 context   memory · history · images · knowledge  tool_result          patch / annotate result
- 4 prompt    render system + message from content   before_provider_*    headers, request body
- 5 model     text vs vision · thinking · caps        agent_end            stats → telemetry
- 6 run       sidecar turn; per tool call ⤵
-      6a validate_args   JSON Schema + ValidationRules(scope=tool_args)
-      6b execute         the pack's tool body
-      6c validate_result ValidationRules(scope=tool_result)
- 7 validate  reply-level rules (moneyguard, narration, language)
- 8 render    body + attachments from structured results   ← exactly one pack owns this
- 9 persist   messages, drafts, superseded cards, events
-10 after     rollover · eval capture · telemetry · sub-agent bookkeeping
+ 0 gate      host-invoked BEFORE a turn exists:      before_agent_start   final prompt/message tweak
+             "does this message start a turn?"       tool_call            allow / block / rewrite args
+ 1 resolve   space → Agent → ProfileVersion          tool_result          patch / annotate result
+ 2 context   rollover · memory · history · images ·  before_provider_*    headers, request body
+             knowledge  (rollover FIRST — see note)   agent_end            stats → telemetry
+ 3 prompt    render system + message from content
+ 4 model     text vs vision · thinking · caps
+ 5 run       engine turn; per tool call ⤵
+      5a validate_args   JSON Schema + ValidationRules(scope=tool_args)
+      5b execute         the pack's tool body
+      5c validate_result ValidationRules(scope=tool_result)
+ 6 render    the pack decides the OUTCOME: a draft card, a typed body, or free prose
+ 7 validate  reply-level rules — only on free prose (outcome not claimed by a pack)
+ 8 persist   write the card or message; collect superseded/cancelled cards
+ 9 after     eval capture · telemetry · sub-agent bookkeeping
+   (events collected during 8 are emitted AFTER the writer lock is released)
 ```
 
-Stages 1, 5, 6 and 8 are **single-owner** (the kernel, the kernel, the engine, the
-pack). Stages 2, 3, 4, 7, 9, 10 and 6a/6c are **ordered lists of plugins**; the
+Three orderings are load-bearing and were fixed by review, not taste: **rollover runs
+first in `context`**, because the turn that ages messages out must see the new summary
+and a history window starting at the advanced watermark (today's `chat.py:556`);
+**`render` precedes `validate`**, because reply validators only ever ran on the free-prose
+fallback and would otherwise warn on every settlement body and could block a settle turn
+whose prose says "Đã ghi"; and **`gate` is not a pipeline stage** but a kernel helper the
+host calls before creating a turn (`/clear` never enters a turn today; `main.py:626-655`).
+
+Stages 1, 4, 5 and 6 are **single-owner** (the kernel, the kernel, the engine, the
+pack). Stages 2, 3, 7, 8, 9 and 5a/5c are **ordered lists of plugins**; the
 profile decides which and in what order. Today's behaviour is the pre-built set:
 
 | Stage | Pre-built plugin (today's code, relocated) | Config it takes |
 |---|---|---|
-| gate | `mention_gate` (`chat.mentions_bot`), `slash_command` (`/clear`, prompt templates) | handle, aliases |
-| context | `long_term_memory` (`memory.load_memory` + `_maybe_rollover`), `recent_history` (`build_history`), `image_lookback` (`recent_images`), `knowledge` (places/observations for the suggest path) | window weeks, max messages, lookback, vision budget |
+| gate (helper) | `mention_gate` (`chat.mentions_bot`), `replies_to_bot_question`, `slash_command` (`/clear`, prompt templates) | handle, aliases |
+| context | `rollover` (`_maybe_rollover`, first), `long_term_memory` (`memory.load_memory`), `recent_history` (`build_history`), `image_lookback` (`recent_images`), `knowledge` (places/observations for the suggest path) | window weeks, max messages, lookback, vision budget |
 | prompt | `template_prompt` (renders `prompt.body` + `append`), `sections_message` (`_render_prompt`) | section headers |
-| validate | `unbacked_amounts`, `fabricated_commit`, `strip_narration`¹ | severity: warn / block, replacement body |
-| after | `rollover_summary`, `turn_log_line`, `eval_capture` (records the turn as a candidate eval case) | summary prompt, sampling rate |
+| validate | `unbacked_amounts`, `fabricated_commit` (needs a ledger lookup — a host/pack hook), `strip_narration`¹ | severity: warn / block, replacement body |
+| after | `eval_capture` (records the turn as a candidate eval case), telemetry | sampling rate |
 
 ¹ `strip_narration` runs in the sidecar today (`turn.js`); it stays there as a sidecar plugin.
 Listing it here is about *configuration*, not location.
@@ -329,16 +349,21 @@ class Plugin(Protocol):
     stage: Stage                     # Literal["gate","context","prompt","validate_args", …]
     config_schema: dict              # JSON Schema; the CMS validates config against it
     handles_money: bool = False      # §9 governance
-    def run(self, ctx: TurnContext, config: dict) -> TurnContext | Verdict: ...
+    async def run(self, ctx: TurnContext, config: dict) -> TurnContext | Verdict: ...
 ```
 
-`TurnContext` is one mutable dataclass carried through the stages — room, sender,
-message, images, resolved profile, the `memory`/`history`/`knowledge` texts, the
-rendered `system`/`message`, the chosen model, the `TurnResult` after stage 6, the
-rendered `body`/`attachments`, and an append-only `trace` of which plugin did what
+`TurnContext` is one mutable dataclass carried through the stages — `space_id`,
+`principal`, `turn_id`, `text`, `images`, `before_id`, `depth`, the resolved `profile`, the
+`memory`/`history`/`knowledge` texts, the rendered `system`/`message`, the chosen model,
+`tool_ctx` (host-owned, opaque to the kernel), the `TurnResult` after stage 5, the
+`outcome` (`Draft(kind, payload)` | `Body(text, attachments, claimed_by_pack)`),
+`persisted` (what stage 8 wrote), `superseded` (cards to republish), `pending_events`
+(emitted after the lock), and an append-only `trace` of which plugin did what
 (this trace is what `GET /api/admin/rooms/{id}/turns/{turn_id}` shows, and what eval
-capture stores). A `validate*` plugin returns a `Verdict(ok, severity, reason, patch)`
-instead of a context; `block` short-circuits to a configured reply, `warn` logs.
+capture stores). A `validate*` plugin returns a `Verdict(ok, severity: "warn"|"block", reason, replacement:
+Body | None)` instead of a context; `block` replaces the outcome with `replacement`, `warn`
+logs and records. Reply validators receive `ctx.outcome`, `ctx.history` and `ctx.text` and
+no-op when `outcome.claimed_by_pack` is true.
 
 A **tool pack** is a plugin with a wider surface:
 
@@ -368,9 +393,11 @@ passes the resolved list as `extensionFactories`. Same shape, other language.
 Plugins live **on disk, in the repo or in installed Python packages**, and register
 through an entry-point group (`chiatienan.plugins`) plus a module-level `PLUGIN`
 object. On startup the engine builds the registry; `GET /api/admin/registry` lists
-every plugin with its stage, config schema and `handles_money`. A profile version
-references plugins by id; publishing fails if an id is not in the registry or its
-config does not validate. A plugin id is a contract: changing behaviour means a new
+every plugin with its stage, config schema and `handles_money`. A published profile
+version references plugins by **id and version, both mandatory**; publishing fails if the
+pair is not in the registry or its config does not validate. The registry also stores a
+hash of each plugin's `config_schema` and refuses to load a plugin whose `id@version` is
+known but whose schema hash differs — a schema change is a new version, always. A plugin id is a contract: changing behaviour means a new
 id (`…long_term@2`), and old published versions keep running the old one until they
 are republished — the same snapshot discipline as skill bodies.
 
@@ -423,13 +450,27 @@ class KnowledgeSource(Protocol):             # optional; what `knowledge.py` pro
     def snapshot(self, space_id) -> dict: ...
 class EventSink(Protocol):                   # turn events → SSE / AG-UI / logs
     async def emit(self, event: TurnEvent) -> None: ...
-class MessageStore(Protocol):                # stage 9 persistence of the reply and cards
+class MessageStore(Protocol):                # stage 8 persistence of the reply
     def post(self, space_id, *, author, kind, body, attachments) -> MessageRef: ...
+class CardStore(Protocol):                   # stage 8: draft cards with supersede semantics
+    def create(self, space_id, kind, payload) -> tuple[MessageRef, list[MessageRef]]: ...
+    def get(self, space_id, card_id) -> MessageRef | None: ...
+class Completion(Protocol):                  # one-shot text→text (the summariser); not a turn
+    async def complete(self, prompt: str, *, spec: EngineSpec) -> str: ...
+class Clock(Protocol):                       # today/now in the host's zone; the bench freezes it
+    def now(self) -> datetime; def today(self) -> date
 ```
 
+`HistorySource.render` takes the bot's display label as a parameter (`bot_label`), because
+the persona name is content and a host adapter must not bake it in (today's
+`chat.py:229` writes `phoenix:`). Busy/typing markers (`RoomHub.mark_busy`,
+`bot.typing`/`bot.done`) stay host-side around the kernel call and are not adapters.
+
 chiatienan implements each with what it has (`build_history`, `memory.py`,
-`knowledge.py`, `RoomHub`, `chat.post_message`). A new host implements the same six
-interfaces and nothing else to run an agent. The framework ships an in-memory
+`knowledge.py`, `RoomHub`, `chat.post_message`, `drafts.create_*`,
+`summarize.summarize_messages`, `clock.py`). A new host implements these nine interfaces
+and nothing else to run an agent; `Completion` and `CardStore` have kernel defaults
+(`Engine.complete`, no cards) so a host without drafts implements seven. The framework ships an in-memory
 implementation of every adapter for tests and for the minimal example host (§12.3).
 
 ## 5. The content plane (the CMS)
@@ -564,9 +605,19 @@ are. So delegation is **a generated tool and a nested pipeline run**:
   budget and the sub-agent's own (`max_tools`, `max_seconds`). `max_depth` on the
   agent stops recursion; a sub-agent's `delegates_to` is honoured only within it.
 - The tool returns `{text, results}` — the sub-agent's final text **and** its
-  structured tool results. The manager's model sees the text. The engine merges
-  `results` into the manager's `TurnResult.tools` so the pack's `render` and the
-  reply validators see every number a tool produced, whoever called it.
+  structured tool results. The manager's model sees the text. The kernel records each
+  sub-agent tool invocation into the manager's `TurnResult.tools` **tagged
+  `from_agent=<sub>`**, so the pack's `render` and the reply validators see every number
+  a tool produced, whoever called it.
+- **The sub-agent's `text` is never "backed".** `moneyguard.backed_amounts` counts numbers
+  in every tool's args *and results*; an `ask_*` result that carried prose would launder
+  every hallucinated number in it into an allowed amount. So the `ask_*` invocation's
+  recorded `result` holds only `{results}`; `text` travels to the model on the wire but
+  is excluded from the record the guard reads.
+- **Drafts are read from the manager's own invocations only.** `persist.drafts` (and
+  `TurnResult.last_result`/`all_results` when asked for draft-producing tools) consider
+  invocations with `from_agent is None`; a sub-agent's `propose_*` result is data for the
+  manager, never a card.
 
 That last point is D3 applied across agents. A sub-agent's prose is a source of
 "unbacked" numbers exactly like the manager's, and the same `unbacked_amounts`
@@ -615,7 +666,7 @@ That is a **domain library**, `ledger_core`, that both packs import. Extracting 
 most of Phase 3's work and is what makes the pack interface honest — a pack is what a
 business *adds* to the domain, and the domain is what two businesses *share*.
 
-### 7.4 What poker forces in the kernel and the host — the real deliverable of Phase 6
+### 7.4 What poker forces in the kernel and the host — done in Phase 3, proven by Phase 6
 
 1. `drafts.py` stops knowing `expense_draft` and `payment_draft` by name; a draft
    carries `kind`, and `commit_any` dispatches to the pack's `DraftKind.commit`.
@@ -627,7 +678,7 @@ business *adds* to the domain, and the domain is what two businesses *share*.
 4. The eval world builder takes fixture steps from packs.
 
 Each of those is a refactor with a byte-identical lunch path and the benchmark as the
-oracle, which is why they are scheduled *before* the poker pack exists.
+oracle, which is why they are scheduled in Phase 3, *before* the poker pack exists.
 
 ## 8. AI-ready: an agent can drive the CMS
 
@@ -662,7 +713,7 @@ operable from inside a turn with no second integration:
 | `cms_run_eval(suite, version)` | run a suite against a draft; returns verdicts and cost | `cms.eval` |
 | `cms_propose_publish(version, rationale)` | opens a **change proposal** for a human | `cms.draft` |
 | `cms_publish(version)` | publish directly — only within the *self-change scope* (§8.3) and only after gates | `cms.publish` |
-| `cms_add_eval_case(turn_id, expect, tags)` | turn a real turn (usually a failure it just saw) into a `review: true` regression case | `cms.eval` |
+| `cms_add_eval_case(turn_id, expect, tags)` | turn a real turn (usually a failure it just saw) into a `review: true` regression case — **gate 4 runs `review: false` cases only**, so an agent cannot seed the suite that judges it | `cms.eval` |
 | `cms_log(level, message, data)` | write a structured line into the room's turn trace and the app log | `cms.read` |
 
 The pack is `handles_money: false` and contains no arithmetic; it is HTTP-free
@@ -682,8 +733,10 @@ Permission is per **agent**, not per room, because it is the agent that acts:
 
 Inside `self_change_scope` an agent with `cms.publish` may publish **its own** profile
 after the gates pass. Outside it — `builtin_tools`, `models`, `tool_packs`,
-`pipeline`, any validation rule with `severity: block`, any other agent's profile —
-the most an agent can ever do is open a proposal. The scope list is content, so the
+`pipeline`, `eval.*` (suites and gate thresholds), any validation rule with
+`severity: block`, any rule tagged `money`, any other agent's profile — the most an agent
+can ever do is open a proposal. Rules carry `tags[]`; `money-safety` is tagged `money`
+from the seeded profile onward. The scope list is content, so the
 operator can widen it per agent; it can never include the blacklist above, which is
 enforced in code. Every agent-made change carries `actor: agent:<slug>` in the audit
 log and the rationale the agent gave.
@@ -706,8 +759,10 @@ Two loops, both bounded:
 - **In-turn**: the agent may call `cms_draft_change` → `cms_run_eval` → adjust, up to
   `max_self_iterations` (default 3) and a token/cost budget per turn, both content.
   Each eval run costs real model calls; the budget is what stops "one more try".
-- **Scheduled**: a *steward* agent (role `sub`, or a dedicated manager for an ops
-  room) runs on a schedule with a fixed brief: read the last N turns' traces, list
+- **Scheduled**: a *steward* agent runs on a schedule with a fixed brief. Because an
+  agent may only self-publish its **own** profile, a steward that reviews *other* agents
+  can only open proposals; the auto-publish path exists only for an agent reviewing
+  itself. The brief: read the last N turns' traces, list
   moneyguard warnings, `capped` turns and eval failures, propose at most one change
   with a rationale and an eval run attached. This is the `eval_capture` plugin's
   natural consumer, and it is how the prod corpus finally gets built with a reviewer
@@ -733,7 +788,7 @@ change_proposals  id, agent_id, profile_version_id, rationale, diff JSON, eval_r
 turn_traces       id, room_id, turn_id, agent_id, started, finished, trace JSON, summary JSON
 ```
 
-Phase **9** (after 2, 4 and 7): the `os_admin` pack, capabilities, proposals and the
+Phase **8** (after 2, 4 and 7): the `os_admin` pack, capabilities, proposals and the
 proposal card, the two loops, and a steward brief as a shipped prompt template.
 
 ## 9. Governance — what publishing checks
@@ -748,15 +803,17 @@ name header until that changes. Publishing a version runs, in order:
    `bash`/`write`/`edit` in `builtin_tools` requires an `override_reason` in the
    publish call, written to the audit log.
 3. **Model probe gate** — `models.text` and `models.vision` must have a passing
-   `probe` against the enabled packs' real schemas within N days.
+   `probe` against the enabled packs' real schemas within N days. The probe is a host-
+   or pack-provided `ModelProbe` (chiatienan's wraps `bench.probe_models`); the kernel
+   only stores and checks the result.
 4. **Eval gate** — the suites named in `spec.eval.suites` run against the draft;
    publish is refused if a money grader (`tool_selection`, `ledger_state`) drops
    below `spec.eval.gate`. Prose graders report, never block.
 5. **Reflexivity** — an agent-initiated publish is refused if the diff touches any
-   gate threshold, any `severity: block` rule, the plugin blacklist, `builtin_tools`,
-   `models`, `tool_packs` or `pipeline` (§0.3); those are proposals only, whatever the
-   agent's capabilities say. The eval in gate 4 runs the *candidate* profile against
-   the *current* suite.
+   gate threshold, `eval.*`, any `severity: block` rule, any rule tagged `money`, the
+   plugin blacklist, `builtin_tools`, `models`, `tool_packs` or `pipeline` (§0.3); those
+   are proposals only, whatever the agent's capabilities say. The eval in gate 4 runs
+   the *candidate* profile against the *current* suite, **`review: false` cases only**.
 6. **Rollback** — `published_version_id` moves; the previous version stays
    publishable so rollback is one call.
 
@@ -863,8 +920,10 @@ next application. It is the acceptance test of Phase 9.
 
 The kernel emits typed `TurnEvent`s: `run.started`, `text.delta`, `tool.start`,
 `tool.result`, `run.finished`, `run.error`, `sub.started`, `sub.finished`,
-`validation.warned`, `validation.blocked`. chiatienan's `EventSink` maps them to the
-frozen `agent.*` SSE names its UI consumes. The framework also ships an
+`validation.warned`, `validation.blocked`, `message.republished` (a superseded or
+cancelled card whose buttons must disappear). chiatienan's `EventSink` maps the first
+group to the frozen `agent.*` SSE names and the last to its `{"type":"message", …}`
+republish, both after the writer lock is released as today. The framework also ships an
 `agui.EventSink` that maps the same events to AG-UI's `RUN_STARTED`,
 `TEXT_MESSAGE_CONTENT`, `TOOL_CALL_START/ARGS/END`, `RUN_FINISHED`, `RUN_ERROR`, so a
 new host gets an AG-UI-compatible stream by choosing that sink.
