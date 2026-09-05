@@ -18,7 +18,9 @@
 
 - **Randomizer** — randomly pick 1 person from the group (e.g. who pays / who fetches lunch).
 
-- **BIG: agent engine export/import**
+- **BIG: agent engine export/import** — design drafted in
+  `docs/superpowers/specs/2026-09-05-agent-cms-design.md` (headless CMS for the Pi
+  harness; export/import as a Pi package, §6).
   - Define mounting point vs skeleton.
   - What to export.
   - Import flow, with sanitize via separate import workflow (installation agent).
