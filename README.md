@@ -143,6 +143,14 @@ schema-validated document type (JSON Schema in the sidecar-safe subset), documen
 room under `/api/admin/spaces/{room_id}/collections/{slug}/documents`, and a profile that
 enables the `collections` pack gets `{slug}_find` / `{slug}_upsert` / `{slug}_delete` tools
 generated from the definition (`backend/kernos/data/`).
+Agents: a business has one default manager agent (the one an unbound room runs) and may add
+`sub` agents (`POST /api/admin/agents`, `role: "sub"`, an optional `description`); a manager
+whose `delegates_to` lists sub ids gets an `ask_<sub_slug>(task)` tool per sub, which runs
+the sub's profile as a nested turn in the same room within the manager's remaining time and
+tool budget and hands back its text and structured tool results (`backend/kernos/agents.py`).
+The sub's results back the manager's numbers, its text never does, and only the manager's
+own `propose_*` calls make cards. The seeded agents delegate to nobody, so a room behaves
+exactly as before until an admin adds a sub.
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 

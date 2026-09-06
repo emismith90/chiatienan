@@ -642,40 +642,68 @@ name people by key against a bank-free member snapshot and record only the pack'
 
 Pi has no sub-agent facility (`docs/usage.md`, confirmed by the inventory), and the
 Pi design already decided orchestration lives in Python where tools and validation
-are. So delegation is **a generated tool and a nested pipeline run**:
+are. So delegation is **a generated tool and a nested pipeline run**. _As built (Phase
+7, plan Task 7.1; `backend/kernos/agents.py`, `app.kernel.Kernel.run_sub`):_
 
-- For each `delegates_to` entry the engine adds a tool `ask_<sub-slug>(task: string)`
-  to the manager's tool list, with the sub-agent's `description` from its profile.
-- Executing it runs stages 1–8 for the sub-agent in the **same room** with the same
-  `ToolContext`, `depth+1`, and caps that are the *minimum* of the manager's remaining
-  budget and the sub-agent's own (`max_tools`, `max_seconds`). `max_depth` on the
-  agent stops recursion; a sub-agent's `delegates_to` is honoured only within it.
-- The tool returns `{text, results}` — the sub-agent's final text **and** its
-  structured tool results. The manager's model sees the text. The kernel records each
-  sub-agent tool invocation into the manager's `TurnResult.tools` **tagged
-  `from_agent=<sub>`**, so the pack's `render` and the reply validators see every number
-  a tool produced, whoever called it.
+- Delegation is a kernos pack, `kernos.agents.DelegationPack` (id `delegation`,
+  `handles_money: false`, no draft kinds), that the run plugin enables for a turn whose
+  agent has a non-empty `delegates_to` (agent ids naming `sub` agents of the same
+  business — the store refuses anything else, a bound or default sub, and self). For
+  each sub it generates `ask_<sub_slug>(task: string)`; the description is the sub's
+  `name` and `kn_agents.description`, plus the rule that the sub's proposals are data
+  and the manager must call `propose_*` itself for a card.
+- Executing it runs the sub's published profile as a nested pipeline `context →
+  validate` (`Pipeline.run(ctx, through=Stage.validate)`: no `persist`, no `after`) in the
+  **same space**, for the same principal, with `text=task`, `depth+1`, a fresh tool
+  context for the sub, and caps that are the *minimum* of the sub's own and the
+  manager's remaining budget: `max_seconds − elapsed − 15 s` (the pack's margin, so the
+  manager can still answer after the sub returns) and `max_tools − calls made`. Below a
+  5 s floor the tool refuses without running (`no time budget left to delegate`). The
+  nested run never takes the host's agent lock (the manager's turn holds it) and
+  `Rollover` does nothing at `depth > 0`. The **root** agent's `max_depth` bounds the
+  tree: `ask_*` tools exist while `depth + 1 < max_depth` (default 2: the manager
+  delegates, its subs do not); cycles in `delegates_to` are legal and end there.
+- The tool hands the model `{ok, text, results, capped}` — the sub's **outcome** text (a
+  pack body such as a settlement when its render produced one, the validators'
+  replacement when they blocked it, else its prose) and the structured results of every
+  tool it called. The kernel merges each sub tool invocation into the manager's
+  `TurnResult.tools` **tagged `from_agent=<sub>`**, in the order things happened, so the
+  reply validators see every number a tool produced, whoever called it.
 - **The sub-agent's `text` is never "backed".** `moneyguard.backed_amounts` counts numbers
   in every tool's args *and results*; an `ask_*` result that carried prose would launder
-  every hallucinated number in it into an allowed amount. So the `ask_*` invocation's
-  recorded `result` holds only `{results}`; `text` travels to the model on the wire but
-  is excluded from the record the guard reads.
-- **Drafts are read from the manager's own invocations only.** `persist.drafts` (and
-  `TurnResult.last_result`/`all_results` when asked for draft-producing tools) consider
-  invocations with `from_agent is None`; a sub-agent's `propose_*` result is data for the
-  manager, never a card.
+  every hallucinated number in it into an allowed amount. So the recorded invocation is
+  `{ok, agent, results}`: the executor contract is a payload key `_record` — `PiEngine`
+  records that value and sends the payload to the model without it.
+- **Cards come from the manager's own invocations only.** `TurnResult.last_result` /
+  `all_results` read invocations with `from_agent is None` unless asked
+  (`include_sub=True`); the render stage therefore never turns a sub's `propose_*` into a
+  card, and `FabricatedCommit` admits own invocations only as commit evidence — "Đã ghi
+  #N" backed by a sub's proposal is a forgery. `persist.cards` republishes over the union,
+  so a sub's `cancel_draft` (an immediate write, no card) still retires the card it
+  cancelled. _Deviation from the first draft of this section:_ render is own-only for
+  every tool, not only draft-producing ones — a sub's `settle_period` is data the manager
+  reports in its prose, not this turn's settlement card.
 
 That last point is D3 applied across agents. A sub-agent's prose is a source of
 "unbacked" numbers exactly like the manager's, and the same `unbacked_amounts`
-validator checks the final body against the *union* of tool results. What a
-sub-agent may not do is `propose_*` a draft on the manager's behalf silently: draft
-creation happens in the manager's `post_turn`, from structured results, so a card is
-always attributable to a tool call in the trace.
+validator checks the final body against the *union* of tool results — while the sub's own
+profile validators ran on its outcome inside the nested run (their verdicts join the
+manager's trace with `span`). What a sub-agent may not do is `propose_*` a draft on the
+manager's behalf silently: a card is always attributable to one of the manager's own
+tool calls in the trace.
 
-Sub-agent turns are recorded in the trace as nested spans and shown in the room's
-live timeline as child events (`agent.sub.started/finished` under the parent
-`turn_id`) — additive to the frozen `agent.*` set, so the existing UI ignores them
-and an AG-UI mapping can nest them.
+The sub's turn is traced as a **span** of the manager's: its pipeline rows join the
+manager's trace with `span=<slug>` and `depth` (a deeper sub keeps its own span), the
+summary sums the manager's own rows and lists the sub's calls as `<slug>:<name>`, and
+`EvalCapture` records the manager's own money calls only. Live, the room sees one turn
+(review F3): `agent.sub.started` (`agent`, `task`) and `agent.sub.finished` (`agent`,
+`elapsed_ms`, `tools`, `error`) on the manager's `turn_id`, the sub's `agent.tool.start/
+result` forwarded under the manager's `turn_id` with `agent`, and its `run.started/
+finished`, `text.delta` and `run.error` dropped — additive to the frozen `agent.*` set, so
+the existing UI ignores them and an AG-UI mapping can nest them. The sidecar keys
+pending tool calls by `req_id:call_id`, since the nested run is a second session on the
+same bridge. Not yet: the eval host runs a profile, not an agent, so `ask_*` tools appear
+in no eval run until Phase 8 gives the runner an agent.
 
 ## 7. The second business: a poker / card-game ledger
 

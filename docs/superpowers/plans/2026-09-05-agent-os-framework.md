@@ -1684,11 +1684,21 @@ contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_a
 
 ### Task 7.2: Docs and state of play
 
-- [ ] Design §6 as built; README (agents); plan state of play.
+- [x] Design §6 as built; README (agents); plan state of play.
 
 **Proof for the phase:** merged results pass `unbacked_amounts`; a sub's text never backs a number.
 
-**Phase 7 — state of play:** _(filled as tasks complete)_
+**Phase 7 — state of play (2026-09-06):** Tasks 7.1–7.2 done; the review gate's F1–F12
+are all in the build (see the dispositions table and the "as built" note under 7.1).
+Delegation is `kernos.agents.DelegationPack` + `Kernel.run_sub`; the executor contract
+`_record`, `Pipeline.run(through=)`, own-only `TurnResult` reads, `kn_agents.description`,
+`delegates_to` validation and the sidecar's `req_id:call_id` key are in. Proof:
+`tests/test_delegation.py` (12 tests, the real `run_turn` on a scripted bridge) and the
+pipeline `through` test; suite 1235 passed, 1 skipped; sidecar 70/70; golden 9/9; no
+pre-existing test edited; layering green. Zero behaviour change for a room whose agent
+delegates to nobody (every seeded agent). Carried to Phase 8: `agent_id` on eval runs and
+the runner's context so `ask_*` tools can be evaluated (F12); the accepted residual that a
+number the manager copies from a sub's text into a tool's args is backed (F11a).
 
 ## Phase 8 — AI-ready
 
