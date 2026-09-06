@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAgentsFiles, KEY_ENV, OPENROUTER_BASE_URL, proxyTool, resolveModel,
+import { buildAgentsFiles, proxyTool, resolveModel,
   toolOptionsFor } from "../session.js";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } } };
@@ -125,11 +125,6 @@ test("an unavailable vision model does not silently fall back to text", () => {
 
 test("a missing PI_MODEL is an error, not a default", () => {
   assert.throws(() => resolveModel(RUNTIME, {}), /PI_MODEL is not set/);
-});
-
-test("the base URL is a constant and the key env name is the real one", () => {
-  assert.equal(OPENROUTER_BASE_URL, "https://openrouter.ai/api/v1");
-  assert.equal(KEY_ENV, "OPEN_ROUTER_KEY");
 });
 
 // --------------------------------------------------------------------------- //

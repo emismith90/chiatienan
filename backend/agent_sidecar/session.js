@@ -15,11 +15,6 @@ import { join } from "node:path";
 import { resolveExtensions } from "./extensions.js";
 import { toTypeBox } from "./schema.js";
 
-/** Constant, not configurable. One less knob to get wrong in prod. */
-export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-
-export const KEY_ENV = "OPEN_ROUTER_KEY";
-
 /**
  * Wrap one Python tool as a pi tool.
  *
@@ -98,8 +93,8 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   // directory — nothing of ours lives there, but keeping it stable (under
   // DATA_DIR, passed by Python) lets pi cache its model catalogue instead of
   // refetching it every turn.
-  const cwd = ensureDir(req.cwd || join(tmpdir(), "chiatienan-pi-cwd"));
-  const agentDir = ensureDir(req.agent_dir || join(tmpdir(), "chiatienan-pi-agent"));
+  const cwd = ensureDir(req.cwd || join(tmpdir(), "kernos-pi-cwd"));
+  const agentDir = ensureDir(req.agent_dir || join(tmpdir(), "kernos-pi-agent"));
 
   // Both are optional and absent from every command today (plan Task 1.4): a
   // profile's `settings` become an in-memory SettingsManager (nothing on disk to

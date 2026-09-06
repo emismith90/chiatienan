@@ -19,13 +19,14 @@ from pathlib import Path
 import pytest
 
 BACKEND = Path(__file__).resolve().parent.parent
-LAYERS = ("kernos", "ledger_core", "packs", "app", "bench")
+LAYERS = ("kernos", "ledger_core", "packs", "app", "bench", "examples")
 ALLOWED = {
     "kernos": {"kernos"},
     "ledger_core": {"kernos", "ledger_core"},
     "packs": {"kernos", "ledger_core", "packs"},
     "app": {"kernos", "ledger_core", "packs", "app"},
     "bench": {"kernos", "ledger_core", "packs", "app", "bench"},
+    "examples": {"kernos", "examples"},          # a host with no chiatienan on its path (Phase 9)
 }
 
 #: The one documented lazy import of a dev-only package (review Phase 2 F9, Phase 3 F6).
