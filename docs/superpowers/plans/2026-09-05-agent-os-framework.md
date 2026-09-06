@@ -1312,7 +1312,8 @@ tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
   on_fail) is declared and **never runs**: `pipeline_dict()` does not fold it into the
   `validate_args`/`validate_result` stages, and `agent.run_turn`'s `call_tool` never
   consults `Pipeline.validate` (`Stage.validate_args` exists; `Pipeline.validate(stage,
-  ctx)` exists; nothing calls it). Gate 2's `handles_money` reads pipeline plugins only.
+  ctx)` exists; nothing calls it). Gate 2's `handles_money` reads `meta` and pipeline
+  plugins, never a pack's flag.
 - `Database.create_all` binds the host's, `ledger_core`'s and the content plane's
   tables; it does **not** call any pack's `bind(engine)` (Phase 3 F8 promised it; the
   lunch pack has no tables of its own so nothing noticed). A pack with tables needs it.
@@ -1405,25 +1406,59 @@ tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
    `propose_game` draft: `tools_ok: []`, `expect.asks: true` — the grader passes when
    the tool returned an error or was not called and the reply is prose).
 
+### Review gate (second Fable, 2026-09-06) — findings and dispositions
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | high | "One business per space, so ids never share a FIFO pool" is not enforced: edge sources are registered per kernel, not per space, and a re-bound room with `meals.id == games.id` for the same pair merges edges in `apply_payments_fifo` — a targeted meal payment could settle a game edge. | Taken, in 6a: the deferred F5 rename — `DebtEdge(debtor, creditor, ref_kind, ref_id, label, occurred_on, amount, paid)` with `meal_id`/`dish` as read-only properties (wire dicts unchanged); FIFO sorts by `(occurred_on, ref_kind, ref_id)` and targets by `(debtor, creditor, ref_kind, ref_id)`; `debt_breakdown` passes `Payment.ref_kind` through; `build_debt_edges` stamps `"meal"`. Policy stated: contributions are **not** filtered by the space's profile (money never hides on re-bind); collisions are prevented by the key. Proof: a room with meal #N and game #N for one pair and a targeted payment attributes to the meal only. |
+| F2 | high | The nine "shared" tools carry lunch: `get_period_summary` reads meals only and the summary body counts "meals"; `settle_period`'s pending listing knows the meal payload shape; the QR fallback note is "Chia tien an"; `posted_body_kind`/`CARD_LABELS` encode the shared bodies in lunch's eval module. | Taken, in 6a: (a) `ToolPack.timeline(session, space_id, from, to) -> list[dict]` (default `[]`) registered like `contributions`; `period_timeline` sums the registered sources (lunch = today's meal rows, byte-identical) and `_summary_body` counts by `kind` generically; (b) `DraftKind.summary(payload) -> dict` (default `{"kind": kind}`) used by `settle_period`'s pending listing and `_settle_blocked_body`; (c) `ledger_tools` takes `fallback_note(date) -> str` at registration (lunch passes today's string); (d) the shared bodies' outcome classification moves to `packs/ledger_tools/eval.py` and lunch/poker compose it. |
+| F3 | high | Rounding "exact per loser, winners off by up to losers−1 đồng" leaves edges that do not sum to the nets on the card. | Taken. Sequential remaining-proportional allocation: losers in member-id order, each loss split across winners proportionally to their **remaining** unreceived win with largest-remainder rounding; because Σ losses = Σ wins exactly, the last loser's shares equal the remaining wins — both sides exact. Tested for exactness on both sides and determinism under reordering. `PokerError` carries the signed delta and says `house` is where rake/tips go; the `sum_equals` error carries the same delta. |
+| F4 | high | Poker `ToolSelection`: `_item_key` reduces entries to `(member, amount)` → `{member, buy_in, cash_out}` compares as `(id, None)` (vacuous pass when the equivalence hook returns `None`); `tools: []` grades nothing, so a "must ask" case has no grader. | Taken. `item_fields` config per list (default today's pair, so the Phase 4 identity holds; poker: `entries: [member, buy_in, cash_out]`); a generic `expect.forbidden_tools`: fail when a named tool returned `ok: true`, a graded **True** when `tools` is empty and none did. `propose_game`'s result echoes `house` so an omitted `house` passes via `_recorded`. |
+| F5 | med | Validation plumbing gaps: the pipeline handle on `extras` set by every caller; `block` verdicts in per-call stages would set `stopped`/replace `outcome`; one plugin cannot serve two scopes; no tool name in the trace row; `rule.tool` unchecked; validators' `config_schema` must accept `rule`/`tool`/`on_fail`; reflexivity fences only `on_fail == "block"` rules. | Taken. `Pipeline.run` sets `ctx.extras["pipeline"] = self`; `Pipeline.validate` runs per-call plugins with `ctx.extras["tool_call"]` and never touches `stopped`/`outcome`; `return_error` maps the first failing verdict to `{ok: False, error}`; records carry `tool`. Validators register once per stage (`kernos.validate.sum_equals` at `validate_args`, `….result` at `validate_result`); the fold checks `plugin.stage` against the scope. Config schemas declare `rule`/`tool`/`on_fail` and paths with a pattern; `right` is a list; a missing path reads 0, a non-integer fails closed. Gate 1 checks `rule.tool` against the enabled packs' static tool names. Blacklist any `validation` entry with a tool scope or a money-handling plugin. `bench.run` runs no rules (its profile has none) — stated. |
+| F6 | med | "The same pipeline as lunch" carries lunch into the dealer: `fabricated_commit` checks meal ids and says "This meal was not recorded"; `COMMIT_TOOLS` is lunch's; the bot handle/label is global. | Taken. The poker profile keeps the host's handle and name (one bot identity per host; per-space handles are a host change, deferred; the proof calls `run_bot_turn` directly). `FabricatedCommit` takes its commit tools from the enabled packs (`ToolPack.commit_tools`, default = `money_tools`) and `record_exists` from the enabled packs' `DraftKind.exists(session, space_id, id)` (default: unknown → treat as forged), with a neutral body ("nothing was recorded"); the lunch body text is kept for lunch through the same hook so the golden stays byte-identical. Proof: a poker turn saying "Đã ghi #1" with no tool call is blocked and the body names no meal. |
+| F7 | med | Wrong fact: `money-safety.mdc` is lunch-specific (14 tools, `items`, the meal card format, bill photos). | Taken. The rule splits into a generic core shipped by `ledger_tools.content()` (tagged `money`) and a lunch addendum that stays in the host's `rules/`; the seeded lunch profile's rules content stays byte-identical (core + addendum concatenated in today's order is not required — the lunch profile keeps today's single file; the split is for poker, which ships core + its own addendum). |
+| F8 | med | Gate 2 never reads a pack's `handles_money` (design §9.2 says any enabled pack or plugin); the fact omitted `meta`. | Taken. Gate 2 ORs `pack.handles_money` over `tool_packs` through the registry it already holds; test added; fact fixed. |
+| F9 | med | `build_world(db, case, fixtures)` breaks two-argument callers; `world_factory(case)` has no spec; fixture names overlap across packs. | Taken. `build_world(db, case, fixtures=None)` (`None` = lunch's); `run_suite` builds `world_factory` with `fixtures_for(spec)` = the union of the enabled packs' fixtures, refusing a step two packs provide; `payment`/`add_member`/`settle` move to `ledger_tools.fixtures()`; poker's pending step is `game_pending`. |
+| F10 | low | A pack-owned `Base` is invisible to the debug export. | Taken. `ToolPack.metadata` (default `None`; `bind` uses it); `_all_tables` includes every registered pack's metadata. |
+| F11 | low | No import cycle for `create_all` → pack `bind` (lazy import); `sync_additive_columns` is reusable. | Taken; negative proof: a lunch DB has the same `meals`/`payments` columns before and after 6c. |
+| F12 | low | The frontend renders unknown card kinds as a blank human bubble and drops status flips for non-lunch drafts. | Scope kept (headless); the degradation is stated in the plan and README, and the generic `DraftCard` + `use-room` fix is ticketed in `TODO.md` as the frontend's first Phase-6 follow-up. |
+
+Positions confirmed by the gate: the F5 rename now; `house ≥ 0`, tolerance 0; seed `poker` unconditionally (content only); reply-scope rules not folded; `bench.run` without rules.
+
 ### Task 6.1 (PR 6a): `ledger_tools` out of `lunch_ledger`
 
-- [ ] `packs/ledger_tools/{__init__.py,tools.py,render.py}` — moved verbatim; `lunch_ledger`
-      imports nothing from it (both import `ledger_core`); `app/packs` registers it and
-      the seeded profile enables it; `MONEY_TOOLS` → `LUNCH_TOOLS` + `LEDGER_TOOLS`; the
-      branch-added partition tests updated; `chat.py` re-exports follow the bodies.
+- [ ] `ledger_core`: the F5 rename (`DebtEdge.ref_kind/ref_id/label`, `meal_id`/`dish`
+      properties; FIFO keys include `ref_kind`; `Payment.ref_kind` passed through — F1);
+      `period_timeline` over registered **timeline sources** (`ToolPack.timeline`, lunch =
+      today's rows — F2a).
+- [ ] `packs/ledger_tools/{__init__.py,tools.py,render.py,eval.py,fixtures.py}` — the nine
+      shared tools, `payment_draft`, the typed bodies (summary counts by `kind`), the
+      shared outcome classification, `payment`/`add_member`/`settle` fixtures; takes
+      `qr` and `fallback_note` at registration (F2c); `settle_period`'s pending listing and
+      `_settle_blocked_body` use `DraftKind.summary` (F2b). `lunch_ledger` keeps
+      `propose_meal`, `void_meal`, `expense_draft`, the meal bodies, `contributions`,
+      `timeline`, its fixtures; `app/packs` registers both and the seeded profile enables
+      both; `MONEY_TOOLS` → `LUNCH_TOOLS` + `LEDGER_TOOLS`; branch-added tests updated;
+      `chat.py` re-exports follow the bodies.
 - [ ] Proof: golden 9/9; regrade identity 0/0; full suite unedited; `tool_manifest()`
-      byte-identical (`test_tools_manifest.py`); layering green.
-- [ ] Commit: `packs: ledger_tools — the tools two ledger businesses share`
+      byte-identical (`test_tools_manifest.py`); a room with meal #N and game-shaped
+      edge #N (a stub source) for one pair and a targeted payment attributes to the meal
+      only (F1); layering green.
+- [ ] Commit: `ledger_core/packs: ref-keyed debt edges, timeline sources; ledger_tools — the tools two ledger businesses share`
 
 ### Task 6.2 (PR 6b): validation rules run
 
-- [ ] `pipeline_dict()` folds `validation` (decision 2); `Registry.build_pipeline` accepts
-      the folded entries (validators are registered plugins at `validate_args`/
-      `validate_result`); `TurnContext.extras["pipeline"]` set by `run_bot_turn` and the
-      eval host; `LegacyRunTurn` sets `tool_ctx.validate_call`; `agent.run_turn` honours it.
-- [ ] `kernos.validate.{sum_equals,non_negative,unique_members}`; path subset documented;
-      `on_fail: return_error` is the only tool-scope action (a `warn` rule records a
-      `warn` verdict in the trace and lets the call through).
+- [ ] `pipeline_dict()` folds `validation` (decision 2, F5): entries carry `rule`, `tool`,
+      `on_fail` in config; the fold checks the plugin's stage matches the scope.
+      `Pipeline.run` sets `ctx.extras["pipeline"]`; `Pipeline.validate` runs the per-call
+      plugins with `ctx.extras["tool_call"]`, never touches `stopped`/`outcome`, records
+      `tool`; `LegacyRunTurn` sets `tool_ctx.validate_call`; `agent.run_turn` honours it.
+- [ ] `kernos.validate.{sum_equals,non_negative,unique_members}` at `validate_args` and
+      `….result` twins at `validate_result`; `config_schema` with the path pattern;
+      `right` a list; missing path = 0; non-integer fails closed; `on_fail: return_error`
+      (a `warn` rule records a `warn` verdict and lets the call through). Gate 1 checks
+      `rule.tool` against the enabled packs' static tool names; gate 5 blacklists
+      tool-scope and money-handling rule changes. `bench.run` runs no rules (stated).
 - [ ] Proof: a lunch profile with a `sum_equals` rule on `propose_meal` (`total` vs
       `items[*].amount`) refuses a mismatched call with the rule's error and the trace
       shows the `validate_args` verdict; without the rule the seeded pipeline is unchanged
@@ -1433,10 +1468,14 @@ tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
 ### Task 6.3 (PR 6c): the poker pack and business
 
 - [ ] `packs/poker_ledger/{__init__.py,models.py,money.py,tools.py,render.py,fixtures.py,
-      eval.py,content/}` per decisions 3–5; `Database.create_all` binds host packs;
-      `ToolPack.content()`/`eval_cases()`; `app/poker_profile.py`; boot seeds `poker`/`dealer`;
-      `evalworld` fixtures by business; `import_pack_suite`; admin `POST
-      /businesses/{id}/eval/import` imports the pack suite for a non-lunch business.
+      eval.py,content/}` per decisions 3–5 as amended (F3 allocation, F4 grader config and
+      `forbidden_tools`, `game_pending`); `ToolPack.metadata`/`bind` and `Database.create_all`
+      binding host packs lazily (F10/F11); `ToolPack.content()`/`eval_cases()`/`commit_tools`;
+      `FabricatedCommit` over the enabled packs (F6); the money-safety rule split (F7);
+      gate 2 over packs (F8); `app/poker_profile.py`; boot seeds `poker`/`dealer`;
+      `build_world(db, case, fixtures=None)` and `fixtures_for(spec)` (F9);
+      `import_pack_suite`; admin import for a non-lunch business; `TODO.md` frontend ticket
+      (F12).
 - [ ] Proof: `tests/test_poker_money.py` (nets, edges exact per loser, rounding bound,
       every invariant refused with a clear error); `tests/golden/poker.py` +
       `tests/test_poker_pack.py` (a table bound to the dealer: `propose_game` through
