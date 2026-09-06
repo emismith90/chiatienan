@@ -4,7 +4,10 @@ from kernos.content.spec import (  # noqa: F401
     Retry, Rule, Runtime, Skill, ToolPackRef, ValidationRuleRef,
 )
 from kernos.content.errors import Conflict, ContentError, GateError, Invalid, NotFound, PreconditionFailed  # noqa: F401
-from kernos.content.gates import BLACKLIST_FIELDS, GateFailure, PublishGates, blacklisted_changes  # noqa: F401
+from kernos.content.gates import (  # noqa: F401
+    BLACKLIST_FIELDS, NEVER_IN_SCOPE, GateFailure, PublishGates, blacklisted_changes, changed_paths, outside_scope,
+)
+from kernos.content.capabilities import CMS_VERBS, SCOPE_VOCABULARY, agent_capabilities, normalise_capabilities  # noqa: F401
 from kernos.content.schema import bind  # noqa: F401
 from kernos.content.store import ContentStore, deep_merge, sessions_for, source_etag  # noqa: F401
 from kernos.content.boot import ensure_seeded  # noqa: F401

@@ -1880,7 +1880,7 @@ Confirmed by the gate: the facts block; gate 5's coverage (a warn↔block flip a
 `app/kernel.py` (`approve_proposal`, `start_eval_run(agent_id)`, `eval_mode`), `app/evalhost.py`
 (agent closed over `run_turn`), tests.
 
-- [ ] `capabilities` validated on create/update (decision 1 as amended; `publish` needs
+- [x] `capabilities` validated on create/update (decision 1 as amended; `publish` needs
       `eval.suites` — F3) with `agent_capabilities(agent)` returning the normalised triple;
       `kn_change_proposals` (+ `base_version_id`, `source_changes` with etags) + store methods;
       `changed_paths` / `outside_scope` (F7, F13); `create_draft(snapshot=)` (F6); boot re-put
@@ -1888,7 +1888,7 @@ Confirmed by the gate: the facts block; gate 5's coverage (a warn↔block flip a
       with `if_match` — F10; a `GateError`/`PreconditionFailed` leaves it pending with
       `last_error`); admin routes; `agent_id` on runs, `Kernel(eval_mode=)`, the eval host's
       agent on `extras`/`tool_ctx` (F5).
-- [ ] Proof (`tests/kernos/test_scope.py`, `tests/test_proposals.py`): capability vocabulary
+- [x] Proof (`tests/kernos/test_scope.py`, `tests/test_proposals.py`): capability vocabulary
       refusals incl. `publish` without `eval.suites`; every `ProfileSpec.model_fields` name
       mutated alone appears in `changed_paths`; `outside_scope` never allows `rules[tag=money]`,
       fenced validation, `meta`, `retry` or a blacklist field even when listed; a proposal
@@ -1897,7 +1897,15 @@ Confirmed by the gate: the facts block; gate 5's coverage (a warn↔block flip a
       pending with `last_error`; an `agent:*` approver is refused; reject; boot re-sync keeps
       an approved `record-meal` body (F2); `snapshot=False` gives a byte-identical base;
       `agent_id` round-trips on a run and the eval host hands the agent to `tool_ctx.agent`.
-- [ ] Commit: `kernos.content: agent capabilities, self-change scope and change proposals (PR 8a)`
+- [x] Commit: `kernos.content: agent capabilities, self-change scope and change proposals (PR 8a)`
+
+      _As built (2026-09-06):_ `approve_proposal` supplies gate 2's `override_reason` itself
+      (the approval, attributed to the approver, with the proposal's rationale) — every
+      publish of a money profile that keeps a risky builtin tool needs one, and a human
+      approval is exactly that statement. Also in this PR: PR 7a had edited the pre-existing
+      `tests/test_chat_payment_turn.py` (a fake result without the `include_sub` keyword);
+      the test is restored byte for byte and `kernos.persist.cards` reads such a result the
+      old way instead.
 
 ### Task 8.2 (PR 8b): the `os_admin` pack
 

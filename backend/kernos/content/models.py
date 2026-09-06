@@ -208,6 +208,33 @@ class EvalRun(Base):
     records: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
+    #: The agent the run was started for or by (Phase 7 F12 / Phase 8): its record reaches
+    #: the eval host's turn context; ``None`` for a human-started, agent-less run.
+    agent_id: Mapped[int | None] = mapped_column(Integer, index=True)
+
+
+class ChangeProposal(Base):
+    """An agent's proposal to publish a draft of its own profile (design §8.4, Phase 8).
+    ``diff`` is what changed against the published version, ``source_changes`` the source
+    rows that must follow on approval (with the etag each had when drafted), ``status`` one
+    of pending | approved | rejected | auto_published."""
+
+    __tablename__ = "kn_change_proposals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("kn_businesses.id"), nullable=False, index=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("kn_agents.id"), nullable=False, index=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("kn_profiles.id"), nullable=False)
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_version_id: Mapped[int | None] = mapped_column(Integer)
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    diff: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    eval_run_id: Mapped[int | None] = mapped_column(Integer)
+    source_changes: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    decided_by: Mapped[str | None] = mapped_column(String(120))
+    decided_at: Mapped[str | None] = mapped_column(String(32))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
 
 
 class Collection(Base):

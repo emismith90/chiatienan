@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from kernos.content import models as m
 from kernos.content.errors import Conflict, GateError, Invalid, NotFound, PreconditionFailed
+from kernos.content.capabilities import normalise_capabilities
 from kernos.content.spec import BindingOverrides, ProfileSpec
 
 SOURCE_KINDS = ("prompt", "rule", "skill", "template")
@@ -252,7 +253,10 @@ class ContentStore:
         return spec
 
     def create_draft(self, profile_id: int, *, actor: str, from_version: int | None = None,
-                     note: str | None = None, base_spec: dict | None = None) -> dict:
+                     note: str | None = None, base_spec: dict | None = None, snapshot: bool = True) -> dict:
+        """A new draft version. ``snapshot=False`` skips the source snapshot so the draft is
+        byte-identical to its base — an agent's draft, whose diff must be exactly its own
+        patch (Phase 8 review F6); the pending source change is how a source follows."""
         with self._session() as s:
             p = self._profile(s, profile_id)
             # Base precedence: an explicit `from_version`, an explicit `base_spec` (boot
@@ -273,7 +277,7 @@ class ContentStore:
                 base = (business.seed or {}).get("spec")
                 if not base:
                     raise Invalid("no base spec: publish a version, pass base_spec, or set business.seed.spec")
-            spec = _validate(self._snapshot_sources(s, p.business_id, base)).stored()
+            spec = _validate(self._snapshot_sources(s, p.business_id, base) if snapshot else base).stored()
             return _row(self._add_version(s, p, spec, actor=actor, note=note))
 
     def _add_version(self, s: Session, p: m.Profile, spec: dict, *, actor: str,
@@ -403,8 +407,9 @@ class ContentStore:
                                                              m.Agent.is_default.is_(True))).all():
                     other.is_default = False
             self._check_delegates(s, business_id, delegates_to or [], self_id=None)
+            capabilities = self._check_capabilities(s, capabilities, profile_id)
             a = m.Agent(business_id=business_id, slug=slug, name=name, role=role, is_default=is_default,
-                        profile_id=profile_id, delegates_to=delegates_to or [], capabilities=capabilities or {},
+                        profile_id=profile_id, delegates_to=delegates_to or [], capabilities=capabilities,
                         max_depth=max_depth, description=description)
             s.add(a); s.flush()
             self.log(s, actor, "create", "agent", a.id, after=_row(a))
@@ -428,6 +433,18 @@ class ContentStore:
                 raise Invalid(f"delegates_to names agent {sub.slug!r}, a {sub.role}; only a sub can be delegated to")
             if sub.is_default or s.scalar(select(m.SpaceBinding).where(m.SpaceBinding.agent_id == sub.id)) is not None:
                 raise Invalid(f"delegates_to names agent {sub.slug!r}, which is bound or default")
+
+    def _check_capabilities(self, s: Session, caps, profile_id: int) -> dict:
+        """Normalised capabilities; the ``publish`` verb needs a profile whose published
+        version names ``eval.suites`` — self-publish is never allowed where gate 4 would
+        be vacuous (Phase 8 review F3)."""
+        out = normalise_capabilities(caps)
+        if "publish" in out.get("cms", []):
+            p = self._profile(s, profile_id)
+            published = s.get(m.ProfileVersion, p.published_version_id).spec if p.published_version_id else {}
+            if not (published.get("eval") or {}).get("suites"):
+                raise Invalid("the publish capability needs a profile whose published version names eval.suites")
+        return out
 
     def referrers(self, agent_id: int) -> list[dict]:
         """The agents whose ``delegates_to`` names ``agent_id``."""
@@ -482,6 +499,9 @@ class ContentStore:
                 self._profile(s, patch["profile_id"])
             if "delegates_to" in patch:
                 self._check_delegates(s, a.business_id, patch["delegates_to"], self_id=a.id)
+            if "capabilities" in patch or "profile_id" in patch:
+                patch = {**patch, "capabilities": self._check_capabilities(
+                    s, patch.get("capabilities", a.capabilities), patch.get("profile_id", a.profile_id))}
             for k, v in patch.items():
                 setattr(a, k, v)
             s.flush()
@@ -656,12 +676,14 @@ class ContentStore:
                                                 .order_by(m.Rubric.slug)).all()]
 
     def create_run(self, suite_id: int, profile_version_id: int, spec_sha: str, *, actor: str,
-                   judge_model: str | None = None) -> dict:
+                   judge_model: str | None = None, agent_id: int | None = None) -> dict:
         with self._session() as s:
             if s.get(m.EvalSuite, suite_id) is None:
                 raise NotFound(f"no eval suite #{suite_id}")
+            if agent_id is not None and s.get(m.Agent, agent_id) is None:
+                raise NotFound(f"no agent {agent_id}")
             row = m.EvalRun(suite_id=suite_id, profile_version_id=profile_version_id, spec_sha=spec_sha,
-                            judge_model=judge_model)
+                            judge_model=judge_model, agent_id=agent_id)
             s.add(row)
             s.flush()
             self.log(s, actor, "start", "eval_run", row.id,
@@ -699,6 +721,73 @@ class ContentStore:
                 q = q.where(m.EvalRun.profile_version_id == profile_version_id)
             rows = s.scalars(q.order_by(m.EvalRun.id.desc()).limit(limit)).all()
             return [{k: v for k, v in _row(r).items() if k != "records"} for r in rows]
+
+    def agent_runs_since(self, business_id: int, since: str) -> list[dict]:
+        """Runs an agent started (``agent_id`` set) in this business since ``since`` (ISO
+        UTC), newest first, without records — the per-day cap reads this (Phase 8 F9)."""
+        with self._session() as s:
+            q = (select(m.EvalRun).join(m.EvalSuite, m.EvalSuite.id == m.EvalRun.suite_id)
+                 .where(m.EvalSuite.business_id == business_id, m.EvalRun.agent_id.is_not(None),
+                        m.EvalRun.started >= since).order_by(m.EvalRun.id.desc()))
+            return [{k: v for k, v in _row(r).items() if k != "records"} for r in s.scalars(q).all()]
+
+    # ----------------------------------------------------------------- proposals
+
+    PROPOSAL_STATUSES = ("pending", "approved", "rejected", "auto_published")
+
+    def create_proposal(self, business_id: int, agent_id: int, profile_id: int, version_id: int, *,
+                        rationale: str, diff: dict, actor: str, base_version_id: int | None = None,
+                        eval_run_id: int | None = None, source_changes: list | None = None,
+                        status: str = "pending", decided_by: str | None = None) -> dict:
+        if status not in self.PROPOSAL_STATUSES:
+            raise Invalid(f"proposal status must be one of {self.PROPOSAL_STATUSES}")
+        with self._session() as s:
+            self._business(s, business_id)
+            if s.get(m.Agent, agent_id) is None:
+                raise NotFound(f"no agent {agent_id}")
+            self._profile(s, profile_id)
+            self._version(s, version_id)
+            row = m.ChangeProposal(business_id=business_id, agent_id=agent_id, profile_id=profile_id,
+                                   version_id=version_id, base_version_id=base_version_id, rationale=rationale or "",
+                                   diff=diff or {}, eval_run_id=eval_run_id, source_changes=list(source_changes or []),
+                                   status=status, decided_by=decided_by,
+                                   decided_at=m.utcnow() if status != "pending" else None)
+            s.add(row); s.flush()
+            self.log(s, actor, "propose", "proposal", row.id, after=_row(row))
+            return _row(row)
+
+    def get_proposal(self, proposal_id: int) -> dict:
+        with self._session() as s:
+            row = s.get(m.ChangeProposal, proposal_id)
+            if row is None:
+                raise NotFound(f"no proposal #{proposal_id}")
+            return _row(row)
+
+    def list_proposals(self, business_id: int | None = None, status: str | None = None, *, limit: int = 100) -> list[dict]:
+        with self._session() as s:
+            q = select(m.ChangeProposal)
+            if business_id is not None:
+                q = q.where(m.ChangeProposal.business_id == business_id)
+            if status is not None:
+                q = q.where(m.ChangeProposal.status == status)
+            return [_row(r) for r in s.scalars(q.order_by(m.ChangeProposal.id.desc()).limit(limit)).all()]
+
+    def decide_proposal(self, proposal_id: int, *, status: str, by: str | None, actor: str,
+                        error: str | None = None) -> dict:
+        """Record a decision (or a failed attempt: ``status="pending"`` with ``error``)."""
+        if status not in self.PROPOSAL_STATUSES:
+            raise Invalid(f"proposal status must be one of {self.PROPOSAL_STATUSES}")
+        with self._session() as s:
+            row = s.get(m.ChangeProposal, proposal_id)
+            if row is None:
+                raise NotFound(f"no proposal #{proposal_id}")
+            before = _row(row)
+            row.status, row.last_error = status, error
+            if status != "pending":
+                row.decided_by, row.decided_at = by, m.utcnow()
+            s.flush()
+            self.log(s, actor, "decide", "proposal", row.id, before=before, after=_row(row))
+            return _row(row)
 
     # -------------------------------------------------------------------- traces
 

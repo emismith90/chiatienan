@@ -75,6 +75,72 @@ def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec |
     return changed
 
 
+def _stored(spec: ProfileSpec | dict | None) -> dict:
+    """A spec as the content plane stores it (no ``runtime``), whichever form came in."""
+    if spec is None:
+        return {}
+    d = spec.stored() if isinstance(spec, ProfileSpec) else dict(spec)
+    d.pop("runtime", None)
+    return d
+
+
+def _fenced(v: dict) -> bool:
+    return v.get("on_fail") == "block" or v.get("scope") in ("tool_args", "tool_result")
+
+
+def _money(r: dict) -> bool:
+    return "money" in (r.get("tags") or [])
+
+
+#: Paths an agent can never self-publish, whatever its scope says (Phase 8 review F7, F13).
+NEVER_IN_SCOPE = frozenset(BLACKLIST_FIELDS) | frozenset({
+    "rules[tag=money]", "validation[on_fail=block|scope=tool_*]", "meta", "retry", "persona", "memory", "templates",
+})
+
+
+def changed_paths(previous: ProfileSpec | dict | None, spec: ProfileSpec | dict) -> list[str]:
+    """The coarse paths of ``spec`` that differ from ``previous`` — **every** top-level
+    field of ``ProfileSpec`` by name, refined only where the scope vocabulary splits a
+    field: ``prompt.body`` / ``prompt.append``, ``rules`` / ``rules[tag=money]``,
+    ``validation.warn`` / ``validation[on_fail=block|scope=tool_*]``. A field added to the
+    spec later is a changed path by construction (Phase 8 review F7)."""
+    new, old = _stored(spec), _stored(previous)
+    out: list[str] = []
+    for field in ProfileSpec.model_fields:
+        if field == "runtime":
+            continue
+        n, o = new.get(field), old.get(field)
+        if field == "prompt":
+            n, o = n or {}, o or {}
+            if n.get("body") != o.get("body"):
+                out.append("prompt.body")
+            if n.get("append") != o.get("append"):
+                out.append("prompt.append")
+        elif field == "rules":
+            n, o = n or [], o or []
+            if [r for r in n if not _money(r)] != [r for r in o if not _money(r)]:
+                out.append("rules")
+            if [r for r in n if _money(r)] != [r for r in o if _money(r)]:
+                out.append("rules[tag=money]")
+        elif field == "validation":
+            n, o = n or [], o or []
+            if [v for v in n if not _fenced(v)] != [v for v in o if not _fenced(v)]:
+                out.append("validation.warn")
+            if [v for v in n if _fenced(v)] != [v for v in o if _fenced(v)]:
+                out.append("validation[on_fail=block|scope=tool_*]")
+        elif n != o:
+            out.append(field)
+    return out
+
+
+def outside_scope(previous: ProfileSpec | dict | None, spec: ProfileSpec | dict, scope: list[str]) -> list[str]:
+    """The changed paths an agent with ``self_change_scope = scope`` may **not** publish:
+    everything changed that the scope does not name, plus :data:`NEVER_IN_SCOPE` even
+    when named."""
+    allowed = set(scope or []) - NEVER_IN_SCOPE
+    return [path for path in changed_paths(previous, spec) if path not in allowed]
+
+
 class PublishGates:
     def __init__(self, registry: Registry, catalogue: Any, *, clock: Any | None = None,
                  probe_max_age_days: int = 30, money_tools: frozenset[str] = MONEY_TOOLS,

@@ -90,26 +90,29 @@ def world_factory(case) -> EvalWorld:
     return EvalWorld(case)
 
 
-async def run_turn(case, world: EvalWorld, spec: ProfileSpec):
+async def run_turn(case, world: EvalWorld, spec: ProfileSpec, *, agent: dict | None = None):
     """One turn of the candidate pipeline in the case's world, clock frozen to its day.
 
     The kernel is built over the world's database with a static resolver, so the
     pipeline is exactly the candidate's. A case's ``history`` (prod captures) is not
     replayed through the room — the pipeline reads the world's own messages; the
-    committed corpora carry none.
+    committed corpora carry none. ``agent`` (the run's, when it has one) reaches the
+    turn's ``extras`` and tool context so an agent-conditional pack shows its tools; the
+    kernel runs in eval mode, so nothing in the turn can start a job (Phase 8 F5).
     """
     from app.kernel import Kernel
     from app.tools import ToolContext
 
-    kernel = Kernel(world.db, resolver=StaticResolver(spec))
+    kernel = Kernel(world.db, resolver=StaticResolver(spec), eval_mode=True)
     sender = world.ids.get(case.actor)
     sender_name = next((m["display_name"] for m in case.members if m.get("key") == case.actor), None)
     ctx = TurnContext(
         space_id=str(world.space_id), principal=Principal(sender, sender_name), text=case.message,
         images=list(case.images or []), profile=spec,
         tool_ctx=ToolContext(db=world.db, room_id=world.space_id, sender_member_id=sender,
-                             sender_name=sender_name, turn_mentions=[]),
+                             sender_name=sender_name, turn_mentions=[], agent=agent),
         sink=LegacyAgentEventSink(None),
+        extras={"agent": agent} if agent is not None else {},
     )
     with frozen_clock(case.day):
         await kernel.pipeline_for(spec).run(ctx)
@@ -162,9 +165,11 @@ def suite_cases(store, business_id: int, suite: dict) -> list[EvalCase]:
 
 async def run_suite(kernel, suite_slug: str, version_id: int, *, actor: str = "eval",
                     run_id: int | None = None, run_turn=run_turn, world_factory=world_factory,
-                    judge=None) -> dict:
+                    judge=None, agent_id: int | None = None) -> dict:
     """Run one suite against one profile version and store the run. ``run_turn`` /
-    ``world_factory`` / ``judge`` are injectable for tests; production uses the ones above."""
+    ``world_factory`` / ``judge`` are injectable for tests; production uses the ones above.
+    The run's agent (``agent_id``, or the existing run row's) is closed over ``run_turn``."""
+    import functools
     store = kernel.store
     version = store.get_version(version_id)
     business_id = store.get_profile(version["profile_id"])["business_id"]
@@ -173,7 +178,9 @@ async def run_suite(kernel, suite_slug: str, version_id: int, *, actor: str = "e
     judge = judge if judge is not None else judge_for(suite)
     run = store.get_run(run_id) if run_id is not None else store.create_run(
         suite["id"], version_id, spec_sha(spec), actor=actor,
-        judge_model=getattr(judge, "model", None) if judge else None)
+        judge_model=getattr(judge, "model", None) if judge else None, agent_id=agent_id)
+    if run.get("agent_id") is not None:
+        run_turn = functools.partial(run_turn, agent=store.get_agent(run["agent_id"]))
     try:
         graders = [kernel.graders.build(ref, judge=judge) for ref in suite["graders"]]
         cases = suite_cases(store, business_id, suite)
@@ -195,6 +202,7 @@ def main(argv=None) -> int:
     run.add_argument("--suite", required=True)
     run.add_argument("--version", type=int, required=True, help="profile version **id**")
     run.add_argument("--run-id", type=int, default=None, help="finish this existing run row")
+    run.add_argument("--agent", type=int, default=None, help="agent id whose record every turn gets")
     imp = sub.add_parser("import", help="import the lunch corpus as the suite's content")
     imp.add_argument("--corpus", default="typical")
     args = parser.parse_args(argv)
@@ -204,7 +212,7 @@ def main(argv=None) -> int:
     if args.cmd == "import":
         print(import_lunch_suite(kernel.store, kernel.seed_report["business_id"], corpus_name=args.corpus))
         return 0
-    result = asyncio.run(run_suite(kernel, args.suite, args.version, run_id=args.run_id))
+    result = asyncio.run(run_suite(kernel, args.suite, args.version, run_id=args.run_id, agent_id=args.agent))
     print(f"run #{result['id']}: {result['status']}", result.get("summary", {}).get("graders"), file=sys.stderr)
     return 0 if result["status"] == "done" else 1
 

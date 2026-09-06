@@ -27,7 +27,7 @@ from kernos.content.traces import StoreTraces
 from kernos.data import CollectionsPack, DataStore
 from kernos.eval import GraderRegistry, eval_gate
 from kernos.content import (
-    ContentStore, DbResolver, NotFound, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
+    ContentStore, DbResolver, Invalid, NotFound, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
 from kernos.kernel import Pipeline
 from kernos.packs import PackRegistry
@@ -66,8 +66,11 @@ class _SubSink:
 
 
 class Kernel:
-    def __init__(self, db: Database, resolver: Resolver | None = None) -> None:
+    def __init__(self, db: Database, resolver: Resolver | None = None, *, eval_mode: bool = False) -> None:
         self.db = db
+        #: True inside the eval host: agent-conditional packs expose read tools only and
+        #: nothing may start a job (Phase 8 review F5).
+        self.eval_mode = eval_mode
         self.adapters: HostAdapters = build_adapters(db)
         from app.packs import host_packs
         self.packs = PackRegistry()
@@ -271,20 +274,77 @@ class Kernel:
         packs = [pack for pack, _ in self.packs.enabled(spec.tool_packs) if pack.eval_cases()]
         return import_pack_suite(self.store, business_id, packs, actor=actor)
 
-    def start_eval_run(self, suite_slug: str, version_id: int, *, actor: str) -> dict:
+    def start_eval_run(self, suite_slug: str, version_id: int, *, actor: str, agent_id: int | None = None) -> dict:
         """Create the run row and spawn `python -m app.evalhost run …` to fill it — a
-        job, never a request the serving process waits on (Phase 4 review F3)."""
-        import subprocess
+        job, never a request the serving process waits on (Phase 4 review F3). With an
+        ``agent_id`` the run carries the agent and the eval host hands its record to every
+        turn's context (Phase 7 F12). Refused in eval mode (F5)."""
         import sys
         from kernos.eval import spec_sha
+        if self.eval_mode:
+            raise Invalid("an eval run cannot start a job")
         version = self.store.get_version(version_id)
         business_id = self.store.get_profile(version["profile_id"])["business_id"]
         suite = self.store.get_suite(business_id, suite_slug)
         run = self.store.create_run(suite["id"], version_id, spec_sha(ProfileSpec.model_validate(version["spec"])),
-                                    actor=actor, judge_model=(suite.get("judge") or {}).get("model"))
+                                    actor=actor, judge_model=(suite.get("judge") or {}).get("model"), agent_id=agent_id)
         self.spawn([sys.executable, "-m", "app.evalhost", "run", "--suite", suite_slug,
                     "--version", str(version_id), "--run-id", str(run["id"])])
         return run
+
+    # ----------------------------------------------------------------- proposals
+
+    def approve_proposal(self, proposal_id: int, *, actor: str, override_reason: str | None = None) -> dict:
+        """Publish a proposed version through the gates, then write the source changes it
+        carries so future drafts keep them (design §8.4; Phase 8 review F2/F10/F11). The
+        approver is never an agent. A gate failure or a source edited since the draft
+        leaves the proposal ``pending`` with ``last_error`` and re-raises. Gate 2's
+        ``override_reason`` (a money profile that keeps a risky builtin tool) defaults to
+        the approval itself — the proposal's rationale, attributed to the approver."""
+        from kernos.content import Conflict, GateError, PreconditionFailed
+        if actor.startswith("agent:"):
+            raise Invalid("a proposal is decided by a non-agent")
+        prop = self.store.get_proposal(proposal_id)
+        if prop["status"] != "pending":
+            raise Conflict(f"proposal #{proposal_id} is {prop['status']}")
+        try:
+            # every source must still be as it was when drafted, before anything is published
+            for change in prop["source_changes"] or []:
+                current = self._source_etag(prop["business_id"], change["kind"], change["slug"])
+                if current != change.get("if_match"):
+                    raise PreconditionFailed(
+                        f"source {change['kind']}/{change['slug']} changed since the proposal was drafted")
+            self.store.publish(prop["version_id"], actor=actor, gates=self.gates, note=f"proposal #{proposal_id}",
+                               override_reason=override_reason or f"proposal #{proposal_id} approved by {actor}: {prop['rationale']}")
+        except (GateError, PreconditionFailed, Conflict) as exc:
+            self.store.decide_proposal(proposal_id, status="pending", by=None, actor=actor, error=str(exc))
+            raise
+        self._apply_source_changes(prop, actor)
+        return self.store.decide_proposal(proposal_id, status="approved", by=actor, actor=actor)
+
+    def reject_proposal(self, proposal_id: int, *, actor: str) -> dict:
+        from kernos.content import Conflict
+        prop = self.store.get_proposal(proposal_id)
+        if prop["status"] != "pending":
+            raise Conflict(f"proposal #{proposal_id} is {prop['status']}")
+        if self.store.get_version(prop["version_id"])["status"] == "draft":
+            self.store.retire(prop["version_id"], actor=actor)
+        return self.store.decide_proposal(proposal_id, status="rejected", by=actor, actor=actor)
+
+    def _source_etag(self, business_id: int, kind: str, slug: str) -> str | None:
+        try:
+            return self.store.get_source(business_id, kind, slug)["etag"]
+        except NotFound:
+            return None
+
+    def _apply_source_changes(self, prop: dict, actor: str) -> None:
+        agent = self.store.get_agent(prop["agent_id"])
+        for change in prop["source_changes"] or []:
+            fm = dict(change.get("frontmatter") or {})
+            fm["audit"] = {"proposal": prop["id"], "approved_by": actor}
+            self.store.put_source(prop["business_id"], change["kind"], change["slug"], body=change["body"],
+                                  title=change.get("title", ""), frontmatter=fm, actor=f"agent:{agent['slug']}",
+                                  if_match=change.get("if_match"))
 
     @staticmethod
     def spawn(argv: list[str]) -> None:

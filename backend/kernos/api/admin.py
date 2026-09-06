@@ -406,8 +406,10 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         return _wrap(lambda: get_kernel().store.put_rubric(business_id, slug, body.body, actor=_actor(x_actor)))
 
     @r.post("/profiles/{profile_id}/versions/{version}/eval", status_code=202)
-    def start_eval(profile_id: int, version: int, suite: str = Query(...), x_actor: str | None = Header(default=None)):
-        """Create the run and spawn the job; poll `GET /eval/runs/{id}`."""
+    def start_eval(profile_id: int, version: int, suite: str = Query(...), agent_id: int | None = Query(default=None),
+                   x_actor: str | None = Header(default=None)):
+        """Create the run and spawn the job; poll `GET /eval/runs/{id}`. ``agent_id`` makes
+        the run an agent's: its record reaches every turn's context (Phase 7 F12)."""
         k = get_kernel()
         start = getattr(k, "start_eval_run", None)
         if start is None:
@@ -415,8 +417,36 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
 
         def go():
             v = k.store.find_version(profile_id, version)
-            return start(suite, v["id"], actor=_actor(x_actor))
+            return start(suite, v["id"], actor=_actor(x_actor), agent_id=agent_id)
         return _wrap(go)
+
+    # ------------------------------------------------------------ proposals
+    @r.get("/proposals")
+    def proposals(business_id: int | None = Query(default=None), status: str | None = Query(default=None),
+                  limit: int = Query(default=100, le=1000)):
+        return get_kernel().store.list_proposals(business_id, status, limit=limit)
+
+    @r.get("/proposals/{proposal_id}")
+    def proposal(proposal_id: int):
+        return _wrap(lambda: get_kernel().store.get_proposal(proposal_id))
+
+    @r.post("/proposals/{proposal_id}/approve")
+    def approve_proposal(proposal_id: int, x_actor: str | None = Header(default=None)):
+        """Publish the proposed version through the gates and write its source changes; a
+        gate failure is 422 and the proposal stays pending with ``last_error``."""
+        k = get_kernel()
+        approve = getattr(k, "approve_proposal", None)
+        if approve is None:
+            raise HTTPException(501, "this host cannot approve proposals")
+        return _wrap(lambda: approve(proposal_id, actor=_actor(x_actor)))
+
+    @r.post("/proposals/{proposal_id}/reject")
+    def reject_proposal(proposal_id: int, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+        reject = getattr(k, "reject_proposal", None)
+        if reject is None:
+            raise HTTPException(501, "this host cannot decide proposals")
+        return _wrap(lambda: reject(proposal_id, actor=_actor(x_actor)))
 
     @r.post("/businesses/{business_id}/eval/import")
     def import_suite(business_id: int, x_actor: str | None = Header(default=None)):

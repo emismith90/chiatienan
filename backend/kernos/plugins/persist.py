@@ -40,10 +40,20 @@ class Cards(BasePlugin):
 
         if ctx.result is not None:
             for name in sorted(self._cancel_tools(ctx)):
-                for r in ctx.result.all_results(name, include_sub=True):    # a sub's cancel took effect too (F4)
+                for r in _results(ctx.result, name):
                     card = self._a.cards.get(ctx.space_id, r.get("draft_id"))
                     if card is not None:
                         superseded_payloads.append(self._a.messages.to_payload(card))
 
         ctx.superseded = superseded_payloads
         ctx.pending_events.extend({"type": "message", **stale} for stale in superseded_payloads)
+
+
+def _results(result, name: str) -> list[dict]:
+    """Every successful result for ``name`` — a sub-agent's included, since its
+    ``cancel_draft`` took effect too (Phase 7 review F4). A host result shape without the
+    ``include_sub`` keyword (a duck-typed fake) is read the old way."""
+    try:
+        return result.all_results(name, include_sub=True)
+    except TypeError:
+        return result.all_results(name)

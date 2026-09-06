@@ -17,7 +17,7 @@ class _FakeResult:
     def last_result(self, name):
         return None
 
-    def all_results(self, name, *, include_sub=False):
+    def all_results(self, name):
         return self._payments if name == "propose_payment" else []
 
 

@@ -36,7 +36,9 @@ def ensure_seeded(store: ContentStore, *, business_slug: str, business_name: str
         fm = src.get("frontmatter") or {}
         etag = source_etag(src["kind"], src["slug"], src.get("title", ""), src["body"], fm)
         row = existing.get((src["kind"], src["slug"]))
-        if row is None or row["etag"] != etag:
+        # a source a human or an agent has edited is theirs now — boot never reverts it
+        # (Phase 8 review F2; mirrors `managed_by`)
+        if row is None or (row["etag"] != etag and row["updated_by"] == actor):
             store.put_source(bid, src["kind"], src["slug"], body=src["body"], title=src.get("title", ""),
                              frontmatter=fm, actor=actor)
             out["actions"].append(f"source {src['kind']}/{src['slug']} {'created' if row is None else 'updated'}")
