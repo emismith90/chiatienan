@@ -19,6 +19,16 @@ no amount that ends up in a QR is ever computed or transcribed by the model.
 Meals are never written by the model directly: it can only *propose*, and a
 person edits/commits the draft.
 
+## Documentation
+
+| I want to… | Read |
+|---|---|
+| use the bot, and change how it behaves from the **Bot** tab | [User guide](docs/user-guide.md) |
+| run it as an operator — bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
+| understand the architecture, or add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
+| ship it to production | [Deploy runsheet](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
+| know why it is shaped this way | [Design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
+
 > Design: [`docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md`](docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md)
 > and the [chat-UX overhaul](docs/superpowers/specs/2026-07-20-chat-ux-overhaul-design.md).
 > (The original [Teams-bot design](docs/superpowers/specs/2026-07-20-chiatienan-teams-lunch-bot-design.md)
@@ -115,84 +125,42 @@ Cancel), which any registered `*_draft` kind falls back to.
 
 ### The agent kernel (`backend/kernos/`)
 
-`kernos` is a host-agnostic framework the bot now runs on — a turn pipeline with
-typed stages, a plugin registry with schema-validated configs, an `Engine`
-protocol (Pi is the first engine), host adapter protocols, and a versioned
-`ProfileSpec`. chiatienan is its first host; `tests/test_layering.py` enforces that
-nothing under `kernos/` imports the app. Design:
-[`docs/superpowers/specs/2026-09-05-agent-cms-design.md`](docs/superpowers/specs/2026-09-05-agent-cms-design.md);
-plan: [`docs/superpowers/plans/2026-09-05-agent-os-framework.md`](docs/superpowers/plans/2026-09-05-agent-os-framework.md).
-The content plane (Phase 2) is live: the bot's prompt, rules, skills, models, caps and
-pipeline are versioned content in `kn_` tables, seeded from code on first boot and
-re-synced while unedited. The admin API under `/api/admin/*` (admin password) edits
-sources with ETags, drafts and publishes versions through the gates (schema,
-money-safety, model probe, reflexivity), binds a room to an agent, and shows what a
-room runs at `GET /api/admin/spaces/{room_id}/resolved`. Rooms nobody binds keep
-running the seeded default, byte for byte.
-Every turn leaves a trace row (`kn_turn_traces`: the plugins that ran, each tool call
-with its arguments and result, a summary) — `GET /api/admin/spaces/{room_id}/turns` and
-`…/turns/{turn_id}`; a turn that raised is traced with its error. Retention is the
-`keep_days` config of the `kernos.after.trace` plugin (30 by default).
-Eval is content too: cases, suites, rubrics and runs under `/api/admin/businesses/{id}/eval/*`
-and `/api/admin/eval/runs`; `POST …/businesses/{id}/eval/import` loads the benchmark's
-`typical` corpus as the `lunch-typical` suite, `POST …/profiles/{id}/versions/{v}/eval?suite=`
-starts a run as a background job (`python -m app.evalhost run …`), and publishing a
-version whose spec names `eval.suites` requires a completed run of the same content that
-passed every blocking grader (`backend/kernos/eval/`, `backend/app/evalhost.py`).
-Collections are the data plane: `PUT /api/admin/businesses/{id}/collections/{slug}` defines a
-schema-validated document type (JSON Schema in the sidecar-safe subset), documents live per
-room under `/api/admin/spaces/{room_id}/collections/{slug}/documents`, and a profile that
-enables the `collections` pack gets `{slug}_find` / `{slug}_upsert` / `{slug}_delete` tools
-generated from the definition (`backend/kernos/data/`).
-Agents: a business has one default manager agent (the one an unbound room runs) and may add
-`sub` agents (`POST /api/admin/agents`, `role: "sub"`, an optional `description`); a manager
-whose `delegates_to` lists sub ids gets an `ask_<sub_slug>(task)` tool per sub, which runs
-the sub's profile as a nested turn in the same room within the manager's remaining time and
-tool budget and hands back its text and structured tool results (`backend/kernos/agents.py`).
-The sub's results back the manager's numbers, its text never does, and only the manager's
-own `propose_*` calls make cards. The seeded agents delegate to nobody, so a room behaves
-exactly as before until an admin adds a sub.
-Self-administration is opt-in twice: a profile enables the `os_admin` pack and the agent's
-`capabilities` grant verbs (`read` its configuration, traces and eval results; `draft` a change to
-its own prompt, skills or non-money rules and propose it; `eval` start a suite as a job and add a
-review case; `publish` itself, only inside its `self_change_scope`, never on the blacklist, and only
-with a finished eval run of the exact content). Proposals live at `/api/admin/proposals` and are
-approved or rejected there by a person; approval publishes through the gates and writes the sources
-so the change survives the next draft. Nothing a `cms_*` tool returns can back a number in a reply
-(`backend/kernos/osadmin.py`). The steward brief is at `GET /api/admin/steward/brief`.
-Portability (Phase 9): `app/kernel.py` is a subclass of the framework's `kernos.host.BaseKernel`
-with four host hooks; `examples/minimal_host/host.py` is a second host with no chiatienan module
-on its path (its test guards that), running the framework run stage `kernos.run.engine` over a
-scripted engine and streaming AG-UI events (`kernos.api.agui`). A published profile exports as a
-Pi package (`GET /api/admin/profiles/{id}/export` — skills, prompts, `AGENTS.md`,
-`.pi/settings.json`, and `kernos.json` for a lossless re-import) and a package imports as sources
-and a draft, never a publish (`POST /api/admin/businesses/{id}/import`). The sidecar's npm package
-is `kernos-sidecar`; the directory keeps its name until the framework is split out.
+`kernos` is a host-agnostic agent framework: a turn pipeline with typed stages, a plugin
+registry with schema-validated configs, an `Engine` protocol (Pi is the first engine), nine
+host adapter protocols, and a versioned content plane. chiatienan is its first host;
+`examples/minimal_host/` is a second one with no chiatienan module on its path, and
+`tests/test_layering.py` enforces that nothing under `kernos/` imports the app.
 
-The steward (off by default): every boot seeds a `steward` sub-agent with a profile of its
-own — one pack (`os_admin`), read and draft capabilities, and the lunch profile under its
-stewardship. Nothing points at it, so no room's tool list changes. Connect it with one call
-(`PATCH /api/admin/agents/<phoenix id>` with `{"delegates_to": [<steward id>]}`) and Phoenix
-gains a single `ask_steward` tool; asking it makes the steward read `cms_get_friction` — six
-deterministic detectors over the room's stored turn traces — and, when a pattern is clear,
-draft one change to a skill, rule or the prompt and open a proposal. It publishes nothing:
-a person approves at `POST /api/admin/proposals/<id>/approve`, or confirms the proposal card
-in the room where the agent that wrote it runs. Before turning it on, read
-[`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md).
+**The bot's configuration is data, not code.** Its prompt, rules, skills, models, caps and
+pipeline are versioned content in `kn_` tables, seeded from code on first boot and re-synced
+while nobody has edited it. A publish goes through five gates (schema, money safety, model
+probe, eval, reflexivity). Every turn leaves a trace row. Rooms nobody binds keep running the
+seeded default, byte for byte.
 
-The room's own CMS (Phase 11): every member sees the agent their room runs under a **Bot**
-tab — the system prompt, the skills, the rules, and a revision log naming who changed what.
-A room with its own binding can edit the prompt, the skills and the non-money rules, and
-republish any earlier version; a room without one is read-only, because `POST
-/api/rooms/create` is public and an unbound room resolves to the shared default agent, so
-membership cannot be a permission. Never editable from a room: the model, the caps, the
-pipeline, the tool packs, the builtin tools and any rule tagged `money`. Two limits worth
-knowing — the first member edit stops that profile following deploys (`managed_by`), and a
-prompt-level money rule is advisory: with `bash` enabled, prose can still talk the model
-into arithmetic and `backed_amounts` counts a builtin's output as evidence. The enforced
-invariants are the blacklisted fields, the confirmed card a ledger write needs, and the
-forged-commit guard. See
-[`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md).
+What that buys, in one line each:
+
+- **A room CMS** — every member reads the agent their room runs under a **Bot** tab, with a
+  revision log and a Republish button; a room with its own binding can edit the prompt, the
+  skills and the non-money rules. The model, caps, pipeline, packs and money rules stay
+  behind the admin password.
+- **A steward** (off by default) — a sub-agent that reads six deterministic detectors over
+  the room's own traces and, when a pattern is clear, proposes one change for a person to
+  approve.
+- **Self-administration** — the CMS as a capability-gated tool pack, so an agent can read
+  its own configuration and propose changes to it, inside a scope, never on the blacklist.
+- **A second business** (`packs/poker_ledger/`) sharing `ledger_core` and nothing else,
+  which is what proves the framework is not lunch-shaped.
+- **Portability** — a published profile exports as a Pi package and imports as sources plus
+  a draft, never a publish.
+
+**Read next:**
+
+| | |
+|---|---|
+| Using the bot and the Bot tab, and the operator's admin tasks | [`docs/user-guide.md`](docs/user-guide.md) |
+| Architecture, the standing rules, and how to add a pack, plugin, business, agent or host | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| Shipping it to production, step by step | [`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
+| Why any of it is shaped this way | [design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
@@ -232,6 +200,11 @@ forged-commit guard. See
 Bill photos must be **pasted inline** (the composer supports paste-to-attach).
 Edit your own display name and bank details on the profile screen so the
 settlement QR can pay you.
+
+The side panel's **Bot** tab shows the bot's own configuration — its prompt, skills and
+rules — with a revision log of who changed what and a Republish button on any earlier
+version. Reading is open to everyone in the room; editing needs the room to have its own
+binding. See the [user guide](docs/user-guide.md#the-bot-tab).
 
 ## Local development
 
