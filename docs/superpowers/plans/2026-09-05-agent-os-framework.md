@@ -2200,32 +2200,70 @@ tests.
 (the directory stays — F8), `pyproject.toml` (F9), `examples/__init__.py`,
 `examples/minimal_host/host.py` (new), `tests/test_layering.py` (`examples → kernos`), tests.
 
-- [ ] npm package renamed `kernos-sidecar` `0.9.0` (`npm install --package-lock-only`); the dead
+- [x] npm package renamed `kernos-sidecar` `0.9.0` (`npm install --package-lock-only`); the dead
       `KEY_ENV`/`OPENROUTER_BASE_URL` exports and their asserts deleted; tmp-dir names
       `kernos-pi-cwd`/`kernos-pi-agent`; `pyproject` explicit `include`, `namespaces = false`;
       the directory move is recorded in design §12.1 as a split-time rename. No symlink, no
       Dockerfile or CI change.
-- [ ] `examples/minimal_host/host.py` per decision 1 with `HelloPack`, the in-memory
+- [x] `examples/minimal_host/host.py` per decision 1 with `HelloPack`, the in-memory
       adapters, `BaseKernel`, `admin_router`, `ScriptedEngine` and `AguiEventSink`;
       `tests/test_minimal_host.py` imports it under a `sys.meta_path` finder that raises on
       any `app`/`packs`/`ledger_core`/`bench` import (F10), runs one turn (`say_hello` → a typed body),
       asserts the AG-UI stream and the admin API answer; `tests/test_layering.py` gains
       `examples: {kernos, examples}`.
-- [ ] Proof: sidecar tests green after the rename; the two pinned tests untouched; the
+- [x] Proof: sidecar tests green after the rename; the two pinned tests untouched; the
       example host's test; the full suite; golden 9/9.
-- [ ] Commit: `examples/minimal_host: a host with no chiatienan on its path runs a turn; the sidecar package is kernos-sidecar (PR 9c)`
+- [x] Commit: `examples/minimal_host: a host with no chiatienan on its path runs a turn; the sidecar package is kernos-sidecar (PR 9c)`
+
+      _As built (2026-09-06):_ the example host's own `ToolContext` is a 13-field dataclass (the
+      fields the framework reads); its kernel is a `BaseKernel` subclass of ~30 lines over an
+      in-memory SQLite content store and the in-memory adapters; `POST /spaces/{id}/turns`
+      takes the scripted engine's reply lines with the message (a real host runs `PiEngine`);
+      the sidecar test that asserted the two dead constants went with them (69 tests now).
+      Suite 1266 passed, 1 skipped; sidecar 69/69; golden 9/9; layering green with the
+      `examples` layer; no pre-existing test edited.
 
 ### Task 9.4: docs, state of play, `TODO.md`
 
-- [ ] Design §12 as built (BaseKernel and its hooks, `kernos.run.engine`, the scripted
+- [x] Design §12 as built (BaseKernel and its hooks, `kernos.run.engine`, the scripted
       bridge/engine, the AG-UI sink's state machine, what export carries and refuses, the
-      sidecar rename deferred to the split with the one `git filter-repo --path …` command —
-      F12); README (export/import, the example host, the sidecar package name); `TODO.md`
+      sidecar rename deferred to the split with the one `git filter-repo …` command — F12);
+      README (export/import, the example host, the sidecar package name); `TODO.md`
       "BIG: agent engine export/import" closed with the file format; `kernos/__init__.py`
       `__version__ = "0.9.0"`; plan state of play and the closing note for the whole plan.
 
 **Proof for the phase:** the example host runs a "hello" business with no `app`/`packs`/
 `ledger_core` on its path; a profile exported as a Pi package imports back as an equal draft.
 
-**Phase 9 — state of play:** _(filled as tasks complete)_
+**Phase 9 — state of play (2026-09-06):** Tasks 9.1–9.4 done; F1–F12 all in the build (see
+the dispositions and the "as built" notes under 9.1–9.3). `kernos.host.BaseKernel` with four
+host hooks; `kernos.run.engine`; `kernos.engine.fake.ScriptedBridge/ScriptedEngine`;
+`kernos.api.agui.AguiEventSink` + `from_legacy`; `kernos.content.package.export_profile/
+import_package` and their admin routes; `examples/minimal_host` with its guarded test; the
+sidecar package renamed `kernos-sidecar` (directory unchanged); `pyproject` explicit
+includes; `kernos.__version__ = "0.9.0"`. Proof: `tests/kernos/test_agui.py`,
+`tests/kernos/test_fake_engine.py`, `tests/test_base_kernel.py`, `tests/kernos/test_package.py`,
+`tests/test_admin_package.py`, `tests/test_minimal_host.py`. Suite 1266 passed, 1 skipped;
+sidecar 69/69; golden 9/9; layering green (six layers); no pre-existing test edited.
+
+---
+
+## Closing note — the plan is complete (2026-09-06)
+
+Nine phases, each gated by a second-model review before code, are on
+`claude/headless-cms-pi-harness-nn18pb`: the kernel and its pipeline (1), the content
+plane and its admin API (2), packs and `ledger_core` (3), traces and eval (4), the data
+plane (5), the poker ledger as a second business (6), agents and sub-agents (7),
+self-administration through the `os_admin` pack (8), and portability (9). The lunch bot's
+behaviour is unchanged throughout: the nine golden fixtures are byte-identical, every
+pre-existing test on `origin/main` is untouched, and every new capability is opt-in
+(a pack in `tool_packs`, a capability on an agent, a binding on a room).
+
+Known limits, stated in the phases that own them: `ask_*` tools do not appear in eval
+runs (no agent tree in the eval world — Phase 7/8); a steward reviews itself only and its
+schedule is the operator's (Phase 8); the frontend renders `game_draft` and other new
+card kinds as blank bubbles until the generic `DraftCard` ticket lands (`TODO.md`); the
+benchmark was not run here (`OPEN_ROUTER_KEY` absent); the sidecar directory keeps its
+name until the framework is split out (Phase 9 F8); the package name `kernos` (design
+§11 item 6) is still the operator's call.
 

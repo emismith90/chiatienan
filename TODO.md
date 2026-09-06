@@ -25,11 +25,9 @@
 
 - **Randomizer** — randomly pick 1 person from the group (e.g. who pays / who fetches lunch).
 
-- **BIG: agent engine export/import** — designed as part of the Agent OS framework
-  (`docs/superpowers/specs/2026-09-05-agent-cms-design.md`; export/import as a Pi
-  package is Phase 9 of `docs/superpowers/plans/2026-09-05-agent-os-framework.md`).
-  Phase 1 (the kernel, zero behaviour change) has shipped on this branch.
-  - Define mounting point vs skeleton.
-  - What to export.
-  - Import flow, with sanitize via separate import workflow (installation agent).
-  - A UI/CMS for upload/config agent.
+- **Agent engine export/import — done (Agent OS Phase 9).** A published profile exports as a
+  Pi package (`GET /api/admin/profiles/{id}/export`: `skills/<slug>/SKILL.md`, `prompts/*.md`,
+  `AGENTS.md`, `.pi/settings.json`, `kernos.json`) and imports into a business as sources plus a
+  draft that the publish gates review (`POST /api/admin/businesses/{id}/import[?replace=true]`).
+  Remaining: a UI for upload (the admin API is the only surface), and the split of `kernos`
+  into its own repository when a second real host exists (design §12.1).

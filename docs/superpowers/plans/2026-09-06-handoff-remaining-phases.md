@@ -1,5 +1,10 @@
 # Handoff — the remaining work on `claude/headless-cms-pi-harness-nn18pb`
 
+> **Update 2026-09-06 (later the same day): Phase 9 shipped in full** (PRs 9a–9c and the
+> Task 9.4 docs). Nothing in the plan remains open; §5 below is kept as the record of how it
+> was done. What a successor could still take up is listed in the plan's closing note:
+> the frontend `DraftCard` ticket, running the benchmark with a key, and the eventual split.
+
 Written 2026-09-06 for whoever continues (a different model may pick this up). Everything
 below is self-contained: what is done, the rules that governed the work, and a step-by-step
 plan for what remains — Phase 9 (Portability) and the closing notes.

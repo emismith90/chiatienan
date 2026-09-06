@@ -1016,50 +1016,84 @@ unchanged to the digit.
 
 ```
 backend/
-  kernos/            the framework — Python package, no imports from app/ or packs/
-    kernel/  registry/  engine/  content/  agents/  data/  observe/  eval/  api/
-    adapters/memory.py    in-memory HistorySource/MemoryStore/… for tests and examples
-  kernos_sidecar/    the Node runtime (today's agent_sidecar/, generalised; no money comments)
-  ledger_core/            domain library: members, payments, netting, QR, periods, drafts
-  packs/
-    lunch_ledger/         business pack; imports ledger_core and kernos
-    poker_ledger/
-  app/                    chiatienan host: FastAPI routes, rooms, chat, SSE, host adapters, plugins/
-  examples/minimal_host/  Phase 9: a 100-line host proving the framework runs without chiatienan
+  kernos/            the framework — Python package, no imports from app/, packs/, ledger_core/ or bench/
+    kernel/  registry/  engine/  content/  data/  eval/  api/  plugins/  adapters/
+    host.py            BaseKernel (§12.2)   agents.py  delegation   osadmin.py  the CMS pack
+    adapters/memory.py in-memory HistorySource/MemoryStore/… for tests and examples
+  agent_sidecar/     the Node runtime; npm package `kernos-sidecar` (the directory keeps its
+                     name until the split — two origin/main tests pin the path; the rename is
+                     one `git filter-repo --path-rename backend/agent_sidecar:backend/kernos_sidecar`)
+  ledger_core/       domain library: members, payments, netting, QR, periods, drafts
+  packs/             lunch_ledger, ledger_tools, poker_ledger — import ledger_core and kernos
+  app/               chiatienan host: FastAPI routes, rooms, chat, SSE, host adapters, plugins/
+  examples/minimal_host/  a ~200-line host proving the framework runs without chiatienan (§12.3)
 ```
 
-Same repo, separate packages, one dependency direction:
-`app → packs → ledger_core → kernos`, and `app → kernos`. A test walks the
-import graph and fails on any edge pointing the other way. Extraction to its own
-repository and to PyPI/npm is a `git subtree split` when a second host exists, not
-before — a framework with one user is a guess, and the plan schedules the second host
-(§12.3) as the moment to split.
+Same repo, separate packages, one dependency direction: `app → packs → ledger_core →
+kernos`, `app → kernos`, `examples → kernos`; `tests/test_layering.py` walks the import
+graph and fails on any other edge. `pyproject.toml` lists the distributed packages
+explicitly (`namespaces = false`); `examples` is importable from the repo but never shipped.
+Extraction to its own repository and to PyPI/npm happens when a second *real* host exists,
+not before — the rehearsal is one command:
+
+```
+git filter-repo --path backend/kernos --path backend/agent_sidecar --path backend/examples \
+                --path backend/tests/kernos --path backend/tests/test_layering.py \
+                --path-rename backend/agent_sidecar:backend/kernos_sidecar
+```
+
+`kernos.__version__` is `0.9.0`; §11's open item 6 (the package name) stays open.
 
 ### 12.2 What a host implements
 
-Six protocols (§4.6) and two decisions: how it maps its tenant to `space_id`, and
-where it mounts the admin router. Everything else is content and packs. The framework
-ships: the kernel, `PiEngine`, the content plane and its API, the data plane, traces,
-eval, the `os_admin` pack, the AG-UI mapping, and in-memory adapters.
+_As built (Phase 9):_ a host subclasses `kernos.host.BaseKernel` and implements four
+hooks — `null_tool_context()` (a tool context with no space, for a pack's static tool
+names), `sub_tool_context(parent, *, sub, depth, caps)` (a sub-agent's context derived
+from its manager's), `eval_runner_argv(suite, version_id, run_id)` (the command that fills
+an eval run; `None` = this host runs no jobs) and `on_packs_registered(packs)` — then calls
+`register_packs(...)`, `register_framework_packs()` (collections, delegation, `os_admin`),
+`register_framework_plugins()`, `register_engine(engine)` (the framework run stage
+`kernos.run.engine` over any `Engine`), seeds its content with `ensure_seeded`, sets
+`default_business_id`, `build_gates()` and `resolver`. It also decides how its tenant maps
+to `space_id`, where it mounts `admin_router(lambda: kernel)`, and which sink it hands a
+turn. Everything else is content and packs; the framework ships the kernel, `PiEngine` and
+the scripted engine, the content plane and its API, the data plane, traces, eval,
+delegation, the `os_admin` pack, the AG-UI sink and the in-memory adapters. chiatienan's
+`app.kernel.Kernel` is such a subclass (~80 lines) and keeps its legacy run plugin, whose
+tool-context preparation and executor policy it shares with `kernos.run.engine`.
 
 ### 12.3 The minimal example host
 
-A single-file FastAPI app with one space, one agent, a "hello" pack with one tool, the
-in-memory adapters, and the `os_admin` pack enabled. It exists to prove the layering
-(no chiatienan module on its import path) and to be the template for the operator's
-next application. It is the acceptance test of Phase 9.
+_As built:_ `examples/minimal_host/host.py` — a `HelloPack` with one tool (`say_hello`)
+and a typed body, a 13-field tool-context dataclass (what the framework reads), a
+`HelloKernel(BaseKernel)` over an in-memory SQLite content store and the in-memory
+adapters, a profile built in code whose pipeline names framework plugins only, the admin
+router at `/admin`, and `POST /spaces/{id}/turns` that runs a turn with the scripted
+engine and returns the persisted reply and the AG-UI events. `tests/test_minimal_host.py`
+imports it under a meta-path guard that refuses `app`, `packs`, `ledger_core` and `bench`,
+runs a turn end to end and reads the trace back through the admin API. It is the
+acceptance test of Phase 9 and the template for the operator's next application.
 
 ### 12.4 Events and AG-UI
 
 The kernel emits typed `TurnEvent`s: `run.started`, `text.delta`, `tool.start`,
 `tool.result`, `run.finished`, `run.error`, `sub.started`, `sub.finished`,
-`validation.warned`, `validation.blocked`, `message.republished` (a superseded or
-cancelled card whose buttons must disappear). chiatienan's `EventSink` maps the first
-group to the frozen `agent.*` SSE names and the last to its `{"type":"message", …}`
-republish, both after the writer lock is released as today. The framework also ships an
-`agui.EventSink` that maps the same events to AG-UI's `RUN_STARTED`,
-`TEXT_MESSAGE_CONTENT`, `TOOL_CALL_START/ARGS/END`, `RUN_FINISHED`, `RUN_ERROR`, so a
-new host gets an AG-UI-compatible stream by choosing that sink.
+`validation.warned`, `validation.blocked`, `message.republished`. chiatienan's
+`LegacyAgentEventSink` maps the first group to the frozen `agent.*` SSE names and the last
+to its `{"type":"message", …}` republish, after the writer lock as today. _As built:_
+`kernos.api.agui.AguiEventSink` is the framework's AG-UI sink, and it is **stateful**
+because AG-UI has an order the kernel's events do not: `RUN_STARTED` is synthesised on
+the first event; an assistant text message opens on the first delta
+(`TEXT_MESSAGE_START/CONTENT`) and closes (`TEXT_MESSAGE_END`) before any tool call,
+step or run end; a complete tool call becomes `TOOL_CALL_START/ARGS/END` at once and its
+result `TOOL_CALL_RESULT` (`role: "tool"`); a sub-agent's span is `STEP_STARTED/FINISHED`
+and its tool call ids are prefixed with its slug (pi's ids collide across sessions);
+verdicts and republished cards are `CUSTOM`; the sidecar's `agent.run.finished` only
+closes the message — `RUN_FINISHED` comes from `sink.finish()`, which the host calls after
+it has flushed its pending events; `RUN_ERROR` ends the stream. Both entry points
+(`emit(TurnEvent)` and the Pi engine's legacy dicts through `emit_raw`) converge on one
+mapping; `from_legacy` is the inverse of `to_legacy`. The streamed text is the model's
+live output, not the persisted reply.
 
 ### 12.5 Versioning
 

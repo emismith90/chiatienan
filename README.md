@@ -159,6 +159,14 @@ with a finished eval run of the exact content). Proposals live at `/api/admin/pr
 approved or rejected there by a person; approval publishes through the gates and writes the sources
 so the change survives the next draft. Nothing a `cms_*` tool returns can back a number in a reply
 (`backend/kernos/osadmin.py`). The steward brief is at `GET /api/admin/steward/brief`.
+Portability (Phase 9): `app/kernel.py` is a subclass of the framework's `kernos.host.BaseKernel`
+with four host hooks; `examples/minimal_host/host.py` is a second host with no chiatienan module
+on its path (its test guards that), running the framework run stage `kernos.run.engine` over a
+scripted engine and streaming AG-UI events (`kernos.api.agui`). A published profile exports as a
+Pi package (`GET /api/admin/profiles/{id}/export` — skills, prompts, `AGENTS.md`,
+`.pi/settings.json`, and `kernos.json` for a lossless re-import) and a package imports as sources
+and a draft, never a publish (`POST /api/admin/businesses/{id}/import`). The sidecar's npm package
+is `kernos-sidecar`; the directory keeps its name until the framework is split out.
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
