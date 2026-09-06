@@ -120,7 +120,7 @@ def test_the_publish_verb_needs_eval_suites_on_the_published_profile(db):
     with pytest.raises(Invalid, match="eval.suites"):
         k.store.update_agent(agent["id"], {"capabilities": {"cms": ["read", "publish"]}})
     with pytest.raises(Invalid, match="eval.suites"):
-        k.store.create_agent(bid, "steward", "Steward", profile_id=pid, capabilities={"cms": ["publish"]})
+        k.store.create_agent(bid, "auditor", "Auditor", profile_id=pid, capabilities={"cms": ["publish"]})
     with pytest.raises(Invalid, match="capabilities.cms"):
         k.store.update_agent(agent["id"], {"capabilities": {"cms": ["root"]}})
     ok = k.store.update_agent(agent["id"], {"capabilities": {"cms": ["eval", "read"], "self_change_scope": ["prompt.append"]}})

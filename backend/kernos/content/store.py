@@ -450,6 +450,10 @@ class ContentStore:
         version names ``eval.suites`` — self-publish is never allowed where gate 4 would
         be vacuous (Phase 8 review F3)."""
         out = normalise_capabilities(caps)
+        for managed in out.get("manages_profiles", []):
+            p = s.get(m.Profile, managed)
+            if p is None or p.business_id != self._profile(s, profile_id).business_id:
+                raise Invalid(f"manages_profiles names profile {managed}, not a profile of this business")
         if "publish" in out.get("cms", []):
             p = self._profile(s, profile_id)
             published = s.get(m.ProfileVersion, p.published_version_id).spec if p.published_version_id else {}

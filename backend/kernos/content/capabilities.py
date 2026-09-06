@@ -1,10 +1,16 @@
 """Agent capabilities (design §8.3, Phase 8 review F3/F9/F13): what an agent may do
 to the CMS, validated as content and read with defaults that fail closed.
 
-``{"cms": [verbs], "self_change_scope": [paths], "max_eval_runs_per_day": n}`` — verbs
-from :data:`CMS_VERBS`, paths from :data:`SCOPE_VOCABULARY` (the blacklist is not in the
-vocabulary, so it can never be granted), the run cap 0–10. An absent block means no verb,
-no scope, and the default cap.
+``{"cms": [verbs], "self_change_scope": [paths], "manages_profiles": [ids],
+"max_eval_runs_per_day": n}`` — verbs from :data:`CMS_VERBS`, paths from
+:data:`SCOPE_VOCABULARY` (the blacklist is not in the vocabulary, so it can never be
+granted), the run cap 0–10. An absent block means no verb, no scope, nothing managed and
+the default cap.
+
+``manages_profiles`` is what lets a **steward** be useful: an agent reviewing another
+agent's turns may draft against the profiles it names and open a proposal for them
+(design §8.3 as amended, plan Phase 10.2). It never widens ``cms_publish``, which stays
+own-profile-only — a change to somebody else's profile is always a person's to approve.
 """
 from __future__ import annotations
 
@@ -16,7 +22,7 @@ CMS_VERBS = ("read", "draft", "eval", "publish")
 SCOPE_VOCABULARY = ("prompt.body", "prompt.append", "skills", "rules", "validation.warn")
 DEFAULT_MAX_EVAL_RUNS_PER_DAY = 2
 MAX_EVAL_RUNS_CAP = 10
-_KEYS = ("cms", "self_change_scope", "max_eval_runs_per_day")
+_KEYS = ("cms", "self_change_scope", "max_eval_runs_per_day", "manages_profiles")
 
 
 def normalise_capabilities(caps) -> dict:
@@ -39,6 +45,11 @@ def normalise_capabilities(caps) -> dict:
         if not isinstance(scope, list) or any(p not in SCOPE_VOCABULARY for p in scope):
             raise Invalid(f"capabilities.self_change_scope must be a list of {list(SCOPE_VOCABULARY)}")
         out["self_change_scope"] = [p for p in SCOPE_VOCABULARY if p in scope]
+    if "manages_profiles" in caps:
+        ids = caps["manages_profiles"]
+        if not isinstance(ids, list) or any(isinstance(i, bool) or not isinstance(i, int) for i in ids):
+            raise Invalid("capabilities.manages_profiles must be a list of profile ids")
+        out["manages_profiles"] = sorted(set(ids))
     if "max_eval_runs_per_day" in caps:
         n = caps["max_eval_runs_per_day"]
         if isinstance(n, bool) or not isinstance(n, int) or not 0 <= n <= MAX_EVAL_RUNS_CAP:
@@ -52,4 +63,5 @@ def agent_capabilities(agent: dict | None) -> dict:
     caps = (agent or {}).get("capabilities") or {}
     return {"cms": set(caps.get("cms") or []),
             "scope": list(caps.get("self_change_scope") or []),
+            "manages": list(caps.get("manages_profiles") or []),
             "max_eval_runs_per_day": caps.get("max_eval_runs_per_day", DEFAULT_MAX_EVAL_RUNS_PER_DAY)}

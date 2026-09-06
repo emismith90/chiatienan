@@ -77,3 +77,54 @@ def ensure_seeded(store: ContentStore, *, business_slug: str, business_name: str
     out.update(business_id=bid, profile_id=pid, agent_id=agent["id"],
                version_id=profile["published_version_id"], managed_by=profile["managed_by"])
     return out
+
+
+def ensure_sub_agent(store: ContentStore, business_id: int, *, slug: str, name: str, spec: ProfileSpec,
+                     description: str = "", capabilities: dict | None = None,
+                     profile_name: str | None = None, actor: str = "boot") -> dict:
+    """Seed a **sub**-agent with a profile of its own, once (plan Phase 10.2).
+
+    Idempotent and non-destructive in the way boot has to be: an agent that already
+    exists keeps everything an operator has changed about it — capabilities above all —
+    and its profile is republished only while it is still ``managed_by="boot"`` and the
+    stored spec differs, the same rule :func:`ensure_seeded` uses for the default one.
+
+    It deliberately does **not** wire any manager's ``delegates_to``. Delegation adds an
+    ``ask_<slug>`` tool to every space that manager runs, which is a change to what a
+    live room's bot can do; boot creates the parts, an operator connects them.
+    """
+    out: dict = {"actions": []}
+    stored = spec.stored()
+    pname = profile_name or slug
+
+    profile = next((p for p in store.list_profiles(business_id) if p["name"] == pname), None)
+    if profile is None:
+        profile = store.create_profile(business_id, pname, actor=actor, managed_by="boot")
+        out["actions"].append(f"profile {pname} created")
+    pid = profile["id"]
+
+    published = store.published_spec(pid)
+    if published is None:
+        draft = store.create_draft(pid, actor=actor, base_spec=stored, snapshot=False,
+                                   note=f"boot: seeded {pname} from code")
+        store.publish(draft["id"], actor=actor, bypass_gates=True)
+        out["actions"].append(f"{pname} version 1 published")
+    elif profile["managed_by"] == "boot":
+        draft = store.create_draft(pid, actor=actor, base_spec=stored, snapshot=False,
+                                   note=f"boot: {pname} changed in code")
+        if store.get_version(draft["id"])["spec"] == published:
+            store.retire(draft["id"], actor=actor)            # nothing changed; no churn
+        else:
+            store.publish(draft["id"], actor=actor, bypass_gates=True)
+            out["actions"].append(f"{pname} republished (code changed)")
+
+    agent = next((a for a in store.list_agents(business_id) if a["slug"] == slug), None)
+    if agent is None:
+        agent = store.create_agent(business_id, slug, name, profile_id=pid, actor=actor, role="sub",
+                                   description=description, capabilities=capabilities or {})
+        out["actions"].append(f"sub-agent {slug} created")
+
+    profile = store.get_profile(pid)
+    out.update(agent_id=agent["id"], profile_id=pid, version_id=profile["published_version_id"],
+               slug=slug, managed_by=profile["managed_by"])
+    return out

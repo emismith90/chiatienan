@@ -19,18 +19,23 @@ def _spec(**kw):
 def test_capabilities_vocabulary_and_defaults():
     assert normalise_capabilities(None) == {} and normalise_capabilities({}) == {}
     out = normalise_capabilities({"cms": ["eval", "read", "read"], "self_change_scope": ["rules", "prompt.append"],
-                                  "max_eval_runs_per_day": 0})
-    assert out == {"cms": ["read", "eval"], "self_change_scope": ["prompt.append", "rules"], "max_eval_runs_per_day": 0}
+                                  "manages_profiles": [3, 1, 3], "max_eval_runs_per_day": 0})
+    assert out == {"cms": ["read", "eval"], "self_change_scope": ["prompt.append", "rules"],
+                   "manages_profiles": [1, 3], "max_eval_runs_per_day": 0}
     for bad, needle in [({"cms": ["admin"]}, "capabilities.cms"), ({"cms": "read"}, "capabilities.cms"),
                         ({"self_change_scope": ["models"]}, "self_change_scope"),
                         ({"self_change_scope": ["persona"]}, "self_change_scope"),
                         ({"max_eval_runs_per_day": 11}, "0–10"), ({"max_eval_runs_per_day": True}, "0–10"),
-                        ({"max_self_iterations": 3}, "unknown capabilities keys"), ([], "must be an object")]:
+                        ({"max_self_iterations": 3}, "unknown capabilities keys"), ([], "must be an object"),
+                        ({"manages_profiles": 3}, "manages_profiles"),
+                        ({"manages_profiles": ["a"]}, "manages_profiles"),
+                        ({"manages_profiles": [True]}, "manages_profiles")]:
         with pytest.raises(Invalid, match=needle):
             normalise_capabilities(bad)
-    assert agent_capabilities(None) == {"cms": set(), "scope": [], "max_eval_runs_per_day": 2}
-    assert agent_capabilities({"capabilities": {"cms": ["read", "draft"], "max_eval_runs_per_day": 5}}) == {
-        "cms": {"read", "draft"}, "scope": [], "max_eval_runs_per_day": 5}
+    assert agent_capabilities(None) == {"cms": set(), "scope": [], "manages": [], "max_eval_runs_per_day": 2}
+    assert agent_capabilities({"capabilities": {"cms": ["read", "draft"], "max_eval_runs_per_day": 5,
+                                                "manages_profiles": [1, 3]}}) == {
+        "cms": {"read", "draft"}, "scope": [], "manages": [1, 3], "max_eval_runs_per_day": 5}
     assert not set(SCOPE_VOCABULARY) & set(BLACKLIST_FIELDS) and not set(SCOPE_VOCABULARY) & NEVER_IN_SCOPE
 
 

@@ -249,7 +249,7 @@ def test_self_publish_needs_scope_blacklist_evidence_and_ownership(db, monkeypat
     assert publish_audit["actor"] == "agent:phoenix" and "self-publish" in publish_audit["after"]["override_reason"]
     assert out["_record"] == {"ok": True, "version_id": d["version_id"], "version": d["version"], "proposal_id": prop["id"]}
     # a skill change is outside the scope; a blacklisted change is refused before the gates
-    ctx.turn.extras.pop("cms_draft")
+    ctx.turn.extras.pop("cms_drafts")
     d2 = tools["cms_draft_change"].execute({"kind": "skill", "slug": "balances", "body": "new", "rationale": "r"})
     _finished_run(k, suite, d2["version_id"])
     refused = tools["cms_publish"].execute({"version_id": d2["version_id"], "rationale": "r"})

@@ -20,7 +20,9 @@ from app.hostadapters import build_adapters
 from app.plugins.prompt import PhoenixSystemPrompt
 from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
-from kernos.content import ContentStore, DbResolver, ProfileSpec, Resolver, StaticResolver, ensure_seeded  # noqa: F401
+from kernos.content import (  # noqa: F401
+    ContentStore, DbResolver, ProfileSpec, Resolver, StaticResolver, ensure_seeded, ensure_sub_agent,
+)
 from kernos.data import DataStore
 from kernos.host import BaseKernel
 
@@ -51,6 +53,12 @@ class Kernel(BaseKernel):
         self.poker_report = ensure_seeded(
             self.store, business_slug=POKER_SLUG, business_name="Poker ledger",
             spec=build_poker_spec(settings), agent_slug="dealer", agent_name="Dealer", sources=poker_sources())
+        from app.steward_profile import CAPABILITIES, DESCRIPTION, NAME, SLUG, build_steward_spec
+        self.steward_report = ensure_sub_agent(
+            self.store, self.seed_report["business_id"], slug=SLUG, name=NAME,
+            spec=build_steward_spec(settings), description=DESCRIPTION,
+            # what it may draft against: the lunch profile it reviews, never its own alone
+            capabilities={**CAPABILITIES, "manages_profiles": [self.seed_report["profile_id"]]})
         self.default_business_id = self.seed_report["business_id"]
         self.build_gates()
         self.resolver = resolver or DbResolver(
