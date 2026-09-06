@@ -77,6 +77,11 @@ class ToolContext:
     cards: Any = None
     today: Callable[[], date] | None = None
     choice: Callable[[list], Any] | None = None
+    # The profile's tool-scope validation rules (plan Task 6.2), set by the run plugin:
+    # ``await validate_call(name, args) -> {ok: False, error} | None`` before a tool runs,
+    # ``await validate_result(name, args, result)`` after. ``None`` = no rules.
+    validate_call: Callable | None = None
+    validate_result: Callable | None = None
 
     @property
     def space_id(self):

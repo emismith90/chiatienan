@@ -129,11 +129,22 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         tool = tools.get(name)
         if tool is None:
             return {"ok": False, "error": f"unknown tool {name}"}
+        before = getattr(ctx, "validate_call", None)
+        if before is not None:                         # the profile's tool_args rules (plan Task 6.2)
+            refused = await before(name, args)
+            if refused is not None:
+                return refused
         try:
-            return tool.execute(args)
+            result = tool.execute(args)
         except Exception as exc:  # noqa: BLE001 — a tool must not kill the turn
             logger.exception("[agent] tool %s raised", name)
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        after = getattr(ctx, "validate_result", None)
+        if after is not None:
+            refused = await after(name, args, result)
+            if refused is not None:
+                return refused
+        return result
 
     engine = PiEngine(get_bridge())
     result = await engine.run(spec, turn_id=turn_id, message=message, images=list(images or []),

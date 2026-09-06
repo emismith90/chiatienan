@@ -1454,24 +1454,31 @@ blocked-settle body treats a `kind`-less pending entry as a meal (the shape befo
 carried a name; `test_chat.py` pins it). `ledger_core.notes` still carries the lunch memo
 wording (`"bua trua"`) — a 6c item alongside the rule split. 1158 tests, 1 skipped.
 
-### Task 6.2 (PR 6b): validation rules run
+### Task 6.2 (PR 6b): validation rules run — done
 
-- [ ] `pipeline_dict()` folds `validation` (decision 2, F5): entries carry `rule`, `tool`,
+- [x] `pipeline_dict()` folds `validation` (decision 2, F5): entries carry `rule`, `tool`,
       `on_fail` in config; the fold checks the plugin's stage matches the scope.
       `Pipeline.run` sets `ctx.extras["pipeline"]`; `Pipeline.validate` runs the per-call
       plugins with `ctx.extras["tool_call"]`, never touches `stopped`/`outcome`, records
       `tool`; `LegacyRunTurn` sets `tool_ctx.validate_call`; `agent.run_turn` honours it.
-- [ ] `kernos.validate.{sum_equals,non_negative,unique_members}` at `validate_args` and
+- [x] `kernos.validate.{sum_equals,non_negative,unique_members}` at `validate_args` and
       `….result` twins at `validate_result`; `config_schema` with the path pattern;
       `right` a list; missing path = 0; non-integer fails closed; `on_fail: return_error`
       (a `warn` rule records a `warn` verdict and lets the call through). Gate 1 checks
       `rule.tool` against the enabled packs' static tool names; gate 5 blacklists
       tool-scope and money-handling rule changes. `bench.run` runs no rules (stated).
-- [ ] Proof: a lunch profile with a `sum_equals` rule on `propose_meal` (`total` vs
+- [x] Proof: a lunch profile with a `sum_equals` rule on `propose_meal` (`total` vs
       `items[*].amount`) refuses a mismatched call with the rule's error and the trace
       shows the `validate_args` verdict; without the rule the seeded pipeline is unchanged
       (golden 9/9); gate 1 refuses a rule naming an unknown validator or a bad path.
-- [ ] Commit: `kernos: validation rules run at validate_args/validate_result; sum_equals, non_negative, unique_members`
+- [x] Commit: `kernos: validation rules run at validate_args/validate_result; sum_equals, non_negative, unique_members`
+
+Notes: gate 5 fences every tool-scope rule (and blocking reply rules, as before) by
+comparing the fenced list — the registry-based "money-handling plugin" check was not
+needed, since every tool-scope rule is fenced anyway. `Pipeline.validate` refuses the
+call when a rule *raises* (fail closed, recorded as `error`). The end-to-end proof drives
+`agent.run_turn` with the fake sidecar through `run_bot_turn`, so the executor hook is the
+one production uses. 1163 tests, 1 skipped; sidecar 69.
 
 ### Task 6.3 (PR 6c): the poker pack and business
 

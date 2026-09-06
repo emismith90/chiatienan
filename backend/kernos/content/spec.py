@@ -160,7 +160,21 @@ class ProfileSpec(_Strict):
         )
 
     def pipeline_dict(self) -> dict[str, list[dict]]:
-        return {stage: [e.model_dump() for e in entries] for stage, entries in self.pipeline.items()}
+        """The pipeline the registry builds, with the ``validation`` rules of tool scope
+        folded into the per-call stages (design §5.4; plan Task 6.2): a rule is a
+        validator plugin plus its config, and the config carries the rule's id, the tool
+        it guards and what failing does (``return_error`` | ``warn``). Reply-scope rules
+        are not folded (the reply validators are pipeline plugins already)."""
+        out = {stage: [e.model_dump() for e in entries] for stage, entries in self.pipeline.items()}
+        stage_of = {"tool_args": "validate_args", "tool_result": "validate_result"}
+        for rule in self.validation:
+            stage = stage_of.get(rule.scope)
+            if stage is None:
+                continue
+            out.setdefault(stage, []).append({
+                "id": rule.plugin, "version": rule.version,
+                "config": {**rule.config, "rule": rule.id, "tool": rule.tool, "on_fail": rule.on_fail}})
+        return out
 
     def stored(self) -> dict:
         """The JSON the content plane persists: everything but ``runtime``, which is

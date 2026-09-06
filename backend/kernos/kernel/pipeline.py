@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Iterable
+from typing import Any, Iterable
 
 from kernos.kernel.context import PIPELINE_ORDER, SINGLE_OWNER, Stage, TurnContext, Verdict
 from kernos.kernel.plugin import Plugin, key
@@ -53,6 +53,7 @@ class Pipeline:
         raised is still observed (plan Task 4.1); its plugins are guarded: one that
         raises is recorded and logged, never re-raised, because observability must
         not break the turn. A ``BaseException`` (cancellation) still propagates."""
+        ctx.extras["pipeline"] = self          # the run stage's tool executor validates calls through it
         try:
             for stage in PIPELINE_ORDER:
                 if stage is Stage.after:
@@ -75,15 +76,40 @@ class Pipeline:
             else:
                 ctx.record(Stage.after, plugin.id, plugin.version, (time.perf_counter() - started) * 1000, "ok")
 
-    async def validate(self, stage: Stage, ctx: TurnContext) -> Verdict | None:
-        """Run the validators of ``validate_args`` / ``validate_result`` for one tool call.
-
-        Returns the first ``block`` verdict, else ``None``. Meant for the `run`
-        stage's tool executor; the pipeline itself never calls it.
+    async def validate(self, stage: Stage, ctx: TurnContext, *, name: str, args: dict | None,
+                       result: Any = None) -> Verdict | None:
+        """Run the validators of ``validate_args`` / ``validate_result`` for one tool call
+        (plan Task 6.2). Only the rules whose config names this ``tool`` (or none) run;
+        the call is on ``ctx.extras["tool_call"]``. Returns the first refusing verdict
+        (``block``), else ``None``; ``warn`` verdicts are recorded and let the call
+        through. Never touches ``ctx.stopped`` or ``ctx.outcome`` — a refused tool call is
+        not a stopped turn. Meant for the `run` stage's tool executor.
         """
         if stage not in (Stage.validate_args, Stage.validate_result):
             raise PipelineError(f"validate() is for per-call stages, not '{stage}'")
-        return await self._run_stage(stage, ctx, self._stages.get(stage, []))
+        ctx.extras["tool_call"] = {"name": name, "args": args or {}, "result": result}
+        refused: Verdict | None = None
+        for plugin, config in self._stages.get(stage, []):
+            tool = config.get("tool")
+            if tool is not None and tool != name:
+                continue
+            started = time.perf_counter()
+            try:
+                out = await plugin.run(ctx, config)
+            except Exception as exc:  # noqa: BLE001 — a broken rule refuses the call, never crashes the turn
+                ms = (time.perf_counter() - started) * 1000
+                ctx.record(stage, plugin.id, plugin.version, ms, "error", tool=name, rule=config.get("rule"),
+                           error=f"{type(exc).__name__}: {exc}")
+                refused = refused or Verdict(False, "block", f"{config.get('rule') or plugin.id}: validator failed ({type(exc).__name__}: {exc})")
+                continue
+            ms = (time.perf_counter() - started) * 1000
+            if isinstance(out, Verdict) and not out.ok:
+                ctx.record(stage, plugin.id, plugin.version, ms, out.severity, tool=name, rule=config.get("rule"), reason=out.reason)
+                if out.severity == "block" and refused is None:
+                    refused = out
+            else:
+                ctx.record(stage, plugin.id, plugin.version, ms, "ok", tool=name, rule=config.get("rule"))
+        return refused
 
     async def _run_stage(self, stage: Stage, ctx: TurnContext,
                          entries: Iterable[tuple[Plugin, dict]]) -> Verdict | None:

@@ -119,10 +119,25 @@ async def test_per_call_validators_are_consulted_not_run():
     }))
     ctx = await p.run(_ctx())
     assert "va" not in [s for s, _ in ctx.extras["seen"]]            # not a stage
-    verdict = await p.validate(Stage.validate_args, ctx)
+    assert ctx.extras["pipeline"] is p                               # the executor finds it here
+    verdict = await p.validate(Stage.validate_args, ctx, name="propose_x", args={"total": 1})
     assert verdict is not None and verdict.reason == "bad"
+    assert ctx.extras["tool_call"] == {"name": "propose_x", "args": {"total": 1}, "result": None}
+    assert ctx.stopped is False and ctx.outcome is None               # a refused call is not a stopped turn
+    row = ctx.trace[-1]
+    assert row["plugin"] == "va" and row["outcome"] == "block" and row["tool"] == "propose_x"
     with pytest.raises(PipelineError):
-        await p.validate(Stage.validate, ctx)
+        await p.validate(Stage.validate, ctx, name="x", args={})
+    # a rule guarding another tool does not run; a warn rule lets the call through
+    p = Pipeline(_stages(**{Stage.validate_args: [
+        (Rec("other", "validate_args", ret=Verdict(False, "block", "no")), {"tool": "other_tool"}),
+        (Rec("soft", "validate_args", ret=Verdict(False, "warn", "hmm")), {"tool": "propose_x"}),
+        (Rec("boom", "validate_args", raise_=RuntimeError("x")), {"tool": "propose_x", "rule": "r1"})]}))
+    ctx = await p.run(_ctx())
+    verdict = await p.validate(Stage.validate_args, ctx, name="propose_x", args={})
+    assert verdict is not None and "validator failed" in verdict.reason         # a broken rule refuses, never crashes
+    assert [s for s, _ in ctx.extras["seen"] if s in ("other", "soft", "boom")] == ["soft", "boom"]
+    assert [(t["plugin"], t["outcome"]) for t in ctx.trace if t["stage"] == "validate_args"] == [("soft", "warn"), ("boom", "error")]
 
 
 def test_describe_lists_pipeline_in_execution_order():

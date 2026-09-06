@@ -32,7 +32,7 @@ from kernos.kernel import Pipeline
 from kernos.packs import PackRegistry
 from kernos.plugins import (
     Cards as KernelCards, ImageLookback, MemoryLoad, ModelPassthrough, PackRender, RecentHistory,
-    Rollover, SectionsMessage, TemplatePrompt, Trace, EvalCapture,
+    Rollover, SectionsMessage, TemplatePrompt, Trace, EvalCapture, validators,
 )
 from kernos.registry import Registry
 
@@ -58,6 +58,7 @@ class Kernel:
             FabricatedCommit(), UnbackedAmounts(),
             Trace(StoreTraces(self.store)),
             EvalCapture(self.capture_case, self.packs, self.adapters),
+            *validators(),
         ])
         self.default_spec = build_default_spec(settings)
         self.seed_report = ensure_seeded(

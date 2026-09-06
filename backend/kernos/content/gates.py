@@ -55,10 +55,15 @@ def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec |
     for field in BLACKLIST_FIELDS:
         if new.get(field) != old.get(field):
             changed.append(field)
-    new_block = [v for v in new.get("validation", []) if v.get("on_fail") == "block"]
-    old_block = [v for v in old.get("validation", []) if v.get("on_fail") == "block"]
+    def fenced(v: dict) -> bool:
+        # a blocking reply rule, or any rule that guards a tool call — those are the
+        # money invariants (plan Task 6.2, review F5)
+        return v.get("on_fail") == "block" or v.get("scope") in ("tool_args", "tool_result")
+
+    new_block = [v for v in new.get("validation", []) if fenced(v)]
+    old_block = [v for v in old.get("validation", []) if fenced(v)]
     if new_block != old_block:
-        changed.append("validation[on_fail=block]")
+        changed.append("validation[on_fail=block|scope=tool_*]")
     new_money = [r for r in new.get("rules", []) if "money" in (r.get("tags") or [])]
     old_money = [r for r in old.get("rules", []) if "money" in (r.get("tags") or [])]
     if new_money != old_money:
@@ -118,6 +123,22 @@ class PublishGates:
                     if unknown:
                         failures.append(GateFailure(
                             "schema", f"tool_packs[{ref.pack}].tools names tools the pack does not have: {unknown}"))
+            if self._tool_names_of is not None:
+                known: set[str] = set()
+                dynamic = False
+                for ref in parsed.tool_packs:
+                    try:
+                        names = self._tool_names_of(self._packs.get(ref.pack))
+                    except Exception:  # noqa: BLE001 — reported above
+                        continue
+                    if names is None:
+                        dynamic = True
+                    else:
+                        known |= set(names)
+                for rule in parsed.validation:
+                    if rule.scope in ("tool_args", "tool_result") and rule.tool and rule.tool not in known and not dynamic:
+                        failures.append(GateFailure(
+                            "schema", f"validation[{rule.id}] guards tool {rule.tool!r}, which no enabled pack provides"))
         # 2 — money safety
         handles_money = bool(parsed.meta.get("handles_money"))
         if pipeline is not None:
