@@ -55,6 +55,13 @@ cd backend
 
 Ship criterion: no case down more than 1/3 on `tool_selection` or `ledger_state`.
 
+> ⚠️ **The latest run (after Phase 11) fails that criterion**: `B3`, a bill-photo case,
+> dropped 3/3 → 1/3 on both money graders. No Phase 11 code is reachable from a turn (the
+> checks are in `backend/bench/results/agent-os-2026-09-06.md`), and `bills` cases have
+> swung this way before with no relevant change — but that is not yet established for this
+> one. **Re-run `B3` yourself before shipping** and read that section:
+> `python -m bench.run --corpus typical --engine pi --repeat 15 --case B3 --out /tmp/b3.json`
+
 ---
 
 ## 2. Back up production first
