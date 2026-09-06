@@ -23,6 +23,7 @@ from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
 from kernos.content.traces import StoreTraces
+from kernos.data import DataStore
 from kernos.eval import GraderRegistry, eval_gate
 from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
@@ -45,6 +46,7 @@ class Kernel:
         self.graders = GraderRegistry()
         self.register_packs(*host_packs())
         self.store = ContentStore(db.session)
+        self.data = DataStore(db.session, audit=self.store.log)
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
@@ -84,6 +86,21 @@ class Kernel:
             self.graders.register_all(pack.graders())
         drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
         ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
+
+    def reserved_tool_names(self) -> set[str]:
+        """Every registered pack's tool names (built with the null context, as the probe
+        does) — a collection may not generate one of them (Phase 5 review F6)."""
+        from app.tools import ToolContext
+        ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
+        names: set[str] = set()
+        for pack in self.packs.list():
+            if pack.id == "collections":
+                continue
+            try:
+                names |= set(pack.tools(ctx))
+            except Exception:  # noqa: BLE001 — a pack that needs a real space contributes nothing here
+                continue
+        return names
 
     def business_for(self, space_id: int | str) -> int:
         """The business a space belongs to: its bound agent's, else the default's."""

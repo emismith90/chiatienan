@@ -1208,12 +1208,12 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 | F9 | low | Immediate writes: keep (consistent with `add_place`/`remember`). `delete` is irreversible with no card. | Taken. `{slug}_delete` returns the deleted document and the audit row's `before` carries it; the description says "permanently". No card because a `Draft` needs a `DraftKind` + commit — the wrong shape for facts. |
 | F10 | low | Proof gaps: why gate 1's new check cannot break the branch; manifest stability unstated; sidecar fixture untouched. | Taken. Added to Task 5.2's proof. |
 
-### Task 5.1 (PR 5a): collections and documents as content
+### Task 5.1 (PR 5a): collections and documents as content — done
 
 **Files:** `kernos/content/models.py` (+2 tables), `kernos/data/{__init__.py,store.py}` (new),
 `kernos/content/boot.py` (seed collections), `kernos/api/admin.py`, tests.
 
-- [ ] Tables per decisions 1/F3 (`kn_collections`; `kn_documents` keyed by `collection_id`,
+- [x] Tables per decisions 1/F3 (`kn_collections`; `kn_documents` keyed by `collection_id`,
       unique on `space_id, collection_id, doc_id`); `kernos.data.DataStore(session_factory,
       audit=store.log)`: `put_collection(business_id, slug, *, name, schema, key, indexed,
       description, actor, reserved=(), force=False)` — slug `[a-z][a-z0-9_]{0,56}`, schema
@@ -1225,9 +1225,9 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
       and collection — F7); `get_document`; `find_documents(collection_id, space_id, *,
       where, limit)` (equality on `indexed` fields only, `doc_id` order, `more` flag — F4/F7);
       `list_documents(..., limit, after)`; `delete_document` returning the row (F9).
-- [ ] Admin routes per decision 5, documents paginated; the router's `get_kernel()`
+- [x] Admin routes per decision 5, documents paginated; the router's `get_kernel()`
       contract lists `data` and `business_for` (F8).
-- [ ] Proof: a schema outside the safe subset (`additionalProperties`, `minimum`, `$ref`,
+- [x] Proof: a schema outside the safe subset (`additionalProperties`, `minimum`, `$ref`,
       `enum` on integers) is refused naming the keyword; `key` not required or not a string
       refused; `indexed` outside the properties refused; a reserved name refused; an
       `agent:*` actor cannot define or delete a collection but can write documents; a
@@ -1236,7 +1236,9 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
       document refused; `find` filters only on indexed fields and refuses others, orders by
       `doc_id`, flags `more`; delete of a collection with documents refused; full suite
       unedited.
-- [ ] Commit: `kernos.data: collections as content, one documents table, admin API`
+- [x] Commit: `kernos.data: collections as content, one documents table, admin API`
+
+Notes: `kernos.data.schema.check_schema` mirrors `agent_sidecar/schema.js` rule for rule; `DataStore` takes the content store's `log` for audit so a document write and its audit row share one transaction. 1149 tests, 1 skipped.
 
 ### Task 5.2 (PR 5b): the generated tools
 

@@ -4,7 +4,8 @@
 under whatever prefix and guard it likes. ``get_kernel()`` must return an object
 with ``store`` (ContentStore), ``registry`` (Registry), ``gates`` (PublishGates),
 ``resolver`` (with ``describe``/``resolve``), ``pipeline_for(spec)``, and optionally
-``probe`` (a ``ModelProbe``). Everything else is data in, data out.
+``probe`` (a ``ModelProbe``), ``data`` (a ``DataStore``) with ``business_for(space_id)``
+and ``reserved_tool_names()`` for the collections routes. Everything else is data in, data out.
 
 Statuses: 404 unknown, 409 state conflict, 412 ``If-Match`` mismatch, 422
 validation or gate failures (with the failure list), 501 no probe configured.
@@ -40,6 +41,21 @@ class EvalSuiteIn(BaseModel):
 
 class RubricIn(BaseModel):
     body: str
+
+class CollectionIn(BaseModel):
+    name: str
+    schema_: dict = Field(alias="schema")
+    key: str
+    indexed: list[str] = []
+    description: str = ""
+    force: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class DocumentIn(BaseModel):
+    data: dict
+
 
 class BusinessIn(BaseModel):
     slug: str
@@ -281,6 +297,68 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
             "engine_spec": asdict(spec.to_engine_spec()),
             "pipeline": k.pipeline_for(spec).describe(),
         }
+
+    # ----------------------------------------------------------- collections
+    def _data(k):
+        data = getattr(k, "data", None)
+        if data is None:
+            raise HTTPException(501, "this host has no data plane")
+        return data
+
+    @r.get("/businesses/{business_id}/collections")
+    def collections(business_id: int):
+        return _wrap(lambda: _data(get_kernel()).list_collections(business_id))
+
+    @r.get("/businesses/{business_id}/collections/{slug}")
+    def collection(business_id: int, slug: str):
+        return _wrap(lambda: _data(get_kernel()).get_collection(business_id, slug))
+
+    @r.put("/businesses/{business_id}/collections/{slug}")
+    def put_collection(business_id: int, slug: str, body: CollectionIn, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+        reserved = k.reserved_tool_names() if hasattr(k, "reserved_tool_names") else ()
+        return _wrap(lambda: _data(k).put_collection(
+            business_id, slug, name=body.name, schema=body.schema_, key=body.key, indexed=body.indexed,
+            description=body.description, actor=_actor(x_actor), reserved=reserved, force=body.force))
+
+    @r.delete("/businesses/{business_id}/collections/{slug}", status_code=204)
+    def delete_collection(business_id: int, slug: str, x_actor: str | None = Header(default=None)):
+        _wrap(lambda: _data(get_kernel()).delete_collection(business_id, slug, actor=_actor(x_actor)))
+
+    def _space_collection(k, space_id: str, slug: str) -> dict:
+        return _data(k).get_collection(k.business_for(space_id), slug)
+
+    @r.get("/spaces/{space_id}/collections/{slug}/documents")
+    def documents(space_id: str, slug: str, limit: int = Query(default=100, le=500), after: str | None = None):
+        k = get_kernel()
+        return _wrap(lambda: _data(k).list_documents(_space_collection(k, space_id, slug), space_id, limit=limit, after=after))
+
+    @r.get("/spaces/{space_id}/collections/{slug}/documents/{doc_id}")
+    def document(space_id: str, slug: str, doc_id: str):
+        k = get_kernel()
+
+        def go():
+            row = _data(k).get_document(_space_collection(k, space_id, slug), space_id, doc_id)
+            if row is None:
+                raise HTTPException(404, f"no document {doc_id!r}")
+            return row
+        return _wrap(go)
+
+    @r.put("/spaces/{space_id}/collections/{slug}/documents/{doc_id}")
+    def put_document(space_id: str, slug: str, doc_id: str, body: DocumentIn, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+
+        def go():
+            col = _space_collection(k, space_id, slug)
+            if str(body.data.get(col["key"])) != doc_id:
+                raise HTTPException(422, f"data.{col['key']} must equal the path's doc_id {doc_id!r}")
+            return _data(k).upsert_document(col, space_id, body.data, actor=_actor(x_actor))
+        return _wrap(go)
+
+    @r.delete("/spaces/{space_id}/collections/{slug}/documents/{doc_id}")
+    def delete_document(space_id: str, slug: str, doc_id: str, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+        return _wrap(lambda: _data(k).delete_document(_space_collection(k, space_id, slug), space_id, doc_id, actor=_actor(x_actor)))
 
     # ----------------------------------------------------------------- eval
     @r.get("/businesses/{business_id}/eval/cases")

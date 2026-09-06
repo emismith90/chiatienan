@@ -206,3 +206,40 @@ class EvalRun(Base):
     records: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class Collection(Base):
+    """A CMS-defined document type (design §5.3; plan Phase 5): a JSON Schema in the
+    sidecar-safe subset, the property that is the document id, the fields ``find``
+    may filter by. Live, audited content — a definition edit changes the generated
+    tools of every profile that enables ``collections`` in this business."""
+
+    __tablename__ = "kn_collections"
+    __table_args__ = (UniqueConstraint("business_id", "slug"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("kn_businesses.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(60), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    schema: Mapped[dict] = mapped_column(JSON, nullable=False)
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    indexed: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+
+
+class Document(Base):
+    """One document of a collection in one space. Keyed by ``collection_id`` (never by
+    slug), so re-binding a space to another business hides the old rows and a slug
+    rename orphans nothing (Phase 5 review F3)."""
+
+    __tablename__ = "kn_documents"
+    __table_args__ = (UniqueConstraint("space_id", "collection_id", "doc_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    collection_id: Mapped[int] = mapped_column(ForeignKey("kn_collections.id"), nullable=False, index=True)
+    space_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+    updated_by: Mapped[str] = mapped_column(String(120), nullable=False)
