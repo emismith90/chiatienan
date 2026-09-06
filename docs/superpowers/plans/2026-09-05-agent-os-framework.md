@@ -1603,6 +1603,25 @@ identity 0/0. Review findings F1–F12 all landed.
    records the manager's own money calls only (`from_agent is None`); a sub's turn is
    not separately traced (it is a span).
 
+### Review gate (second Fable, 2026-09-06) — findings and dispositions
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | high | The sidecar's `max_seconds` timer on the manager keeps running while a nested run consumes wall-clock inside `call_tool`; when it fires the manager's session is disposed, the sub keeps running (and may write), and the room gets a capped reply. `max_tools` is counted by the sidecar on the manager's own calls only. | Taken. `sub.max_seconds = min(sub.caps.max_seconds, manager.max_seconds − elapsed − MARGIN)` (`MARGIN` 15 s, config of the delegation pack); below a 5 s floor the executor refuses without running (`{ok: false, error: "no time budget left to delegate"}`); `sub.max_tools = min(sub.caps.max_tools, manager.max_tools − own calls − sub calls so far)`, floor 1; the tool payload carries the sub's `capped`. Residual stated: a manager cut mid-sub still merges the sub's invocations, so the trace shows the writes. |
+| F2 | high | A sub's successful `propose_*` (`from_agent`) counts as commit evidence for the manager's "đã ghi" claim although it creates no card. | Taken. `FabricatedCommit` admits **own** invocations only as commit evidence; `unbacked_amounts` keeps the union; the `ask_*` description says a sub's proposals are data and the manager must call `propose_*` itself for a card. Proof: "Đã ghi #1" with only a sub's `propose_meal` is blocked. |
+| F3 | high | Forwarding the sub's `agent.*` events under the sub's `turn_id` makes the frontend stream the sub's prose as the active timeline and end the manager's "working" state early. | Taken. The legacy sink drops the sub's `run.started/finished/text.delta`; `sub.started/finished` replace them; the sub's `tool.start/tool.result` are forwarded under the **manager's** `turn_id` with `agent=<slug>`. Proof asserts no `agent.text.delta` and no second `agent.run.started`. |
+| F4 | high | Blanket own-only `last_result/all_results` breaks `Cards`' republish of a sub's `cancel_draft` and contradicts spec §6's wording. | Taken. Render stays own-only (a deliberate deviation, spec §6 fixed in 7.2); `TurnResult.all_results(name, *, include_sub=False)`; `Cards` republishes over `include_sub=True`. Stated: immediate-write tools a sub calls take effect with no pack body; the manager's prose reports them. Proof: a sub's `cancel_draft` yields the republish event. |
+| F5 | med | "Stages context → validate" has no API; `Pipeline.run` always runs everything and `after` in a `finally` — the sub would write a second trace row and be captured as a case; `text` is undefined when the sub's validate blocks or its render yields a Draft. | Taken. `Pipeline.run(ctx, *, through=None)` runs stages up to and including `through` (no `after` unless included; default unchanged); `run_sub` uses `through=Stage.validate`; `text = outcome.text if outcome is a Body else result.final_text` — a blocked sub hands the manager the replacement body, never the forged prose; a Draft outcome yields the proposal in `results`. |
+| F6 | med | The sub ctx must carry `images`, `before_id`, `principal`; `Rollover` must not run mid-turn at depth > 0; joining the sub's trace rows double-counts `elapsed_ms` and leaks a sub plugin error into the manager's summary. | Taken. The sub ctx copies them; `run_sub` skips `kernos.context.rollover` at depth > 0; `summarize()` sums `ms` and picks `errors` over rows with no `span`; verdicts keep `span`. |
+| F7 | med | `update_agent` validates nothing (any `role`, `is_default` on a sub, role flips on referenced/bound agents); self-reference in `delegates_to`. | Taken. `update_agent` validates `role`, refuses `is_default` on a sub, refuses role changes for an agent that is bound, default or referenced, and refuses `delegates_to` entries that are not `sub` of the business, are bound/default, or the agent itself; `referrers(agent_id)` helper. |
+| F8 | med | Depth semantics ambiguous at depth 2; cycles legal. | Taken. The **root** (bound/default) agent's `max_depth` is the tree's limit, carried on `ToolContext.max_depth` from depth 0 to every sub ctx (a sub's own column is ignored, documented); `ask_*` tools exist iff `depth + 1 < max_depth` (default 2: the manager delegates, its subs do not); cycles are legal and bounded by depth. |
+| F9 | med | Same bridge with `req_id` multiplexing works, but the sidecar's `pendingToolCalls` is keyed by `call_id` alone — concurrent sessions can collide. | Taken. Position: same bridge, a second `run` with `req_id=run-<sub turn_id>`; `main.js` keys `pendingToolCalls` by `${req_id}:${call_id}`; a sidecar test interleaves two runs with the same `call_id`. |
+| F10 | med | A fake `run_turn` branching on depth proves none of the mechanism. | Taken. The proof runs the real `run_turn` with a scripted `FakeBridge` branching on `req_id`: the sub's `run` command carries the clamped caps, the manager's `tool_result` content carries `text` while the recorded invocation does not, and the merged order; one pipeline-level test keeps the golden angle. |
+| F11 | low | Residual laundering: a number the manager copies from the sub's text into a tool's args is backed; the summary's `tools` list cannot tell a sub's call. | Taken. (a) recorded as an accepted residual (the arg reaches a card a human confirms); (b) summary `tools` entries are `<slug>:<name>` for sub calls. |
+| F12 | low | `capabilities.description` collides with §8.3's permission object; `EvalRun` has no agent. | Taken. `kn_agents.description` column (additive) for the `ask_*` description; Phase 8 adds `agent_id` to eval runs and the runner context (noted, not built). |
+
+Confirmed by the gate: zero behaviour change with `delegates_to = []`; the facts block; `settle_period` is read-only; the `_record` contract keeps the sub's prose out of the record; nothing in the nested path takes `_agent_lock`; the sub's own validation rules apply through its pipeline handle.
+
 ### Task 7.1 (PR 7a): delegation
 
 **Files:** `kernos/agents.py` (new), `kernos/engine/base.py` (own-only reads, the `_record`
@@ -1611,25 +1630,40 @@ contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_a
 `agent_for`), `app/chat.py` (agent on `extras`), `app/plugins/run.py`, `app/tools.py`,
 `app/agent.py` (caps override, merge, `calls_made`), tests.
 
-- [ ] `TurnResult.last_result/all_results` own-only; `PiEngine` records `_record`;
-      `Pipeline.run` stamps `started_at`; `store` validates `delegates_to`.
-- [ ] `DelegationPack(agents_of, run_sub)` per decisions 1–2; `Kernel.run_sub(parent_ctx,
-      sub_agent, task) -> (text, results, invocations)` per decisions 2–4; `Kernel.agent_for
-      (space_id)`; `run_bot_turn` puts the agent on `ctx.extras["agent"]`; `LegacyRunTurn`
-      passes agent/depth/tool_config; `agent.run_turn` applies `caps_override`, counts calls,
-      merges `sub_invocations`.
-- [ ] Proof (`tests/test_delegation.py`, a manager + a `sub` "auditor" on a lunch room, one
-      fake engine branching on `ctx.depth`): the manager's manifest carries `ask_auditor`
-      and the sub's does not; the merged `TurnResult.tools` is `[ask_auditor (own),
-      settle_period (from_agent=auditor)]` and the recorded `ask_auditor` result has no
-      `text`; a manager reply quoting an amount from the sub's **result** passes
-      `unbacked_amounts`, one quoting an amount that appears only in the sub's **text** is
-      flagged; a sub's `propose_payment` result creates no card; the sub's engine spec caps
-      are the minimum (a manager with 3 tools left and a sub with 40 → 3); at `max_depth`
-      the sub gets no `ask_*` tools; `agent.sub.started/finished` carry the parent turn id
-      and the sub's `agent.*` events carry `parent_turn_id`; the trace has the sub's rows
-      as `span=auditor`; `create_agent(delegates_to=["nope"])` and a manager as a delegate
-      are refused; golden 9/9; full suite unedited; layering green.
+- [ ] `TurnResult.last_result` own-only and `all_results(name, *, include_sub=False)`;
+      `Cards` republishes with `include_sub=True` (F4); `PiEngine` records `_record`;
+      `Pipeline.run(ctx, *, through=None)` and `started_at` (F5); `kn_agents.description`
+      (F12); `store.create_agent/update_agent` validation and `referrers` (F7); the sidecar
+      keys `pendingToolCalls` by `req_id:call_id` with a test (F9).
+- [ ] `DelegationPack(agents_of, run_sub, margin_seconds=15)` per decisions 1–2 as amended
+      (F1 caps rule and refusal, F8 depth on `ToolContext.max_depth`, the description text
+      of F2); `Kernel.run_sub(parent_ctx, sub_agent, task) -> {text, results, capped,
+      invocations}` per decisions 2–4 as amended (F3 event shape, F5 `through=validate` and
+      the text rule, F6 sub ctx fields and no rollover); `Kernel.agent_for(space_id)`;
+      `run_bot_turn` puts the agent on `ctx.extras["agent"]`; `LegacyRunTurn` passes
+      agent/depth/max_depth/tool_config; `agent.run_turn` applies `caps_override`, counts
+      calls, merges `sub_invocations`; `FabricatedCommit` admits own invocations only (F2);
+      `summarize()` sums own rows and names sub calls `<slug>:<name>` (F6, F11).
+- [ ] Proof (`tests/test_delegation.py`, a manager + a `sub` "auditor" on a lunch room,
+      the real `run_turn` with a scripted `FakeBridge` branching on `req_id` — F10): the
+      manager's manifest carries `ask_auditor` and the sub's does not; the sub's `run`
+      command carries the clamped caps (manager with 40 tools and 3 already made, sub with
+      40 → 37; seconds clamped by the margin) and a manager with no time budget left gets
+      a refusal without a nested run; the manager's `tool_result` content for `ask_auditor`
+      carries `text` while the recorded invocation does not; the merged `TurnResult.tools`
+      is `[ask_auditor (own), settle_period (from_agent=auditor)]`; a manager reply quoting
+      an amount from the sub's **result** passes `unbacked_amounts`, one quoting an amount
+      that appears only in the sub's **text** is flagged; "Đã ghi #1" with only a sub's
+      `propose_meal` is blocked (F2); a sub's `propose_payment` creates no card and a sub's
+      `cancel_draft` yields the republish event (F4); a sub whose prose is a fabricated
+      commit hands the manager the replacement text (F5); at the depth limit the sub gets
+      no `ask_*` tools and a B→C→B cycle terminates (F8); the emitted events have exactly
+      one `agent.run.started`, no `agent.text.delta` from the sub, `agent.sub.started/
+      finished` and the sub's tool events under the manager's `turn_id` with `agent` (F3);
+      the trace has the sub's rows as `span=auditor`, the summary's `elapsed_ms` counts
+      own rows and lists `auditor:settle_period` (F6, F11); `create_agent`/`update_agent`
+      refusals (F7); the sidecar interleaves two runs with the same `call_id` (F9); golden
+      9/9; full suite unedited; layering green.
 - [ ] Commit: `kernos.agents: ask_<sub> delegation — nested run with min caps, results merged as from_agent, text never backed`
 
 ### Task 7.2: Docs and state of play
