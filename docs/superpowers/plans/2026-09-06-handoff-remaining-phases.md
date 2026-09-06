@@ -13,10 +13,15 @@ plan for what remains — Phase 9 (Portability) and the closing notes.
   documented (design spec "as built" sections, README, plan "state of play").
 - Last verified run: `1251 passed, 1 skipped` (backend), sidecar `70/70`, golden `9/9`,
   layering green, no pre-existing test edited.
-- Phase 9's plan section is expanded (facts, decisions 1–6, Tasks 9.1–9.4) and its review
-  gate was **launched but its findings may not be recorded yet**. Check the plan: if the
-  Phase 9 section still says `### Review gate — _(to be filled …)_`, run the gate again
-  (§3 below) before writing code.
+- Phase 9's plan section is expanded and **its review gate is done**: findings F1–F12 with
+  dispositions are recorded in the plan's "## Phase 9 — Portability" section and folded into
+  Tasks 9.1–9.4. Where §5 below differs from the plan's amended tasks, **the plan wins**
+  (headline changes: a framework run plugin `kernos.run.engine` is required; `BaseKernel`
+  has four host hooks; `ScriptedEngine = PiEngine(ScriptedBridge)`; the AG-UI sink is
+  stateful with `finish()`; the sidecar directory does **not** move — only the npm package is
+  renamed; export writes `.pi/settings.json` from an allowlist and refuses secrets; import
+  builds sources from the spec when `kernos.json` is present; `pyproject` needs an explicit
+  include with `namespaces = false`; the example-host test uses a `sys.meta_path` guard).
 
 ## 1. Rules that governed every phase (keep them)
 

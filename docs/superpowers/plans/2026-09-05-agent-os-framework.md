@@ -2094,7 +2094,26 @@ schedule is the operator's; the room card is not built (the admin API approves).
    `extensions/` (code) — an imported package's extensions are listed and ignored with a
    warning (code never enters through content); themes.
 
-### Review gate — _(to be filled by the second Fable before Task 9.1 starts)_
+### Review gate (second Fable, 2026-09-06) — findings and dispositions
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | high | There is no framework run-stage plugin: the only run plugin is `app/plugins/run.py::LegacyRunTurn` → `app.agent.run_turn` → `app.tools`/`app.pi_bridge`; the example host cannot run a turn on `kernos` alone, and no typed `run.started`/`text.delta`/`tool.start` is emitted anywhere (they come only from the sidecar's legacy dicts). | Taken. Task 9.1 adds `kernos.plugins.run.EngineRun(engine, packs)` (id `kernos.run.engine`): `compose_tools` → `ToolSpec`s; the executor policy copied from `run_turn` (unknown tool / raise → `{ok: False, error}`, `validate_call`/`validate_result` via `ctx.extras["pipeline"]`, await awaitable results, `calls_made`, `sub_invocations` merge); `spec.to_engine_spec(system=ctx.system)` with `caps_override`; `emit=ctx.sink.emit_raw`; sets `ctx.result`/`ctx.turn_id`. `LegacyRunTurn` untouched. |
+| F2 | high | Decision 1's `BaseKernel` member list includes host-bound code (`run_sub` builds `app.tools.ToolContext`; `static_/reserved_tool_names` build a null `ToolContext`; `start_eval_run` spawns `app.evalhost`; `import_eval_suite`, `business_for`'s `seed_report` fallback, `register_packs`'s `app.drafts`/`ledger_core` calls, `probe`), and contradicts itself on whether the example reuses it. | Taken. `BaseKernel(store, data, adapters, *, packs, resolver, eval_mode)` with host hooks `null_tool_context()`, `sub_tool_context(parent, *, sub, depth, caps)`, `eval_runner_argv(suite, version_id, run_id) -> list \| None` (None → `Invalid`), `on_packs_registered(packs)`, and `default_business_id` set after seeding; `import_eval_suite` and `probe` stay on `app.kernel.Kernel` (the router uses `getattr`). The example host **subclasses** `BaseKernel`; the "not reused" sentence is dropped. `kernel_for` and `Kernel(db, resolver=, eval_mode=)` unchanged. |
+| F3 | high | AG-UI is not a per-event map: `agent.run.finished` arrives in the run stage while `validation.*` and `message.republished` come later; an open text message must close before `TOOL_CALL_START`/`RUN_FINISHED`; sub call ids collide with the manager's; a dead bridge yields `RUN_ERROR` without `RUN_STARTED`. | Taken. The sink is stateful: `RUN_STARTED` synthesised lazily; text message opened on the first delta and closed before any tool call, step or run end; `agent.tool.start` → `TOOL_CALL_START`+`ARGS`(json)+`END`; `agent.tool.result` → `TOOL_CALL_RESULT` (`role: "tool"`, new `messageId`); `toolCallId = f"{agent}/{call_id}"` when `agent` present; `sub.*` → `STEP_STARTED/FINISHED`; legacy `agent.run.finished` only closes the text; `RUN_FINISHED` comes from an explicit `sink.finish()` the host calls after `flush`; everything after `RUN_ERROR` dropped. Documented: the streamed text is not the persisted reply. |
+| F4 | high | Import from the Pi files loses `delivery` and `tags`; with `kernos.json` present the draft keeps `money` tags but the sources do not, so the next snapshot draft drops the protection silently (the Phase 8 F2/F10 lesson); `snapshot=True` would also merge the target's existing sources. | Taken. With `kernos.json`: sources are created **from the spec** (rules with tags, skills with delivery, templates, `prompt/system`) and the Pi files are ignored; the draft is `create_draft(..., base_spec=kernos_json, snapshot=False)`. Without: `SKILL.md` → skill (inline), `prompts/*.md` → template, `AGENTS.md` → one `prompt/system` source, no rule split. Proof asserts the **source row** keeps `money` and the draft equals the export. |
+| F5 | med | Stock-pi facts half right: `AGENTS.md` is a cwd context file, not a package resource; settings are read from `~/.pi/agent/settings.json` or `.pi/settings.json`, never a root `settings.json`; skill `name` is `[a-z0-9-]` ≤64 and a skill with no description is not loaded. | Taken. Export writes `.pi/settings.json` and a `README.md` (`cd <dir> && pi -e .`); skill names slugified to pi's regex; empty descriptions fall back to the title or first body line. |
+| F6 | med | Secrets and paths beyond `runtime`: `settings.httpProxy` (URL userinfo), `sessionDir`, `shellPath`, `shellCommandPrefix`, `npmCommand`; `extensions[].config` (a provider key would live there); free-form `meta` — all travel in `kernos.json`. | Taken. `.pi/settings.json` from an allowlist (`defaultProvider`/`defaultModel`, `defaultThinkingLevel`, `thinkingBudgets`, `compaction`, `retry`, `steeringMode`); `kernos.json` drops the path/proxy settings keys; export refuses (422 naming the path) when any string under `settings`/`extensions`/`meta` matches a secret pattern. Proof: `extensions: [{id, config: {apiKey}}]` does not export. |
+| F7 | med | Import safety: `put_source` validates `kind` only (zip folder names become slugs); existing sources overwritten silently and business-wide; `agent:*` not refused; gate 1 does not check `extensions` ids, so an imported spec naming an unknown sidecar extension publishes and every turn dies. | Taken. Allowlisted paths read in memory; `..`/absolute/`\`/non-regular entries rejected; ≈2 MB upload and ≈8 MB summed size caps; slug regex `^[a-z0-9][a-z0-9._-]{0,63}$`; collision → 409 unless `?replace=true` (with `if_match`); `Invalid` for `agent:*`; `extensions` ids listed under `warnings`; an invalid `kernos.json` is 422. |
+| F8 | med | `KEY_ENV`/`OPENROUTER_BASE_URL` in `session.js` are dead exports (only a branch-edited test reads them; the key travels via `PiBridge._child_env`); the only host names are the tmp-dir defaults. The repo has no symlink today; on Windows (`core.symlinks=false`) a symlink becomes a text file and both pinned tests fail; renaming `package.json` leaves `package-lock.json` stale. | Taken, **preferred option**: the directory does not move in Phase 9. The npm package is renamed `kernos-sidecar` (lockfile via `npm install --package-lock-only`), the two dead constants and their asserts are deleted, the tmp-dir names genericised, and `agent_sidecar → kernos_sidecar` is recorded in design §12.1 as a split-time rename. No symlink, no Dockerfile/CI edits; decision 4 and Task 9.3 amended accordingly. |
+| F9 | med | `[tool.setuptools.packages.find]` defaults to namespaces, so `kernos*` would swallow a `kernos_sidecar/` (incl. `node_modules`) and `examples*` must not be added (tests import it via the rootdir path). | Taken. `include = ["app", "app.*", "kernos", "kernos.*", "ledger_core", "ledger_core.*", "packs", "packs.*"]`, `namespaces = false`; no `examples`; the "host extras" note dropped. |
+| F10 | med | A `sys.modules` snapshot-and-diff guard passes vacuously — the pytest process already imported `app.*`. | Taken. A `sys.meta_path` finder at index 0 raises `ImportError` for `app`/`packs`/`ledger_core`/`bench` while `examples.minimal_host.host` is imported (cached `examples.*` popped first); `test_layering.py` gains `examples: {kernos, examples}`. |
+| F11 | low | A separate `ScriptedEngine` duplicates `PiEngine` (`_record`, hydration, `fatal`). | Taken. `kernos.engine.fake.ScriptedBridge(script)` yields one run's reply lines; `ScriptedEngine(script) = PiEngine(ScriptedBridge(script))`; `tests/test_delegation.py` imports the framework class (one implementation). |
+| F12 | low | `kernos/__init__.py` already has `__version__ = "0.1.0"`; a "lists paths" split script is theatre (`git subtree split` takes one prefix; the framework spans five paths); historical plans must not be edited. | Taken. `__version__ = "0.9.0"`; the rehearsal is the one `git filter-repo --path …` command written in design §12.1; only README, design §12 and this plan are edited. |
+
+Confirmed by the gate: the facts block (layering test, pyproject, every `agent_sidecar` reference, the empty extension registry, `SettingsManager.inMemory`, the host-neutral `PiBridge`, the in-memory adapters, `ensure_seeded`, the admin router's duck contract, `to_legacy`/`LegacyAgentEventSink`/`flush`, the legacy event shapes carrying enough for AG-UI tool events, `_SubSink`, `SOURCE_KINDS`/`stored()`, the pi package and settings facts, the two pinned `origin/main` tests, no symlinks, sidecar 70/70, the golden test's independence from a kernel-class refactor, `TemplatePrompt` as the example's prompt plugin, design §11 item 6 still open).
+
+**Decisions as amended by the gate:** 1 — `BaseKernel` with the four host hooks and `default_business_id`; the example host subclasses it; `kernos.run.engine` is the framework run plugin; `ScriptedEngine = PiEngine(ScriptedBridge)`. 2 — the AG-UI sink is stateful with `finish()`. 3 — sources from the spec when `kernos.json` is present; `.pi/settings.json` from an allowlist; secret scan on export; import allowlist, caps, slug regex, `?replace=true`, `agent:*` refused, extension ids as warnings. 4 — **no directory move**: npm rename, dead constants removed, tmp names genericised; the move is a split-time rename. 5 — `namespaces = false` explicit include; `__version__ = "0.9.0"`; the `filter-repo` command in design §12.1 instead of a script.
 
 ### Task 9.1 (PR 9a): `kernos.host.BaseKernel`, the fake engine and the AG-UI sink
 
@@ -2102,8 +2121,10 @@ schedule is the operator's; the room card is not built (the admin API approves).
 `ScriptedEngine`), `kernos/api/agui.py` (new: `AguiEventSink`, `to_agui`, `from_legacy`),
 `app/kernel.py` (subclasses `BaseKernel`), tests.
 
-- [ ] `BaseKernel(db_sessions, adapters, *, packs, registry, resolver, traces, eval_mode)`
-      owns what both kernels need: the framework plugin wiring (`Rollover … EvalCapture,
+- [ ] `kernos.plugins.run.EngineRun(engine, packs)` (`kernos.run.engine`) per F1.
+- [ ] `BaseKernel(store, data, adapters, *, packs, resolver, eval_mode)` per F2 (hooks
+      `null_tool_context`, `sub_tool_context`, `eval_runner_argv`, `on_packs_registered`;
+      `default_business_id`) owns what both kernels need: the framework plugin wiring (`Rollover … EvalCapture,
       validators()`, `DelegationPack`, `OsAdminPack`, `CollectionsPack`), `pipeline_for`
       caching and `invalidate`, `agent_for`/`agent_space`, `subs_of`, `run_sub`,
       `approve_proposal`/`reject_proposal`, `start_eval_run`/`spawn`, `static_tool_names`/
@@ -2111,12 +2132,13 @@ schedule is the operator's; the room card is not built (the admin API approves).
       its prompt/run/validate plugins, seeding and the tool-context factory. `app.kernel.
       Kernel`'s public names and behaviour are unchanged (golden 9/9, the admin API contract
       documented in `kernos/api/admin.py` becomes `BaseKernel`'s).
-- [ ] `ScriptedEngine(script)` implements `Engine`: replays `tool_call`/`turn_done` entries
-      exactly as the sidecar would answer (calls `call_tool`, appends the invocation,
-      honours `_record`, emits `agent.*` events), so a host runs turns with no Node and no
-      key; the delegation tests' `ScriptedBridge` stays (it tests the bridge path).
-- [ ] `AguiEventSink(write)`: `emit(TurnEvent)` and `emit_raw(legacy dict)` both produce
-      AG-UI events (`RUN_STARTED`, `TEXT_MESSAGE_START/CONTENT/END`, `TOOL_CALL_START/ARGS/END`,
+- [ ] `kernos.engine.fake.ScriptedBridge(script)` + `ScriptedEngine(script) =
+      PiEngine(ScriptedBridge(script))` (F11); `tests/test_delegation.py` imports the
+      framework class.
+- [ ] `AguiEventSink(write, *, thread_id)` — **stateful** per F3 (lazy `RUN_STARTED`, text
+      message open/close, `TOOL_CALL_*` from complete args, `toolCallId` prefixed with the
+      sub's slug, `finish()` emits `RUN_FINISHED` after the host's `flush`): `emit(TurnEvent)`
+      and `emit_raw(legacy dict)` both produce AG-UI events (`RUN_STARTED`, `TEXT_MESSAGE_START/CONTENT/END`, `TOOL_CALL_START/ARGS/END`,
       `TOOL_CALL_RESULT`, `STEP_STARTED/FINISHED` for `sub.*`, `RUN_FINISHED`, `RUN_ERROR`,
       `CUSTOM` for `validation.*` and `message.republished`), `threadId = space_id`, `runId =
       turn_id`, one `messageId` per assistant message; the mapping is tested both ways
@@ -2134,11 +2156,14 @@ schedule is the operator's; the room card is not built (the admin API approves).
 tests.
 
 - [ ] `export_profile(store, profile_id, *, version_id=None) -> dict[str, bytes]` per
-      decision 3 (`package.json`, `skills/<slug>/SKILL.md`, `prompts/<slug>.md`, `AGENTS.md`,
-      `settings.json`, `kernos.json`); `import_package(store, business_id, files, *, actor)
-      -> {sources: [...], draft: version | None, ignored: [...]}` per decision 3 (sources from
-      `skills/**/SKILL.md`, `prompts/*.md`, `AGENTS.md`; a draft from `kernos.json`, never
-      published; `extensions/` and `themes/` listed as ignored). `GET /api/admin/profiles/
+      decision 3 as amended (`package.json`, `README.md`, `skills/<slug>/SKILL.md` with pi-valid
+      names and non-empty descriptions, `prompts/<slug>.md`, `AGENTS.md`, `.pi/settings.json`
+      from the allowlist, `kernos.json` without the path/proxy settings keys; a secret pattern
+      anywhere under `settings`/`extensions`/`meta` refuses the export — F5, F6);
+      `import_package(store, business_id, files, *, actor, replace=False)` per F4/F7 (allowlisted
+      paths, size caps, slug regex, `agent:*` refused, 409 on collision unless `replace`,
+      sources from the spec when `kernos.json` is present else from the Pi files, a
+      `snapshot=False` draft never published, `extensions` ids as `warnings`). `GET /api/admin/profiles/
       {id}/export` (zip) and `POST /api/admin/businesses/{id}/import` (zip upload).
 - [ ] Proof (`tests/kernos/test_package.py`, `tests/test_admin_package.py`): the lunch
       profile exports to a package whose `SKILL.md` frontmatter is `name`/`description`,
@@ -2151,38 +2176,35 @@ tests.
       the money rule keeps its tag.
 - [ ] Commit: `kernos.content.package: export a profile as a Pi package, import a package as sources and a draft (PR 9b)`
 
-### Task 9.3 (PR 9c): the sidecar move and the example host
+### Task 9.3 (PR 9c): the sidecar rename and the example host
 
-**Files:** `backend/kernos_sidecar/` (moved from `agent_sidecar/`), `app/pi_bridge.py`,
-`Dockerfile`, `.github/workflows/ci.yml`, `README.md`, `examples/minimal_host/host.py` (new),
-`tests/test_layering.py` (the example is a layer: `examples → kernos`), tests.
+**Files:** `backend/agent_sidecar/{package.json,package-lock.json,session.js,test/session.test.js}`
+(the directory stays — F8), `pyproject.toml` (F9), `examples/__init__.py`,
+`examples/minimal_host/host.py` (new), `tests/test_layering.py` (`examples → kernos`), tests.
 
-- [ ] `git mv backend/agent_sidecar backend/kernos_sidecar`; `package.json` name
-      `kernos-sidecar`, `version 0.9.0`; `session.js` temp-dir names generic, `KEY_ENV` read
-      from the run command's env as the bridge already maps it; a **compatibility path**
-      keeps the pinned tests resolving (fact: two `origin/main` tests read
-      `agent_sidecar/test/fixtures/tool-schemas.json`; `bench/` reads `agent_sidecar/main.js`)
-      — `backend/agent_sidecar` becomes a symlink to `kernos_sidecar` committed in git, and
-      the Dockerfile copies `kernos_sidecar` (a symlink in the image is not needed); CI
-      `working-directory` and `cache-dependency-path` follow.
+- [ ] npm package renamed `kernos-sidecar` `0.9.0` (`npm install --package-lock-only`); the dead
+      `KEY_ENV`/`OPENROUTER_BASE_URL` exports and their asserts deleted; tmp-dir names
+      `kernos-pi-cwd`/`kernos-pi-agent`; `pyproject` explicit `include`, `namespaces = false`;
+      the directory move is recorded in design §12.1 as a split-time rename. No symlink, no
+      Dockerfile or CI change.
 - [ ] `examples/minimal_host/host.py` per decision 1 with `HelloPack`, the in-memory
       adapters, `BaseKernel`, `admin_router`, `ScriptedEngine` and `AguiEventSink`;
-      `tests/test_minimal_host.py` imports it under a `sys.modules` guard that fails on any
-      `app`/`packs`/`ledger_core`/`bench` import, runs one turn (`say_hello` → a typed body),
+      `tests/test_minimal_host.py` imports it under a `sys.meta_path` finder that raises on
+      any `app`/`packs`/`ledger_core`/`bench` import (F10), runs one turn (`say_hello` → a typed body),
       asserts the AG-UI stream and the admin API answer; `tests/test_layering.py` gains
       `examples: {kernos, examples}`.
-- [ ] Proof: sidecar 70/70 from the new directory; the two pinned tests pass unchanged
-      through the symlink; `bench.dump_schemas` writes the fixture at the new path via the
-      same symlink; the example host's test; the full suite; golden 9/9.
-- [ ] Commit: `kernos_sidecar + examples/minimal_host: the sidecar moves, a host with no chiatienan on its path runs a turn (PR 9c)`
+- [ ] Proof: sidecar tests green after the rename; the two pinned tests untouched; the
+      example host's test; the full suite; golden 9/9.
+- [ ] Commit: `examples/minimal_host: a host with no chiatienan on its path runs a turn; the sidecar package is kernos-sidecar (PR 9c)`
 
 ### Task 9.4: docs, state of play, `TODO.md`
 
-- [ ] Design §12 as built (BaseKernel, the fake engine, the compatibility symlink, what
-      export carries); README (kernos_sidecar, export/import, the example host); `TODO.md`
+- [ ] Design §12 as built (BaseKernel and its hooks, `kernos.run.engine`, the scripted
+      bridge/engine, the AG-UI sink's state machine, what export carries and refuses, the
+      sidecar rename deferred to the split with the one `git filter-repo --path …` command —
+      F12); README (export/import, the example host, the sidecar package name); `TODO.md`
       "BIG: agent engine export/import" closed with the file format; `kernos/__init__.py`
-      `__version__`; `scripts/split_kernos.sh` (documented rehearsal, not run); plan state of
-      play and the closing note for the whole plan.
+      `__version__ = "0.9.0"`; plan state of play and the closing note for the whole plan.
 
 **Proof for the phase:** the example host runs a "hello" business with no `app`/`packs`/
 `ledger_core` on its path; a profile exported as a Pi package imports back as an equal draft.
