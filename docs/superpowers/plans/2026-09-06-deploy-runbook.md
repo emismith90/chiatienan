@@ -50,11 +50,15 @@ otherwise; it was wrong). The benchmark has been run twice on this branch:
 - `40d671f`, after the nine phases: 69 turns of `typical` at `--repeat 3`, 0 errored,
   `tool_selection` 69/69 = 1.00, `ledger_state` 55/60 = 0.92, p50 3.8s, $0.137. Compared
   against `origin/main` run the same day, no blocker attributable to this branch.
-- After Phase 10 — numbers in §3.1 below. Phase 10 is worth re-running for because,
-  although the steward is off, three of its changes touch code a live money turn runs:
-  the settle guard now filters pending cards by `blocks_settlement`, `create_card` fills
-  in a body when the kind provides one, and `drafts._commit` translates a kind's refused
-  commit into a `LedgerError`.
+- After Phase 10, run on this branch tip: 69 turns, 0 errored, `tool_selection`
+  69/69 = 1.00, `ledger_state` 58/60 = 0.97, p50 4.5s / p95 32.2s, $0.145.
+  `--compare` against the run above reports **no blockers and no case dropped on either
+  money grader**. Phase 10 was worth re-running for because, although the steward is off,
+  three of its changes are executed by a live money turn: the settle guard now filters
+  pending cards by `blocks_settlement`, `create_card` fills in a body when the kind
+  provides one, and `drafts._commit` translates a kind's refused commit into a
+  `LedgerError`. Evidence and the caveats (one case moved on non-determinism, one 33s
+  turn moved p95) are in `backend/bench/results/agent-os-2026-09-06.md`.
 
 To repeat it yourself:
 
