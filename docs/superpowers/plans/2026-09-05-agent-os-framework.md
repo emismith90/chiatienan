@@ -1150,8 +1150,10 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 - The host's knowledge modules — places, memos, observations, `knowledge.snapshot`
   (~1,300 lines, with their own admin UI, memory files and the `lunch_places` pack) — are
   lunch's and the host's; the design lists them as "already content; unchanged" (§2).
-- `Business.seed` (JSON) exists and is unused; `debug_api._all_tables` exports every
-  `kn_` table; `Database.create_all` binds new `kn_` tables with no host change.
+- `Business.seed` (JSON) holds the boot business's `spec` (the base of a first draft);
+  `debug_api._all_tables` exports every `kn_` table; `Database.create_all` binds new
+  `kn_` tables with no host change. The sidecar converts tool schemas with six JSON
+  Schema keywords only (`agent_sidecar/schema.js`) and throws on the rest.
 
 ### Decisions taken for this phase
 
@@ -1188,27 +1190,52 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
    own tables. Places/memos/observations are not migrated: they have a UI, memory files
    and resolution logic that a schema-validated document store would not carry, and
    moving them is a rewrite with no user-visible gain. `lunch_places` stays a host pack.
-7. **A `Business.seed.collections` list** lets a business ship with its collections
-   (Phase 6's poker "house-rules"); `ensure_seeded` upserts them. No documents are seeded.
+7. ~~Seeded collections~~ — dropped (F5): a business gets its collections through the
+   admin API (Phase 6's poker `house-rules` is one `PUT`).
+
+### Review gate (second Fable, 2026-09-06) — findings and dispositions
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | high | The sidecar converts tool schemas with exactly six JSON Schema keywords (`type, properties, required, items, description, enum`; `agent_sidecar/schema.js`) and **throws** on anything else while converting the whole manifest — one collection with `additionalProperties: false` or `minimum` would kill every turn of the business, lunch tools included. | Taken. `put_collection` validates the schema against a kernos-defined **safe subset** = those six keywords, scalar `type` (unions of scalars only), `enum` on strings only, objects declare `properties`, arrays declare `items`; anything else is refused naming the keyword and path. `find.limit` is bounded in Python. Widening the subset means widening `schema.js` and its tests together. Proof converts the generated manifest with the sidecar's own converter. |
+| F2 | high | Collection definitions are live, unversioned content that rewrite the manifest of a published profile (no snapshot, no probe); a schema edit can orphan documents; an `agent:*` actor could edit its own tools via `PUT /collections`. | Taken. Stated as designed: definitions are live content like places (audited), the snapshot/probe exception noted in §5.3/§9. `put_collection` on a collection with documents re-validates every document and refuses with the failing `doc_id`s unless `force`. Definition writes refuse `agent:*` actors in code (`DataStore`, like `_actor` refuses `boot*`); documents stay agent-writable. Phase 8's blacklist gains "collection definitions". |
+| F3 | med | Scoping on re-bind is undefined: keying documents by `(space, slug)` surfaces business A's rows under business B's same-named collection; adding `business_id` to the key makes writes collide invisibly. `ToolContext.space_id` is an int, `kn_` tables store strings. | Taken. Documents are keyed by **`collection_id`** (FK): `unique(space_id, collection_id, doc_id)`; `find`/admin by `(collection_id, str(space_id))`; re-binding hides the other business's documents (intended); a slug rename orphans nothing; "refused while documents exist" is one FK count. No `business_id` column on documents (derivable). Unbound spaces resolve to the default business (`Kernel.business_for`). `str(space_id)` at the pack boundary. |
+| F4 | med | "Aggregation refused by construction" over-claims: `find` returns rows and the model can sum them in prose. Position: not a D3 violation, numbers stay allowed in schemas; the real guard is the reply validator `unbacked_amounts`, which fires on a model-computed sum. | Taken. Restated: no tool computes an aggregate; a derived amount in the reply is caught by `unbacked_amounts` like any other. `find` returns rows in `doc_id` order with a boolean `more` when capped — a flag, not a count. Proof: a fake reply totalling two rows gets a verdict in the trace; a reply quoting one row's value does not. |
+| F5 | med | Wrong fact: `Business.seed` is used (boot stores `seed.spec`; `create_draft` reads it). Decision 7's `seed.collections` would only run for the boot business. | Taken. Fact fixed; decision 7 dropped — poker's `house-rules` is one admin `PUT`. |
+| F6 | med | Turn-time failures have a whole-space blast radius: a slug whose generated name collides with another pack's tool, or an override naming a missing tool, raises in `compose_tools` inside the turn. Provider tool-name limits (64 chars). | Taken. `put_collection(..., reserved)` refuses a slug whose generated names collide with any registered pack's tool names (the kernel passes the union, built with the null context as the probe does); slug ≤ 57 chars, `[a-z][a-z0-9_]*`. `CollectionsPack.tools(ctx)` never raises: a bad definition is logged and skipped. Gate 1 checks pack ids and, for every pack except `collections`, that override names exist. |
+| F7 | med | "Small by construction" is asserted, not built; `count_documents` is a promise code cannot keep. | Taken. A per-`(space, collection)` cap of 1,000 documents enforced by `upsert` (a clarifying error when full); admin listing paginated by `doc_id` (`limit`, `after`) with a `more` flag; `count_documents` dropped. `key` must be a required string property with values `^[A-Za-z0-9_.:@-]{1,80}$` (they become path segments). |
+| F8 | low | Wiring: `register_packs(*host_packs())` runs before `self.store` exists, so the collections pack registers after; `tools(ctx)` runs twice per turn (`build_tools` and `tool_manifest`). Router contract; models location. | Taken. Registered after the store (a second `register_packs` call — harmless, stated). The double call is accepted and stated (two cheap reads). The admin router's `get_kernel()` contract lists `data` and `business_for`; tables live in `kernos/content/models.py` (one `Base`, so the debug export sees them), the store in `kernos/data`. |
+| F9 | low | Immediate writes: keep (consistent with `add_place`/`remember`). `delete` is irreversible with no card. | Taken. `{slug}_delete` returns the deleted document and the audit row's `before` carries it; the description says "permanently". No card because a `Draft` needs a `DraftKind` + commit — the wrong shape for facts. |
+| F10 | low | Proof gaps: why gate 1's new check cannot break the branch; manifest stability unstated; sidecar fixture untouched. | Taken. Added to Task 5.2's proof. |
 
 ### Task 5.1 (PR 5a): collections and documents as content
 
 **Files:** `kernos/content/models.py` (+2 tables), `kernos/data/{__init__.py,store.py}` (new),
 `kernos/content/boot.py` (seed collections), `kernos/api/admin.py`, tests.
 
-- [ ] Tables per decision 1; `kernos.data.DataStore(session_factory, audit=store.log)`:
-      `put_collection` (schema checked; `key`/`indexed` must be schema properties),
-      `get/list/delete_collection` (delete refused with documents), `validate(collection,
-      data)`, `upsert_document(business_id, space_id, slug, data, *, doc_id=None, actor)`
-      (id from `key` or given or generated `d{n}`), `get_document`, `find_documents(...,
-      where, limit)` (equality on `indexed` fields, in Python over the space's rows of
-      that collection — small by construction, no SQL on JSON), `delete_document`,
-      `count_documents` for the admin listing only (never a tool).
-- [ ] Admin routes per decision 5; `ensure_seeded` upserts `seed.collections`.
-- [ ] Proof: a schema that is not a valid JSON Schema is refused; `key`/`indexed` outside
-      the properties refused; upsert of invalid data refused with the schema error;
-      find filters only on indexed fields and refuses others; delete of a collection
-      with documents refused; second identical seed is a no-op; full suite unedited.
+- [ ] Tables per decisions 1/F3 (`kn_collections`; `kn_documents` keyed by `collection_id`,
+      unique on `space_id, collection_id, doc_id`); `kernos.data.DataStore(session_factory,
+      audit=store.log)`: `put_collection(business_id, slug, *, name, schema, key, indexed,
+      description, actor, reserved=(), force=False)` — slug `[a-z][a-z0-9_]{0,56}`, schema
+      in the **safe subset** (F1), `key` a required string property, `indexed` ⊆ properties,
+      generated names not in `reserved` (F6), existing documents re-validated (F2), actor
+      `agent:*` refused (F2); `get/list/delete_collection` (delete refused with documents);
+      `validate(collection, data)`; `upsert_document(collection_id, space_id, data, *, actor,
+      doc_id=None)` (id from `key`, values `^[A-Za-z0-9_.:@-]{1,80}$`; cap 1,000 per space
+      and collection — F7); `get_document`; `find_documents(collection_id, space_id, *,
+      where, limit)` (equality on `indexed` fields only, `doc_id` order, `more` flag — F4/F7);
+      `list_documents(..., limit, after)`; `delete_document` returning the row (F9).
+- [ ] Admin routes per decision 5, documents paginated; the router's `get_kernel()`
+      contract lists `data` and `business_for` (F8).
+- [ ] Proof: a schema outside the safe subset (`additionalProperties`, `minimum`, `$ref`,
+      `enum` on integers) is refused naming the keyword; `key` not required or not a string
+      refused; `indexed` outside the properties refused; a reserved name refused; an
+      `agent:*` actor cannot define or delete a collection but can write documents; a
+      schema edit that invalidates an existing document is refused naming it (and taken
+      with `force`); upsert of invalid data refused with the schema error; the 1,001st
+      document refused; `find` filters only on indexed fields and refuses others, orders by
+      `doc_id`, flags `more`; delete of a collection with documents refused; full suite
+      unedited.
 - [ ] Commit: `kernos.data: collections as content, one documents table, admin API`
 
 ### Task 5.2 (PR 5b): the generated tools
@@ -1217,26 +1244,37 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 (register the pack, pass `packs` to the gates), tests.
 
 - [ ] `CollectionsPack(data_store, business_of)` per decision 2; tool names
-      `{slug}_{find,upsert,delete}` (slugs are `[a-z][a-z0-9_]*`, enforced on write so the
-      names are valid tool names); a collection's `description` and `properties` in the
-      tool descriptions; `upsert.input_schema.properties.data = collection.schema`.
-- [ ] Gate 1: unknown pack id → `schema` failure naming it (decision 4).
+      `{slug}_{find,upsert,delete}`; a collection's `description` and `properties` in the
+      tool descriptions; `upsert.input_schema.properties.data = collection.schema` (safe
+      subset, so the sidecar converts it); `tools(ctx)` never raises — a bad definition is
+      logged and skipped (F6); registered after the store, called twice per turn (F8).
+- [ ] Gate 1: `PublishGates(packs=…, tool_names_of=…)`: unknown pack id → `schema` failure
+      naming it; an override naming a tool the pack lacks → `schema` failure, for every pack
+      whose names are static (`tool_names_of` returns `None` for `collections`).
+- [ ] The kernel passes `reserved` = the union of registered packs' tool names (null
+      context) to `put_collection`.
 - [ ] Proof: with a `rota` collection and a profile enabling `collections`, the manifest
-      the engine receives has exactly the three generated tools next to the lunch ones,
-      `rota_upsert` with wrong data returns a clarifying error and writes nothing, a good
-      upsert then `rota_find` returns the document, a `where` on a non-indexed field is
-      refused, `rota_delete` removes it, and the trace shows the calls; a profile naming
-      pack `nope` cannot publish; a stub end-to-end turn (`tests/test_collections_turn.py`)
+      the engine receives has exactly the three generated tools after the lunch ones (the
+      legacy order first, unknown names appended — the sidecar fixture test uses the
+      legacy manifest and never sees them), and the sidecar's own `schema.js` converts that
+      manifest; `rota_upsert` with wrong data returns a clarifying error and writes
+      nothing, a good upsert then `rota_find` returns the document, a `where` on a
+      non-indexed field is refused, `rota_delete` removes it and returns it, and the trace
+      shows the calls; a profile naming pack `nope` or an override for a missing tool
+      cannot publish (gate 1 reads the live pack registry, which is why the seeded profile
+      and the stub-pack test still pass); an end-to-end turn (`tests/test_collections_turn.py`)
       through `run_bot_turn` with a fake engine calling `rota_upsert` persists the document
-      and the reply is the model's prose (no card); full suite unedited; layering green.
+      and the reply is the model's prose (no card); a fake reply that totals two `find`
+      rows gets an `unbacked_amounts` verdict in the trace while one quoting a row's value
+      does not (F4); full suite unedited; layering green.
 - [ ] Commit: `kernos.data: generated find/upsert/delete tools per collection; gate 1 checks pack ids`
 
 ### Task 5.3: Docs and state of play
 
 - [ ] Design §5.3 as built; README (collections API); plan state of play.
 
-**Proof for the phase:** schema-validated CRUD through the model; aggregation refused
-(no tool exists that computes one; `find` is capped and returns rows).
+**Proof for the phase:** schema-validated CRUD through the model; no tool computes an
+aggregate, and a derived amount in the reply is caught by `unbacked_amounts`.
 
 **Phase 5 — state of play:** _(filled as tasks complete)_
 
