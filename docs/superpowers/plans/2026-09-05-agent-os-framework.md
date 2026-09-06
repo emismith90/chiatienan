@@ -785,29 +785,69 @@ qr.py,roster.py,ledger.py,drafts.py,moneyguard.py,notes.py}`; modify the corresp
 7. `kernos.packs.err(message)` is the `{"ok": False, "error": …}` convention as a
    function, shared by the three packs.
 
-### Task 3.4 (PR 3d): generalise what the host still hard-codes
+### Task 3.4 (PR 3d): generalise what the host still hard-codes — done
 
-- [ ] `ledger_core.ledger.period_balances` / `debt_breakdown` / transfers take the edge
-      list from `Σ pack.contributions(session, space_id)` — unwindowed; the core windows
-      after FIFO as today (F4); `lunch_ledger.contributions`
-      returns exactly today's edges; a test asserts `debt_breakdown` equality before and
-      after over the golden ledgers (`tests/golden/scenario_week.py`).
-- [ ] `app/drafts.commit_any` dispatches on `pack.draft_kinds()`; the commit/recommit
-      routes in `main.py` call it unchanged.
-- [ ] The seeded pipeline switches to `kernos.render.packs` / `kernos.persist.cards` and
-      the three id-pin tests added on this branch are updated with it (F1).
-- [ ] `chat.py` loses the last lunch literals: `_settlement_body` and friends move to
-      the pack's render module; the chat module keeps `post_message`, history, memory.
-- [ ] Proof: golden 9/9; full suite unedited; a stub pack with two tools and one draft
-      kind runs a turn end to end in a test space (`tests/test_stub_pack.py`).
-- [ ] Commit: `kernos/ledger_core: balances from pack contributions; drafts and render by pack`
+- [x] `ledger_core.ledger.debt_breakdown` (and so `period_balances`, `period_transfers`,
+      `statement_for`, `outstanding_pairs`) takes its edges from the registered
+      **edge sources** — `Σ pack.contributions(session, space_id)`, unwindowed — applies
+      payments FIFO over that one list and windows afterwards (F4). `ledger.meal_edges`
+      is the meals' half, `LunchLedgerPack.contributions` returns exactly it, and
+      `Kernel.register_packs` hands every pack's `contributions` to
+      `ledger_core.configure(edge_sources=…)`. With none registered the ledger reads its
+      own meals. `tests/test_ledger_contributions.py` asserts `debt_breakdown` equality
+      over the golden week (inline computation = default = via the pack) and that a
+      second source's edge changes balances and transfers, and is windowed with the rest.
+- [x] `app/drafts` is generic over `DraftKind`: `create_card` / `list_pending_drafts` /
+      `update_draft` / `commit_any` dispatch on the kinds the kernel registered
+      (`set_draft_kinds`); `create_draft`, `create_payment_draft`, `commit_draft`,
+      `commit_payment_draft` are thin wrappers on the one path with today's error
+      strings; the commit/recommit routes in `main.py` are unchanged. `DraftKind` grew
+      `card` (the confirmation the room sees, built from the commit result),
+      `prepare` (payload normalisation on create and edit — lunch's `sync_items`) and
+      `signature` (re-proposal identity for superseding; `None` = never). `RoomCards.create`
+      is one line.
+- [x] The seeded pipeline runs `kernos.render.packs` / `kernos.persist.cards`; the three
+      id-pin tests added on this branch are updated (F1) and the `app.render.lunch` /
+      `app.persist.cards` delegates are deleted (branch-added, never deployed).
+- [x] `chat.py` lost the last lunch literals: `_meal_body` and `_payment_body` joined the
+      other bodies in `packs/lunch_ledger/render.py` (re-exported for the pre-existing
+      tests and `bench.graders`); `_meal_exists` and `_FABRICATED_COMMIT_BODY` moved to
+      `app/plugins/validate.py`, their only user. `chat.py` keeps messages, history,
+      images, `run_bot_turn`, rollover and the generic `_empty_turn_body`.
+- [x] Proof: golden 9/9; full suite unedited (1116 passed, 1 skipped; sidecar 69/69);
+      `tests/test_stub_pack.py`: a pack with two tools and one draft kind, registered on
+      the kernel and enabled by a published profile, runs a turn end to end — the engine
+      is offered only its tools, its `Draft` becomes a card of its own kind through the
+      kernel's persist stage and the generic store, and `commit_any` commits it with the
+      stub's `commit`/`card`.
+- [x] Commit: `kernos/ledger_core: balances from pack contributions; drafts and render by pack`
+
+**Deviations:** edge sources and draft kinds are registered *per kernel*, not per
+space — the data is space-scoped, so summing every registered pack's edges over a
+space equals summing the enabled ones', and a kind a space's profile does not enable
+never produces a card there. Per-space enablement can arrive with the poker business
+(Phase 6) if a host ever runs two money packs over one table. `recommit_draft` (edit a
+committed meal: void + re-record, repoint payments) stays expense-specific in
+`app/drafts.py`; it reaches the pack only for the card.
 
 ### Task 3.5: Docs and state of play
 
-- [ ] Design §4.2/§7.3 updated with the interface as built and decision 2's FK note;
+- [x] Design §4.2/§7.3 updated with the interface as built and decision 2's FK note;
       README module table; plan state of play.
 
-**Phase 3 — state of play:** _(filled as tasks complete)_
+**Phase 3 — state of play (2026-09-06):** Tasks 3.1–3.5 done, as four commit groups
+(9fc901e 3a, d2f944e 3b, d3efbb2 3c, 3d). `backend/ledger_core` is the money domain
+(models on their own `Base`, FIFO edges, netting, periods, VietQR, drafts payloads,
+member directory, clock, edge sources); `backend/packs/lunch_ledger` is the lunch
+business as a pack importing `kernos` and `ledger_core` only (11 tools, render decision
+and bodies, two draft kinds with commit/card/prepare/signature, contributions, fixtures
+over a world); `app/packs` holds the host's registration and the two host packs
+(`lunch_places`, `room_members`). `app/tools.py` is the composition point; `app/drafts.py`
+and `app/hostadapters.RoomCards` know no business; the seeded pipeline runs the kernel's
+render and persist plugins. Baseline 986 → 1116 backend tests (+1 skipped), sidecar 69;
+golden 9/9; `test_layering` covers `kernos`, `ledger_core`, `packs`, `app`, `bench`.
+Benchmark: not run here (no `OPEN_ROUTER_KEY`). Phase 3 gate findings F1–F8 all landed
+(F5's `DebtEdge` rename left as-is: `meal_id`/`dish` are fields, on the wire unchanged).
 
 ## Phase 4 — Observe and eval
 

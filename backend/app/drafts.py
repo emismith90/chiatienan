@@ -1,12 +1,16 @@
-"""Expense-draft lifecycle: persist, edit, commit, cancel.
+"""Draft-card lifecycle: persist, edit, commit, cancel — generic over the packs'
+draft kinds (plan Task 3.4).
 
-A draft is a ``RoomMessage`` (``kind="expense_draft"``) whose ``attachments``
-carry the proposed meal plus a ``status``
-(pending|committed|cancelled|superseded). Multiple drafts may be pending in a
-room at once — proposals persist as independent cards, each confirmed, edited or
-cancelled from its own card — with one exception: re-proposing *the same thing*
-marks the older card ``superseded`` (see :func:`_supersede_duplicates`). All
-ledger writes go through :func:`app.ledger.record_meal` — the LLM never writes.
+A draft is a ``RoomMessage`` whose ``kind`` is one of the enabled packs'
+:class:`kernos.packs.DraftKind`\ s and whose ``attachments`` carry the proposed
+payload plus a ``status`` (pending|committed|cancelled|superseded). Multiple drafts
+may be pending in a room at once — proposals persist as independent cards, each
+confirmed, edited or cancelled from its own card — with one exception: re-proposing
+*the same thing* marks the older card ``superseded`` (see
+:func:`_supersede_duplicates`). This module knows no business: what a payload
+means, how it becomes ledger rows and what the confirmation card says are the
+kind's ``prepare``/``commit``/``card``; the kinds are registered by the kernel
+(:func:`set_draft_kinds`). The LLM never writes.
 """
 from __future__ import annotations
 
@@ -14,9 +18,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import chat, ledger
-from app.models import Meal, Member, RoomMessage
+from app.models import Meal, RoomMessage
+from kernos.packs import DraftKind
 from ledger_core import drafts as core
-from ledger_core.drafts import DRAFT_KINDS  # noqa: F401  (re-exported)
+from ledger_core.drafts import DRAFT_KINDS  # noqa: F401  (the lunch kinds, re-exported)
 
 # The payload half of a draft lives in ``ledger_core.drafts`` (plan Task 3.2); these
 # names stay for the modules and tests that import them from here.
@@ -25,6 +30,26 @@ _sync_items = core.sync_items
 _int_or_none = core.int_or_none
 _draft_signature = core.draft_signature
 _adjustments_map = core.adjustments_map
+
+_kinds: dict[str, DraftKind] | None = None
+
+
+def set_draft_kinds(kinds: dict[str, DraftKind] | None) -> None:
+    """The kernel registers the enabled packs' draft kinds here (``Kernel.register_packs``)."""
+    global _kinds
+    _kinds = dict(kinds) if kinds is not None else None
+
+
+def draft_kinds() -> dict[str, DraftKind]:
+    if _kinds is None:
+        from app.packs import host_packs
+        set_draft_kinds({k: dk for p in host_packs() for k, dk in p.draft_kinds().items()})
+    return _kinds
+
+
+def _kind_of(m: RoomMessage) -> DraftKind | None:
+    return draft_kinds().get(m.kind) if m is not None else None
+
 
 def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list[RoomMessage]:
     """Mark pending drafts that ``new_att`` re-proposes as ``superseded``.
@@ -43,11 +68,16 @@ def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list
     proposal — two genuinely different meals for that exact group on one day are
     rare, and the cost of being wrong is a card the user can ask for again.
     """
-    signature = _draft_signature(new_att)
+    kind = draft_kinds()[new_att["type"]]
+    if kind.signature is None:
+        return []
+    signature = kind.signature(new_att)
     superseded: list[RoomMessage] = []
     for m in list_pending_drafts(session, room_id):
+        if m.kind != kind.kind:
+            continue
         att = dict(m.attachments or {})
-        if _draft_signature(att) != signature:
+        if kind.signature(att) != signature:
             continue
         att["status"] = "superseded"
         m.attachments = att   # reassign so SQLAlchemy marks the JSON dirty
@@ -57,24 +87,34 @@ def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list
     return superseded
 
 
-def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
-    """Persist a new pending draft, retiring any it re-proposes.
+def create_card(session: Session, room_id: int, kind: str, payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
+    """Persist a new pending card of ``kind``, retiring any it re-proposes.
 
     Returns ``(new_draft, superseded)`` — the caller publishes the superseded
     cards so their buttons disappear in every open client.
     """
-    att = _sync_items({"type": "expense_draft", "status": "pending", **payload})
+    dk = draft_kinds().get(kind)
+    if dk is None:
+        raise ValueError(f"unknown draft kind {kind!r}")
+    att = {"type": kind, "status": "pending", **payload}
+    if dk.prepare is not None:
+        att = dk.prepare(att)
     att.pop("logged_by", None)
     superseded = _supersede_duplicates(session, room_id, att)
-    new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind="expense_draft")
+    new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind=kind)
     return new_draft, superseded
 
 
+def create_draft(session: Session, room_id: int, payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
+    """A pending ``expense_draft`` (see :func:`create_card`)."""
+    return create_card(session, room_id, "expense_draft", payload)
+
+
 def list_pending_drafts(session: Session, room_id: int) -> list[RoomMessage]:
-    """All pending expense drafts in the room, oldest first."""
+    """All pending draft cards in the room, oldest first."""
     rows = session.scalars(
         select(RoomMessage)
-        .where(RoomMessage.room_id == room_id, RoomMessage.kind.in_(DRAFT_KINDS))
+        .where(RoomMessage.room_id == room_id, RoomMessage.kind.in_(list(draft_kinds())))
         .order_by(RoomMessage.id)
     ).all()
     return [m for m in rows if (m.attachments or {}).get("status") == "pending"]
@@ -82,7 +122,8 @@ def list_pending_drafts(session: Session, room_id: int) -> list[RoomMessage]:
 
 def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> RoomMessage:
     m = session.get(RoomMessage, draft_id)
-    if m is None or m.room_id != room_id or m.kind not in DRAFT_KINDS:
+    dk = _kind_of(m)
+    if m is None or m.room_id != room_id or dk is None:
         raise ledger.LedgerError(f"Draft #{draft_id} not found.")
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
@@ -90,64 +131,42 @@ def update_draft(session: Session, draft_id: int, room_id: int, patch: dict) -> 
     if patch.get("status") == "cancelled":
         att["status"] = "cancelled"
     else:
-        for k in _EDITABLE:
+        for k in dk.editable:
             if k in patch:
                 att[k] = patch[k]
-        _sync_items(att)
+        if dk.prepare is not None:
+            dk.prepare(att)
     m.attachments = att   # reassign so SQLAlchemy marks the JSON dirty
     session.flush()
     return m
 
 
-def _all_member_names(session: Session, room_id: int) -> dict[int, str]:
-    """Display names for EVERY member of the room, active or not.
-
-    Unlike :func:`app.roster.list_members` (active-only, used for LLM-facing
-    resolution), the meal/payment payloads shown to humans must still show a
-    real name for a since-deactivated member instead of "?" — this is display
-    only, the underlying share math is unaffected.
-    """
-    return {m.id: m.display_name for m in session.scalars(select(Member).where(Member.room_id == room_id))}
-
-
-def _meal_message(session: Session, room_id: int, att: dict, res: dict) -> RoomMessage:
-    """Build + persist the committed-meal bot card from a record_meal result."""
-    names = _all_member_names(session, room_id)
-    meal_att = {
-        "type": "meal",
-        "meal_id": res["meal_id"],
-        "occurred_on": res["occurred_on"],
-        "bill_total": res["bill_total"],
-        "tracked_total": res["tracked_total"],
-        "guests": res["guests"],
-        "dish": att.get("dish"),
-        "initiator": att.get("initiator"),
-        "note": att.get("note"),
-        "items": att.get("items") or None,
-        "payer": {"id": res["payer_member_id"], "name": names.get(res["payer_member_id"], "?")},
-        "shares": [{"id": mid, "name": names.get(mid, "?"), "amount": amt}
-                   for mid, amt in res["shares"].items()],
-    }
-    body = chat._meal_body(meal_att)
-    return chat.post_message(session, room_id, None, body, attachments=meal_att, kind="bot")
-
-
-def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str | None) -> RoomMessage:
+def _commit(session: Session, draft_id: int, room_id: int, logged_by: str | None,
+            *, expect: str | None) -> RoomMessage:
+    """The one commit path: the kind's ``commit`` writes the domain rows, its
+    ``card`` says what happened, the draft flips to ``committed``."""
     m = session.get(RoomMessage, draft_id)
-    if m is None or m.room_id != room_id or m.kind != "expense_draft":
+    dk = _kind_of(m)
+    if m is None or m.room_id != room_id or dk is None or (expect is not None and m.kind != expect):
         raise ledger.LedgerError(f"Draft #{draft_id} not found.")
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("This draft has already been processed.")
-    core.require_meal_fields(att)
-    res = core.record_meal_payload(session, room_id, att, logged_by=logged_by)
-    meal_msg = _meal_message(session, room_id, att, res)
+    res = dk.commit(session, room_id, att, logged_by=logged_by)
+    body, card_att = dk.card(session, room_id, att, res) if dk.card else ("", None)
+    card = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
 
     att["status"] = "committed"
-    att["committed_meal_id"] = res["meal_id"]
+    if isinstance(res, dict) and res.get("meal_id") is not None:
+        att["committed_meal_id"] = res["meal_id"]
     m.attachments = att
     session.flush()
-    return meal_msg
+    return card
+
+
+def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str | None) -> RoomMessage:
+    """Commit a pending ``expense_draft``; returns the committed-meal card."""
+    return _commit(session, draft_id, room_id, logged_by, expect="expense_draft")
 
 
 def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
@@ -182,7 +201,8 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     # statement shows their share as unpaid while the settlement counts it.
     ledger.repoint_meal_payments(session, room_id=room_id, old_meal_id=meal.id,
                                  new_meal_id=res["meal_id"])
-    meal_msg = _meal_message(session, room_id, att, res)
+    body, card_att = draft_kinds()["expense_draft"].card(session, room_id, att, res)
+    meal_msg = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
     att["committed_meal_id"] = res["meal_id"]
     m.attachments = att
     session.flush()
@@ -191,53 +211,19 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
 
 def create_payment_draft(session: Session, room_id: int,
                          payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
-    """Persist a pending payment draft, retiring any it re-proposes.
-
-    Same ``(new_draft, superseded)`` contract as :func:`create_draft`: "tôi đã
-    trả tiền Emi" asked twice in a row leaves one live card, not two, and neither
-    can go on blocking a settle.
-    """
-    att = {"type": "payment_draft", "status": "pending", **payload}
-    att.pop("logged_by", None)
-    superseded = _supersede_duplicates(session, room_id, att)
-    new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind="payment_draft")
-    return new_draft, superseded
+    """A pending ``payment_draft`` (see :func:`create_card`): "tôi đã trả tiền Emi"
+    asked twice in a row leaves one live card, not two, and neither can go on
+    blocking a settle."""
+    return create_card(session, room_id, "payment_draft", payload)
 
 
 def commit_payment_draft(session: Session, draft_id: int, room_id: int,
                          logged_by: str | None) -> RoomMessage:
-    m = session.get(RoomMessage, draft_id)
-    if m is None or m.room_id != room_id or m.kind != "payment_draft":
-        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
-    att = dict(m.attachments or {})
-    if att.get("status") != "pending":
-        raise ledger.LedgerError("This draft has already been processed.")
-    transfers = core.require_transfers(att)
-    core.record_payment_transfers(session, room_id, transfers, logged_by=logged_by)
-    names = _all_member_names(session, room_id)
-    pay_att = {
-        "type": "payment",
-        "transfers": [
-            {"from": {"id": t["from_member_id"], "name": names.get(t["from_member_id"], "?")},
-             "to": {"id": t["to_member_id"], "name": names.get(t["to_member_id"], "?")},
-             "amount": t["amount"]}
-            for t in transfers
-        ],
-    }
-    card = chat.post_message(session, room_id, None, chat._payment_body(pay_att),
-                            attachments=pay_att, kind="bot")
-    att["status"] = "committed"
-    m.attachments = att
-    session.flush()
-    return card
+    """Commit a pending ``payment_draft``; returns the recorded-payment card."""
+    return _commit(session, draft_id, room_id, logged_by, expect="payment_draft")
 
 
 def commit_any(session: Session, draft_id: int, room_id: int,
                logged_by: str | None) -> RoomMessage:
-    """Commit a draft, dispatching by kind (meal vs payment)."""
-    m = session.get(RoomMessage, draft_id)
-    if m is None or m.room_id != room_id:
-        raise ledger.LedgerError(f"Draft #{draft_id} not found.")
-    if m.kind == "payment_draft":
-        return commit_payment_draft(session, draft_id, room_id, logged_by)
-    return commit_draft(session, draft_id, room_id, logged_by)
+    """Commit a draft of any registered kind — the pack's ``DraftKind`` decides."""
+    return _commit(session, draft_id, room_id, logged_by, expect=None)

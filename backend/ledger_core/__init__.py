@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Callable
 
 from ledger_core import clock as _clock
+from ledger_core import ledger as _ledger
 from ledger_core import members as _members
 from ledger_core.members import MemberDirectory, SqlMemberDirectory  # noqa: F401
 from ledger_core.models import Base, Meal, MealShare, Payment, Settlement  # noqa: F401
@@ -21,11 +22,15 @@ __version__ = "0.1.0"
 
 
 def configure(*, member_model: type | None = None, directory: MemberDirectory | None = None,
-              space_attr: str = "room_id", now: Callable[[], datetime] | None = None) -> None:
-    """Bind the host's member model (or a directory of your own) and its clock."""
+              space_attr: str = "room_id", now: Callable[[], datetime] | None = None,
+              edge_sources: list | None = None) -> None:
+    """Bind the host's member model (or a directory of your own), its clock, and the
+    packs whose ``contributions`` feed the balances (``ledger.set_edge_sources``)."""
     if directory is None and member_model is not None:
         directory = SqlMemberDirectory(member_model, space_attr=space_attr)
     if directory is not None:
         _members.set_directory(directory)
     if now is not None:
         _clock.set_provider(now)
+    if edge_sources is not None:
+        _ledger.set_edge_sources(edge_sources)

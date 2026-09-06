@@ -29,8 +29,8 @@ from app.summarize import summarize_messages
 # (plan Task 3.3); re-exported so `tests/test_chat_bodies.py` and `bench.graders`
 # keep their import path.
 from packs.lunch_ledger.render import (  # noqa: F401
-    _random_pick_body, _settle_blocked_body, _settlement_body, _statement_body, _summary_body,
-    render_bot_attachments,
+    _meal_body, _payment_body, _random_pick_body, _settle_blocked_body, _settlement_body,
+    _statement_body, _summary_body, render_bot_attachments,
 )
 
 log = logging.getLogger("chiatienan")
@@ -313,16 +313,6 @@ def recent_images(session: Session, room_id: int, *, before_id: int | None = Non
     return []
 
 
-def _payment_body(attachments: dict) -> str:
-    """Deterministic summary of recorded payment(s), from the tool/commit dict —
-    never LLM prose (money-safety)."""
-    transfers = attachments.get("transfers") or []
-    if not transfers:
-        return "💸 Payment recorded."
-    lines = [f"{t['from']['name']} paid {t['to']['name']} {t['amount']:,}đ" for t in transfers]
-    return "💸 " + lines[0] if len(lines) == 1 else "💸 Recorded:\n" + "\n".join(lines)
-
-
 def _empty_turn_body(result) -> str:
     """What to say when the model produced no text.
 
@@ -352,47 +342,6 @@ def _empty_turn_body(result) -> str:
         return ("⏱️ That took too long and I ran out of time before answering — "
                 "nothing was recorded. Ask me again.")
     return ("⚠️ I came back with nothing — nothing was recorded. Ask me again.")
-
-
-def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
-    """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
-
-    Room-scoped and void-aware on purpose: "Đã ghi #14" is a claim about *this*
-    room's ledger, and a voided meal is one the room decided never happened.
-    """
-    with db.session() as s:
-        meal = s.get(Meal, meal_id)
-        return meal is not None and meal.room_id == room_id and not meal.voided
-
-
-#: What the room sees instead of a forged confirmation. It has to say the thing
-#: the forgery hid — that the ledger is untouched — because the failure is
-#: invisible otherwise: nothing was written, so no balance moves and no card
-#: appears, and the next person to read the thread has only the bot's word.
-_FABRICATED_COMMIT_BODY = (
-    "⚠️ This meal was **not recorded** — nothing in the ledger changed.\n"
-    "Please say it again (attach the bill photo if you have one, and say who paid and "
-    "who shared) — it only reaches the ledger once a draft card appears and someone "
-    "presses **Confirm**."
-)
-
-
-def _meal_body(attachments: dict) -> str:
-    """Deterministic summary of a committed meal, straight from the tool-result
-    dict — never from LLM prose (design D3, money-safety)."""
-    payer = attachments.get("payer") or {}
-    shares = attachments.get("shares") or []
-    shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
-    bill = attachments.get("bill_total", attachments.get("tracked_total", attachments.get("total_amount", 0)))
-    guests = attachments.get("guests") or []
-    guest_str = (f" (incl. {len(guests)} guest{'' if len(guests) == 1 else 's'} paying cash)"
-                 if guests else "")
-    dish = attachments.get("dish")
-    dish_str = f" — {dish}" if dish else ""
-    return (
-        f"Recorded #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} paid "
-        f"{bill:,}đ total{guest_str} • {shares_str}"
-    )
 
 
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,

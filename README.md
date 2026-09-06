@@ -77,14 +77,14 @@ Caddy (auto-TLS)
 | `auth.py` | Bearer-session (`require_session`) + admin-password (`require_admin`) guards |
 | `rooms.py` | Room create + lookup by invite token / id |
 | `chat.py` | Persist/list messages, `@phoenix` detection, agent dispatch (serialized), deterministic bot-reply rendering |
-| `drafts.py` | Expense-draft lifecycle: persist, edit, commit, supersede, cancel |
+| `drafts.py` | Draft-card lifecycle, generic over the packs' `DraftKind`s: persist, edit, commit, supersede, cancel |
 | `tools.py` | The host's tool composition point: `ToolContext`, `CustomTool`, `build_tools` (the enabled packs' tools in the legacy order), `tool_manifest` |
 | `packs/` | this host's packs: the registration of the framework's `lunch_ledger` (QR builder + place resolver injected), `lunch_places` (restaurants, memos), `room_members` (member CRUD) |
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
 | `kernel.py` | kernos composition root: registry of plugins, host adapters, resolver → the pipeline `chat.run_bot_turn` runs |
-| `plugins/` | this app's pipeline plugins: persona prompt, the `run_turn` seam, lunch renderers, money validators, draft cards |
+| `plugins/` | this app's pipeline plugins: persona prompt, the `run_turn` seam, the money validators (fabricated commit, unbacked amounts) |
 | `hostadapters.py` · `default_profile.py` | the kernos host adapters over this app's modules; the seeded default profile (today's bot as a `ProfileSpec`) |
 | `agent.py` | shim over `kernos.engine.pi.PiEngine`: builds the `EngineSpec`, executes tools, logs one line; `run_turn`'s signature is frozen |
 | `pi_bridge.py` | shim over `kernos.engine.pi.PiBridge`: sidecar path, our key name, `PI_*` defaults, the per-process singleton |

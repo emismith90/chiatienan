@@ -4,9 +4,7 @@ from app.agent import ToolInvocation, TurnResult
 from app.hostadapters import build_adapters
 from app.default_profile import build_default_spec
 from app.packs import host_packs
-from app.plugins.persist import Cards
 from app.plugins.prompt import PhoenixSystemPrompt
-from app.plugins.render import LunchRender
 from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from app.prompt import build_system_prompt
@@ -38,7 +36,7 @@ async def test_phoenix_prompt_is_todays_system_prompt(db):
 
 async def test_render_decides_draft_payment_typed_body_or_prose(db):
     room_id, m = _seed_room(db, 2)
-    r = LunchRender(PackRender(_packs()))
+    r = PackRender(_packs())
     ctx = _ctx(db, room_id, m)
     ctx.result = TurnResult(final_text="ignored", turn_id="t1", tools=[ToolInvocation("propose_meal", {}, {
         "ok": True, "payer_member_id": m[0], "member_participants": m, "bill_total": 1000})])
@@ -99,7 +97,7 @@ async def test_persist_writes_drafts_and_queues_superseded_and_cancelled_cards(d
                "occurred_on": None, "raw_input": "x", "logged_by": str(m[0]), "turn_id": "t"}
     ctx.result = TurnResult(final_text="")
     ctx.outcome = Draft("expense_draft", dict(payload))
-    await Cards(KernelCards(a, _packs())).run(ctx, {})
+    await KernelCards(a, _packs()).run(ctx, {})
     first = ctx.persisted
     assert first.kind == "expense_draft" and ctx.pending_events == []
 
@@ -107,7 +105,7 @@ async def test_persist_writes_drafts_and_queues_superseded_and_cancelled_cards(d
     ctx2.result = TurnResult(final_text="", tools=[ToolInvocation("cancel_draft", {"draft_id": first.id},
                                                                    {"ok": True, "draft_id": first.id})])
     ctx2.outcome = Draft("expense_draft", dict(payload))
-    await Cards(KernelCards(a, _packs())).run(ctx2, {})
+    await KernelCards(a, _packs()).run(ctx2, {})
     kinds = [(e["type"], e["id"], e["attachments"]["status"]) for e in ctx2.pending_events]
     # superseded by the re-proposal, then republished again as the cancelled card
     assert kinds == [("message", first.id, "superseded"), ("message", first.id, "superseded")]
@@ -115,7 +113,7 @@ async def test_persist_writes_drafts_and_queues_superseded_and_cancelled_cards(d
     ctx3 = _ctx(db, room_id, m)
     ctx3.result = TurnResult(final_text="hi")
     ctx3.outcome = Body("hi", None)
-    await Cards(KernelCards(a, _packs())).run(ctx3, {})
+    await KernelCards(a, _packs()).run(ctx3, {})
     assert ctx3.persisted.kind == "bot" and ctx3.persisted.body == "hi"
 
 

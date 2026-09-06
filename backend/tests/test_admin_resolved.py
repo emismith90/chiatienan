@@ -22,6 +22,6 @@ def test_resolved_engine_spec_is_todays_command_and_the_pipeline_is_listed(api_c
     assert body["engine_spec"] == asdict(agent.default_engine_spec())
     stages = [(e["stage"], e["plugin"]) for e in body["pipeline"]]
     assert stages[:2] == [("context", "kernos.context.rollover"), ("context", "kernos.context.memory")]
-    assert ("run", "app.run.legacy") in stages and ("render", "app.render.lunch") in stages
+    assert ("run", "app.run.legacy") in stages and ("render", "kernos.render.packs") in stages
     assert all(e["version"] for e in body["pipeline"])
     assert body["spec"]["persona"]["name"] == "Phoenix" and body["spec"]["meta"]["handles_money"] is True

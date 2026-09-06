@@ -9,7 +9,7 @@ host's :mod:`ledger_core.members` directory (review F3).
 from __future__ import annotations
 
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -308,6 +308,47 @@ def period_transfer_inputs(
     return list(by_id.values()), payments
 
 
+#: Where the debt edges come from (design §4.2 "balance contributions"; plan Task
+#: 3.4). Each source is ``(session, space_id) -> list[DebtEdge]`` returning **every**
+#: gross edge of that business, unwindowed and with ``paid=0`` — the core applies
+#: payments FIFO over the sum of all sources and windows afterwards (review F4), so
+#: no pack can re-window edges before attribution. A host registers its packs'
+#: ``contributions`` through :func:`set_edge_sources` (``ledger_core.configure``);
+#: with none registered the ledger reads its own meals, as it always has.
+EdgeSource = Callable[[Session, int], list["DebtEdge"]]
+_edge_sources: list[EdgeSource] | None = None
+
+
+def set_edge_sources(sources: list[EdgeSource] | None) -> None:
+    global _edge_sources
+    _edge_sources = list(sources) if sources is not None else None
+
+
+def meal_edges(session: Session, room_id: int) -> list["DebtEdge"]:
+    """The meals' gross edges — one per (participant ≠ payer, non-voided meal), the
+    whole ledger of ``room_id``, ``paid=0``. The lunch business's contribution."""
+    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False)]
+    meal_rows = session.execute(
+        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on).where(*meal_conds)
+    ).all()
+    by_id = {
+        mid: {"meal_id": mid, "payer_id": payer, "dish": dish, "occurred_on": occ, "shares": {}}
+        for mid, payer, dish, occ in meal_rows
+    }
+    if by_id:
+        for meal_id, member_id, amt in session.execute(
+            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
+            .where(MealShare.meal_id.in_(by_id.keys()))
+        ).all():
+            by_id[meal_id]["shares"][member_id] = amt
+    return build_debt_edges(list(by_id.values()))
+
+
+def _all_edges(session: Session, room_id: int) -> list["DebtEdge"]:
+    sources = _edge_sources if _edge_sources is not None else [meal_edges]
+    return [e for source in sources for e in source(session, room_id)]
+
+
 def debt_breakdown(
     session: Session, room_id: int, from_date: date | None, to_date: date
 ) -> list["DebtEdge"]:
@@ -324,22 +365,10 @@ def debt_breakdown(
     reported the 107,000đ Giang had paid that same morning as still owing, and
     printed a live VietQR for it. In a room that habitually pays the next day,
     every week-scoped question had that property.
-    """
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False)]
-    meal_rows = session.execute(
-        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on).where(*meal_conds)
-    ).all()
-    by_id = {
-        mid: {"meal_id": mid, "payer_id": payer, "dish": dish, "occurred_on": occ, "shares": {}}
-        for mid, payer, dish, occ in meal_rows
-    }
-    if by_id:
-        for meal_id, member_id, amt in session.execute(
-            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
-            .where(MealShare.meal_id.in_(by_id.keys()))
-        ).all():
-            by_id[meal_id]["shares"][member_id] = amt
 
+    The edges themselves come from every registered source (:data:`_edge_sources`
+    — the enabled packs' ``contributions``), the meals by default.
+    """
     payments = [
         {"from": f, "to": t, "amount": a, "meal_id": mid}
         for f, t, a, mid in session.execute(
@@ -347,7 +376,7 @@ def debt_breakdown(
             .where(Payment.room_id == room_id, Payment.voided.is_(False))
         ).all()
     ]
-    edges = apply_payments_fifo(build_debt_edges(list(by_id.values())), payments)
+    edges = apply_payments_fifo(_all_edges(session, room_id), payments)
     return [e for e in edges
             if e.occurred_on <= to_date and (from_date is None or e.occurred_on >= from_date)]
 

@@ -368,21 +368,31 @@ no-op when `outcome.claimed_by_pack` is true.
 A **tool pack** is a plugin with a wider surface:
 
 ```python
-class ToolPack(Protocol):
-    id: str;  handles_money: bool
-    def tools(self, ctx: ToolContext) -> dict[str, CustomTool]: ...        # the bodies
-    def draft_kinds(self) -> dict[str, DraftKind]: ...                     # e.g. "expense_draft" → commit(), patch schema
-    def render(self, result) -> tuple[str, dict] | None: ...               # body, attachments
-    def balance_contributions(self, session, room_id, window) -> list[DebtEdge]: ...
-    def fixtures(self) -> dict[str, FixtureStep]: ...                      # eval world building, §5.5
-    def seed(self, session, room_id) -> None: ...                          # new room of this business
-    def models(self) -> list[type[Base]]: ...                              # its own tables, if any (§5.3)
+class ToolPack(Protocol):                       # kernos.packs, as built in Phase 3
+    id: str;  version: str;  handles_money: bool
+    cancel_tools: frozenset[str]                # tools whose result names a card to republish
+    def tools(self, ctx) -> dict[str, PackTool]: ...              # sync bodies; ctx is the host's per-turn context
+    def draft_kinds(self) -> dict[str, DraftKind]: ...           # kind → commit, card, prepare, signature, editable, stamps
+    def render(self, result) -> Draft | Body | None: ...         # the outcome, or "not mine"
+    def contributions(self, session, space_id) -> list[DebtEdge]: ...   # every gross edge, unwindowed
+    def fixtures(self) -> dict[str, FixtureStep]: ...            # (world, step, ids, drafts_by_step, actor)
+    def seed(self, session, space_id) -> None: ...
+    def bind(self, engine) -> None: ...                          # its own tables, if any (§5.3)
 ```
 
-`balance_contributions` is the one method that makes a second money business
-possible: `ledger.period_balances` stops reading `meals` directly and instead sums
-`DebtEdge`s from every enabled pack. `money.net_transfers`, QR building,
-settlements, payments and the roster stay in the core, shared by every pack.
+`contributions` is the one method that makes a second money business possible:
+`ledger_core.ledger.debt_breakdown` sums the `DebtEdge`s of every registered source
+(the kernel registers each pack's `contributions`), applies payments FIFO over that
+one list and windows **afterwards** — never before, which is why the method takes no
+window (Phase 3 review F4). `money.net_transfers`, QR building, settlements,
+payments and the roster stay in the core, shared by every pack. A `DraftKind` carries
+what the host's draft store needs without knowing the business: `commit(session,
+space_id, payload, *, logged_by) → result`, `card(session, space_id, payload, result)
+→ (body, attachments)`, `prepare(payload)` for normalisation on create and edit,
+`signature(payload)` for spotting a re-proposal, the editable field list and the
+kernel-owned `stamps`. What a pack needs from a host is injected — at registration
+(lunch: the QR builder, the place resolver) and on the per-turn context (a card store,
+the clock, the uniform draw) — and the pack imports `kernos` and `ledger_core` only.
 
 Sidecar plugins are Pi extension factories (`(pi, config) => void`) exported from a
 registry module; the `run` command names them with their config and `session.js`
@@ -673,6 +683,14 @@ details, cash payments between members, debt edges and FIFO payment application,
 That is a **domain library**, `ledger_core`, that both packs import. Extracting it is
 most of Phase 3's work and is what makes the pack interface honest — a pack is what a
 business *adds* to the domain, and the domain is what two businesses *share*.
+
+As built (Phase 3): `ledger_core` owns `Meal`/`MealShare`/`Payment`/`Settlement` on its
+own SQLAlchemy `Base` with the cross-package references (`room_id`, member ids,
+`place_id`) as plain indexed integers — decision 2: no FK into a host table, the host
+binds a `MemberDirectory` (existence checks, names, roster) and a clock through
+`ledger_core.configure`, and registers the packs' `contributions` as the ledger's edge
+sources. Member *administration* (accounts, PINs, bank details) stays a host concern
+— chiatienan's `room_members` pack — that any money business on that host enables.
 
 ### 7.4 What poker forces in the kernel and the host — done in Phase 3, proven by Phase 6
 

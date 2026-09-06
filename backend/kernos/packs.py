@@ -37,14 +37,28 @@ class PackTool:
 
 @dataclass(frozen=True)
 class DraftKind:
-    """A card kind a pack can commit. ``stamps`` names the kernel-owned fields the
-    render stage adds to the draft payload (``raw_input``, ``logged_by``, ``turn_id``)
-    — a pack never sees principals."""
+    """A card kind a pack can commit — everything the host's draft store needs to
+    know about it without knowing the business (plan Task 3.4).
+
+    ``commit(session, space_id, payload, *, logged_by) -> result`` writes the
+    domain rows for a confirmed card; ``card(session, space_id, payload, result) ->
+    (body, attachments)`` is the confirmation the room sees afterwards, built from
+    the result dict, never from prose; ``prepare(payload) -> payload`` normalises a
+    payload on create and on every edit (lunch re-derives the itemised split);
+    ``signature(payload) -> hashable`` identifies a re-proposal so the store can
+    retire the older pending card (``None`` = never supersede); ``editable`` is the
+    field list a card edit may patch; ``stamps`` names the kernel-owned fields the
+    render stage adds to the payload (``raw_input``, ``logged_by``, ``turn_id``) — a
+    pack never sees principals.
+    """
 
     kind: str
-    commit: Callable[..., Any]                 # (session, space_id, payload, logged_by) -> host object
+    commit: Callable[..., Any]
     editable: frozenset[str] = frozenset()
     stamps: frozenset[str] = frozenset({"turn_id"})
+    card: Callable[..., tuple[str, dict]] | None = None
+    prepare: Callable[[dict], dict] | None = None
+    signature: Callable[[dict], Any] | None = None
 
 
 @runtime_checkable

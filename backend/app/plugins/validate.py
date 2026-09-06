@@ -1,6 +1,8 @@
 import logging
 
 from app import chat, moneyguard
+from app.db import Database
+from app.models import Meal
 from kernos.kernel import BasePlugin, Body, Stage, TurnContext, Verdict
 
 log = logging.getLogger("chiatienan")
@@ -13,6 +15,30 @@ def _prose(ctx: TurnContext) -> Body | None:
     if not isinstance(out, Body) or out.claimed_by_pack or not ctx.result or not ctx.result.final_text:
         return None
     return out
+
+
+
+def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
+    """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
+
+    Room-scoped and void-aware on purpose: "Đã ghi #14" is a claim about *this*
+    room's ledger, and a voided meal is one the room decided never happened.
+    """
+    with db.session() as s:
+        meal = s.get(Meal, meal_id)
+        return meal is not None and meal.room_id == room_id and not meal.voided
+
+
+#: What the room sees instead of a forged confirmation. It has to say the thing
+#: the forgery hid — that the ledger is untouched — because the failure is
+#: invisible otherwise: nothing was written, so no balance moves and no card
+#: appears, and the next person to read the thread has only the bot's word.
+_FABRICATED_COMMIT_BODY = (
+    "⚠️ This meal was **not recorded** — nothing in the ledger changed.\n"
+    "Please say it again (attach the bill photo if you have one, and say who paid and "
+    "who shared) — it only reaches the ledger once a draft card appears and someone "
+    "presses **Confirm**."
+)
 
 
 class FabricatedCommit(BasePlugin):
@@ -45,7 +71,7 @@ class FabricatedCommit(BasePlugin):
         db, room_id = ctx.tool_ctx.db, ctx.tool_ctx.room_id
         forged = moneyguard.fabricated_commit(
             out.text, f"{ctx.text}\n{ctx.history or ''}", ctx.result.tools,
-            meal_exists=lambda mid: chat._meal_exists(db, room_id, mid),
+            meal_exists=lambda mid: _meal_exists(db, room_id, mid),
         )
         if forged is None:
             return None
@@ -56,7 +82,7 @@ class FabricatedCommit(BasePlugin):
             [inv.name for inv in ctx.result.tools], out.text[:400],
         )
         return Verdict(False, "block", "fabricated commit",
-                       Body(chat._FABRICATED_COMMIT_BODY, out.attachments, claimed_by_pack=True))
+                       Body(_FABRICATED_COMMIT_BODY, out.attachments, claimed_by_pack=True))
 
 
 class UnbackedAmounts(BasePlugin):

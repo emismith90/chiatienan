@@ -24,7 +24,7 @@ def test_registry_and_schema(admin):
     client, _, _ = admin
     rows = client.get("/api/admin/registry", headers=ADMIN).json()
     ids = {r["id"] for r in rows}
-    assert {"kernos.context.rollover", "kernos.prompt.template", "app.render.lunch"} <= ids
+    assert {"kernos.context.rollover", "kernos.prompt.template", "kernos.render.packs"} <= ids
     assert client.get("/api/admin/plugins/kernos.context.history/1/schema", headers=ADMIN).json()["required"] == ["max_messages"]
     assert client.get("/api/admin/plugins/nope/1/schema", headers=ADMIN).status_code == 404
     assert client.get("/api/admin/registry").status_code == 401                      # guarded

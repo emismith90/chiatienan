@@ -83,11 +83,7 @@ class RoomCards:
 
     def create(self, space_id, kind, payload) -> tuple[RoomMessage, list[RoomMessage]]:
         with self._db.session() as s:
-            if kind == "expense_draft":
-                return drafts.create_draft(s, _room(space_id), payload)
-            if kind == "payment_draft":
-                return drafts.create_payment_draft(s, _room(space_id), payload)
-            raise ValueError(f"unknown draft kind {kind!r}")
+            return drafts.create_card(s, _room(space_id), kind, payload)
 
     def get(self, space_id, card_id) -> RoomMessage | None:
         with self._db.session() as s:

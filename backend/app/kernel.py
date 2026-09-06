@@ -18,9 +18,7 @@ from app.config import settings
 from app.db import Database
 from app.default_profile import build_default_spec
 from app.hostadapters import build_adapters
-from app.plugins.persist import Cards
 from app.plugins.prompt import PhoenixSystemPrompt
-from app.plugins.render import LunchRender
 from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
@@ -42,16 +40,14 @@ class Kernel:
         self.adapters: HostAdapters = build_adapters(db)
         from app.packs import host_packs
         self.packs = PackRegistry()
-        self.packs.register_all(host_packs())
-        render = PackRender(self.packs)
-        cards = KernelCards(self.adapters, self.packs)
+        self.register_packs(*host_packs())
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
             ImageLookback(self.adapters), SectionsMessage(), TemplatePrompt(self.adapters),
             ModelPassthrough(),
-            PhoenixSystemPrompt(), LegacyRunTurn(), render, cards,
-            LunchRender(render), Cards(cards),
+            PhoenixSystemPrompt(), LegacyRunTurn(), PackRender(self.packs),
+            KernelCards(self.adapters, self.packs),
             FabricatedCommit(), UnbackedAmounts(),
         ])
         self.default_spec = build_default_spec(settings)
@@ -68,6 +64,16 @@ class Kernel:
         self.store.on_change.append(self.invalidate)
         from app.modelprobe import BenchModelProbe
         self.probe = BenchModelProbe()
+
+    def register_packs(self, *packs) -> None:
+        """Register packs and hand the host's draft store and the ledger what they
+        contribute: draft kinds (``app.drafts``) and debt edges (``ledger_core``)."""
+        import ledger_core
+        from app import drafts
+
+        self.packs.register_all(packs)
+        drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
+        ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
 
     def resolve(self, space_id: int | str) -> ProfileSpec:
         return self.resolver.resolve(str(space_id))
