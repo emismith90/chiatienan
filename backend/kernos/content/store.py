@@ -340,18 +340,27 @@ class ContentStore:
 
     def publish(self, version_id: int, *, actor: str, gates=None, override_reason: str | None = None,
                 bypass_gates: bool = False, skip_probe: bool = False, skip_eval: bool = False,
-                note: str | None = None) -> dict:
+                note: str | None = None, if_published: int | None = None) -> dict:
         """Make ``version_id`` what its profile runs.
 
         ``bypass_gates`` exists for boot seeding only — the seeded profile *is* today's
         behaviour — and it is the one path that keeps ``managed_by = "boot"``. Any
         other publish makes the profile human-managed (finding 4).
+
+        ``if_published`` is optimistic concurrency for a caller that read the profile,
+        built a draft from it and is now publishing: the check happens **inside this
+        transaction**, so two editors who both read v7 cannot both win (plan Phase 11
+        review F7). A route that only compares before starting has a race, not a check.
         """
         with self._session() as s:
             v = self._version(s, version_id)
             if v.status not in ("draft", "superseded"):
                 raise Conflict(f"version {v.version} is {v.status}; only a draft or superseded version can be published")
             p = self._profile(s, v.profile_id)
+            if if_published is not None and p.published_version_id != if_published:
+                raise Conflict(
+                    f"profile {p.id} now publishes version id {p.published_version_id}, not {if_published}; "
+                    "someone else changed it — reload and try again")
             previous = s.get(m.ProfileVersion, p.published_version_id) if p.published_version_id else None
             if not bypass_gates:
                 if gates is None:

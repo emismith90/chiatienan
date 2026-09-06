@@ -36,6 +36,7 @@ from kernos import friction
 from kernos.content.capabilities import SCOPE_VOCABULARY, agent_capabilities
 from kernos.content.errors import ContentError
 from kernos.content.gates import BLACKLIST_FIELDS, blacklisted_changes, changed_paths, outside_scope
+from kernos.content.sources import money_slugs, source_changes
 from kernos.content.spec import ProfileSpec
 from kernos.eval.case import spec_sha
 from kernos.eval.gate import latest_matching_run
@@ -516,7 +517,9 @@ class _Tools:
         else:
             rules = [dict(r) for r in spec.get("rules", [])]
             current = next((r for r in rules if r["slug"] == slug), None)
-            if current and "money" in (current.get("tags") or []):
+            # identity is the slug, not the tag: an untagged rule reusing a money rule's
+            # slug would replace its source row and strip the tag (Phase 11 review F2)
+            if slug in money_slugs(published):
                 return err(f"rule {slug!r} is tagged money; it can only be proposed by a person")
             before = current["content"] if current else ""
             tags = [t for t in (fm.get("tags") or (current or {}).get("tags") or []) if t != "money"]
@@ -556,36 +559,18 @@ class _Tools:
         return problems, run_id
 
     def _source_changes(self, published: dict, draft: dict) -> list[dict]:
-        """The source rows that must follow the draft: every skill, non-money rule and the
-        system prompt that differ from the published spec, each with the etag its source
-        has now (``None`` when the source does not exist) — approval applies them with
-        ``if_match`` (F10). Derived from the specs, so a proposal made turns after the
-        draft carries them too."""
+        """The source rows that must follow the draft (Phase 8 review F10). Shared with
+        the room editor via :mod:`kernos.content.sources`, so the money-slug guard
+        (Phase 11 review F2) protects this path too."""
         store, bid = self.p._store, self.agent["business_id"]
 
-        def etag(kind: str, slug: str):
+        def etag_of(kind: str, slug: str):
             try:
                 return store.get_source(bid, kind, slug)["etag"]
             except ContentError:
                 return None
 
-        out: list[dict] = []
-        old_skills = {s["name"]: s for s in published.get("skills", [])}
-        for sk in draft.get("skills", []):
-            if old_skills.get(sk["name"]) != sk:
-                out.append({"kind": "skill", "slug": sk["name"], "body": sk["body"], "title": sk["name"],
-                            "frontmatter": {"description": sk.get("description", ""), "delivery": sk.get("delivery", "inline")},
-                            "if_match": etag("skill", sk["name"])})
-        old_rules = {r["slug"]: r for r in published.get("rules", [])}
-        for r in draft.get("rules", []):
-            if old_rules.get(r["slug"]) != r and "money" not in (r.get("tags") or []):
-                out.append({"kind": "rule", "slug": r["slug"], "body": r["content"], "title": r["slug"],
-                            "frontmatter": {"tags": list(r.get("tags") or [])}, "if_match": etag("rule", r["slug"])})
-        new_body = (draft.get("prompt") or {}).get("body")
-        if new_body != (published.get("prompt") or {}).get("body"):
-            out.append({"kind": "prompt", "slug": "system", "body": new_body or "", "title": "system",
-                        "frontmatter": {}, "if_match": etag("prompt", "system")})
-        return out
+        return source_changes(published, draft, etag_of=etag_of)
 
     def cms_propose_publish(self, args: dict | None) -> dict:
         args = args or {}

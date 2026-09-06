@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import (accounts, chat, debug_api, drafts, knowledge, ledger, memory,
-                 memos, observations, places, roster, rooms)
+                 memos, observations, places, roomcms, roster, rooms)
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
@@ -1187,3 +1187,56 @@ async def bridge_smoke(x_admin_password: str | None = Header(default=None)):
     if not settings.admin_password or x_admin_password != settings.admin_password:
         raise HTTPException(status_code=401, detail="unauthorized")
     return await run_bridge_smoke()
+
+
+# --------------------------------------------------------------------- room CMS
+# The agent a room runs, readable by every member and editable by a bound room
+# (plan Phase 11). `app.roomcms` holds the rules; these are the doors.
+
+class AgentContentIn(BaseModel):
+    base_version_id: int | None = None
+    note: str | None = None
+    prompt_body: str | None = None
+    prompt_append: list[str] | None = None
+    skills: list[dict] | None = None
+    rules: list[dict] | None = None
+    source_etags: dict[str, str] | None = None
+
+
+class RepublishIn(BaseModel):
+    note: str | None = None
+
+
+@app.get("/api/rooms/{room_id}/agent")
+async def room_agent(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.view(kernel_for(get_db()), room_id)
+
+
+@app.get("/api/rooms/{room_id}/agent/versions")
+async def room_agent_versions(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.versions(kernel_for(get_db()), room_id)
+
+
+@app.get("/api/rooms/{room_id}/agent/versions/{version}")
+async def room_agent_version(room_id: int, version: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.version_detail(kernel_for(get_db()), room_id, version)
+
+
+@app.put("/api/rooms/{room_id}/agent/content")
+async def room_agent_edit(room_id: int, body: AgentContentIn, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    out = roomcms.edit(kernel_for(get_db()), room_id, ctx.member_id, body.model_dump())
+    await hub.publish(room_id, {"type": "agent:changed"})
+    return out
+
+
+@app.post("/api/rooms/{room_id}/agent/versions/{version}/republish")
+async def room_agent_republish(room_id: int, version: int, body: RepublishIn,
+                               ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    out = roomcms.republish(kernel_for(get_db()), room_id, ctx.member_id, version, body.note)
+    await hub.publish(room_id, {"type": "agent:changed"})
+    return out
