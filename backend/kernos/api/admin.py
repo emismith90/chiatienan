@@ -420,6 +420,13 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
             return start(suite, v["id"], actor=_actor(x_actor), agent_id=agent_id)
         return _wrap(go)
 
+    @r.get("/steward/brief")
+    def steward_brief():
+        """The shipped steward brief (design §8.5) — text an operator installs as a skill
+        source of a business whose agent has the `os_admin` pack, or sends as a turn."""
+        from kernos.osadmin import STEWARD_BRIEF
+        return {"brief": STEWARD_BRIEF}
+
     # ------------------------------------------------------------ proposals
     @r.get("/proposals")
     def proposals(business_id: int | None = Query(default=None), status: str | None = Query(default=None),

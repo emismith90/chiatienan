@@ -164,6 +164,17 @@ class ContentStore:
             self.log(s, actor, "put", f"source:{kind}", f"{business_id}/{slug}", before=before, after=_row(row))
             return _row(row)
 
+    def apply_source_changes(self, business_id: int, changes: list, *, actor: str, audit: dict) -> None:
+        """Write the source rows an approved or auto-published proposal carries, each with
+        the etag it had when drafted (``if_match``; a source that did not exist has none) so
+        a concurrent human edit is a ``PreconditionFailed``, never an overwrite (Phase 8 F10)."""
+        for change in changes or []:
+            fm = dict(change.get("frontmatter") or {})
+            fm["audit"] = dict(audit)
+            self.put_source(business_id, change["kind"], change["slug"], body=change["body"],
+                            title=change.get("title", ""), frontmatter=fm, actor=actor,
+                            if_match=change.get("if_match"))
+
     def get_source(self, business_id: int, kind: str, slug: str) -> dict:
         with self._session() as s:
             row = s.scalar(select(m.Source).where(m.Source.business_id == business_id,

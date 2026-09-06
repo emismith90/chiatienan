@@ -81,6 +81,11 @@ class Kernel:
         self.register_packs(CollectionsPack(self.data, self.business_for))
         from kernos.agents import DelegationPack
         self.register_packs(DelegationPack(self.subs_of, self.run_sub))
+        from kernos.osadmin import OsAdminPack
+        self.register_packs(OsAdminPack(
+            self.store, gates=lambda: self.gates, describe=self.agent_space,
+            start_run=lambda *a, **kw: self.start_eval_run(*a, **kw), traces=StoreTraces(self.store),
+            eval_mode=eval_mode, admin_url="/api/admin/proposals/{id}"))
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
@@ -88,7 +93,7 @@ class Kernel:
             ModelPassthrough(),
             PhoenixSystemPrompt(), LegacyRunTurn(), PackRender(self.packs),
             KernelCards(self.adapters, self.packs),
-            FabricatedCommit(self.packs), UnbackedAmounts(),
+            FabricatedCommit(self.packs), UnbackedAmounts(self.packs),
             Trace(StoreTraces(self.store)),
             EvalCapture(self.capture_case, self.packs, self.adapters),
             *validators(),
@@ -133,6 +138,8 @@ class Kernel:
         (`collections`)."""
         if pack.id == "collections":
             return None
+        if getattr(pack, "all_tool_names", None) is not None:      # agent-conditional tools (Phase 8 F8)
+            return set(pack.all_tool_names)
         from app.tools import ToolContext
         try:
             return set(pack.tools(ToolContext(db=Database("sqlite:///:memory:"), room_id=0)))
@@ -148,11 +155,21 @@ class Kernel:
         for pack in self.packs.list():
             if pack.id == "collections":
                 continue
+            if getattr(pack, "all_tool_names", None) is not None:
+                names |= set(pack.all_tool_names)
+                continue
             try:
                 names |= set(pack.tools(ctx))
             except Exception:  # noqa: BLE001 — a pack that needs a real space contributes nothing here
                 continue
         return names
+
+    def agent_space(self, space_id: int | str) -> dict | None:
+        """What a space resolves to (`agent`, `profile_id`, `version_id`), or ``None`` for a
+        static resolver — the os_admin pack's view of "my profile"."""
+        if not hasattr(self.resolver, "describe"):
+            return None
+        return self.resolver.describe(str(space_id))
 
     def agent_for(self, space_id: int | str) -> dict | None:
         """The agent record a space runs (its binding's, else the default's), or ``None``
@@ -339,12 +356,8 @@ class Kernel:
 
     def _apply_source_changes(self, prop: dict, actor: str) -> None:
         agent = self.store.get_agent(prop["agent_id"])
-        for change in prop["source_changes"] or []:
-            fm = dict(change.get("frontmatter") or {})
-            fm["audit"] = {"proposal": prop["id"], "approved_by": actor}
-            self.store.put_source(prop["business_id"], change["kind"], change["slug"], body=change["body"],
-                                  title=change.get("title", ""), frontmatter=fm, actor=f"agent:{agent['slug']}",
-                                  if_match=change.get("if_match"))
+        self.store.apply_source_changes(prop["business_id"], prop["source_changes"], actor=f"agent:{agent['slug']}",
+                                        audit={"proposal": prop["id"], "approved_by": actor})
 
     @staticmethod
     def spawn(argv: list[str]) -> None:

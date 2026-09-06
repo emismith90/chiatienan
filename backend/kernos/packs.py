@@ -110,6 +110,13 @@ class BasePack:
     cancel_tools: frozenset[str] = frozenset()
     money_tools: frozenset[str] = frozenset()
     metadata: Any = None
+    #: Whether this pack's tool args and results may **back** the numbers in a reply
+    #: (``moneyguard.backed_amounts``). ``False`` for a pack whose tools read the CMS —
+    #: a past trace or a log line would otherwise launder any number (Phase 8 review F1).
+    evidence: bool = True
+    #: The full static set of tool names for a pack whose ``tools(ctx)`` depends on the
+    #: agent (gate 1 and the reserved names read this; ``None`` = ask ``tools()``).
+    all_tool_names: frozenset[str] | None = None
 
     @property
     def commit_tools(self) -> frozenset[str]:

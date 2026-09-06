@@ -56,6 +56,7 @@ def summarize(ctx: TurnContext) -> dict:
                      for t in ctx.trace if t.get("outcome") in ("warn", "block")],
         "stopped": bool(ctx.stopped),
         "depth": ctx.depth,
+        **({"agent_log": list(ctx.extras["agent_log"])} if ctx.extras.get("agent_log") else {}),   # cms_log lines (Phase 8)
     }
 
 

@@ -50,7 +50,9 @@ def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec |
     A missing ``previous`` means everything blacklisted that is non-default counts —
     an agent cannot create a profile from nothing either.
     """
-    new, old = _dump(spec), _dump(previous) or {}
+    # both sides as stored (no `runtime`): a resolved ProfileSpec carries the host's runtime,
+    # a stored dict never does, and that difference is not a change an agent made
+    new, old = _stored(spec), _stored(previous)
     changed: list[str] = []
     for field in BLACKLIST_FIELDS:
         if new.get(field) != old.get(field):

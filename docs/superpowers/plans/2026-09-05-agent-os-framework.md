@@ -1914,7 +1914,7 @@ Confirmed by the gate: the facts block; gate 5's coverage (a warn↔block flip a
 (`summary.agent_log`), `app/kernel.py` (registration, `static_tool_names`/`reserved_tool_names`
 via `all_tool_names` — F8), `kernos/api/admin.py` (`GET /steward/brief`), tests.
 
-- [ ] Tools per decision 2 as amended: generated from the agent's verbs (read only in eval
+- [x] Tools per decision 2 as amended: generated from the agent's verbs (read only in eval
       mode — F5), every result recorded as a reference (`_record` — F1a), `evidence = False`
       (F1b), `cms_draft_change` kinds `prompt_append|prompt_body|skill|rule` on a
       `snapshot=False` draft of the agent's own profile (one per turn, reused), a `money` rule
@@ -1923,7 +1923,7 @@ via `all_tool_names` — F8), `kernos/api/admin.py` (`GET /steward/brief`), test
       evidence (F3, F7); `cms_get_turn_trace` redacted and wrapped untrusted (F3, F12);
       `render` → `Body` naming the proposal and the admin URL (F4); `cms_log` →
       `summary.agent_log`.
-- [ ] Proof (`tests/test_os_admin.py`, the real `run_turn` on a scripted bridge): with
+- [x] Proof (`tests/test_os_admin.py`, the real `run_turn` on a scripted bridge): with
       `os_admin` **registered**, a plain lunch room still sends exactly 19 tools (F14); no
       verbs → no `cms_*` tools; a `read` agent sees exactly the read tools; every `cms_*`
       invocation in the trace is a reference (`_record`) and a reply quoting an amount that
@@ -1943,7 +1943,20 @@ via `all_tool_names` — F8), `kernos/api/admin.py` (`GET /steward/brief`), test
       run; `cms_add_eval_case` writes a `review: true` case the runner skips; `cms_log` lands
       in the trace summary; a profile enabling `os_admin` with a per-tool override publishes
       (F8); layering green; golden 9/9.
-- [ ] Commit: `kernos.osadmin: the CMS as a capability-gated tool pack — draft, evaluate, propose; publish only inside the self-change scope`
+- [x] Commit: `kernos.osadmin: the CMS as a capability-gated tool pack — draft, evaluate, propose; publish only inside the self-change scope`
+
+      _As built (2026-09-06):_ a proposal's `source_changes` are **derived from the diff**
+      between the published spec and the draft (skills, non-money rules, the system prompt),
+      with each source's etag at proposal time — not tracked per turn — so a proposal made
+      turns after the draft carries them too; `cms_publish` supplies gate 2's
+      `override_reason` itself ("self-publish inside scope …": the risky builtin tools are
+      blacklisted, so the risk it overrides is the one a human already accepted);
+      `cms_add_eval_case(message, expect, tags, turn_id?)` takes the message from the agent
+      (a trace stores no message text); gate 5's `blacklisted_changes` now compares both
+      sides **as stored** — a resolved `ProfileSpec` carries the host's `runtime`, a stored
+      dict never does, and that difference had been reported as an agent change (latent since
+      Phase 2, surfaced by the first agent publish that reached the gate). Suite 1251 passed,
+      1 skipped; sidecar 70/70; golden 9/9; layering green; no pre-existing test edited.
 
 ### Task 8.3: Docs and state of play
 

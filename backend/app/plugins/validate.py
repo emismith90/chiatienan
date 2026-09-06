@@ -17,6 +17,19 @@ def _prose(ctx: TurnContext) -> Body | None:
     return out
 
 
+def _evidence(ctx: TurnContext, packs) -> list:
+    """This turn's invocations minus those of enabled packs whose ``evidence`` is False:
+    a CMS read or a log line never backs a number in the reply (Phase 8 review F1)."""
+    tools = list(getattr(ctx.result, "tools", None) or [])
+    if packs is None or ctx.profile is None:
+        return tools
+    excluded: set[str] = set()
+    for pack, _ in packs.enabled(ctx.profile.tool_packs):
+        if getattr(pack, "evidence", True) is False:
+            excluded |= set(getattr(pack, "all_tool_names", None) or ())
+    return [inv for inv in tools if inv.name not in excluded] if excluded else tools
+
+
 
 def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
     """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
@@ -95,12 +108,13 @@ class FabricatedCommit(BasePlugin):
             return None
         db, room_id = ctx.tool_ctx.db, ctx.tool_ctx.room_id
         commit_tools, record_exists = self._from_packs(ctx)
+        tools = _evidence(ctx, self._packs)
         forged = moneyguard.fabricated_commit(
-            out.text, f"{ctx.text}\n{ctx.history or ''}", ctx.result.tools,
+            out.text, f"{ctx.text}\n{ctx.history or ''}", tools,
             meal_exists=record_exists or (lambda mid: _meal_exists(db, room_id, mid)),
             commit_tools=commit_tools,
             # a sub-agent's propose_* made no card, so it proves no write (Phase 7 review F2)
-            evidence=[inv for inv in ctx.result.tools if getattr(inv, "from_agent", None) is None],
+            evidence=[inv for inv in tools if getattr(inv, "from_agent", None) is None],
         )
         if forged is None:
             return None
@@ -129,12 +143,15 @@ class UnbackedAmounts(BasePlugin):
     config_schema = _EMPTY
     handles_money = True
 
+    def __init__(self, packs=None) -> None:
+        self._packs = packs
+
     async def run(self, ctx: TurnContext, config: dict) -> Verdict | None:
         out = _prose(ctx)
         if out is None:
             return None
         room_id = ctx.tool_ctx.room_id
-        stray = moneyguard.unbacked_amounts(out.text, f"{ctx.text}\n{ctx.history or ''}", ctx.result.tools)
+        stray = moneyguard.unbacked_amounts(out.text, f"{ctx.text}\n{ctx.history or ''}", _evidence(ctx, self._packs))
         if not stray:
             return None
         log.warning(
