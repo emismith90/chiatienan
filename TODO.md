@@ -36,3 +36,12 @@
   draft that the publish gates review (`POST /api/admin/businesses/{id}/import[?replace=true]`).
   Remaining: a UI for upload (the admin API is the only surface), and the split of `kernos`
   into its own repository when a second real host exists (design §12.1).
+
+- **Room CMS follow-ups (Phase 11).** Two things the review gate named and this phase did
+  not do. (1) **Builtin tools count as evidence.** `moneyguard.backed_amounts` treats every
+  invocation's output as backing and `validate._evidence` excludes only `evidence=False`
+  *packs* — `bash` is a builtin, so a bash-computed amount in prose passes as "backed" and
+  `UnbackedAmounts` does not warn. Excluding builtins changes live validator behaviour, so
+  it needs its own phase and a benchmark run. (2) **Copy-on-write per room** — a room-owned
+  profile would still share `kn_sources`, which is per *business*, so it isolates nothing
+  until sources are per profile. Today's answer is the binding plus a shared-bot notice.

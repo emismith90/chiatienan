@@ -180,6 +180,20 @@ a person approves at `POST /api/admin/proposals/<id>/approve`, or confirms the p
 in the room where the agent that wrote it runs. Before turning it on, read
 [`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md).
 
+The room's own CMS (Phase 11): every member sees the agent their room runs under a **Bot**
+tab — the system prompt, the skills, the rules, and a revision log naming who changed what.
+A room with its own binding can edit the prompt, the skills and the non-money rules, and
+republish any earlier version; a room without one is read-only, because `POST
+/api/rooms/create` is public and an unbound room resolves to the shared default agent, so
+membership cannot be a permission. Never editable from a room: the model, the caps, the
+pipeline, the tool packs, the builtin tools and any rule tagged `money`. Two limits worth
+knowing — the first member edit stops that profile following deploys (`managed_by`), and a
+prompt-level money rule is advisory: with `bash` enabled, prose can still talk the model
+into arithmetic and `backed_amounts` counts a builtin's output as evidence. The enforced
+invariants are the blacklisted fields, the confirmed card a ledger write needs, and the
+forged-commit guard. See
+[`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md).
+
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
 - `app/page.tsx` — the room view (or an "open an invite link" prompt when signed out).

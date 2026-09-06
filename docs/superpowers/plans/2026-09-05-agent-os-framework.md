@@ -2308,3 +2308,24 @@ runbook is [`2026-09-06-deploy-runbook.md`](2026-09-06-deploy-runbook.md).
 **Not done here:** the LLM eval and the benchmark (no `OPEN_ROUTER_KEY` in the build
 environment) — the runbook has the commands; and the frontend Confirm button for the
 proposal card (`TODO.md`).
+
+## Phase 11 — the room's own CMS (2026-09-06)
+
+The first phase that ships **on**: a Bot tab in the room showing the agent it runs, its
+revision log, and — for a room with its own binding — editing and republish. Planned,
+gated by a second Fable review (two blockers), amended, built and self-validated in
+[`2026-09-06-room-cms.md`](2026-09-06-room-cms.md); the deploy steps are in
+[`2026-09-06-deploy-runbook.md`](2026-09-06-deploy-runbook.md).
+
+The gate earned its keep twice. **F1**: the planned permission — membership of the room in
+the URL — would have let anyone on the internet rewrite the real bot, because room
+creation is public and an unbound room resolves to the shared default agent. Editing is
+now gated on a binding. **F2**: the money rule was protected by its tag, but identity is
+the slug, so an untagged rule reusing `money-safety` would have replaced its source row
+and stripped the tag permanently.
+
+Also from the gate: republish drafts from the target instead of `store.rollback`, which
+mutates the row it republishes (F3); `store.publish` gained `if_published` so the
+concurrency check happens inside the transaction (F7); sources are written only after a
+successful publish (F6); and `managed_by` is surfaced because the first member edit
+detaches the profile from deploys (F8).
