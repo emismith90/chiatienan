@@ -2165,7 +2165,7 @@ Confirmed by the gate: the facts block (layering test, pyproject, every `agent_s
 **Files:** `kernos/content/package.py` (new), `kernos/api/admin.py` (export/import routes),
 tests.
 
-- [ ] `export_profile(store, profile_id, *, version_id=None) -> dict[str, bytes]` per
+- [x] `export_profile(store, profile_id, *, version_id=None) -> dict[str, bytes]` per
       decision 3 as amended (`package.json`, `README.md`, `skills/<slug>/SKILL.md` with pi-valid
       names and non-empty descriptions, `prompts/<slug>.md`, `AGENTS.md`, `.pi/settings.json`
       from the allowlist, `kernos.json` without the path/proxy settings keys; a secret pattern
@@ -2175,7 +2175,7 @@ tests.
       sources from the spec when `kernos.json` is present else from the Pi files, a
       `snapshot=False` draft never published, `extensions` ids as `warnings`). `GET /api/admin/profiles/
       {id}/export` (zip) and `POST /api/admin/businesses/{id}/import` (zip upload).
-- [ ] Proof (`tests/kernos/test_package.py`, `tests/test_admin_package.py`): the lunch
+- [x] Proof (`tests/kernos/test_package.py`, `tests/test_admin_package.py`): the lunch
       profile exports to a package whose `SKILL.md` frontmatter is `name`/`description`,
       whose `AGENTS.md` carries the system prompt and every rule, whose `settings.json`
       names the model, and whose `kernos.json` round-trips to an equal stored spec; no
@@ -2184,7 +2184,15 @@ tests.
       package (skills + prompts, no `kernos.json`) creates sources only; an import naming a
       pack the host lacks is a draft gate 1 refuses at publish, never an error at import;
       the money rule keeps its tag.
-- [ ] Commit: `kernos.content.package: export a profile as a Pi package, import a package as sources and a draft (PR 9b)`
+- [x] Commit: `kernos.content.package: export a profile as a Pi package, import a package as sources and a draft (PR 9b)`
+
+      _As built (2026-09-06):_ front matter is read and written by a minimal `key: value` /
+      `key: [a, b]` parser (no YAML dependency); the secret scan matches `sk-…`, `api_key`,
+      `token`, `secret`, `password` (as words) and URL userinfo under `settings`/`extensions`/
+      `meta`; the import route takes the zip as the raw request body (`python-multipart` is
+      not needed) with a 2 MB upload cap and an 8 MB summed-size cap; `import_package` also
+      warns about every `tool_packs` entry (gate 1 checks them at publish). Suite 1264
+      passed, 1 skipped; no pre-existing test edited.
 
 ### Task 9.3 (PR 9c): the sidecar rename and the example host
 

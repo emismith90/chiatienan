@@ -11,3 +11,4 @@ from kernos.content.capabilities import CMS_VERBS, SCOPE_VOCABULARY, agent_capab
 from kernos.content.schema import bind  # noqa: F401
 from kernos.content.store import ContentStore, deep_merge, sessions_for, source_etag  # noqa: F401
 from kernos.content.boot import ensure_seeded  # noqa: F401
+from kernos.content.package import export_profile, import_package  # noqa: F401

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Callable
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from kernos.content.errors import ContentError, GateError
@@ -248,6 +248,50 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         actor = _actor(body.actor)
         return _wrap(lambda: get_kernel().store.rollback(
             profile_id, body.version, actor=actor, gates=get_kernel().gates, override_reason=body.override_reason))
+
+    # ------------------------------------------------------------- packages
+    @r.get("/profiles/{profile_id}/export")
+    def export_profile(profile_id: int, version: int | None = Query(default=None)):
+        """The published (or `version`) profile as a Pi package, zipped (design §12; Task 9.2)."""
+        import io
+        import zipfile
+        from kernos.content.package import export_profile as export
+        k = get_kernel()
+
+        def build():
+            vid = k.store.find_version(profile_id, version)["id"] if version is not None else None
+            return export(k.store, profile_id, version_id=vid)
+        files = _wrap(build)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for path, data in files.items():
+                z.writestr(path, data)
+        return Response(buf.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="profile-{profile_id}.zip"'})
+
+    @r.post("/businesses/{business_id}/import")
+    async def import_package(business_id: int, request: Request, replace: bool = Query(default=False),
+                             x_actor: str | None = Header(default=None)):
+        """A zipped Pi package (or a kernos export) as sources and, with `kernos.json`, a
+        draft — never a publish (Task 9.2; review F4–F7)."""
+        import io
+        import zipfile
+        from kernos.content.package import MAX_TOTAL_BYTES, import_package as do_import
+        body = await request.body()
+        if len(body) > MAX_TOTAL_BYTES // 4:
+            raise HTTPException(413, f"upload larger than {MAX_TOTAL_BYTES // 4} bytes")
+        try:
+            with zipfile.ZipFile(io.BytesIO(body)) as z:
+                files = {}
+                for info in z.infolist():
+                    if info.is_dir():
+                        continue
+                    if info.file_size > MAX_TOTAL_BYTES:
+                        raise HTTPException(413, f"{info.filename} is too large")
+                    files[info.filename] = z.read(info)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(422, "the body is not a zip file") from exc
+        return _wrap(lambda: do_import(get_kernel().store, business_id, files, actor=_actor(x_actor), replace=replace))
 
     # --------------------------------------------------------------- agents
     @r.get("/agents")
