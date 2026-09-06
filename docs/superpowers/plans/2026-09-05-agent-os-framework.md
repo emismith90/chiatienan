@@ -2277,3 +2277,34 @@ confirmable, but not a card designed for the kind; the sidecar directory keeps i
 name until the framework is split out (Phase 9 F8); the package name `kernos` (design
 §11 item 6) is still the operator's call.
 
+---
+
+## Phase 10 — The steward (2026-09-06, after the nine)
+
+Built after the framework, for the operator rather than the framework: the bot reviewing
+its own mistakes and proposing a fix. Everything here is **seeded and off**; the deploy
+runbook is [`2026-09-06-deploy-runbook.md`](2026-09-06-deploy-runbook.md).
+
+- **10.1 `cms_get_friction`** — six deterministic detectors over stored turn summaries
+  (forged commit claims, run errors, rule-blocked calls, unbacked money, capped and slow
+  turns). Summary-only, so scanning fifty turns loads no tool results. A `read`-verb
+  os_admin tool; records a reference, `evidence=False`.
+- **10.2 the steward** — `ensure_sub_agent` seeds a `sub` agent with its own profile
+  (`os_admin` only, read + draft). Nothing wires `phoenix.delegates_to`, so no room's
+  manifest changes; connecting it is one admin call. Capabilities gained
+  `manages_profiles`, which is what lets an agent draft against the profile it reviews;
+  `cms_publish` deliberately did not widen.
+- **10.3 the card** — a proposal becomes a confirmable card in the space whose own agent
+  authored it, showing the diff and warning when the bot is shared. Answers Phase 8
+  review F4: a refused confirm leaves the card pending and retryable (`drafts._commit`
+  translates it to a `LedgerError` → 409), and `DraftKind.blocks_settlement` stops a
+  configuration card from freezing the ledger. `DraftKind.body` gives a pending card
+  readable text for a client that does not know its kind yet.
+- **10.4 the deploy rehearsal** — `tests/test_prod_migration.py` boots the branch over a
+  database shaped like production's (no `kn_` tables, real rooms, messages and meals) and
+  proves the schema is additive, the data untouched, the manifest still 19 tools, and a
+  redeploy a no-op.
+
+**Not done here:** the LLM eval and the benchmark (no `OPEN_ROUTER_KEY` in the build
+environment) — the runbook has the commands; and the frontend Confirm button for the
+proposal card (`TODO.md`).

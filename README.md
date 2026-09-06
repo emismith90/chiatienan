@@ -169,6 +169,17 @@ Pi package (`GET /api/admin/profiles/{id}/export` — skills, prompts, `AGENTS.m
 and a draft, never a publish (`POST /api/admin/businesses/{id}/import`). The sidecar's npm package
 is `kernos-sidecar`; the directory keeps its name until the framework is split out.
 
+The steward (off by default): every boot seeds a `steward` sub-agent with a profile of its
+own — one pack (`os_admin`), read and draft capabilities, and the lunch profile under its
+stewardship. Nothing points at it, so no room's tool list changes. Connect it with one call
+(`PATCH /api/admin/agents/<phoenix id>` with `{"delegates_to": [<steward id>]}`) and Phoenix
+gains a single `ask_steward` tool; asking it makes the steward read `cms_get_friction` — six
+deterministic detectors over the room's stored turn traces — and, when a pattern is clear,
+draft one change to a skill, rule or the prompt and open a proposal. It publishes nothing:
+a person approves at `POST /api/admin/proposals/<id>/approve`, or confirms the proposal card
+in the room where the agent that wrote it runs. Before turning it on, read
+[`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md).
+
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
 - `app/page.tsx` — the room view (or an "open an invite link" prompt when signed out).
