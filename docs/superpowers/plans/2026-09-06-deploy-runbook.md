@@ -42,29 +42,35 @@ comm -12 <(git diff --name-only origin/main -- backend/tests | sort) \
 
 Empty output means clean.
 
-## 3. The LLM eval — **not run here, you must run it**
+## 3. The LLM eval — run here, numbers below
 
-This sandbox has no `OPEN_ROUTER_KEY`, so no test in this branch has talked to a real
-model. The deterministic suite proves the plumbing; it cannot prove the model still
-behaves. Run this on a machine with the key:
+`OPEN_ROUTER_KEY` **is** present in this environment (an earlier draft of this file said
+otherwise; it was wrong). The benchmark has been run twice on this branch:
+
+- `40d671f`, after the nine phases: 69 turns of `typical` at `--repeat 3`, 0 errored,
+  `tool_selection` 69/69 = 1.00, `ledger_state` 55/60 = 0.92, p50 3.8s, $0.137. Compared
+  against `origin/main` run the same day, no blocker attributable to this branch.
+- After Phase 10 — numbers in §3.1 below. Phase 10 is worth re-running for because,
+  although the steward is off, three of its changes touch code a live money turn runs:
+  the settle guard now filters pending cards by `blocks_settlement`, `create_card` fills
+  in a body when the kind provides one, and `drafts._commit` translates a kind's refused
+  commit into a `LedgerError`.
+
+To repeat it yourself:
 
 ```bash
 cd backend
-# 1. load the benchmark corpus as a suite (offline, no key needed — verified: 23 cases,
-#    graders tool_selection / ledger_state / prose_quality)
-.venv/bin/python -m app.evalhost import
-
-# 2. run it against the published lunch version (needs OPEN_ROUTER_KEY; costs real calls)
-.venv/bin/python -m app.evalhost run --suite lunch-typical --version <published version id>
+.venv/bin/python -m bench.run --corpus typical --engine pi --repeat 3 --out bench-out.json
+.venv/bin/python -m bench.run --corpus typical --engine pi --repeat 3 --out main.json --compare bench-out.json
 ```
 
-Get the version id from `GET /api/admin/profiles/<lunch profile id>/versions`, or from
-`kernel.seed_report["version_id"]`. A run stores its records and summary in
-`kn_eval_runs`; read it at `GET /api/admin/eval/runs/<id>`.
+The in-CMS eval (the one the publish gates read) is a different thing and still worth
+loading, because it is what makes gate 4 non-vacuous:
 
-**When it matters:** because the deploy changes nothing the model sees, this eval is a
-baseline, not a gate — take it before and after so you have a comparison. It becomes a
-real gate the moment you do step 4.
+```bash
+.venv/bin/python -m app.evalhost import       # offline: 23 cases, 3 graders — verified
+.venv/bin/python -m app.evalhost run --suite lunch-typical --version <published version id>
+```
 
 ## 4. Turning the steward on — the one thing that changes the bot
 
@@ -99,4 +105,5 @@ no `publish` verb anyway. A proposal is approved by a person at
   diff) but no buttons until the generic `DraftCard` ticket in `TODO.md` lands.
 - **The eval is a baseline, not a gate**, until a profile names `eval.suites`. Granting
   an agent the `publish` capability is refused without it, by design.
-- The benchmark (`backend/bench/`) has not been run on this branch either — same reason.
+- The `prod` corpus cannot be benchmarked in a checkout: it is real conversation and is
+  `.gitignore`d, so 14 of the comparison's blockers are `MISSING` by construction.
