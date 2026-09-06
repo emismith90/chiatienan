@@ -129,6 +129,39 @@ test("a ping mid-turn is answered without disturbing the run", async () => {
   assert.equal(out.at(-1).req_id, "run-1");
 });
 
+test("two runs on one bridge with the same call_id resolve independently", async () => {
+  // A manager's tool call nests a sub-agent's run on the same bridge (Phase 7); pi
+  // numbers call ids per session, so both may ask for `c1` at once.
+  const { out, dispatcher } = harness({
+    runTurnFn: async (_s, req) => {
+      const result = await req.__callTool("c1", "settle_period", {});
+      return { final_text: `${req.turn_id}:${result.who}`, tools: [], error: null, capped: false, stats: null };
+    },
+    buildSessionFn: async (req, { callTool }) => {
+      req.__callTool = callTool;
+      return { session: {}, dispose() {} };
+    },
+  });
+
+  const manager = dispatcher.handle({ type: "run", req_id: "run-m", turn_id: "m", message: "x" });
+  await new Promise((resolve) => setImmediate(resolve));
+  const sub = dispatcher.handle({ type: "run", req_id: "run-s", turn_id: "s", message: "y" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(out.filter((m) => m.type === "tool_call").length, 2);
+  assert.equal(dispatcher.pendingToolCalls.size, 2, "both calls stay pending under their own req_id");
+
+  // The sub's result lands first and must not wake the manager's call.
+  await dispatcher.handle({ type: "tool_result", req_id: "run-s", call_id: "c1", content: JSON.stringify({ who: "sub" }) });
+  await sub;
+  assert.ok(!out.some((m) => m.type === "turn_done" && m.req_id === "run-m"), "the manager is still blocked");
+  await dispatcher.handle({ type: "tool_result", req_id: "run-m", call_id: "c1", content: JSON.stringify({ who: "manager" }) });
+  await manager;
+
+  const done = Object.fromEntries(out.filter((m) => m.type === "turn_done").map((m) => [m.req_id, m.final_text]));
+  assert.deepEqual(done, { "run-s": "s:sub", "run-m": "m:manager" });
+  assert.equal(dispatcher.pendingToolCalls.size, 0);
+});
+
 test("a setup failure still closes the turn", async () => {
   // Otherwise chat.py waits forever and the room sees nothing at all.
   const { out, dispatcher } = harness({

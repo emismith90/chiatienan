@@ -99,6 +99,8 @@ class FabricatedCommit(BasePlugin):
             out.text, f"{ctx.text}\n{ctx.history or ''}", ctx.result.tools,
             meal_exists=record_exists or (lambda mid: _meal_exists(db, room_id, mid)),
             commit_tools=commit_tools,
+            # a sub-agent's propose_* made no card, so it proves no write (Phase 7 review F2)
+            evidence=[inv for inv in ctx.result.tools if getattr(inv, "from_agent", None) is None],
         )
         if forged is None:
             return None

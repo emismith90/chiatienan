@@ -140,8 +140,14 @@ COMMIT_TOOLS = frozenset({"propose_meal", "propose_payment", "void_meal", "cance
 
 
 def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None,
-                      commit_tools: frozenset[str] | set[str] | None = None) -> list[int] | None:
+                      commit_tools: frozenset[str] | set[str] | None = None,
+                      evidence=None) -> list[int] | None:
     """Why ``body`` is a forged write claim, or ``None`` if it is not.
+
+    ``evidence`` — the invocations whose success may make the claim true (default:
+    ``tools``). A host that merges a sub-agent's calls into ``tools`` passes its own
+    calls here: a sub's ``propose_*`` creates no card, so it is no proof of a write,
+    while its numbers still back the amounts (Phase 7 review F2).
 
     Returns ``None`` for a reply that may be posted, otherwise the offending
     amounts — **possibly an empty list**, when the giveaway was a meal id rather
@@ -176,7 +182,7 @@ def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None,
     if not body or not _COMMIT_CLAIM.search(body):
         return None
     admitted = COMMIT_TOOLS if commit_tools is None else commit_tools
-    for inv in tools or []:
+    for inv in (tools if evidence is None else evidence) or []:
         if inv.name in admitted and isinstance(inv.result, dict) and inv.result.get("ok"):
             return None
     if meal_exists is not None:

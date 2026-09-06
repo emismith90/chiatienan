@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import weakref
 
 from app.config import settings
@@ -26,7 +27,7 @@ from kernos.content.traces import StoreTraces
 from kernos.data import CollectionsPack, DataStore
 from kernos.eval import GraderRegistry, eval_gate
 from kernos.content import (
-    ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
+    ContentStore, DbResolver, NotFound, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
 from kernos.kernel import Pipeline
 from kernos.packs import PackRegistry
@@ -35,6 +36,33 @@ from kernos.plugins import (
     Rollover, SectionsMessage, TemplatePrompt, Trace, EvalCapture, validators,
 )
 from kernos.registry import Registry
+
+log = logging.getLogger("chiatienan")
+
+
+class _SubSink:
+    """The sub-agent's live events, seen through the manager's sink (Phase 7 review F3):
+    its tool events are forwarded under the **manager's** ``turn_id`` with ``agent``
+    added; its ``run.started/finished``, ``text.delta`` and ``run.error`` are dropped —
+    ``sub.started/finished`` on the manager's turn replace them — so the room's
+    timeline never shows a second turn or a sub's prose as the reply."""
+
+    _FORWARD = frozenset({"agent.tool.start", "agent.tool.result"})
+
+    def __init__(self, parent, turn_id: str | None, agent: str) -> None:
+        self._parent, self._turn_id, self._agent = parent, turn_id, agent
+
+    async def emit(self, event) -> None:
+        if self._parent is None:
+            return
+        event.turn_id = self._turn_id
+        event.data = {**event.data, "agent": self._agent}
+        await self._parent.emit(event)
+
+    async def emit_raw(self, payload: dict) -> None:
+        if self._parent is None or payload.get("type") not in self._FORWARD:
+            return
+        await self._parent.emit_raw({**payload, "turn_id": self._turn_id, "agent": self._agent})
 
 
 class Kernel:
@@ -48,6 +76,8 @@ class Kernel:
         self.store = ContentStore(db.session)
         self.data = DataStore(db.session, audit=self.store.log)
         self.register_packs(CollectionsPack(self.data, self.business_for))
+        from kernos.agents import DelegationPack
+        self.register_packs(DelegationPack(self.subs_of, self.run_sub))
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
@@ -120,6 +150,97 @@ class Kernel:
             except Exception:  # noqa: BLE001 — a pack that needs a real space contributes nothing here
                 continue
         return names
+
+    def agent_for(self, space_id: int | str) -> dict | None:
+        """The agent record a space runs (its binding's, else the default's), or ``None``
+        when the resolver has no notion of agents (a static spec)."""
+        if not hasattr(self.resolver, "describe"):
+            return None
+        return (self.resolver.describe(str(space_id)) or {}).get("agent")
+
+    def subs_of(self, agent: dict) -> list[dict]:
+        """The sub-agents an agent's ``delegates_to`` names; an entry that is not a
+        ``sub`` of the same business is logged and skipped (the store refuses to save
+        one, so this is belt and braces)."""
+        out = []
+        for entry in agent.get("delegates_to") or []:
+            try:
+                sub = self.store.get_agent(int(entry))
+            except (NotFound, TypeError, ValueError):
+                log.warning("agent %s delegates to %r, which is no agent", agent.get("slug"), entry)
+                continue
+            if sub["role"] != "sub" or sub["business_id"] != agent["business_id"]:
+                log.warning("agent %s delegates to %s, a %s of business %s; skipped",
+                            agent.get("slug"), sub["slug"], sub["role"], sub["business_id"])
+                continue
+            out.append(sub)
+        return out
+
+    async def run_sub(self, tool_ctx, sub: dict, task: str, *, budget: dict) -> dict:
+        """A sub-agent's turn nested inside the manager's tool call (design §6, plan
+        Task 7.1): the sub's published profile runs its pipeline ``context → validate``
+        — it posts nothing and is traced as a span of the manager — in the same space,
+        for the same principal, with ``text=task`` and caps clamped to the manager's
+        remaining budget. Never takes ``chat._agent_lock`` (the manager's turn holds it).
+        Returns ``{text, results, capped, invocations, error}``."""
+        import time as _time
+        from app.tools import ToolContext
+        from kernos.kernel import Body, Stage, TurnContext
+        from kernos.kernel.events import SUB_FINISHED, SUB_STARTED, TurnEvent
+
+        parent: TurnContext = tool_ctx.turn
+        slug = sub["slug"]
+        stored = self.store.published_spec(sub["profile_id"])
+        if stored is None:
+            return {"text": "", "results": [], "capped": False, "invocations": [],
+                    "error": f"sub-agent {slug} has no published profile"}
+        spec = ProfileSpec.model_validate(stored).with_runtime(self.default_spec.runtime)
+        caps = {"max_seconds": min(spec.caps.max_seconds, budget["max_seconds"]),
+                "max_tools": min(spec.caps.max_tools, budget["max_tools"])}
+        depth = (parent.depth if parent is not None else tool_ctx.depth) + 1
+        sub_tool_ctx = ToolContext(
+            db=self.db, room_id=tool_ctx.room_id, sender_member_id=tool_ctx.sender_member_id,
+            sender_name=tool_ctx.sender_name, turn_mentions=list(tool_ctx.turn_mentions),
+            agent=sub, depth=depth, max_depth=tool_ctx.max_depth, caps_override=caps)
+        manager_turn_id = tool_ctx.turn_id
+        parent_sink = parent.sink if parent is not None else None
+        ctx = TurnContext(
+            space_id=str(tool_ctx.room_id),
+            principal=parent.principal if parent is not None else None,
+            text=task,
+            images=list(parent.images) if parent is not None else [],
+            before_id=parent.before_id if parent is not None else None,
+            depth=depth, profile=spec, tool_ctx=sub_tool_ctx,
+            sink=_SubSink(parent_sink, manager_turn_id, slug),
+            extras={"agent": sub, "max_depth": tool_ctx.max_depth},
+        )
+        if parent_sink is not None:
+            await parent_sink.emit(TurnEvent(SUB_STARTED, manager_turn_id, {"agent": slug, "task": task}))
+        started = _time.perf_counter()
+        error = None
+        try:
+            await self.pipeline_for(spec).run(ctx, through=Stage.validate)
+        except Exception as exc:  # noqa: BLE001 — a failed sub is a tool error, never a dead manager turn
+            log.exception("[agents] sub %s failed", slug)
+            error = f"{type(exc).__name__}: {exc}"
+        result = ctx.result
+        invocations = list(getattr(result, "tools", None) or [])
+        for inv in invocations:
+            if inv.from_agent is None:
+                inv.from_agent = slug
+        if parent is not None:
+            # a deeper sub's rows keep their own span (they joined this ctx the same way)
+            parent.trace.extend({**row, "span": row.get("span", slug), "depth": row.get("depth", depth)} for row in ctx.trace)
+        if error is None and result is not None and result.error:
+            error = result.error
+        # a blocked sub hands the manager the replacement body, never the forged prose (F5)
+        text = ctx.outcome.text if isinstance(ctx.outcome, Body) else (result.final_text if result is not None else "")
+        elapsed_ms = round((_time.perf_counter() - started) * 1000, 1)
+        if parent_sink is not None:
+            await parent_sink.emit(TurnEvent(SUB_FINISHED, manager_turn_id, {
+                "agent": slug, "elapsed_ms": elapsed_ms, "tools": [inv.name for inv in invocations], "error": error}))
+        return {"text": text, "results": [{"name": inv.name, "result": inv.result} for inv in invocations],
+                "capped": bool(getattr(result, "capped", False)), "invocations": invocations, "error": error}
 
     def business_for(self, space_id: int | str) -> int:
         """The business a space belongs to: its bound agent's, else the default's."""

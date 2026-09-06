@@ -40,7 +40,7 @@ class Cards(BasePlugin):
 
         if ctx.result is not None:
             for name in sorted(self._cancel_tools(ctx)):
-                for r in ctx.result.all_results(name):
+                for r in ctx.result.all_results(name, include_sub=True):    # a sub's cancel took effect too (F4)
                     card = self._a.cards.get(ctx.space_id, r.get("draft_id"))
                     if card is not None:
                         superseded_payloads.append(self._a.messages.to_payload(card))

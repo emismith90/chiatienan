@@ -42,17 +42,25 @@ class TurnResult:
     #: ``None`` when the engine did not say — never 0, which would read as "free".
     stats: dict | None = None
 
-    def last_result(self, name: str) -> dict | None:
-        """Most-recent successful (``ok``) result dict for a given tool name."""
+    def last_result(self, name: str, *, include_sub: bool = False) -> dict | None:
+        """Most-recent successful (``ok``) result dict for a given tool name.
+
+        **Own** invocations only by default (``from_agent is None``): a sub-agent's
+        ``propose_*`` result is data for the manager, never this turn's card (design
+        §6, Phase 7 review F4). ``include_sub=True`` reads the union.
+        """
         for inv in reversed(self.tools):
-            if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok"):
+            if inv.name == name and (include_sub or inv.from_agent is None) \
+                    and isinstance(inv.result, dict) and inv.result.get("ok"):
                 return inv.result
         return None
 
-    def all_results(self, name: str) -> list[dict]:
-        """All successful (``ok``) result dicts for a tool name, in call order."""
+    def all_results(self, name: str, *, include_sub: bool = False) -> list[dict]:
+        """All successful (``ok``) result dicts for a tool name, in call order; own
+        invocations only unless ``include_sub``."""
         return [inv.result for inv in self.tools
-                if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok")]
+                if inv.name == name and (include_sub or inv.from_agent is None)
+                and isinstance(inv.result, dict) and inv.result.get("ok")]
 
 
 @dataclass(frozen=True)

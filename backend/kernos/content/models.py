@@ -91,6 +91,8 @@ class Agent(Base):
     delegates_to: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     capabilities: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     max_depth: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    #: What a manager is told an ``ask_<slug>`` sub does (Phase 7; additive column).
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
 
 

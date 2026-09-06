@@ -177,3 +177,20 @@ async def test_after_runs_in_a_finally_and_is_guarded():
     with pytest.raises(__import__("asyncio").CancelledError):
         await p.run(ctx)
     assert [s for s, _ in ctx.extras["seen"]] == ["cancel", "t"]
+
+
+async def test_through_runs_the_stages_up_to_that_one_and_stamps_started_at():
+    # a sub-agent's nested run stops at `validate`: no persist, no after (Phase 7 review F5)
+    p = Pipeline(_stages(**{
+        Stage.context: [(Rec("c", "context"), {})],
+        Stage.validate: [(Rec("v", "validate"), {})],
+        Stage.persist: [(Rec("p", "persist"), {})],
+        Stage.after: [(Rec("z", "after"), {})],
+    }))
+    ctx = await p.run(_ctx(depth=1), through=Stage.validate)
+    assert [s for s, _ in ctx.extras["seen"]] == ["c", "m", "r", "d", "v"]
+    assert isinstance(ctx.extras["started_at"], float)
+    # through `after` is the whole run; the default is unchanged
+    ctx = await p.run(_ctx(), through="after")
+    assert [s for s, _ in ctx.extras["seen"]] == ["c", "m", "r", "d", "v", "p", "z"]
+    assert [s for s, _ in (await p.run(_ctx())).extras["seen"]] == ["c", "m", "r", "d", "v", "p", "z"]

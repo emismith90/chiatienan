@@ -20,9 +20,11 @@ function through ``ToolContext.engine_spec`` / ``system_override`` /
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import uuid
+from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
@@ -121,11 +123,15 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     if message is None:
         message = _render_prompt(user_text, sender_name=ctx.sender_name, memory=memory,
                                  history=history, image_count=len(images or []))
-    spec = replace(spec, system=system)
+    spec = replace(spec, system=system, **(getattr(ctx, "caps_override", None) or {}))   # a nested run's budget (Phase 7)
+    ctx.turn_id = turn_id
+    if getattr(ctx, "started_at", None) is None:
+        ctx.started_at = started
 
     tools = build_tools(ctx)
 
     async def call_tool(name: str, args: dict):
+        ctx.calls_made += 1
         tool = tools.get(name)
         if tool is None:
             return {"ok": False, "error": f"unknown tool {name}"}
@@ -136,6 +142,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
                 return refused
         try:
             result = tool.execute(args)
+            if inspect.isawaitable(result):            # the delegation pack's nested run
+                result = await result
         except Exception as exc:  # noqa: BLE001 — a tool must not kill the turn
             logger.exception("[agent] tool %s raised", name)
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -149,6 +157,8 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     engine = PiEngine(get_bridge())
     result = await engine.run(spec, turn_id=turn_id, message=message, images=list(images or []),
                               tools=tool_manifest(ctx), call_tool=call_tool, emit=emit)
+    if getattr(ctx, "sub_invocations", None):
+        result.tools = _merge_sub_invocations(result.tools, ctx.sub_invocations)
     stats = result.stats or {}
 
     # One line per turn so the log mirror (and /internal/debug/logs) shows where a
@@ -165,3 +175,19 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
         f" ERROR={result.error}" if result.error else "",
     )
     return result
+
+
+def _merge_sub_invocations(own: list, subs: list) -> list:
+    """The manager's own invocations with each sub-agent's calls right after the
+    ``ask_*`` call that made them (``(own_call_index, invocation)`` pairs), so the
+    record reads in the order things happened (design §6)."""
+    after = defaultdict(list)
+    for index, inv in subs:
+        after[index].append(inv)
+    merged = []
+    for i, inv in enumerate(own):
+        merged.append(inv)
+        merged.extend(after.pop(i, []))
+    for rest in after.values():
+        merged.extend(rest)
+    return merged

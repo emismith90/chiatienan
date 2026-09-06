@@ -16,12 +16,21 @@ class LegacyRunTurn(BasePlugin):
 
     async def run(self, ctx: TurnContext, config: dict) -> None:
         tool_ctx = ctx.tool_ctx
+        agent = ctx.extras.get("agent")
         if ctx.profile is not None:
             tool_ctx.engine_spec = ctx.profile.to_engine_spec()
-            tool_ctx.tool_config = ({"packs": [t.model_dump() for t in ctx.profile.tool_packs]}
-                                    if ctx.profile.tool_packs else None)
+            packs = [t.model_dump() for t in ctx.profile.tool_packs]
+            if agent and agent.get("delegates_to"):
+                packs.append({"pack": "delegation", "tools": {}})      # `ask_<sub>` tools (design §6)
+            tool_ctx.tool_config = {"packs": packs} if packs else None
         tool_ctx.system_override = ctx.system
         tool_ctx.message_override = ctx.message
+        # who is running, how deep, and the root agent's depth limit (Phase 7 review F8)
+        tool_ctx.agent = agent
+        tool_ctx.depth = ctx.depth
+        tool_ctx.max_depth = ctx.extras.get("max_depth") or (agent or {}).get("max_depth")
+        tool_ctx.turn = ctx
+        tool_ctx.started_at = ctx.extras.get("started_at")
         pipeline = ctx.extras.get("pipeline")
         if pipeline is not None:                       # the profile's tool-scope validation rules (plan Task 6.2)
             async def validate_call(name, args):

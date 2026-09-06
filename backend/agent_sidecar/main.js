@@ -19,8 +19,15 @@
 import { buildSession } from "./session.js";
 import { runTurn } from "./turn.js";
 
-/** Resolvers for in-flight `tool_call`s, keyed by the pi tool-call id. */
+/**
+ * Resolvers for in-flight `tool_call`s, keyed by `${req_id}:${call_id}`.
+ *
+ * Not by `call_id` alone: two sessions run on one bridge when a manager agent's
+ * tool call nests a sub-agent's turn (`req_id=run-<sub turn_id>`), and pi's
+ * per-session call ids can collide across them.
+ */
 const pendingToolCalls = new Map();
+const pendingKey = (reqId, callId) => `${reqId}:${callId}`;
 
 export function createDispatcher({ write, buildSessionFn = buildSession, runTurnFn = runTurn } = {}) {
   const emit = (message) => write(message);
@@ -39,7 +46,7 @@ export function createDispatcher({ write, buildSessionFn = buildSession, runTurn
   /** Ask Python to run a tool, and block this call until `tool_result` arrives. */
   const callTool = (reqId) => (callId, name, args) =>
     new Promise((resolve, reject) => {
-      pendingToolCalls.set(callId, { resolve, reject });
+      pendingToolCalls.set(pendingKey(reqId, callId), { resolve, reject });
       emit({ type: "tool_call", req_id: reqId, call_id: callId, name, args });
     });
 
@@ -52,14 +59,15 @@ export function createDispatcher({ write, buildSessionFn = buildSession, runTurn
       }
 
       case "tool_result": {
-        const pending = pendingToolCalls.get(command.call_id);
+        const key = pendingKey(reqId, command.call_id);
+        const pending = pendingToolCalls.get(key);
         if (!pending) {
           // Nothing is blocked on it. Report rather than swallow: a stray result
           // means the correlation is broken somewhere upstream.
           emit({ type: "fatal", req_id: reqId, message: `no pending tool call ${command.call_id}` });
           return;
         }
-        pendingToolCalls.delete(command.call_id);
+        pendingToolCalls.delete(key);
         let payload = command.content;
         if (typeof payload === "string") {
           try {

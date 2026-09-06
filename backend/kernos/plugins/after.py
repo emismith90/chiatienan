@@ -27,8 +27,11 @@ def summarize(ctx: TurnContext) -> dict:
     """The summary row. Tolerates a turn that never produced a result or an outcome."""
     result = ctx.result
     stats = (getattr(result, "stats", None) or {}) if result is not None else {}
-    trace_ms = sum(float(t.get("ms") or 0) for t in ctx.trace)
-    errors = [t["error"] for t in ctx.trace if t.get("outcome") == "error" and t.get("error")]
+    # a sub-agent's rows joined this trace as a span; its time is inside the manager's run
+    # stage already and its plugin errors are its own (Phase 7 review F6)
+    own = [t for t in ctx.trace if "span" not in t]
+    trace_ms = sum(float(t.get("ms") or 0) for t in own)
+    errors = [t["error"] for t in own if t.get("outcome") == "error" and t.get("error")]
     outcome: dict[str, Any] | None = None
     if isinstance(ctx.outcome, Draft):
         outcome = {"kind": "draft", "draft_kind": ctx.outcome.kind}
@@ -40,14 +43,16 @@ def summarize(ctx: TurnContext) -> dict:
         "text_chars": len(ctx.text or ""),
         "images": len(ctx.images or []),
         "model": ctx.model,
-        "tools": [inv.name for inv in (getattr(result, "tools", None) or [])],
+        "tools": [f"{inv.from_agent}:{inv.name}" if getattr(inv, "from_agent", None) else inv.name
+                  for inv in (getattr(result, "tools", None) or [])],
         "tokens": stats.get("tokens"),
         "cost": stats.get("cost"),
         "elapsed_ms": round(trace_ms, 1),
         "capped": bool(getattr(result, "capped", False)) if result is not None else False,
         "error": (getattr(result, "error", None) if result is not None else None) or (errors[0] if errors else None),
         "outcome": outcome,
-        "verdicts": [{"plugin": t["plugin"], "outcome": t["outcome"], "reason": t.get("reason")}
+        "verdicts": [{"plugin": t["plugin"], "outcome": t["outcome"], "reason": t.get("reason"),
+                      **({"span": t["span"]} if "span" in t else {})}
                      for t in ctx.trace if t.get("outcome") in ("warn", "block")],
         "stopped": bool(ctx.stopped),
         "depth": ctx.depth,
@@ -111,7 +116,9 @@ def capture_case(ctx: TurnContext, *, money_tools: set[str], members: list[dict]
     adds a world. Returns ``None`` when the turn called no money tool.
     """
     result = ctx.result
-    calls = [inv for inv in (getattr(result, "tools", None) or []) if inv.name in money_tools]
+    # the manager's own money calls; a sub-agent's are its answer, not this turn's expectation (design §6)
+    calls = [inv for inv in (getattr(result, "tools", None) or [])
+             if inv.name in money_tools and getattr(inv, "from_agent", None) is None]
     if not calls:
         return None
     key_of = {m["id"]: f"m{m['id']}" for m in members}

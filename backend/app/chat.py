@@ -387,6 +387,7 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
         tool_ctx=ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
                              sender_name=member_name, turn_mentions=[]),
         sink=LegacyAgentEventSink(emit),
+        extras={"agent": kernel.agent_for(room_id)},     # who runs the room; its `delegates_to` enables `ask_*` (design §6)
     )
 
     async with _agent_lock:

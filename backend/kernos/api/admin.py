@@ -105,6 +105,7 @@ class AgentIn(BaseModel):
     delegates_to: list = Field(default_factory=list)
     capabilities: dict = Field(default_factory=dict)
     max_depth: int = 2
+    description: str | None = None
 
 
 class BindingIn(BaseModel):
@@ -258,7 +259,7 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         return _wrap(lambda: get_kernel().store.create_agent(
             body.business_id, body.slug, body.name, profile_id=body.profile_id, actor=_actor(x_actor), role=body.role,
             is_default=body.is_default, delegates_to=body.delegates_to, capabilities=body.capabilities,
-            max_depth=body.max_depth))
+            max_depth=body.max_depth, description=body.description))
 
     @r.get("/agents/{agent_id}")
     def agent(agent_id: int):

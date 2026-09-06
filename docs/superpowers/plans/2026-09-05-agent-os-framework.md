@@ -1630,12 +1630,12 @@ contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_a
 `agent_for`), `app/chat.py` (agent on `extras`), `app/plugins/run.py`, `app/tools.py`,
 `app/agent.py` (caps override, merge, `calls_made`), tests.
 
-- [ ] `TurnResult.last_result` own-only and `all_results(name, *, include_sub=False)`;
+- [x] `TurnResult.last_result` own-only and `all_results(name, *, include_sub=False)`;
       `Cards` republishes with `include_sub=True` (F4); `PiEngine` records `_record`;
       `Pipeline.run(ctx, *, through=None)` and `started_at` (F5); `kn_agents.description`
       (F12); `store.create_agent/update_agent` validation and `referrers` (F7); the sidecar
       keys `pendingToolCalls` by `req_id:call_id` with a test (F9).
-- [ ] `DelegationPack(agents_of, run_sub, margin_seconds=15)` per decisions 1–2 as amended
+- [x] `DelegationPack(agents_of, run_sub, margin_seconds=15)` per decisions 1–2 as amended
       (F1 caps rule and refusal, F8 depth on `ToolContext.max_depth`, the description text
       of F2); `Kernel.run_sub(parent_ctx, sub_agent, task) -> {text, results, capped,
       invocations}` per decisions 2–4 as amended (F3 event shape, F5 `through=validate` and
@@ -1644,7 +1644,7 @@ contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_a
       agent/depth/max_depth/tool_config; `agent.run_turn` applies `caps_override`, counts
       calls, merges `sub_invocations`; `FabricatedCommit` admits own invocations only (F2);
       `summarize()` sums own rows and names sub calls `<slug>:<name>` (F6, F11).
-- [ ] Proof (`tests/test_delegation.py`, a manager + a `sub` "auditor" on a lunch room,
+- [x] Proof (`tests/test_delegation.py`, a manager + a `sub` "auditor" on a lunch room,
       the real `run_turn` with a scripted `FakeBridge` branching on `req_id` — F10): the
       manager's manifest carries `ask_auditor` and the sub's does not; the sub's `run`
       command carries the clamped caps (manager with 40 tools and 3 already made, sub with
@@ -1664,7 +1664,23 @@ contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_a
       own rows and lists `auditor:settle_period` (F6, F11); `create_agent`/`update_agent`
       refusals (F7); the sidecar interleaves two runs with the same `call_id` (F9); golden
       9/9; full suite unedited; layering green.
-- [ ] Commit: `kernos.agents: ask_<sub> delegation — nested run with min caps, results merged as from_agent, text never backed`
+- [x] Commit: `kernos.agents: ask_<sub> delegation — nested run with min caps, results merged as from_agent, text never backed`
+
+      _As built (2026-09-06), where the build refined the plan:_ `delegates_to` entries are
+      **agent ids** (design §5.2 already said so); a pack tool may return an awaitable and
+      the executor awaits it (the nested run is async, pack tools stay sync otherwise); the
+      sub's `TurnContext` reaches the pack through `ToolContext.turn`, the manager's
+      `turn_id` through `ToolContext.turn_id` (set by `run_turn` before the engine runs), so
+      the sub's forwarded events carry it; `Rollover` itself returns early at `depth > 0`
+      (the same effect as skipping it in `run_sub`, robust to any nested runner); sub
+      invocations are merged **in order** — each sub's calls right after the `ask_*` that
+      made them (`(own_call_index, invocation)` pairs) — not appended at the end; a
+      deeper sub's trace rows keep their own `span`, so a B→C chain shows both; the
+      manager's budget counts the calls made *before* the in-flight `ask_*` (40 tools, 3
+      made → 37, as the proof states); `EvalCapture` records own money calls only (decision
+      5, now enforced); the `text` a sub hands back is its **outcome**: with a pack body
+      (a settlement) it is that body, not the model's prose. Suite 1235 passed, 1 skipped;
+      sidecar 70/70; golden 9/9; no pre-existing test edited.
 
 ### Task 7.2: Docs and state of play
 

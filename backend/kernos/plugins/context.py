@@ -55,6 +55,8 @@ class Rollover(BasePlugin):
         self._a = adapters
 
     async def run(self, ctx: TurnContext, config: dict) -> None:
+        if ctx.depth > 0:
+            return None      # a sub-agent's nested run must not fold the room's history mid-turn (Phase 7 review F6)
         await rollover_once(ctx.space_id, adapters=self._a, window_weeks=config["window_weeks"],
                             header=config.get("header", "Auto-saved"), kind=config.get("kind", "rollover"))
 

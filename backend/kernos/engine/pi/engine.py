@@ -48,7 +48,15 @@ class PiEngine:
                     name = reply.get("name") or ""
                     args = reply.get("args") or {}
                     payload = await call_tool(name, args)
-                    result.tools.append(ToolInvocation(name=name, args=args, result=payload))
+                    # The executor contract (design §6): a payload carrying ``_record`` is
+                    # recorded as that value and sent to the model without it — so what
+                    # the model reads (a sub-agent's prose) and what backs the reply's
+                    # numbers (structured results) can differ on purpose.
+                    record = payload
+                    if isinstance(payload, dict) and "_record" in payload:
+                        record = payload["_record"]
+                        payload = {k: v for k, v in payload.items() if k != "_record"}
+                    result.tools.append(ToolInvocation(name=name, args=args, result=record))
                     await self._bridge.send({
                         "type": "tool_result", "req_id": command["req_id"],
                         "call_id": reply.get("call_id"),

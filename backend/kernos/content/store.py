@@ -388,7 +388,7 @@ class ContentStore:
 
     def create_agent(self, business_id: int, slug: str, name: str, *, profile_id: int, actor: str = "admin",
                      role: str = "manager", is_default: bool = False, delegates_to: list | None = None,
-                     capabilities: dict | None = None, max_depth: int = 2) -> dict:
+                     capabilities: dict | None = None, max_depth: int = 2, description: str | None = None) -> dict:
         if role not in ("manager", "sub"):
             raise Invalid("role must be manager or sub")
         with self._session() as s:
@@ -402,12 +402,38 @@ class ContentStore:
                 for other in s.scalars(select(m.Agent).where(m.Agent.business_id == business_id,
                                                              m.Agent.is_default.is_(True))).all():
                     other.is_default = False
+            self._check_delegates(s, business_id, delegates_to or [], self_id=None)
             a = m.Agent(business_id=business_id, slug=slug, name=name, role=role, is_default=is_default,
                         profile_id=profile_id, delegates_to=delegates_to or [], capabilities=capabilities or {},
-                        max_depth=max_depth)
+                        max_depth=max_depth, description=description)
             s.add(a); s.flush()
             self.log(s, actor, "create", "agent", a.id, after=_row(a))
             return _row(a)
+
+    def _check_delegates(self, s: Session, business_id: int, entries: list, *, self_id: int | None) -> None:
+        """A ``delegates_to`` entry is an agent id naming a ``sub`` of the same business
+        that is neither bound to a space, the default, nor the agent itself (Phase 7
+        decision 1, review F7)."""
+        if not isinstance(entries, list):
+            raise Invalid("delegates_to must be a list of agent ids")
+        for entry in entries:
+            if not isinstance(entry, int) or isinstance(entry, bool):
+                raise Invalid(f"delegates_to entry {entry!r} is not an agent id")
+            if entry == self_id:
+                raise Invalid("an agent cannot delegate to itself")
+            sub = s.get(m.Agent, entry)
+            if sub is None or sub.business_id != business_id:
+                raise Invalid(f"delegates_to names agent {entry}, not an agent of business {business_id}")
+            if sub.role != "sub":
+                raise Invalid(f"delegates_to names agent {sub.slug!r}, a {sub.role}; only a sub can be delegated to")
+            if sub.is_default or s.scalar(select(m.SpaceBinding).where(m.SpaceBinding.agent_id == sub.id)) is not None:
+                raise Invalid(f"delegates_to names agent {sub.slug!r}, which is bound or default")
+
+    def referrers(self, agent_id: int) -> list[dict]:
+        """The agents whose ``delegates_to`` names ``agent_id``."""
+        with self._session() as s:
+            return [_row(a) for a in s.scalars(select(m.Agent).order_by(m.Agent.id)).all()
+                    if agent_id in (a.delegates_to or [])]
 
     def get_agent(self, agent_id: int) -> dict:
         with self._session() as s:
@@ -430,7 +456,7 @@ class ContentStore:
             return _row(a) if a else None
 
     def update_agent(self, agent_id: int, patch: dict, *, actor: str = "admin") -> dict:
-        allowed = {"name", "role", "profile_id", "delegates_to", "capabilities", "max_depth", "is_default"}
+        allowed = {"name", "role", "profile_id", "delegates_to", "capabilities", "max_depth", "is_default", "description"}
         bad = set(patch) - allowed
         if bad:
             raise Invalid(f"agent fields not editable: {sorted(bad)}")
@@ -439,12 +465,23 @@ class ContentStore:
             if a is None:
                 raise NotFound(f"no agent {agent_id}")
             before = _row(a)
+            role = patch.get("role", a.role)
+            if role not in ("manager", "sub"):
+                raise Invalid("role must be manager or sub")
+            if role != a.role:
+                bound = s.scalar(select(m.SpaceBinding).where(m.SpaceBinding.agent_id == a.id)) is not None
+                if a.is_default or bound or self.referrers(agent_id):
+                    raise Invalid(f"agent {a.slug!r} is bound, default or delegated to; its role cannot change")
+            if (patch.get("is_default", a.is_default)) and role != "manager":
+                raise Invalid("only a manager can be the default agent")
             if patch.get("is_default"):
                 for other in s.scalars(select(m.Agent).where(m.Agent.business_id == a.business_id,
                                                              m.Agent.is_default.is_(True))).all():
                     other.is_default = False
             if "profile_id" in patch:
                 self._profile(s, patch["profile_id"])
+            if "delegates_to" in patch:
+                self._check_delegates(s, a.business_id, patch["delegates_to"], self_id=a.id)
             for k, v in patch.items():
                 setattr(a, k, v)
             s.flush()

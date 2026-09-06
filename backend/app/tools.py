@@ -82,6 +82,25 @@ class ToolContext:
     # ``await validate_result(name, args, result)`` after. ``None`` = no rules.
     validate_call: Callable | None = None
     validate_result: Callable | None = None
+    # Delegation (design §6, plan Task 7.1). ``agent`` is the agent record running this
+    # turn (``None`` = no agent, so no ``ask_*`` tools); ``depth`` is 0 for the room's
+    # manager and ``max_depth`` the **root** agent's limit, carried unchanged to every
+    # sub's context; ``turn`` is the ``TurnContext`` this tool context belongs to (the
+    # nested run copies principal/images from it); ``turn_id``/``started_at`` are the
+    # running turn's, set by ``agent.run_turn`` and the pipeline; ``calls_made`` counts
+    # this agent's own tool calls (the executor increments it before each); ``caps_override``
+    # is ``{max_tools, max_seconds}`` a nested run applies to its ``EngineSpec``;
+    # ``sub_invocations`` collects ``(own_call_index, ToolInvocation)`` a sub made, merged
+    # into the manager's ``TurnResult.tools`` after the engine returns.
+    agent: dict | None = None
+    depth: int = 0
+    max_depth: int | None = None
+    turn: Any = None
+    turn_id: str | None = None
+    started_at: float | None = None
+    calls_made: int = 0
+    caps_override: dict | None = None
+    sub_invocations: list = field(default_factory=list)
 
     @property
     def space_id(self):

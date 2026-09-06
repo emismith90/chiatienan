@@ -48,19 +48,30 @@ class Pipeline:
             for plugin, config in self._stages.get(stage, [])
         ]
 
-    async def run(self, ctx: TurnContext) -> TurnContext:
+    async def run(self, ctx: TurnContext, *, through: Stage | str | None = None) -> TurnContext:
         """Stages in order. ``after`` always runs — in a ``finally`` — so a turn that
         raised is still observed (plan Task 4.1); its plugins are guarded: one that
         raises is recorded and logged, never re-raised, because observability must
-        not break the turn. A ``BaseException`` (cancellation) still propagates."""
+        not break the turn. A ``BaseException`` (cancellation) still propagates.
+
+        ``through`` runs the stages up to and including that one (Phase 7 review F5):
+        a sub-agent's nested run stops at ``validate`` — it posts nothing and is not
+        observed as a turn of its own — and ``after`` runs only when it is included.
+        ``ctx.extras["started_at"]`` (monotonic seconds) is stamped so the run stage's
+        tools can tell how much of the turn's time budget is left."""
         ctx.extras["pipeline"] = self          # the run stage's tool executor validates calls through it
+        ctx.extras["started_at"] = time.monotonic()
+        stages = PIPELINE_ORDER
+        if through is not None:
+            stages = PIPELINE_ORDER[:PIPELINE_ORDER.index(Stage(through)) + 1]
         try:
-            for stage in PIPELINE_ORDER:
+            for stage in stages:
                 if stage is Stage.after:
                     continue
                 await self._run_stage(stage, ctx, self._stages.get(stage, []))
         finally:
-            await self._run_after(ctx)
+            if Stage.after in stages:
+                await self._run_after(ctx)
         return ctx
 
     async def _run_after(self, ctx: TurnContext) -> None:
