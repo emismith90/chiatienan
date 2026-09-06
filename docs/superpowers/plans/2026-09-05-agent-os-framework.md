@@ -1131,8 +1131,114 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 
 ## Phase 5 — Data plane
 
-- `Collection` content type, `kn_documents`, generated `{collection}_find/upsert/delete`
-  tools with schema validation, aggregation refused by construction.
+### Facts that shape this phase (from the code, 2026-09-06)
+
+- The design (§5.3, decision 5) is specific: a `Collection` is **content** — name, JSON
+  Schema, indexed fields — stored in **one** space-scoped documents table, with
+  **generated** tools `{collection}_find` / `{collection}_upsert` / `{collection}_delete`
+  that validate against the schema and never aggregate; `handles_money` is false and
+  stays false. Pack-owned tables (`ToolPack.bind`) remain the home for anything numbers
+  are derived from.
+- Tools reach the model only through packs: `compose_tools(registry, spec.tool_packs, ctx)`
+  in profile order, per-tool overrides applied, a name from two packs is an error. A
+  pack's `tools(ctx)` may be dynamic — `ctx.space_id` is on the host's `ToolContext`
+  (Task 3.3) and the kernel knows a space's business (`Kernel.business_for`, Task 4.3).
+- Gate 1 does **not** check `tool_packs[].pack` against a registry (only the reflexivity
+  blacklist names the field); a profile naming an unknown pack fails at the first turn
+  (`PackError` in `compose_tools`), not at publish.
+- `jsonschema` 4.26 is already a dependency (plugin `config_schema` validation).
+- The host's knowledge modules — places, memos, observations, `knowledge.snapshot`
+  (~1,300 lines, with their own admin UI, memory files and the `lunch_places` pack) — are
+  lunch's and the host's; the design lists them as "already content; unchanged" (§2).
+- `Business.seed` (JSON) exists and is unused; `debug_api._all_tables` exports every
+  `kn_` table; `Database.create_all` binds new `kn_` tables with no host change.
+
+### Decisions taken for this phase
+
+1. **Collections are content; documents are data.** `kn_collections` (business, slug,
+   name, description, `schema` JSON — a JSON Schema object, checked with
+   `Draft202012Validator.check_schema` on write — `key` (the document field that is the
+   id, or none → generated), `indexed` (fields `find` may filter by), updated_at) and
+   `kn_documents` (id, business_id, space_id, collection, doc_id, `data` JSON, created/
+   updated at/by; unique on space+collection+doc_id). One documents table (decision 5).
+   Definitions are audited content; document writes are audited too (actor = the
+   principal or the admin) — they are what an agent remembers on the room's behalf.
+2. **The generated tools are one pack, `kernos.data.CollectionsPack`** (id `collections`,
+   `handles_money: False`, `money_tools` empty). `tools(ctx)` lists the business's
+   collections for `ctx.space_id` and generates three tools per collection whose
+   descriptions and input schemas come from the definition (the schema's `properties`
+   are listed in the description; `upsert.data` **is** the collection schema, so the
+   engine validates shape before the tool does). `find(where, limit≤50)` filters by
+   equality on `indexed` fields only and returns documents as stored — no count, no sum,
+   no group: **aggregation is refused by construction** because no tool computes one.
+   `upsert` validates `data` against the schema and writes; `delete` by `doc_id`. Errors
+   are clarifying questions (`kernos.packs.err`). Writes are immediate (facts, not money;
+   design §5.3) — a business that wants confirmation puts a rule in its prompt.
+3. **Opt-in per profile** by `tool_packs: [{pack: "collections"}]`; per-tool overrides
+   work on generated names (`rota_find`). The seeded lunch profile does not enable it.
+4. **Gate 1 checks pack ids.** `PublishGates` takes an optional `packs` registry; every
+   `tool_packs[].pack` must be registered. Per-tool override names are not checked at
+   publish (a collections pack's tool names depend on the space's business) — they fail
+   at compose time as today.
+5. **Admin API**: `/businesses/{id}/collections[/{slug}]` GET/PUT/DELETE (delete refused
+   while documents exist), `/spaces/{space_id}/collections/{slug}/documents[/{doc_id}]`
+   GET/PUT/DELETE with the same validation the tools apply.
+6. **The host's knowledge modules stay where they are.** Phase 3 said Phase 5 "gives
+   knowledge a home"; the home is `Collection` (a rota, house rules) or a pack with its
+   own tables. Places/memos/observations are not migrated: they have a UI, memory files
+   and resolution logic that a schema-validated document store would not carry, and
+   moving them is a rewrite with no user-visible gain. `lunch_places` stays a host pack.
+7. **A `Business.seed.collections` list** lets a business ship with its collections
+   (Phase 6's poker "house-rules"); `ensure_seeded` upserts them. No documents are seeded.
+
+### Task 5.1 (PR 5a): collections and documents as content
+
+**Files:** `kernos/content/models.py` (+2 tables), `kernos/data/{__init__.py,store.py}` (new),
+`kernos/content/boot.py` (seed collections), `kernos/api/admin.py`, tests.
+
+- [ ] Tables per decision 1; `kernos.data.DataStore(session_factory, audit=store.log)`:
+      `put_collection` (schema checked; `key`/`indexed` must be schema properties),
+      `get/list/delete_collection` (delete refused with documents), `validate(collection,
+      data)`, `upsert_document(business_id, space_id, slug, data, *, doc_id=None, actor)`
+      (id from `key` or given or generated `d{n}`), `get_document`, `find_documents(...,
+      where, limit)` (equality on `indexed` fields, in Python over the space's rows of
+      that collection — small by construction, no SQL on JSON), `delete_document`,
+      `count_documents` for the admin listing only (never a tool).
+- [ ] Admin routes per decision 5; `ensure_seeded` upserts `seed.collections`.
+- [ ] Proof: a schema that is not a valid JSON Schema is refused; `key`/`indexed` outside
+      the properties refused; upsert of invalid data refused with the schema error;
+      find filters only on indexed fields and refuses others; delete of a collection
+      with documents refused; second identical seed is a no-op; full suite unedited.
+- [ ] Commit: `kernos.data: collections as content, one documents table, admin API`
+
+### Task 5.2 (PR 5b): the generated tools
+
+**Files:** `kernos/data/pack.py` (new), `kernos/content/gates.py` (pack ids), `app/kernel.py`
+(register the pack, pass `packs` to the gates), tests.
+
+- [ ] `CollectionsPack(data_store, business_of)` per decision 2; tool names
+      `{slug}_{find,upsert,delete}` (slugs are `[a-z][a-z0-9_]*`, enforced on write so the
+      names are valid tool names); a collection's `description` and `properties` in the
+      tool descriptions; `upsert.input_schema.properties.data = collection.schema`.
+- [ ] Gate 1: unknown pack id → `schema` failure naming it (decision 4).
+- [ ] Proof: with a `rota` collection and a profile enabling `collections`, the manifest
+      the engine receives has exactly the three generated tools next to the lunch ones,
+      `rota_upsert` with wrong data returns a clarifying error and writes nothing, a good
+      upsert then `rota_find` returns the document, a `where` on a non-indexed field is
+      refused, `rota_delete` removes it, and the trace shows the calls; a profile naming
+      pack `nope` cannot publish; a stub end-to-end turn (`tests/test_collections_turn.py`)
+      through `run_bot_turn` with a fake engine calling `rota_upsert` persists the document
+      and the reply is the model's prose (no card); full suite unedited; layering green.
+- [ ] Commit: `kernos.data: generated find/upsert/delete tools per collection; gate 1 checks pack ids`
+
+### Task 5.3: Docs and state of play
+
+- [ ] Design §5.3 as built; README (collections API); plan state of play.
+
+**Proof for the phase:** schema-validated CRUD through the model; aggregation refused
+(no tool exists that computes one; `find` is capped and returns rows).
+
+**Phase 5 — state of play:** _(filled as tasks complete)_
 
 ## Phase 6 — `poker_ledger`
 
