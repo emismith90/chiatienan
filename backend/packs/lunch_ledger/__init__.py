@@ -50,6 +50,14 @@ def meal_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
     return render._meal_body(meal_att), meal_att
 
 
+def meal_exists(session, space_id, meal_id) -> bool:
+    """Is ``meal_id`` a live (non-voided) meal of this space? Room-scoped and void-aware
+    on purpose: "Đã ghi #14" is a claim about *this* room's ledger."""
+    from ledger_core.models import Meal
+    meal = session.get(Meal, int(meal_id))
+    return meal is not None and meal.room_id == int(space_id) and not meal.voided
+
+
 def meal_summary(session, space_id, att: dict) -> dict:
     """A pending meal draft, for another pack's blocked-settle listing."""
     names = _names(session, space_id)
@@ -74,7 +82,7 @@ class LunchLedgerPack(BasePack):
                 "expense_draft", _commit_meal, editable=frozenset(core.EDITABLE),
                 stamps=frozenset({"raw_input", "logged_by", "turn_id"}),
                 card=meal_card, prepare=core.sync_items, signature=core.draft_signature,
-                summary=meal_summary),
+                summary=meal_summary, exists=meal_exists),
         }
 
     def render(self, result):

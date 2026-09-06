@@ -132,3 +132,22 @@ def test_gate1_pack_ids_and_override_names_when_a_pack_registry_is_given():
     assert g.check(_spec(tool_packs=[ToolPackRef(pack="static", tools={"a_tool": {}}),
                                      ToolPackRef(pack="dynamic", tools={"anything": {}})]), previous=None, actor="admin") == []
     assert _gates().check(_spec(tool_packs=[ToolPackRef(pack="nope")]), previous=None, actor="admin") == []   # no registry: unchecked
+
+
+def test_gate2_counts_a_money_handling_pack():
+    from kernos.content import ToolPackRef
+    from kernos.packs import BasePack, PackRegistry
+
+    class Money(BasePack):
+        id, handles_money = "money", True
+
+    class Facts(BasePack):
+        id = "facts"
+
+    packs = PackRegistry()
+    packs.register_all([Money(), Facts()])
+    g = _gates(packs=packs, tool_names_of=lambda p: set())
+    assert _names(g.check(_spec(tool_packs=[ToolPackRef(pack="money")], builtin_tools=["bash"]), previous=None, actor="admin")) == ["money"]
+    assert g.check(_spec(tool_packs=[ToolPackRef(pack="facts")], builtin_tools=["bash"]), previous=None, actor="admin") == []
+    assert g.check(_spec(tool_packs=[ToolPackRef(pack="money")], builtin_tools=["bash"]), previous=None, actor="admin",
+                   override_reason="ok") == []

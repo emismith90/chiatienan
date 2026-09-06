@@ -278,10 +278,13 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
             ids.discard(None)
             names = _names_for(s, ctx.space_id, ids)
         for e in timeline:
-            if e["kind"] == "meal":
+            # name whatever member fields a row carries — a meal's payer, a payment's
+            # from/to; another business's rows (a game) carry their own shape
+            if e.get("payer_id") is not None:
                 e["payer_name"] = names.get(e["payer_id"], "?")
-            else:
+            if e.get("from_id") is not None:
                 e["from_name"] = names.get(e["from_id"], "?")
+            if e.get("to_id") is not None:
                 e["to_name"] = names.get(e["to_id"], "?")
         return {
             "ok": True, "type": "summary",

@@ -59,14 +59,28 @@ def import_lunch_suite(store, business_id: int, *, actor: str = "admin", corpus_
             "sources": sorted({c.source for c in cases})}
 
 
+def fixtures_for(spec: ProfileSpec, kernel=None) -> dict:
+    """The union of the enabled packs' fixtures; a step two packs provide is refused
+    (Phase 6 review F9), like a tool name two packs provide."""
+    from app.kernel import kernel_for
+    packs = (kernel or kernel_for(Database(settings.database_url))).packs
+    out: dict = {}
+    for pack, _ in packs.enabled(spec.tool_packs):
+        for name, fn in pack.fixtures().items():
+            if name in out:
+                raise ValueError(f"fixture step {name!r} is provided by two enabled packs")
+            out[name] = fn
+    return out
+
+
 class EvalWorld:
     """One case's world: its own SQLite file, the room the fixtures built, the key→id map."""
 
-    def __init__(self, case) -> None:
+    def __init__(self, case, fixtures: dict | None = None) -> None:
         self._dir = tempfile.mkdtemp(prefix=f"eval-{case.id}-")
         self.db = Database(f"sqlite:///{self._dir}/eval.db")
         self.db.create_all()
-        self.space_id, self.ids, self.drafts = build_world(self.db, case)
+        self.space_id, self.ids, self.drafts = build_world(self.db, case, fixtures)
 
     def close(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
@@ -100,6 +114,30 @@ async def run_turn(case, world: EvalWorld, spec: ProfileSpec):
     with frozen_clock(case.day):
         await kernel.pipeline_for(spec).run(ctx)
     return ctx.result
+
+
+def import_pack_suite(store, business_id: int, packs: list, *, actor: str = "admin") -> dict:
+    """A business whose packs ship their golden cases (``ToolPack.eval_cases``) gets them
+    as content: the cases, the packs' graders as the suite, and a rubric when a pack
+    ships one. Idempotent."""
+    cases, graders, rubric = [], [], None
+    for pack in packs:
+        for raw in pack.eval_cases():
+            case = EvalCase.from_dict(raw)
+            store.put_case(business_id, case.id, case.to_dict(), actor=actor, tags=case.tags or [pack.id],
+                           source="imported", review=case.review)
+            cases.append(case.id)
+        for plugin_id in pack.graders():
+            graders.append({"plugin": plugin_id, "name": plugin_id.rsplit(".", 1)[-1]})
+        rubric = rubric or (pack.content() or {}).get("rubric")
+    if not cases:
+        raise ValueError("none of the business's packs ships eval cases")
+    slug = f"{packs[0].id}-golden"
+    if rubric:
+        store.put_rubric(business_id, RUBRIC_SLUG, rubric, actor=actor)
+    suite = store.put_suite(business_id, slug, actor=actor, case_slugs=cases, graders=graders,
+                            judge={"model": settings.bench_judge_model, "rubric": RUBRIC_SLUG if rubric else None}, repeat=1)
+    return {"cases": len(cases), "suite": suite["slug"], "graders": [g["name"] for g in graders]}
 
 
 def judge_for(suite: dict):
@@ -139,6 +177,9 @@ async def run_suite(kernel, suite_slug: str, version_id: int, *, actor: str = "e
     try:
         graders = [kernel.graders.build(ref, judge=judge) for ref in suite["graders"]]
         cases = suite_cases(store, business_id, suite)
+        if world_factory is globals()["world_factory"]:            # the default: the candidate's packs' fixtures
+            fixtures = fixtures_for(spec, kernel)
+            world_factory = lambda case: EvalWorld(case, fixtures)  # noqa: E731
         runner = Runner(graders, world_factory=world_factory, run_turn=run_turn,
                         repeat=suite.get("repeat") or 1, judge_model=getattr(judge, "model", None) if judge else None)
         out = await runner.run(cases, spec)

@@ -86,3 +86,11 @@ class LedgerToolsPack(BasePack):
 
     def fixtures(self):
         return dict(fixtures.FIXTURES)
+
+    @staticmethod
+    def content() -> dict:
+        """The business-neutral core of the money-safety rule (Phase 6 review F7); a
+        business adds its own addendum."""
+        from pathlib import Path
+        core = Path(__file__).with_name("content_money_safety_core.mdc").read_text(encoding="utf-8")
+        return {"prompt_body": None, "skills": [], "rules": [{"slug": "money-safety-core", "content": core, "tags": ["money"]}]}

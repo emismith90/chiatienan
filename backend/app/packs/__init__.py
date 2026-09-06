@@ -11,6 +11,7 @@ from app.packs.members import MEMBER_TOOLS, RoomMembersPack
 from app.packs.places import PLACES_TOOLS, LunchPlacesPack
 from packs.ledger_tools import LEDGER_TOOLS, LedgerToolsPack  # noqa: F401
 from packs.lunch_ledger import LUNCH_TOOLS, LunchLedgerPack  # noqa: F401
+from packs.poker_ledger import POKER_TOOLS, PokerLedgerPack  # noqa: F401
 
 #: The money tools, as the two packs that provide them.
 MONEY_TOOLS = LUNCH_TOOLS | LEDGER_TOOLS
@@ -28,4 +29,4 @@ assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
 
 def host_packs() -> list:
     """Every pack this host registers with its kernel, fresh instances."""
-    return [lunch_ledger_pack(), ledger_tools_pack(), LunchPlacesPack(), RoomMembersPack()]
+    return [lunch_ledger_pack(), ledger_tools_pack(), LunchPlacesPack(), RoomMembersPack(), PokerLedgerPack()]

@@ -55,7 +55,7 @@ class Kernel:
             ModelPassthrough(),
             PhoenixSystemPrompt(), LegacyRunTurn(), PackRender(self.packs),
             KernelCards(self.adapters, self.packs),
-            FabricatedCommit(), UnbackedAmounts(),
+            FabricatedCommit(self.packs), UnbackedAmounts(),
             Trace(StoreTraces(self.store)),
             EvalCapture(self.capture_case, self.packs, self.adapters),
             *validators(),
@@ -65,6 +65,10 @@ class Kernel:
             self.store, business_slug=BUSINESS_SLUG, business_name="Lunch ledger",
             spec=self.default_spec, agent_slug="phoenix", agent_name="Phoenix",
             sources=default_sources(), catalogue_rows=catalogue_rows(settings))
+        from app.poker_profile import BUSINESS_SLUG as POKER_SLUG, build_poker_spec, poker_sources
+        self.poker_report = ensure_seeded(
+            self.store, business_slug=POKER_SLUG, business_name="Poker ledger",
+            spec=build_poker_spec(settings), agent_slug="dealer", agent_name="Dealer", sources=poker_sources())
         self.gates = PublishGates(
             self.registry, self.store, clock=self.adapters.clock,
             eval_gate=lambda spec, *, profile_id, version_id: eval_gate(
@@ -136,8 +140,15 @@ class Kernel:
         self.store.prune_cases(bid, source="captured", review=True, older_than=cutoff)
 
     def import_eval_suite(self, business_id: int, *, actor: str) -> dict:
-        from app.evalhost import import_lunch_suite
-        return import_lunch_suite(self.store, business_id, actor=actor)
+        """The lunch business imports the benchmark corpus; any other business imports
+        the golden cases its packs ship (`ToolPack.eval_cases`)."""
+        from app.evalhost import import_lunch_suite, import_pack_suite
+        business = self.store.get_business(business_id)
+        if business["slug"] == BUSINESS_SLUG:
+            return import_lunch_suite(self.store, business_id, actor=actor)
+        spec = ProfileSpec.model_validate(self.store.published_spec(self.store.default_agent(business_id)["profile_id"]))
+        packs = [pack for pack, _ in self.packs.enabled(spec.tool_packs) if pack.eval_cases()]
+        return import_pack_suite(self.store, business_id, packs, actor=actor)
 
     def start_eval_run(self, suite_slug: str, version_id: int, *, actor: str) -> dict:
         """Create the run row and spawn `python -m app.evalhost run …` to fill it — a

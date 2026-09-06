@@ -69,14 +69,21 @@ def _recorded(call: dict, key: str):
     return None
 
 
-def _item_key(entry) -> tuple:
-    """An `items` entry reduced to its money: who ate it and what it cost.
-
-    `label` is the model's prose and is not compared.
+def _item_key(entry, fields: tuple = ("member", "amount")) -> tuple:
+    """A list entry reduced to its money — by default who and how much (`items`,
+    `adjustments`); a business configures other fields (`entries`: member, buy_in,
+    cash_out). Anything else on the entry is the model's prose and is not compared.
     """
     if isinstance(entry, dict):
-        return (entry.get("member"), entry.get("amount"))
+        return tuple(entry.get(f) for f in fields)
     return (entry,)
+
+
+def _ok_results(record: dict, name: str) -> list[dict]:
+    """Successful result dicts for one tool, in call order (a dict whose `ok` is truthy)."""
+    return [c["result"] for c in record.get("tools") or []
+            if c.get("name") == name and isinstance(c.get("result"), dict)
+            and c["result"].get("ok")]
 
 
 def _hashable(value):
@@ -97,6 +104,8 @@ DEFAULT_TOOL_SELECTION = {
     # world's key→id map before comparing (`bench.corpus.resolve_args` did this)
     "member_args": ["payer", "from", "to"],
     "member_list_args": ["participants"],
+    # the fields that make a list entry's identity, per list (Phase 6 review F4)
+    "item_fields": {"items": ["member", "amount"], "adjustments": ["member", "amount"]},
 }
 
 
@@ -124,7 +133,12 @@ class ToolSelection:
         self.equivalence_keys = tuple(cfg["equivalence_keys"])
         self.member_args = tuple(cfg["member_args"])
         self.member_list_args = tuple(cfg["member_list_args"])
+        self.item_fields = {k: tuple(v) for k, v in dict(cfg.get("item_fields") or {}).items()}
         self._equivalence = dict(equivalence or {})
+
+    def _key(self, list_name: str):
+        fields = self.item_fields.get(list_name, ("member", "amount"))
+        return lambda entry: _item_key(entry, fields)
 
     def resolve_args(self, case, ids: dict) -> dict:
         """``expect["args"]`` with member keys turned into ids. Raises ``KeyError`` on a
@@ -163,9 +177,10 @@ class ToolSelection:
                 return f"guests: expected {len(want)}, got {len(got)} ({got})"
             return None
         if key in self.member_amount_lists and isinstance(want, list) and isinstance(got, list):
-            if sorted(map(_item_key, want)) != sorted(map(_item_key, got)):
-                return (f"{key}: expected {[_item_key(i) for i in want]}, "
-                        f"got {[_item_key(i) for i in got]}")
+            item_key = self._key(key)
+            if sorted(map(item_key, want), key=repr) != sorted(map(item_key, got), key=repr):
+                return (f"{key}: expected {[item_key(i) for i in want]}, "
+                        f"got {[item_key(i) for i in got]}")
             return None
         if want != got:
             return f"{key}: expected {want!r}, got {got!r}"
@@ -178,11 +193,21 @@ class ToolSelection:
         resolved against ``world.ids`` first; without one (``bench.run``) the caller
         already did."""
         expected = list((case.expect or {}).get("tools") or [])
-        if not expected:
+        forbidden = list((case.expect or {}).get("forbidden_tools") or [])
+        if not expected and not forbidden:
             return Verdict(None, "no tool expectation for this case")
 
         if record.get("error"):
             return Verdict(False, f"turn errored: {record['error']}")
+
+        # A case that must NOT act (an ambiguous table the model has to ask about):
+        # a forbidden tool that returned ok is a failure; none of them succeeding is a
+        # graded pass — never a None (Phase 6 review F4).
+        acted = [name for name in forbidden if _ok_results(record, name)]
+        if acted:
+            return Verdict(False, f"{acted} succeeded on a case that must ask instead")
+        if not expected:
+            return Verdict(True, f"asked instead of acting: none of {forbidden} succeeded")
 
         expect_args = ((case.expect or {}).get("args") or {})
         if world is not None and getattr(world, "ids", None):
@@ -270,17 +295,6 @@ class _Invocation:
         self.name = call.get("name")
         self.args = call.get("args")
         self.result = call.get("result")
-
-
-def _ok_results(record: dict, name: str) -> list[dict]:
-    """Successful result dicts for one tool, in call order.
-
-    Same admission rule as `TurnResult.all_results`: a dict whose `ok` is truthy.
-    """
-    return [c["result"] for c in record.get("tools") or []
-            if c.get("name") == name and isinstance(c.get("result"), dict)
-            and c["result"].get("ok")]
-
 
 
 class Prose:

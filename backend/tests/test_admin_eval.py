@@ -6,7 +6,8 @@ ADMIN = {"X-Admin-Password": "test-admin-pw"}
 
 def test_kernel_registers_the_packs_graders(db):
     k = kernel_for(db)
-    assert k.graders.ids() == ["lunch_ledger.eval.ledger_state", "lunch_ledger.eval.prose", "lunch_ledger.eval.tool_selection"]
+    assert k.graders.ids() == ["lunch_ledger.eval.ledger_state", "lunch_ledger.eval.prose", "lunch_ledger.eval.tool_selection",
+                               "poker_ledger.eval.game_state", "poker_ledger.eval.prose", "poker_ledger.eval.tool_selection"]
     name, g = k.graders.build({"plugin": "lunch_ledger.eval.prose", "name": "prose_quality"})
     assert name == "prose_quality" and g.blocking is False and "Vietnamese" in g.rubric
 

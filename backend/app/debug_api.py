@@ -78,6 +78,10 @@ def _all_tables() -> dict:
     out = dict(Base.metadata.tables)
     out.update(_LedgerBase.metadata.tables)
     out.update(_ContentBase.metadata.tables)
+    from app.packs import host_packs          # a pack's own tables are exportable too (Phase 6 review F10)
+    for pack in host_packs():
+        if getattr(pack, "metadata", None) is not None:
+            out.update(pack.metadata.tables)
     return out
 
 

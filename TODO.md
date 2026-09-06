@@ -1,5 +1,12 @@
 # TODO
 
+- **Generic draft card in the frontend (Phase 6 follow-up).** The backend now commits any
+  registered draft kind through `POST /drafts/{id}/commit` (a poker `game_draft`, for
+  one), but `message-list.tsx` renders unknown kinds as a blank human bubble and
+  `use-room.ts` only replaces status flips for the two lunch kinds. Add a generic
+  `DraftCard` fallback for any `*_draft` kind (body + attachment summary + Confirm/Cancel)
+  and make the in-place replacement apply to `kind.endsWith("_draft")`.
+
 - **Balance redesign** (short name, balance center alignment)
 
 - **Blame feature.** Now chat/action run on trust, no way to verify. A false claim is not reversible/fixable → figure out a way to "blame" and exclude the transaction.

@@ -1478,11 +1478,11 @@ comparing the fenced list — the registry-based "money-handling plugin" check w
 needed, since every tool-scope rule is fenced anyway. `Pipeline.validate` refuses the
 call when a rule *raises* (fail closed, recorded as `error`). The end-to-end proof drives
 `agent.run_turn` with the fake sidecar through `run_bot_turn`, so the executor hook is the
-one production uses. 1163 tests, 1 skipped; sidecar 69.
+one production uses. 1165 tests, 1 skipped; sidecar 69.
 
-### Task 6.3 (PR 6c): the poker pack and business
+### Task 6.3 (PR 6c): the poker pack and business — done
 
-- [ ] `packs/poker_ledger/{__init__.py,models.py,money.py,tools.py,render.py,fixtures.py,
+- [x] `packs/poker_ledger/{__init__.py,models.py,money.py,tools.py,render.py,fixtures.py,
       eval.py,content/}` per decisions 3–5 as amended (F3 allocation, F4 grader config and
       `forbidden_tools`, `game_pending`); `ToolPack.metadata`/`bind` and `Database.create_all`
       binding host packs lazily (F10/F11); `ToolPack.content()`/`eval_cases()`/`commit_tools`;
@@ -1491,7 +1491,7 @@ one production uses. 1163 tests, 1 skipped; sidecar 69.
       `build_world(db, case, fixtures=None)` and `fixtures_for(spec)` (F9);
       `import_pack_suite`; admin import for a non-lunch business; `TODO.md` frontend ticket
       (F12).
-- [ ] Proof: `tests/test_poker_money.py` (nets, edges exact per loser, rounding bound,
+- [x] Proof: `tests/test_poker_money.py` (nets, edges exact per loser, rounding bound,
       every invariant refused with a clear error); `tests/golden/poker.py` +
       `tests/test_poker_pack.py` (a table bound to the dealer: `propose_game` through
       `run_bot_turn` with a fake engine → `game_draft` card → `commit_any` writes the game
@@ -1501,7 +1501,16 @@ one production uses. 1163 tests, 1 skipped; sidecar 69.
       suite green under an oracle engine (`import_pack_suite` + `run_suite`), the lunch
       suite unchanged (golden 9/9, regrade identity, `typical` import count unchanged);
       a lunch room sees no poker tools and a poker table no meal tools; layering green.
-- [ ] Commit: `packs: poker_ledger — games, chips conserved, edges from losers to winners; the poker business`
+- [x] Commit: `packs: poker_ledger — games, chips conserved, edges from losers to winners; the poker business`
+
+Notes: the **house** cut is borne by the losers in proportion to their losses (exactly,
+largest remainder) and is a debt to nobody in the ledger — the table kept that cash; the
+rest of each loss goes to the winners, exact on both sides. The golden cases ship with the
+pack (`packs/poker_ledger/golden.py`, imported as suite `poker_ledger-golden`) rather than
+under `tests/golden/`, because a pack's golden cases are its content (decision 5). The
+`game_state` grader compares settlement transfers as a set (netting order is the core's).
+The `bench.graders` shim keeps its lunch import path; `compare_settlement` and
+`balances_by_member` now live in `packs/ledger_tools/eval.py`. 1203 tests, 1 skipped.
 
 ### Task 6.4: Docs and state of play
 

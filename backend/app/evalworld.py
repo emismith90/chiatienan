@@ -81,7 +81,7 @@ class World:
             drafts.commit_any(s, card_id, self.space_id, logged_by=str(actor))
 
 
-def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
+def build_world(db, case, fixtures: dict | None = None) -> tuple[int, dict[str, int], dict[str, int]]:
     """Seed the room and replay every prior step. Returns `(room_id, ids, drafts)`.
 
     `drafts` maps a step id to the draft it created, for `confirm_pending`'s
@@ -99,7 +99,8 @@ def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
     # The step kinds are the lunch pack's fixtures (`packs.lunch_ledger.fixtures`):
     # the bench sequences them and freezes the clock, the pack knows how to put a
     # room into "meal confirmed" or "payment recorded" state — through `_World`.
-    fixtures = {**ledger_tools_pack().fixtures(), **lunch_ledger_pack().fixtures()}
+    if fixtures is None:                      # the lunch business's, for bench and the goldens
+        fixtures = {**ledger_tools_pack().fixtures(), **lunch_ledger_pack().fixtures()}
     world = World(db, room_id)
     for step in case.prior_steps:
         kind = step["kind"]

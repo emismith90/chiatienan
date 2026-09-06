@@ -139,7 +139,8 @@ def claimed_meal_ids(body: str) -> list[int]:
 COMMIT_TOOLS = frozenset({"propose_meal", "propose_payment", "void_meal", "cancel_draft"})
 
 
-def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None) -> list[int] | None:
+def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None,
+                      commit_tools: frozenset[str] | set[str] | None = None) -> list[int] | None:
     """Why ``body`` is a forged write claim, or ``None`` if it is not.
 
     Returns ``None`` for a reply that may be posted, otherwise the offending
@@ -174,8 +175,9 @@ def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None) -> 
     """
     if not body or not _COMMIT_CLAIM.search(body):
         return None
+    admitted = COMMIT_TOOLS if commit_tools is None else commit_tools
     for inv in tools or []:
-        if inv.name in COMMIT_TOOLS and isinstance(inv.result, dict) and inv.result.get("ok"):
+        if inv.name in admitted and isinstance(inv.result, dict) and inv.result.get("ok"):
             return None
     if meal_exists is not None:
         for meal_id in claimed_meal_ids(body):

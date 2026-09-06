@@ -149,6 +149,11 @@ class Database:
         _sync_additive_columns(self.engine)
         bind_ledger(self.engine)
         bind_content(self.engine)
+        # A pack with tables of its own binds them here too (plan Task 6.3). Lazy: the
+        # packs import the models, never this module.
+        from app.packs import host_packs
+        for pack in host_packs():
+            pack.bind(self.engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:

@@ -61,17 +61,44 @@ class FabricatedCommit(BasePlugin):
     """
 
     id, version, stage = "app.validate.fabricated_commit", "1", Stage.validate
-    config_schema = _EMPTY
+    config_schema = {"type": "object", "additionalProperties": False,
+                     "properties": {"body": {"type": "string", "description": "what the room sees instead of the forgery"}}}
     handles_money = True
+
+    def __init__(self, packs=None) -> None:
+        """With a pack registry the commit tools and the "does #N exist" check come from
+        the profile's enabled packs (`commit_tools`, `DraftKind.exists` — Phase 6 review
+        F6); without one, today's lunch set."""
+        self._packs = packs
+
+    def _from_packs(self, ctx: TurnContext):
+        if self._packs is None or ctx.profile is None:
+            return None, None
+        commit: set[str] = set()
+        checks = []
+        for pack, _ in self._packs.enabled(ctx.profile.tool_packs):
+            commit |= set(getattr(pack, "commit_tools", ()) or ())
+            checks += [dk.exists for dk in pack.draft_kinds().values() if dk.exists is not None]
+        db, room_id = ctx.tool_ctx.db, ctx.tool_ctx.room_id
+
+        def record_exists(record_id: int) -> bool:
+            # a claimed id must be a live record of *some* enabled kind; no kind that can
+            # say → treat the claim as forged (fail closed)
+            with db.session() as s:
+                return any(check(s, room_id, record_id) for check in checks)
+
+        return frozenset(commit), record_exists
 
     async def run(self, ctx: TurnContext, config: dict) -> Verdict | None:
         out = _prose(ctx)
         if out is None:
             return None
         db, room_id = ctx.tool_ctx.db, ctx.tool_ctx.room_id
+        commit_tools, record_exists = self._from_packs(ctx)
         forged = moneyguard.fabricated_commit(
             out.text, f"{ctx.text}\n{ctx.history or ''}", ctx.result.tools,
-            meal_exists=lambda mid: _meal_exists(db, room_id, mid),
+            meal_exists=record_exists or (lambda mid: _meal_exists(db, room_id, mid)),
+            commit_tools=commit_tools,
         )
         if forged is None:
             return None
@@ -82,7 +109,7 @@ class FabricatedCommit(BasePlugin):
             [inv.name for inv in ctx.result.tools], out.text[:400],
         )
         return Verdict(False, "block", "fabricated commit",
-                       Body(_FABRICATED_COMMIT_BODY, out.attachments, claimed_by_pack=True))
+                       Body(config.get("body") or _FABRICATED_COMMIT_BODY, out.attachments, claimed_by_pack=True))
 
 
 class UnbackedAmounts(BasePlugin):

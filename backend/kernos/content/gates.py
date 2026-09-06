@@ -145,6 +145,12 @@ class PublishGates:
             handles_money = handles_money or any(
                 getattr(plugin, "handles_money", False)
                 for entries in pipeline._stages.values() for plugin, _ in entries)
+        if self._packs is not None:
+            for ref in parsed.tool_packs:
+                try:
+                    handles_money = handles_money or bool(getattr(self._packs.get(ref.pack), "handles_money", False))
+                except Exception:  # noqa: BLE001 — an unknown pack is already a schema failure
+                    pass
         risky = sorted(set(parsed.builtin_tools) & self._money_tools)
         if handles_money and risky and not override_reason:
             failures.append(GateFailure(
