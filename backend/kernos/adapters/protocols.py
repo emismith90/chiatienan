@@ -85,6 +85,23 @@ class CardStore(Protocol):
 
 
 @runtime_checkable
+class TraceStore(Protocol):
+    """Where the turn trace goes (design §8.6; plan Task 4.1). Rows are keyed by their
+    own id; ``turn_id`` may be ``None`` when the turn failed before the engine ran."""
+
+    def write(self, space_id: str, turn_id: str | None, *, started: str, finished: str,
+              summary: dict, tools: list, trace: list, keep_days: int | None = None) -> Any: ...
+
+    def list(self, space_id: str, *, limit: int = 50) -> list[dict]:
+        """Newest first, summaries only (no ``tools``/``trace``)."""
+        ...
+
+    def get(self, space_id: str, ref: Any) -> dict | None:
+        """One full row by row id or by turn id."""
+        ...
+
+
+@runtime_checkable
 class Completion(Protocol):
     async def complete(self, prompt: str, *, kind: str) -> str:
         """One-shot text → text (the summariser). ``""`` on failure, never a raise."""

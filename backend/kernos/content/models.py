@@ -130,3 +130,20 @@ class AuditLog(Base):
     before: Mapped[dict | None] = mapped_column(JSON)
     after: Mapped[dict | None] = mapped_column(JSON)
     at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+
+
+class TurnTrace(Base):
+    """One row per turn (design §8.6; plan Task 4.1): the plugin trace, the tool
+    calls with args and results, and a summary the admin timeline and eval capture
+    read. ``turn_id`` is null when the turn failed before the engine ran."""
+
+    __tablename__ = "kn_turn_traces"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    space_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    turn_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    profile_version_id: Mapped[int | None] = mapped_column(Integer)
+    started: Mapped[str] = mapped_column(String(32), nullable=False)
+    finished: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    tools: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    trace: Mapped[list] = mapped_column(JSON, default=list, nullable=False)

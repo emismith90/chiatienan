@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from datetime import datetime, timedelta
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
 
@@ -488,6 +489,42 @@ class ContentStore:
             self.log(s, actor, "unbind", "space", space_id, before=_row(row))
             s.delete(row)
         self._changed()
+
+    # -------------------------------------------------------------------- traces
+
+    def write_trace(self, space_id: str, turn_id: str | None, *, started: str, finished: str,
+                    summary: dict, tools: list, trace: list, keep_days: int | None = None,
+                    profile_version_id: int | None = None) -> dict:
+        """Persist one turn's trace; with ``keep_days`` prune rows older than that first.
+        Not audited (a row per turn is telemetry, not a content change)."""
+        with self._session() as s:
+            if keep_days is not None:
+                cutoff = (datetime.fromisoformat(finished) - timedelta(days=keep_days)).isoformat(timespec="seconds")
+                for old in s.scalars(select(m.TurnTrace).where(m.TurnTrace.finished < cutoff)).all():
+                    s.delete(old)
+            row = m.TurnTrace(space_id=str(space_id), turn_id=turn_id, profile_version_id=profile_version_id,
+                              started=started, finished=finished, summary=summary, tools=tools, trace=trace)
+            s.add(row)
+            s.flush()
+            return _row(row)
+
+    def list_traces(self, space_id: str, *, limit: int = 50) -> list[dict]:
+        with self._session() as s:
+            rows = s.scalars(select(m.TurnTrace).where(m.TurnTrace.space_id == str(space_id))
+                             .order_by(m.TurnTrace.id.desc()).limit(limit)).all()
+            return [{k: v for k, v in _row(r).items() if k not in ("tools", "trace")} for r in rows]
+
+    def get_trace(self, space_id: str, ref: Any) -> dict | None:
+        """By turn id first, then by row id."""
+        with self._session() as s:
+            row = s.scalar(select(m.TurnTrace).where(m.TurnTrace.space_id == str(space_id),
+                                                     m.TurnTrace.turn_id == str(ref))
+                           .order_by(m.TurnTrace.id.desc()))
+            if row is None and str(ref).isdigit():
+                row = s.get(m.TurnTrace, int(ref))
+                if row is not None and row.space_id != str(space_id):
+                    row = None
+            return _row(row) if row else None
 
     # ----------------------------------------------------------------- catalogue
 

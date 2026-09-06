@@ -967,33 +967,39 @@ Benchmark: not run here (no `OPEN_ROUTER_KEY`). Phase 3 gate findings F1–F8 al
 
 Confirmed by the gate: the facts block above (trace recorded but unpersisted, `after` in `PIPELINE_ORDER`, error re-raised before `after`), the layering edges, the unused gate-4 hook, `LedgerState` fitting the pack within layering, the golden test's insensitivity to a side table, and the shim surface the pre-existing bench tests need.
 
-### Task 4.1 (PR 4a): the turn trace
+### Task 4.1 (PR 4a): the turn trace — done
 
 **Files:** `kernos/kernel/pipeline.py`, `kernos/plugins/after.py` (new), `kernos/adapters/protocols.py`
 (`TraceStore`), `kernos/adapters/memory.py`, `kernos/content/models.py` (`TurnTrace`),
 `kernos/content/store.py` (write/list/get/prune), `kernos/api/admin.py`, `app/kernel.py`,
 `app/default_profile.py`, tests.
 
-- [ ] Prerequisite (F5): `Dockerfile` copies `kernos/`, `ledger_core/`, `packs/` next to `app/`.
-- [ ] `Pipeline.run`: stages before `after` as today; `after` in `finally`, each plugin
+- [x] Prerequisite (F5): `Dockerfile` copies `kernos/`, `ledger_core/`, `packs/` next to `app/`.
+- [x] `Pipeline.run`: stages before `after` as today; `after` in `finally`, each plugin
       guarded (`except Exception` → log + `ctx.record(..., "error")`, no re-raise;
       `BaseException` propagates after recording — F11).
-- [ ] `kernos.after.trace` plugin: summary + `tools: [{name, args, result}]` (F12) + trace →
+- [x] `kernos.after.trace` plugin: summary + `tools: [{name, args, result}]` (F12) + trace →
       `TraceStore.write(...)`; tolerates `ctx.result`/`ctx.outcome` being `None`; `keep_days`
       config prunes older rows on write. `InMemoryTraces`.
-- [ ] `kn_turn_traces` (id, space_id, turn_id nullable+indexed, profile_version_id?, started,
+- [x] `kn_turn_traces` (id, space_id, turn_id nullable+indexed, profile_version_id?, started,
       finished, summary JSON, tools JSON, trace JSON); `ContentStore.write_trace/list_traces/
       get_trace/prune_traces`; `GET /spaces/{space_id}/turns?limit` (summaries), `GET
       /spaces/{space_id}/turns/{ref}` (full; `ref` is a row id or a turn id — F11).
-- [ ] Seeded pipeline gains `after: [kernos.after.trace]`; the golden replays still
+- [x] Seeded pipeline gains `after: [kernos.after.trace]`; the golden replays still
       byte-identical (the trace is a side table; `test_run_bot_turn_golden` compares the
       persisted reply). Boot re-syncs the seeded profile.
-- [ ] Proof: a turn writes one trace row whose summary names the tools and the outcome and
+- [x] Proof: a turn writes one trace row whose summary names the tools and the outcome and
       whose `tools` carry args and results; a `context` plugin and a `run` plugin that raise
       each still leave a trace with `error` (and `turn_id` null for the former); the admin
       routes return it by row id and by turn id; pruning removes rows older than
       `keep_days`; full suite unedited.
-- [ ] Commit: `kernos: turn traces — after stage in finally, kn_turn_traces, admin turns API`
+- [x] Commit: `kernos: turn traces — after stage in finally, kn_turn_traces, admin turns API`
+
+Notes: the trace plugin takes a `TraceStore` directly (`kernos.content.traces.StoreTraces`
+over the content store) rather than a new `HostAdapters` field — one fewer thing a host
+must wire; `turn_id` falls back to the result's when the run plugin did not set it;
+`profile_version_id` is stored but null until the resolver exposes the version it
+served (Task 4.3 wires it with gate 4). 1125 tests, 1 skipped; sidecar 69.
 
 ### Task 4.2 (PR 4b): eval core — cases, graders, runner, tables
 

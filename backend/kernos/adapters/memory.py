@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from kernos.kernel.events import TurnEvent, to_legacy
@@ -147,3 +147,28 @@ class FixedClock:
 
     def now(self) -> datetime: return self._at
     def today(self) -> date: return self._at.date()
+
+
+class InMemoryTraces:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+        self._ids = itertools.count(1)
+
+    def write(self, space_id, turn_id, *, started, finished, summary, tools, trace, keep_days=None):
+        if keep_days is not None:
+            cutoff = (datetime.fromisoformat(finished) - timedelta(days=keep_days)).isoformat(timespec="seconds")
+            self.rows = [r for r in self.rows if r["finished"] >= cutoff]
+        row = {"id": next(self._ids), "space_id": space_id, "turn_id": turn_id, "started": started,
+               "finished": finished, "summary": summary, "tools": tools, "trace": trace}
+        self.rows.append(row)
+        return row
+
+    def list(self, space_id, *, limit=50):
+        rows = [r for r in reversed(self.rows) if r["space_id"] == space_id][:limit]
+        return [{k: v for k, v in r.items() if k not in ("tools", "trace")} for r in rows]
+
+    def get(self, space_id, ref):
+        for r in reversed(self.rows):
+            if r["space_id"] == space_id and (r["turn_id"] == str(ref) or str(r["id"]) == str(ref)):
+                return r
+        return None

@@ -6,11 +6,15 @@ and it re-raises — the host decides what an exception means for its user.
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import Iterable
 
 from kernos.kernel.context import PIPELINE_ORDER, SINGLE_OWNER, Stage, TurnContext, Verdict
 from kernos.kernel.plugin import Plugin, key
+
+
+log = logging.getLogger("kernos.kernel")
 
 
 class PipelineError(ValueError):
@@ -45,9 +49,31 @@ class Pipeline:
         ]
 
     async def run(self, ctx: TurnContext) -> TurnContext:
-        for stage in PIPELINE_ORDER:
-            await self._run_stage(stage, ctx, self._stages.get(stage, []))
+        """Stages in order. ``after`` always runs — in a ``finally`` — so a turn that
+        raised is still observed (plan Task 4.1); its plugins are guarded: one that
+        raises is recorded and logged, never re-raised, because observability must
+        not break the turn. A ``BaseException`` (cancellation) still propagates."""
+        try:
+            for stage in PIPELINE_ORDER:
+                if stage is Stage.after:
+                    continue
+                await self._run_stage(stage, ctx, self._stages.get(stage, []))
+        finally:
+            await self._run_after(ctx)
         return ctx
+
+    async def _run_after(self, ctx: TurnContext) -> None:
+        for plugin, config in self._stages.get(Stage.after, []):
+            started = time.perf_counter()
+            try:
+                await plugin.run(ctx, config)
+            except Exception as exc:  # noqa: BLE001 — an after plugin must not break the turn
+                log.warning("after plugin %s failed: %s: %s", plugin.id, type(exc).__name__, exc)
+                ctx.record(Stage.after, plugin.id, plugin.version,
+                           (time.perf_counter() - started) * 1000, "error",
+                           error=f"{type(exc).__name__}: {exc}")
+            else:
+                ctx.record(Stage.after, plugin.id, plugin.version, (time.perf_counter() - started) * 1000, "ok")
 
     async def validate(self, stage: Stage, ctx: TurnContext) -> Verdict | None:
         """Run the validators of ``validate_args`` / ``validate_result`` for one tool call.

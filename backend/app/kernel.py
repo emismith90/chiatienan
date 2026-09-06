@@ -22,6 +22,7 @@ from app.plugins.prompt import PhoenixSystemPrompt
 from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
+from kernos.content.traces import StoreTraces
 from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
@@ -29,7 +30,7 @@ from kernos.kernel import Pipeline
 from kernos.packs import PackRegistry
 from kernos.plugins import (
     Cards as KernelCards, ImageLookback, MemoryLoad, ModelPassthrough, PackRender, RecentHistory,
-    Rollover, SectionsMessage, TemplatePrompt,
+    Rollover, SectionsMessage, TemplatePrompt, Trace,
 )
 from kernos.registry import Registry
 
@@ -41,6 +42,7 @@ class Kernel:
         from app.packs import host_packs
         self.packs = PackRegistry()
         self.register_packs(*host_packs())
+        self.store = ContentStore(db.session)
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
@@ -49,9 +51,9 @@ class Kernel:
             PhoenixSystemPrompt(), LegacyRunTurn(), PackRender(self.packs),
             KernelCards(self.adapters, self.packs),
             FabricatedCommit(), UnbackedAmounts(),
+            Trace(StoreTraces(self.store)),
         ])
         self.default_spec = build_default_spec(settings)
-        self.store = ContentStore(db.session)
         self.seed_report = ensure_seeded(
             self.store, business_slug=BUSINESS_SLUG, business_name="Lunch ledger",
             spec=self.default_spec, agent_slug="phoenix", agent_name="Phoenix",

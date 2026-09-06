@@ -135,3 +135,30 @@ def test_outcome_types():
     assert Draft("expense_draft", {"a": 1}).kind == "expense_draft"
     assert Body("x").claimed_by_pack is False
     assert Verdict.passed().ok
+
+
+async def test_after_runs_in_a_finally_and_is_guarded():
+    # a raising context plugin: the error propagates, `after` still ran, its row is recorded
+    after = Rec("t", "after")
+    p = Pipeline(_stages(**{Stage.context: [(Rec("boom", "context", raise_=RuntimeError("x")), {})],
+                          Stage.after: [(after, {})]}))
+    ctx = _ctx()
+    with pytest.raises(RuntimeError):
+        await p.run(ctx)
+    seen = [s for s, _ in ctx.extras["seen"]]
+    assert seen == ["boom", "t"] and ctx.trace[-1]["plugin"] == "t" and ctx.trace[-1]["outcome"] == "ok"
+    # an after plugin that raises is recorded and logged, never re-raised
+    p = Pipeline(_stages(**{Stage.after: [(Rec("bad", "after", raise_=ValueError("nope")), {}),
+                                          (Rec("next", "after"), {})]}))
+    ctx = _ctx()
+    await p.run(ctx)
+    by_plugin = {t["plugin"]: t for t in ctx.trace}
+    assert by_plugin["bad"]["outcome"] == "error" and "ValueError: nope" in by_plugin["bad"]["error"]
+    assert by_plugin["next"]["outcome"] == "ok"           # the second after plugin still ran
+    # a cancellation is not swallowed
+    p = Pipeline(_stages(**{Stage.context: [(Rec("cancel", "context", raise_=__import__("asyncio").CancelledError()), {})],
+                          Stage.after: [(Rec("t", "after"), {})]}))
+    ctx = _ctx()
+    with pytest.raises(__import__("asyncio").CancelledError):
+        await p.run(ctx)
+    assert [s for s, _ in ctx.extras["seen"]] == ["cancel", "t"]

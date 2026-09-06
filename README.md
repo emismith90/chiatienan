@@ -118,6 +118,10 @@ sources with ETags, drafts and publishes versions through the gates (schema,
 money-safety, model probe, reflexivity), binds a room to an agent, and shows what a
 room runs at `GET /api/admin/spaces/{room_id}/resolved`. Rooms nobody binds keep
 running the seeded default, byte for byte.
+Every turn leaves a trace row (`kn_turn_traces`: the plugins that ran, each tool call
+with its arguments and result, a summary) — `GET /api/admin/spaces/{room_id}/turns` and
+`…/turns/{turn_id}`; a turn that raised is traced with its error. Retention is the
+`keep_days` config of the `kernos.after.trace` plugin (30 by default).
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 

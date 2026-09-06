@@ -264,6 +264,18 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
             "pipeline": k.pipeline_for(spec).describe(),
         }
 
+    # ---------------------------------------------------------------- turns
+    @r.get("/spaces/{space_id}/turns")
+    def turns(space_id: str, limit: int = Query(default=50, le=500)):
+        return get_kernel().store.list_traces(space_id, limit=limit)
+
+    @r.get("/spaces/{space_id}/turns/{ref}")
+    def turn(space_id: str, ref: str):
+        row = get_kernel().store.get_trace(space_id, ref)
+        if row is None:
+            raise HTTPException(404, f"no trace {ref!r} in space {space_id!r}")
+        return row
+
     # ------------------------------------------------------------ catalogue
     @r.get("/catalogue/models")
     def models():
