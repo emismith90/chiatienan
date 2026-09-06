@@ -29,7 +29,7 @@ ALLOWED = {
 }
 
 #: The one documented lazy import of a dev-only package (review Phase 2 F9, Phase 3 F6).
-EXCEPTIONS = {("app/modelprobe.py", "bench")}
+EXCEPTIONS = {("app/modelprobe.py", "bench"), ("app/evalhost.py", "bench")}
 
 
 def _imports(path: Path) -> set[str]:

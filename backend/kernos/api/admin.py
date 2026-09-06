@@ -326,6 +326,27 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
     def put_rubric(business_id: int, slug: str, body: RubricIn, x_actor: str | None = Header(default=None)):
         return _wrap(lambda: get_kernel().store.put_rubric(business_id, slug, body.body, actor=_actor(x_actor)))
 
+    @r.post("/profiles/{profile_id}/versions/{version}/eval", status_code=202)
+    def start_eval(profile_id: int, version: int, suite: str = Query(...), x_actor: str | None = Header(default=None)):
+        """Create the run and spawn the job; poll `GET /eval/runs/{id}`."""
+        k = get_kernel()
+        start = getattr(k, "start_eval_run", None)
+        if start is None:
+            raise HTTPException(501, "this host cannot run evals")
+
+        def go():
+            v = k.store.find_version(profile_id, version)
+            return start(suite, v["id"], actor=_actor(x_actor))
+        return _wrap(go)
+
+    @r.post("/businesses/{business_id}/eval/import")
+    def import_suite(business_id: int, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+        importer = getattr(k, "import_eval_suite", None)
+        if importer is None:
+            raise HTTPException(501, "this host has no eval suite to import")
+        return _wrap(lambda: importer(business_id, actor=_actor(x_actor)))
+
     @r.get("/eval/graders")
     def eval_graders():
         k = get_kernel()

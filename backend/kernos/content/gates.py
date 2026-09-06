@@ -73,7 +73,7 @@ def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec |
 class PublishGates:
     def __init__(self, registry: Registry, catalogue: Any, *, clock: Any | None = None,
                  probe_max_age_days: int = 30, money_tools: frozenset[str] = MONEY_TOOLS,
-                 eval_gate: Callable[[ProfileSpec], list[GateFailure]] | None = None) -> None:
+                 eval_gate: Callable[..., list[GateFailure]] | None = None) -> None:
         self._registry = registry
         self._catalogue = catalogue          # anything with get_model(model_id) -> dict | None
         self._clock = clock or _UtcClock()
@@ -83,7 +83,8 @@ class PublishGates:
 
     def check(self, spec: ProfileSpec | dict, *, previous: ProfileSpec | dict | None,
               actor: str, override_reason: str | None = None,
-              skip_probe: bool = False) -> list[GateFailure]:
+              skip_probe: bool = False, skip_eval: bool = False,
+              profile_id: int | None = None, version_id: int | None = None) -> list[GateFailure]:
         failures: list[GateFailure] = []
         # 1 — schema
         try:
@@ -122,9 +123,10 @@ class PublishGates:
                 failure = self._probe_failure(model_id)
                 if failure:
                     failures.append(GateFailure("probe", f"models.{key}={model_id!r}: {failure}"))
-        # 4 — eval (Phase 4 hook)
-        if self._eval_gate is not None:
-            failures.extend(self._eval_gate(parsed))
+        # 4 — eval: `eval_gate(spec, *, profile_id, version_id)` (kernos.eval.gate); a
+        # rollback skips it — the version passed when it was published (review F8)
+        if self._eval_gate is not None and not skip_eval:
+            failures.extend(self._eval_gate(parsed, profile_id=profile_id, version_id=version_id))
         # 5 — reflexivity
         if actor.startswith("agent:"):
             changed = blacklisted_changes(previous, parsed)

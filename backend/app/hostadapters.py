@@ -99,6 +99,17 @@ class RoomCards:
             return drafts.update_draft(s, card_id, _room(space_id), {"status": "cancelled"})
 
 
+class RoomPrincipals:
+    def list(self, space_id) -> list[dict]:
+        from app import roster
+        with self._db.session() as s:
+            return [{"id": m.id, "name": m.display_name, "handle": m.nickname}
+                    for m in roster.list_members(s, _room(space_id), include_inactive=True)]
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+
 class ChatCompletion:
     """The summariser, looked up on ``app.chat`` at call time so the tests that
     patch ``app.chat.summarize_messages`` keep intercepting it."""
@@ -116,5 +127,5 @@ def build_adapters(db: Database) -> HostAdapters:
     return HostAdapters(
         history=RoomHistory(db), memory=RoomMemory(), messages=RoomMessages(db),
         clock=IctClock(), knowledge=RoomKnowledge(db), cards=RoomCards(db),
-        completion=ChatCompletion(),
+        completion=ChatCompletion(), principals=RoomPrincipals(db),
     )

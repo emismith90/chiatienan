@@ -122,6 +122,12 @@ Every turn leaves a trace row (`kn_turn_traces`: the plugins that ran, each tool
 with its arguments and result, a summary) — `GET /api/admin/spaces/{room_id}/turns` and
 `…/turns/{turn_id}`; a turn that raised is traced with its error. Retention is the
 `keep_days` config of the `kernos.after.trace` plugin (30 by default).
+Eval is content too: cases, suites, rubrics and runs under `/api/admin/businesses/{id}/eval/*`
+and `/api/admin/eval/runs`; `POST …/businesses/{id}/eval/import` loads the benchmark's
+`typical` corpus as the `lunch-typical` suite, `POST …/profiles/{id}/versions/{v}/eval?suite=`
+starts a run as a background job (`python -m app.evalhost run …`), and publishing a
+version whose spec names `eval.suites` requires a completed run of the same content that
+passed every blocking grader (`backend/kernos/eval/`, `backend/app/evalhost.py`).
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 

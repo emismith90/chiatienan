@@ -1055,33 +1055,33 @@ by `register_packs`. Identity: 0 changed on both stored runs (skipped 42/57 with
 prod corpus, 0/15 with it). A suite with runs cannot be deleted (`Conflict`): runs are
 gate evidence. 1135 tests, 1 skipped; sidecar 69.
 
-### Task 4.3 (PR 4c): the lunch suite as content; gate 4; eval_capture
+### Task 4.3 (PR 4c): the lunch suite as content; gate 4; eval_capture — done
 
 **Files:** `app/evalhost.py` (new; layering exception), `kernos/content/gates.py`,
 `kernos/eval/gate.py` (new), `kernos/plugins/after.py` (`eval_capture`), `app/kernel.py`,
 `kernos/api/admin.py`, `tests/test_layering.py` (exception), tests.
 
-- [ ] `app/evalworld.py`: `frozen_clock`, the member seeding and `_World` move here from
+- [x] `app/evalworld.py`: `frozen_clock`, the member seeding and `_World` move here from
       `bench.world`, which imports them (F5) — runs need no `bench`.
-- [ ] `app/evalhost.py`: `import_lunch_suite(store, business_id)` (decision 7; lazy
+- [x] `app/evalhost.py`: `import_lunch_suite(store, business_id)` (decision 7; lazy
       `bench.corpus`, the documented exception), `world_factory(case)` and
       `run_turn(case, world, spec)` for the `Runner` — the candidate pipeline driven
       directly through `Kernel(db, resolver=StaticResolver(spec))`, a fresh DB per case,
       never `run_bot_turn` or `_agent_lock` (F3) — `judge_for(spec)` from
       `Settings.bench_judge_model` (F13); a `__main__` that runs one suite against one
       version as a **job** and writes the run.
-- [ ] `POST /businesses/{id}/eval/import` → the importer; `POST /profiles/{id}/versions/{v}/eval?suite=`
+- [x] `POST /businesses/{id}/eval/import` → the importer; `POST /profiles/{id}/versions/{v}/eval?suite=`
       creates the run row (`status: running`), spawns `python -m app.evalhost …` and returns
       202 with the run id; `GET /eval/runs/{id}` reads it.
-- [ ] `kernos.eval.gate.eval_gate(store, spec, *, profile_id, version_id)` per decisions 5
+- [x] `kernos.eval.gate.eval_gate(store, spec, *, profile_id, version_id)` per decisions 5
       and F2/F8/F10: for each named suite the latest run with the candidate's `spec_sha`,
       `status: done`; every blocking grader `graded ≥ 1`, `grader_raised == 0`, rate ≥
       `eval.gate[name]` (default 1.0); `skip_eval` for rollback. Wired into `PublishGates`
       by the kernel.
-- [ ] `kernos.after.eval_capture` per decision 6 as amended by F9 (money tools only,
+- [x] `kernos.after.eval_capture` per decision 6 as amended by F9 (money tools only,
       member snapshot keyed `m{id}` without bank fields, ids→keys, `keep_days`); registered,
       opt-in.
-- [ ] Proof: importing yields one `kn_eval_cases` row per `typical` case (23 without the
+- [x] Proof: importing yields one `kn_eval_cases` row per `typical` case (23 without the
       gitignored prod corpus, 37 with) with the golden ids preserved, images kept, and a
       suite naming three graders; importing twice changes nothing; a profile that names
       the suite cannot publish without a run; a run with a fake engine that fails one
@@ -1089,18 +1089,45 @@ gate evidence. 1135 tests, 1 skipped; sidecar 69.
       raises on every case blocks; a prose failure alone does not block; rollback skips
       the gate; a captured turn appears as a `review: true` case with keys, not ids, and
       the Runner skips it; full suite unedited.
-- [ ] Commit: `kernos.eval: lunch suite imported as content, gate 4 over stored runs, eval_capture`
+- [x] Commit: `kernos.eval: lunch suite imported as content, gate 4 over stored runs, eval_capture`
+
+Notes: `ToolSelection` resolves the expectation's member keys against `world.ids` itself
+when the kernel runner hands it a world (`bench.run` pre-resolves and passes none) —
+the runner would otherwise have compared keys to ids. The lunch pack's `money_tools`
+(what capture records) excludes the scaffolding lookups `find_members`, `resolve_period`,
+`resolve_date`. The eval `run_turn` drives the candidate pipeline over the world's own
+database; a case's `history` string (prod captures) is not replayed through the room —
+the committed corpora carry none, and a captured case's history is kept for the human
+who adds its world. `Settings.bench_judge_model` is unset here, so prose is *not graded*
+in every run this environment can make. 1141 tests, 1 skipped; sidecar 69.
 
 ### Task 4.4: Docs and state of play
 
-- [ ] Design §5.5/§8.6/§9.4 aligned with decisions 1–7; README (traces API, eval API);
-      plan state of play.
+- [x] Design §5.5/§8.6/§9.4 aligned with decisions 1–7 as amended by the gate; README
+      (traces API, eval API); plan state of play.
 
 **Proof for the phase:** `bench.regrade` of the stored `pi-typical-r3.json` through the
 grader plugins yields identical verdicts (0 changed; no model calls); a captured turn
 appears as a `review: true` case; the seeded pipeline traces every turn.
 
-**Phase 4 — state of play:** _(filled as tasks complete)_
+**Phase 4 — state of play (2026-09-06):** Tasks 4.1–4.4 done as three commits (6731f84 4a,
+fbff454 4b, 4c). Every turn leaves a `kn_turn_traces` row (plugins, tool calls with args
+and results, summary) written from an `after` stage the pipeline runs in a `finally`;
+`GET /api/admin/spaces/{id}/turns[/{ref}]`. `kernos.eval` holds cases, tri-state
+verdicts, graders with a declared `blocking`, a registry with per-suite names, the run
+identity (`spec_sha` = stored spec minus `eval`), and a runner that rebuilds one world
+per case, isolates grader failures and skips review cases; the business-neutral
+graders take their lunch knowledge by injection and the lunch pack registers all three
+under its own ids; `bench.graders` is a shim and regrading both stored runs changes 0
+verdicts. Four eval tables with store CRUD and admin routes; `app/evalhost.py` imports
+the `typical` corpus as the `lunch-typical` suite (23 cases here, 37 with the gitignored
+prod file), runs a suite as a **job** (`python -m app.evalhost run …`, spawned by
+`POST …/versions/{v}/eval` → 202), and gate 4 reads the latest completed run matching
+the candidate's sha, refusing on a blocking grader that graded nothing, raised, or fell
+below `eval.gate`; rollback skips it. `kernos.after.eval_capture` (opt-in) stores a turn's
+money-tool calls as a keyed `review: true` case with a bank-free member snapshot. The
+Dockerfile now ships `kernos`, `ledger_core`, `packs`. Baseline 986 → 1141 tests (+1
+skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 
 ## Phase 5 — Data plane
 

@@ -324,7 +324,8 @@ class ContentStore:
             return _row(v)
 
     def publish(self, version_id: int, *, actor: str, gates=None, override_reason: str | None = None,
-                bypass_gates: bool = False, skip_probe: bool = False, note: str | None = None) -> dict:
+                bypass_gates: bool = False, skip_probe: bool = False, skip_eval: bool = False,
+                note: str | None = None) -> dict:
         """Make ``version_id`` what its profile runs.
 
         ``bypass_gates`` exists for boot seeding only — the seeded profile *is* today's
@@ -341,7 +342,8 @@ class ContentStore:
                 if gates is None:
                     raise Invalid("publish needs gates (or bypass_gates for boot seeding)")
                 failures = gates.check(v.spec, previous=previous.spec if previous else None, actor=actor,
-                                       override_reason=override_reason, skip_probe=skip_probe)
+                                       override_reason=override_reason, skip_probe=skip_probe,
+                                       skip_eval=skip_eval, profile_id=p.id, version_id=v.id)
                 if failures:
                     raise GateError(f.as_tuple() for f in failures)
             if previous is not None and previous.id != v.id:
@@ -363,13 +365,14 @@ class ContentStore:
 
     def rollback(self, profile_id: int, version: int, *, actor: str, gates,
                  override_reason: str | None = None) -> dict:
-        """Republish a superseded version. Gate 3 is skipped: the version passed its
-        probe when it was published, and rollback is the incident path (finding 7)."""
+        """Republish a superseded version. Gates 3 and 4 are skipped: the version passed
+        its probe and its eval when it was published, and rollback is the incident path
+        (finding 7; Phase 4 review F8)."""
         target = self.find_version(profile_id, version)
         if target["status"] != "superseded":
             raise Conflict(f"version {version} is {target['status']}; only a superseded version can be rolled back to")
         return self.publish(target["id"], actor=actor, gates=gates, override_reason=override_reason,
-                            skip_probe=True, note=f"rollback by {actor}")
+                            skip_probe=True, skip_eval=True, note=f"rollback by {actor}")
 
     def retire(self, version_id: int, *, actor: str) -> dict:
         with self._session() as s:
@@ -538,6 +541,17 @@ class ContentStore:
                 raise NotFound(f"no eval case {slug!r}")
             s.delete(row)
             self.log(s, actor, "delete", "eval_case", f"{business_id}/{slug}")
+
+    def prune_cases(self, business_id: int, *, source: str, review: bool, older_than: str) -> int:
+        """Delete cases of ``source``/``review`` updated before ``older_than`` (ISO). Retention
+        for captured, unreviewed cases (review F9)."""
+        with self._session() as s:
+            rows = s.scalars(select(m.EvalCaseRow).where(
+                m.EvalCaseRow.business_id == business_id, m.EvalCaseRow.source == source,
+                m.EvalCaseRow.review.is_(review), m.EvalCaseRow.updated_at < older_than)).all()
+            for row in rows:
+                s.delete(row)
+            return len(rows)
 
     def put_suite(self, business_id: int, slug: str, *, actor: str, case_slugs: list, graders: list,
                   judge: dict | None = None, repeat: int = 1) -> dict:

@@ -80,7 +80,10 @@ def payment_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
 class LunchLedgerPack(BasePack):
     id, version, handles_money = "lunch_ledger", "1", True
     cancel_tools = frozenset({"cancel_draft"})
-    money_tools = MONEY_TOOLS
+    #: The tools whose call *is* the turn's money answer — what eval capture records as
+    #: the expectation. The lookups a model makes on its way (`find_members`,
+    #: `resolve_period`, `resolve_date`) are scaffolding and must not become mandatory.
+    money_tools = MONEY_TOOLS - {"find_members", "resolve_period", "resolve_date"}
 
     def __init__(self, *, qr: Callable[[Any, int, str], str],
                  place_resolver: Callable[[Any, Any, str], tuple[dict | None, bool]] | None = None) -> None:

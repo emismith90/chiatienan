@@ -172,3 +172,11 @@ class InMemoryTraces:
             if r["space_id"] == space_id and (r["turn_id"] == str(ref) or str(r["id"]) == str(ref)):
                 return r
         return None
+
+
+class InMemoryPrincipals:
+    def __init__(self, by_space: dict[str, list[dict]] | None = None) -> None:
+        self.by_space = dict(by_space or {})
+
+    def list(self, space_id):
+        return list(self.by_space.get(space_id, []))

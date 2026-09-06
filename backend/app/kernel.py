@@ -23,7 +23,7 @@ from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
 from kernos.content.traces import StoreTraces
-from kernos.eval import GraderRegistry
+from kernos.eval import GraderRegistry, eval_gate
 from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
@@ -31,7 +31,7 @@ from kernos.kernel import Pipeline
 from kernos.packs import PackRegistry
 from kernos.plugins import (
     Cards as KernelCards, ImageLookback, MemoryLoad, ModelPassthrough, PackRender, RecentHistory,
-    Rollover, SectionsMessage, TemplatePrompt, Trace,
+    Rollover, SectionsMessage, TemplatePrompt, Trace, EvalCapture,
 )
 from kernos.registry import Registry
 
@@ -54,13 +54,17 @@ class Kernel:
             KernelCards(self.adapters, self.packs),
             FabricatedCommit(), UnbackedAmounts(),
             Trace(StoreTraces(self.store)),
+            EvalCapture(self.capture_case, self.packs, self.adapters),
         ])
         self.default_spec = build_default_spec(settings)
         self.seed_report = ensure_seeded(
             self.store, business_slug=BUSINESS_SLUG, business_name="Lunch ledger",
             spec=self.default_spec, agent_slug="phoenix", agent_name="Phoenix",
             sources=default_sources(), catalogue_rows=catalogue_rows(settings))
-        self.gates = PublishGates(self.registry, self.store, clock=self.adapters.clock)
+        self.gates = PublishGates(
+            self.registry, self.store, clock=self.adapters.clock,
+            eval_gate=lambda spec, *, profile_id, version_id: eval_gate(
+                self.store, spec, profile_id=profile_id, version_id=version_id))
         self.resolver: Resolver = resolver or DbResolver(
             self.store, default_business_slug=BUSINESS_SLUG,
             runtime=self.default_spec.runtime, fallback=self.default_spec)
@@ -80,6 +84,48 @@ class Kernel:
             self.graders.register_all(pack.graders())
         drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
         ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
+
+    def business_for(self, space_id: int | str) -> int:
+        """The business a space belongs to: its bound agent's, else the default's."""
+        info = self.resolver.describe(str(space_id)) if hasattr(self.resolver, "describe") else {}
+        agent = info.get("agent") if info else None
+        if agent is not None:
+            return agent["business_id"]
+        return self.seed_report["business_id"]
+
+    def capture_case(self, space_id, case: dict, keep_days: int) -> None:
+        """`kernos.after.eval_capture`'s sink: a `review: true` case in the space's
+        business, with retention for unreviewed captures."""
+        from datetime import datetime, timedelta, timezone
+        bid = self.business_for(space_id)
+        self.store.put_case(bid, case["id"], case, actor="kernos:eval_capture", tags=case.get("tags") or ["captured"],
+                            source="captured", review=True)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)).isoformat(timespec="seconds")
+        self.store.prune_cases(bid, source="captured", review=True, older_than=cutoff)
+
+    def import_eval_suite(self, business_id: int, *, actor: str) -> dict:
+        from app.evalhost import import_lunch_suite
+        return import_lunch_suite(self.store, business_id, actor=actor)
+
+    def start_eval_run(self, suite_slug: str, version_id: int, *, actor: str) -> dict:
+        """Create the run row and spawn `python -m app.evalhost run …` to fill it — a
+        job, never a request the serving process waits on (Phase 4 review F3)."""
+        import subprocess
+        import sys
+        from kernos.eval import spec_sha
+        version = self.store.get_version(version_id)
+        business_id = self.store.get_profile(version["profile_id"])["business_id"]
+        suite = self.store.get_suite(business_id, suite_slug)
+        run = self.store.create_run(suite["id"], version_id, spec_sha(ProfileSpec.model_validate(version["spec"])),
+                                    actor=actor, judge_model=(suite.get("judge") or {}).get("model"))
+        self.spawn([sys.executable, "-m", "app.evalhost", "run", "--suite", suite_slug,
+                    "--version", str(version_id), "--run-id", str(run["id"])])
+        return run
+
+    @staticmethod
+    def spawn(argv: list[str]) -> None:
+        import subprocess
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL, start_new_session=True)
 
     def resolve(self, space_id: int | str) -> ProfileSpec:
         return self.resolver.resolve(str(space_id))

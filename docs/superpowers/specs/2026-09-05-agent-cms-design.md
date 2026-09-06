@@ -610,6 +610,18 @@ only sequences steps and freezes the clock. `eval_capture` (stage 10) writes rea
 turns as `source: captured, review: true` cases, which is how the prod corpus was
 meant to be built and never was (the Pi plan, Task 7 Step 6).
 
+As built (Phase 4): `kn_eval_cases` / `kn_eval_suites` / `kn_rubrics` / `kn_eval_runs`;
+a suite's graders are `[{plugin, name?, config?}]` and a grader declares `blocking`
+(`kernos.eval.Grader`). The business-neutral graders (`ToolSelection`, `Prose`) are
+kernel classes whose business knowledge is **injected** — compared argument names, a
+per-tool argument-equivalence hook, the unbacked-amount checker, the "the room saw a
+card" classifier — and a pack registers them under its own ids (`ToolPack.graders()`);
+`ledger_state` lives in the lunch pack. A run is a **job** in its own process (a fresh
+database and world per case, the clock frozen to the case's day, the candidate pipeline
+driven directly), keyed by `spec_sha` = the stored spec minus `eval`. Captured cases
+name people by key against a bank-free member snapshot and record only the pack's
+`money_tools` calls; they are `review: true` and a runner never grades them.
+
 ## 6. Agents and sub-agents
 
 Pi has no sub-agent facility (`docs/usage.md`, confirmed by the inventory), and the
@@ -798,8 +810,12 @@ Two loops, both bounded:
 
 The turn **trace** (§4.2) is the log: which plugins ran, every validator verdict, tool
 calls with args and results, model, tokens, cost, elapsed, `capped`, sub-agent spans.
-It is stored per turn (`turn_traces` table, retention configurable) and exposed both to
-humans (`GET /api/admin/rooms/{id}/turns/{turn_id}`) and to agents (`cms_get_turn_trace`).
+It is stored per turn (`kn_turn_traces`: summary, the tool calls with args and results,
+the plugin rows; `keep_days` retention) by the `kernos.after.trace` plugin, from an
+`after` stage the pipeline runs in a `finally` so a failed turn is traced too, and
+exposed both to humans (`GET /api/admin/spaces/{id}/turns/{ref}` — a row id or a turn id,
+the latter null when the turn never reached the engine) and to agents
+(`cms_get_turn_trace`).
 The existing one-line `[agent] turn … done` log stays as the human-readable summary;
 `cms_log` lets an agent add structured lines of its own. Nothing here is a second
 observability stack: the trace is what eval capture, proposals and the admin timeline
@@ -832,9 +848,12 @@ name header until that changes. Publishing a version runs, in order:
    `probe` against the enabled packs' real schemas within N days. The probe is a host-
    or pack-provided `ModelProbe` (chiatienan's wraps `bench.probe_models`); the kernel
    only stores and checks the result.
-4. **Eval gate** — the suites named in `spec.eval.suites` run against the draft;
-   publish is refused if a money grader (`tool_selection`, `ledger_state`) drops
-   below `spec.eval.gate`. Prose graders report, never block.
+4. **Eval gate** — for each suite named in `spec.eval.suites` there must be a
+   **completed run** whose `spec_sha` equals the candidate's (the gate reads stored
+   runs; it never runs a model inside a publish). Publish is refused when a
+   `blocking` grader graded no case, raised on any case, or passed fewer than
+   `spec.eval.gate[name]` (default 1.0) of the graded ones. Non-blocking graders
+   (prose) report, never block. Rollback skips this gate, as it skips the probe.
 5. **Reflexivity** — an agent-initiated publish is refused if the diff touches any
    gate threshold, `eval.*`, any `severity: block` rule, any rule tagged `money`, the
    plugin blacklist, `builtin_tools`, `models`, `tool_packs` or `pipeline` (§0.3); those

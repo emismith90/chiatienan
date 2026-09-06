@@ -93,6 +93,10 @@ DEFAULT_TOOL_SELECTION = {
     "count_only": ["guests"],
     "sender_defaulted": ["payer", "from"],
     "equivalence_keys": ["adjustments", "items"],
+    # expectation args whose values are member **keys** (`"a1"`), resolved against the
+    # world's key→id map before comparing (`bench.corpus.resolve_args` did this)
+    "member_args": ["payer", "from", "to"],
+    "member_list_args": ["participants"],
 }
 
 
@@ -118,7 +122,34 @@ class ToolSelection:
         self.count_only = tuple(cfg["count_only"])
         self.sender_defaulted = tuple(cfg["sender_defaulted"])
         self.equivalence_keys = tuple(cfg["equivalence_keys"])
+        self.member_args = tuple(cfg["member_args"])
+        self.member_list_args = tuple(cfg["member_list_args"])
         self._equivalence = dict(equivalence or {})
+
+    def resolve_args(self, case, ids: dict) -> dict:
+        """``expect["args"]`` with member keys turned into ids. Raises ``KeyError`` on a
+        key the world does not contain, rather than grading against a wrong id."""
+        args = (getattr(case, "expect", None) or {}).get("args") or {}
+
+        def member_id(key):
+            if key not in ids:
+                raise KeyError(f"{case.id}: expectation names unknown member {key!r}")
+            return ids[key]
+
+        resolved = {}
+        for tool_name, tool_args in args.items():
+            out = dict(tool_args)
+            for name in self.member_args:
+                if name in out:
+                    out[name] = member_id(out[name])
+            for name in self.member_list_args:
+                if name in out:
+                    out[name] = [member_id(k) for k in out[name]]
+            for name in self.member_amount_lists:
+                if name in out:
+                    out[name] = [dict(i, member=member_id(i["member"])) for i in out[name]]
+            resolved[tool_name] = out
+        return resolved
 
     def _args_differ(self, key: str, want, got) -> str | None:
         """Return a human reason when `got` fails to match `want`, else None."""
@@ -143,12 +174,19 @@ class ToolSelection:
 
 
     def grade(self, case, record: dict, world=None) -> Verdict:
+        """With a ``world`` (the kernel runner) the expectation's member keys are
+        resolved against ``world.ids`` first; without one (``bench.run``) the caller
+        already did."""
         expected = list((case.expect or {}).get("tools") or [])
         if not expected:
             return Verdict(None, "no tool expectation for this case")
 
         if record.get("error"):
             return Verdict(False, f"turn errored: {record['error']}")
+
+        expect_args = ((case.expect or {}).get("args") or {})
+        if world is not None and getattr(world, "ids", None):
+            expect_args = self.resolve_args(case, world.ids)
 
         called = [c.get("name") for c in record.get("tools") or []]
         missing = [name for name in expected if name not in called]
@@ -166,7 +204,7 @@ class ToolSelection:
             return Verdict(False, f"expected {missing} to be called, got {called or 'no tools'}")
 
         problems = []
-        for tool_name, want_args in ((case.expect or {}).get("args") or {}).items():
+        for tool_name, want_args in expect_args.items():
             call = _last_call(record, tool_name)
             if call is None:
                 problems.append(f"{tool_name} was never called")

@@ -85,6 +85,16 @@ class CardStore(Protocol):
 
 
 @runtime_checkable
+class PrincipalDirectory(Protocol):
+    """Who is in a space (display only — never bank or auth fields): eval capture
+    snapshots them so a captured case names people by key, not by id (review F9)."""
+
+    def list(self, space_id: str) -> list[dict]:
+        """``[{id, name, handle}]``, inactive members included."""
+        ...
+
+
+@runtime_checkable
 class TraceStore(Protocol):
     """Where the turn trace goes (design §8.6; plan Task 4.1). Rows are keyed by their
     own id; ``turn_id`` may be ``None`` when the turn failed before the engine ran."""
@@ -126,3 +136,4 @@ class HostAdapters:
     knowledge: KnowledgeSource | None = None
     cards: CardStore | None = None
     completion: Completion | None = None
+    principals: PrincipalDirectory | None = None

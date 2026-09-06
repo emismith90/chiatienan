@@ -100,6 +100,14 @@ def test_gate5_reflexivity_blocks_agents_on_blacklisted_paths_only():
     assert blacklisted_changes(prev, prev) == []
 
 
-def test_eval_gate_hook_is_called():
-    g = _gates(eval_gate=lambda spec: [GateFailure("eval", "ledger_state dropped")])
-    assert _names(g.check(_spec(), previous=None, actor="admin")) == ["eval"]
+def test_eval_gate_hook_is_called_with_the_version_and_skipped_on_rollback():
+    seen = {}
+
+    def hook(spec, *, profile_id, version_id):
+        seen.update(profile_id=profile_id, version_id=version_id)
+        return [GateFailure("eval", "ledger_state dropped")]
+
+    g = _gates(eval_gate=hook)
+    assert _names(g.check(_spec(), previous=None, actor="admin", profile_id=3, version_id=9)) == ["eval"]
+    assert seen == {"profile_id": 3, "version_id": 9}
+    assert _names(g.check(_spec(), previous=None, actor="admin", skip_eval=True)) == []
