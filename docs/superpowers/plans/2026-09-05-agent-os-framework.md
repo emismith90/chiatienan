@@ -1240,22 +1240,22 @@ skipped), sidecar 69; golden 9/9. Review findings F1–F13 all landed.
 
 Notes: `kernos.data.schema.check_schema` mirrors `agent_sidecar/schema.js` rule for rule; `DataStore` takes the content store's `log` for audit so a document write and its audit row share one transaction. 1149 tests, 1 skipped.
 
-### Task 5.2 (PR 5b): the generated tools
+### Task 5.2 (PR 5b): the generated tools — done
 
 **Files:** `kernos/data/pack.py` (new), `kernos/content/gates.py` (pack ids), `app/kernel.py`
 (register the pack, pass `packs` to the gates), tests.
 
-- [ ] `CollectionsPack(data_store, business_of)` per decision 2; tool names
+- [x] `CollectionsPack(data_store, business_of)` per decision 2; tool names
       `{slug}_{find,upsert,delete}`; a collection's `description` and `properties` in the
       tool descriptions; `upsert.input_schema.properties.data = collection.schema` (safe
       subset, so the sidecar converts it); `tools(ctx)` never raises — a bad definition is
       logged and skipped (F6); registered after the store, called twice per turn (F8).
-- [ ] Gate 1: `PublishGates(packs=…, tool_names_of=…)`: unknown pack id → `schema` failure
+- [x] Gate 1: `PublishGates(packs=…, tool_names_of=…)`: unknown pack id → `schema` failure
       naming it; an override naming a tool the pack lacks → `schema` failure, for every pack
       whose names are static (`tool_names_of` returns `None` for `collections`).
-- [ ] The kernel passes `reserved` = the union of registered packs' tool names (null
+- [x] The kernel passes `reserved` = the union of registered packs' tool names (null
       context) to `put_collection`.
-- [ ] Proof: with a `rota` collection and a profile enabling `collections`, the manifest
+- [x] Proof: with a `rota` collection and a profile enabling `collections`, the manifest
       the engine receives has exactly the three generated tools after the lunch ones (the
       legacy order first, unknown names appended — the sidecar fixture test uses the
       legacy manifest and never sees them), and the sidecar's own `schema.js` converts that
@@ -1269,16 +1269,29 @@ Notes: `kernos.data.schema.check_schema` mirrors `agent_sidecar/schema.js` rule 
       and the reply is the model's prose (no card); a fake reply that totals two `find`
       rows gets an `unbacked_amounts` verdict in the trace while one quoting a row's value
       does not (F4); full suite unedited; layering green.
-- [ ] Commit: `kernos.data: generated find/upsert/delete tools per collection; gate 1 checks pack ids`
+- [x] Commit: `kernos.data: generated find/upsert/delete tools per collection; gate 1 checks pack ids`
+
+Notes: gate 1 takes `packs` and `tool_names_of`; the kernel's `static_tool_names` builds a pack's names with the null context and returns `None` for `collections`. The end-to-end test converts the generated manifest with `agent_sidecar/schema.js` under node. 1160 tests, 1 skipped; sidecar 69.
 
 ### Task 5.3: Docs and state of play
 
-- [ ] Design §5.3 as built; README (collections API); plan state of play.
+- [x] Design §5.3 as built; README (collections API); plan state of play.
 
 **Proof for the phase:** schema-validated CRUD through the model; no tool computes an
 aggregate, and a derived amount in the reply is caught by `unbacked_amounts`.
 
-**Phase 5 — state of play:** _(filled as tasks complete)_
+**Phase 5 — state of play (2026-09-06):** Tasks 5.1–5.3 done as two commits (5d70bdb 5a, 5b).
+`kernos.data`: collections are audited, live content (a JSON Schema in the sidecar-safe
+six-keyword subset, a required string `key`, `indexed` filter fields; definitions refuse
+agent actors, reserved tool names and schema edits that orphan documents), documents live
+in one table keyed by collection id and space (1,000 per space and collection), and
+`CollectionsPack` generates `{slug}_find/_upsert/_delete` per collection for any profile
+that enables `collections` — schema-validated writes, `find` returning rows in `doc_id`
+order with a `more` flag and never a count; a model-computed total in the reply is
+caught by `unbacked_amounts`. Gate 1 now checks pack ids and static override names.
+Admin routes for definitions and paginated documents. The seeded lunch profile is
+unchanged; the host's knowledge modules stay where they are. Baseline 986 → 1160
+tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
 
 ## Phase 6 — `poker_ledger`
 

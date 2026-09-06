@@ -23,7 +23,7 @@ from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
 from kernos.content.traces import StoreTraces
-from kernos.data import DataStore
+from kernos.data import CollectionsPack, DataStore
 from kernos.eval import GraderRegistry, eval_gate
 from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
@@ -47,6 +47,7 @@ class Kernel:
         self.register_packs(*host_packs())
         self.store = ContentStore(db.session)
         self.data = DataStore(db.session, audit=self.store.log)
+        self.register_packs(CollectionsPack(self.data, self.business_for))
         self.registry = Registry()
         self.registry.register_all([
             Rollover(self.adapters), MemoryLoad(self.adapters), RecentHistory(self.adapters),
@@ -66,7 +67,8 @@ class Kernel:
         self.gates = PublishGates(
             self.registry, self.store, clock=self.adapters.clock,
             eval_gate=lambda spec, *, profile_id, version_id: eval_gate(
-                self.store, spec, profile_id=profile_id, version_id=version_id))
+                self.store, spec, profile_id=profile_id, version_id=version_id),
+            packs=self.packs, tool_names_of=self.static_tool_names)
         self.resolver: Resolver = resolver or DbResolver(
             self.store, default_business_slug=BUSINESS_SLUG,
             runtime=self.default_spec.runtime, fallback=self.default_spec)
@@ -86,6 +88,17 @@ class Kernel:
             self.graders.register_all(pack.graders())
         drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
         ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
+
+    def static_tool_names(self, pack) -> set[str] | None:
+        """A pack's tool names for gate 1, or ``None`` when they depend on the space
+        (`collections`)."""
+        if pack.id == "collections":
+            return None
+        from app.tools import ToolContext
+        try:
+            return set(pack.tools(ToolContext(db=Database("sqlite:///:memory:"), room_id=0)))
+        except Exception:  # noqa: BLE001
+            return None
 
     def reserved_tool_names(self) -> set[str]:
         """Every registered pack's tool names (built with the null context, as the probe

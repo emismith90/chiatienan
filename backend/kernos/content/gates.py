@@ -73,8 +73,11 @@ def blacklisted_changes(previous: ProfileSpec | dict | None, spec: ProfileSpec |
 class PublishGates:
     def __init__(self, registry: Registry, catalogue: Any, *, clock: Any | None = None,
                  probe_max_age_days: int = 30, money_tools: frozenset[str] = MONEY_TOOLS,
-                 eval_gate: Callable[..., list[GateFailure]] | None = None) -> None:
+                 eval_gate: Callable[..., list[GateFailure]] | None = None,
+                 packs: Any | None = None, tool_names_of: Callable[[Any], set | None] | None = None) -> None:
         self._registry = registry
+        self._packs = packs                  # a PackRegistry, or None to skip the pack checks
+        self._tool_names_of = tool_names_of  # pack -> its tool names, or None when they are dynamic
         self._catalogue = catalogue          # anything with get_model(model_id) -> dict | None
         self._clock = clock or _UtcClock()
         self._max_age = timedelta(days=probe_max_age_days)
@@ -102,6 +105,19 @@ class PublishGates:
         for where, body in (("prompt.body", parsed.prompt.body), *((f"prompt.append[{i}]", a) for i, a in enumerate(parsed.prompt.append))):
             for problem in validate_template(body, ALLOWED_VARS):
                 failures.append(GateFailure("schema", f"{where}: {problem}"))
+        if self._packs is not None:
+            for ref in parsed.tool_packs:
+                try:
+                    pack = self._packs.get(ref.pack)
+                except Exception as exc:  # noqa: BLE001 — PackError, reported as a schema failure
+                    failures.append(GateFailure("schema", str(exc)))
+                    continue
+                names = self._tool_names_of(pack) if self._tool_names_of is not None else None
+                if names is not None:
+                    unknown = sorted(set(ref.tools) - set(names))
+                    if unknown:
+                        failures.append(GateFailure(
+                            "schema", f"tool_packs[{ref.pack}].tools names tools the pack does not have: {unknown}"))
         # 2 — money safety
         handles_money = bool(parsed.meta.get("handles_money"))
         if pipeline is not None:

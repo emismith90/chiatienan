@@ -128,6 +128,11 @@ and `/api/admin/eval/runs`; `POST …/businesses/{id}/eval/import` loads the ben
 starts a run as a background job (`python -m app.evalhost run …`), and publishing a
 version whose spec names `eval.suites` requires a completed run of the same content that
 passed every blocking grader (`backend/kernos/eval/`, `backend/app/evalhost.py`).
+Collections are the data plane: `PUT /api/admin/businesses/{id}/collections/{slug}` defines a
+schema-validated document type (JSON Schema in the sidecar-safe subset), documents live per
+room under `/api/admin/spaces/{room_id}/collections/{slug}/documents`, and a profile that
+enables the `collections` pack gets `{slug}_find` / `{slug}_upsert` / `{slug}_delete` tools
+generated from the definition (`backend/kernos/data/`).
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 

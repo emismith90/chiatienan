@@ -568,6 +568,22 @@ Poker's games and buy-ins are pack-owned (§7). A "who brings cards next Friday"
 is a `Collection`. Both are content-visible: the admin API lists a pack's tables
 read-only and a collection's documents read-write.
 
+As built (Phase 5): `kn_collections` (business, slug, name, JSON Schema, `key`, `indexed`)
+and `kn_documents` keyed by collection id and space. A collection's schema must stay in
+the **sidecar-safe subset** — the six keywords `agent_sidecar/schema.js` converts (`type,
+properties, required, items, description, enum`; string enums only) — because the
+generated `upsert` tool's input schema *is* the collection schema and one unsupported
+keyword would break the whole manifest. Definitions are live, audited content (an edit
+changes the generated tools of every profile enabling `collections` in that business,
+outside the profile snapshot and the model probe — accepted, like places); they refuse
+`agent:*` actors, slugs whose generated names collide with a registered pack's tools,
+and schema edits that existing documents no longer satisfy (unless forced). Documents
+are capped at 1,000 per space and collection; `find` filters by equality on `indexed`
+fields, returns rows in `doc_id` order with a `more` flag and never a count; writes are
+immediate (facts, not money) and `delete` returns the row. "Aggregation refused by
+construction" means no tool computes one — a total the model derives in prose is caught
+by the `unbacked_amounts` reply validator like any other invented amount.
+
 ### 5.4 Validation content type — `ValidationRule`
 
 A rule is *a validator plugin + config + scope*, attached to a profile:

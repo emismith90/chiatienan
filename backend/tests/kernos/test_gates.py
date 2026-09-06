@@ -111,3 +111,24 @@ def test_eval_gate_hook_is_called_with_the_version_and_skipped_on_rollback():
     assert _names(g.check(_spec(), previous=None, actor="admin", profile_id=3, version_id=9)) == ["eval"]
     assert seen == {"profile_id": 3, "version_id": 9}
     assert _names(g.check(_spec(), previous=None, actor="admin", skip_eval=True)) == []
+
+
+def test_gate1_pack_ids_and_override_names_when_a_pack_registry_is_given():
+    from kernos.content import ToolPackRef
+    from kernos.packs import BasePack, PackRegistry
+
+    class Static(BasePack):
+        id = "static"
+
+    class Dynamic(BasePack):
+        id = "dynamic"
+
+    packs = PackRegistry()
+    packs.register_all([Static(), Dynamic()])
+    names = lambda pack: {"a_tool"} if pack.id == "static" else None
+    g = _gates(packs=packs, tool_names_of=names)
+    assert _names(g.check(_spec(tool_packs=[ToolPackRef(pack="nope")]), previous=None, actor="admin")) == ["schema"]
+    assert _names(g.check(_spec(tool_packs=[ToolPackRef(pack="static", tools={"zzz": {}})]), previous=None, actor="admin")) == ["schema"]
+    assert g.check(_spec(tool_packs=[ToolPackRef(pack="static", tools={"a_tool": {}}),
+                                     ToolPackRef(pack="dynamic", tools={"anything": {}})]), previous=None, actor="admin") == []
+    assert _gates().check(_spec(tool_packs=[ToolPackRef(pack="nope")]), previous=None, actor="admin") == []   # no registry: unchecked
