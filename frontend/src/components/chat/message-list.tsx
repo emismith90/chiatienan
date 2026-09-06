@@ -1,5 +1,6 @@
 "use client";
 import { BotMessage } from "./bot-message";
+import { DraftCard } from "./draft-card";
 import { ExpenseDraftCard } from "./expense-draft-card";
 import { MemoCard } from "./memo-card";
 import { PaymentDraftCard } from "./payment-draft-card";
@@ -104,7 +105,7 @@ export function MessageList({
   return (
     <div className="flex flex-col gap-4">
       {messages.map((m) => {
-        const turnId = (m.kind === "expense_draft" || m.kind === "payment_draft") ? m.attachments?.turn_id : undefined;
+        const turnId = m.kind?.endsWith("_draft") ? m.attachments?.turn_id : undefined;
         const turnSteps = turnId ? timelines?.[turnId] : undefined;
         return m.kind === "context_reset" ? (
           <div key={m.id} className="flex justify-center py-1">
@@ -134,6 +135,17 @@ export function MessageList({
               Phoenix
             </span>
             <MemoCard message={m} roomId={roomId} />
+          </div>
+        ) : m.kind?.endsWith("_draft") ? (
+          // Any other registered draft kind (a poker `game_draft`, …) gets the
+          // generic card, so it can be read and confirmed at all — before this it
+          // fell through to HumanMessage and rendered as a blank bubble.
+          <div key={m.id} className="flex flex-col items-start">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
+              Phoenix
+            </span>
+            {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
+            <DraftCard message={m} roomId={roomId} />
           </div>
         ) : m.kind === "bot" ? (
           <div key={m.id} className="flex flex-col items-start">

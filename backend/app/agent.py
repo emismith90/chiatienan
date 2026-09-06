@@ -5,27 +5,33 @@ every tool call**. :mod:`app.chat` renders the bot's reply from those structured
 results (never from LLM-transcribed numbers), so a ``settle_period`` payload's
 amounts and QR URLs reach the user exactly as the tool computed them (design D3).
 
-**This module is a shim, deliberately.** It builds a command, forwards events,
-executes tools, and hydrates a dataclass. Everything about how pi behaves — model
-resolution, event shapes, turn caps, answer assembly, narration stripping, error
-formatting — lives in ``agent_sidecar/`` (design §3.1). If a change to this file
-needs to know something about pi, it belongs in ``turn.js``.
+**This module is a shim, deliberately.** It builds an :class:`EngineSpec`, hands
+the turn to :class:`kernos.engine.pi.PiEngine`, executes tools when asked, and
+logs one line. Everything about how pi behaves — model resolution, event shapes,
+turn caps, answer assembly, narration stripping, error formatting — lives in
+``agent_sidecar/`` (Pi design §3.1); everything about the wire lives in
+``kernos.engine``.
 
-``run_turn``'s signature and ``TurnResult``'s shape are **frozen**: 14
+``run_turn``'s signature and ``TurnResult``'s shape are **frozen**: 18
 ``monkeypatch.setattr`` sites across 4 test files depend on them, and
-``chat.py:503`` is the only production caller.
+``chat.py`` is the only production caller. The kernos pipeline reaches this
+function through ``ToolContext.engine_spec`` / ``system_override`` /
+``message_override`` (plan Task 1.4) — the one argument every fake ignores.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import replace
 from pathlib import Path
 
 from app.config import settings
 from app.prompt import build_system_prompt
 from app.tools import ToolContext, build_tools, tool_manifest
+from kernos.engine import EngineSpec, ToolInvocation, TurnResult  # noqa: F401  (re-exported)
+from kernos.engine.base import merge_sub_invocations
 
 logger = logging.getLogger("chiatienan")
 
@@ -37,74 +43,20 @@ _SKILLS_DIR = Path(__file__).resolve().parent / "agent_skills" / "skills"
 _RULES_DIR = Path(__file__).resolve().parent / "agent_skills" / "rules"
 
 
-@dataclass
-class ToolInvocation:
-    name: str
-    args: dict | None
-    result: object
-
-
-@dataclass
-class TurnResult:
-    final_text: str = ""
-    tools: list[ToolInvocation] = field(default_factory=list)
-    error: str | None = None
-    turn_id: str | None = None
-    #: The turn hit ``max_seconds`` or ``max_tools`` and was cut short. **Not an
-    #: error** — a cap keeps whatever was accumulated (see `turn.js:runTurn`) — but
-    #: the caller has to know, because a cap that lands before the model has
-    #: written anything leaves ``final_text`` empty and is indistinguishable from a
-    #: provider returning nothing. Production, 2026-08-14 room 3: "ăn gì ngon ngon
-    #: đi mày" ran `suggest_lunch` and was cut at 120.6s with 0 characters, and the
-    #: room got the same bare "(no response)" as a genuinely empty completion 100
-    #: minutes earlier. The same question answered in 69.0s / 344ch just before and
-    #: 79.5s / 602ch just after, so it was a timeout, not a failure — and the room
-    #: could not tell.
-    capped: bool = False
-
-    def last_result(self, name: str) -> dict | None:
-        """Most-recent successful (``ok``) result dict for a given tool name."""
-        for inv in reversed(self.tools):
-            if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok"):
-                return inv.result
-        return None
-
-    def all_results(self, name: str) -> list[dict]:
-        """All successful (``ok``) result dicts for a tool name, in call order."""
-        return [inv.result for inv in self.tools
-                if inv.name == name and isinstance(inv.result, dict) and inv.result.get("ok")]
-
-
 def _render_prompt(user_text: str, *, sender_name: str | None = None,
                    memory: str | None = None, history: str | None = None,
                    image_count: int = 0) -> str:
-    """Assemble the turn's user message.
+    """Assemble the turn's user message — see :func:`kernos.plugins.render_sections`,
+    which this delegates to with the default (Vietnamese) section headers. Kept
+    here because the pipeline's ``app.run.legacy`` seam and the tests call it by
+    this name; ``sender_name`` is accepted for signature compatibility."""
+    from kernos.plugins import render_sections
 
-    ``image_count`` is announced in the text because the images themselves ride on
-    the message, invisible to the prompt: in production the bill was attached and
-    the model still asked for the total that was in it, then read that same total
-    off the image one turn later. The history renders past images as ``[ảnh: N]``
-    for the same reason — this covers the current turn.
-
-    The system prompt is **no longer prepended** here: the sidecar has a real
-    ``systemPromptOverride``, so ``build_system_prompt`` goes out as ``system``.
-    """
-    sections = []
-    if memory:
-        sections.append(f"# Bộ nhớ dài hạn\n{memory.strip()}")
-    if history:
-        sections.append(f"# Lịch sử hội thoại (gần đây)\n{history.strip()}")
-    if image_count:
-        sections.append(
-            f"# Ảnh kèm theo\nLượt này có {image_count} ảnh (thường là hoá đơn) — "
-            "ĐỌC ảnh trước khi trả lời. Đừng hỏi lại tổng tiền / giá từng món nếu ảnh đã có."
-        )
-    sections.append(f"# Tin nhắn người dùng\n{user_text.strip()}")
-    return "\n\n".join(sections)
+    return render_sections(user_text, memory=memory, history=history, image_count=image_count)
 
 
 def _read_skills() -> list[dict]:
-    """The four ``SKILL.md`` bodies, as text. Their frontmatter is already
+    """The ``SKILL.md`` bodies, as text. Their frontmatter is already
     ``name`` + ``description``, which is exactly what pi wants."""
     skills = []
     if not _SKILLS_DIR.is_dir():
@@ -126,100 +78,88 @@ def _read_context_files() -> list[dict]:
     return files
 
 
+def default_engine_spec() -> EngineSpec:
+    """Today's configuration as an :class:`EngineSpec`: env settings, the skill
+    files and the rules file. ``system`` is left ``None`` — it depends on the
+    sender and is rendered per turn. This is what the pipeline's seeded default
+    profile must reproduce (plan Task 1.7)."""
+    return EngineSpec(
+        model=settings.pi_model,
+        vision_model=settings.pi_vision_model,
+        thinking=settings.pi_thinking,
+        builtin_tools=list(settings.pi_builtin_tools),
+        max_tools=settings.pi_max_tools,
+        max_seconds=settings.pi_max_seconds,
+        # pi needs a real cwd and its own config dir. Keeping the latter under
+        # DATA_DIR lets it cache the model catalogue across turns instead of
+        # refetching it every time.
+        cwd=str(Path(settings.data_dir) / "pi-cwd"),
+        agent_dir=str(Path(settings.data_dir) / "pi-agent"),
+        skills=_read_skills(),
+        context_files=_read_context_files(),
+    )
+
+
 async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
                    memory=None, history=None) -> TurnResult:
     """Run one turn to completion and return the assembled :class:`TurnResult`.
 
     ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives the live
     ``agent.*`` timeline events for this turn's SSE stream. The sidecar emits them
-    already in the app's wire format, so they are forwarded untouched; the
-    74-line translator ``app/agui.py`` used to be is deleted.
+    already in the app's wire format, so they are forwarded untouched.
     """
     from app.pi_bridge import get_bridge
+    from kernos.engine.pi import PiEngine
 
     turn_id = uuid.uuid4().hex[:12]
     started = time.monotonic()
-    result = TurnResult(turn_id=turn_id)
 
-    async def _emit(event: dict) -> None:
-        if emit:
-            await emit(event)
-
-    command = {
-        "type": "run",
-        "req_id": f"run-{turn_id}",
-        "turn_id": turn_id,
-        "system": build_system_prompt(sender_name=ctx.sender_name,
-                                      sender_id=ctx.sender_member_id),
-        "message": _render_prompt(user_text, sender_name=ctx.sender_name, memory=memory,
-                                  history=history, image_count=len(images or [])),
-        "images": list(images or []),
-        "tools": tool_manifest(),
-        "skills": _read_skills(),
-        "context_files": _read_context_files(),
-        # pi needs a real cwd and its own config dir. Keeping the latter under
-        # DATA_DIR lets it cache the model catalogue across turns instead of
-        # refetching it every time.
-        "cwd": str(Path(settings.data_dir) / "pi-cwd"),
-        "agent_dir": str(Path(settings.data_dir) / "pi-agent"),
-        "model": settings.pi_model,
-        "vision_model": settings.pi_vision_model,
-        "thinking": settings.pi_thinking,
-        "builtin_tools": list(settings.pi_builtin_tools),
-        "max_tools": settings.pi_max_tools,
-        "max_seconds": settings.pi_max_seconds,
-    }
+    spec = getattr(ctx, "engine_spec", None) or default_engine_spec()
+    system = getattr(ctx, "system_override", None)
+    if system is None:
+        system = spec.system if spec.system is not None else build_system_prompt(
+            sender_name=ctx.sender_name, sender_id=ctx.sender_member_id)
+    message = getattr(ctx, "message_override", None)
+    if message is None:
+        message = _render_prompt(user_text, sender_name=ctx.sender_name, memory=memory,
+                                 history=history, image_count=len(images or []))
+    spec = replace(spec, system=system, **(getattr(ctx, "caps_override", None) or {}))   # a nested run's budget (Phase 7)
+    ctx.turn_id = turn_id
+    if getattr(ctx, "started_at", None) is None:
+        ctx.started_at = started
 
     tools = build_tools(ctx)
-    bridge = get_bridge()
-    stats: dict = {}
 
-    try:
-        async for message in bridge.request(command):
-            kind = message.get("type", "")
+    async def call_tool(name: str, args: dict):
+        ctx.calls_made += 1
+        tool = tools.get(name)
+        if tool is None:
+            return {"ok": False, "error": f"unknown tool {name}"}
+        before = getattr(ctx, "validate_call", None)
+        if before is not None:                         # the profile's tool_args rules (plan Task 6.2)
+            refused = await before(name, args)
+            if refused is not None:
+                return refused
+        try:
+            result = tool.execute(args)
+            if inspect.isawaitable(result):            # the delegation pack's nested run
+                result = await result
+        except Exception as exc:  # noqa: BLE001 — a tool must not kill the turn
+            logger.exception("[agent] tool %s raised", name)
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        after = getattr(ctx, "validate_result", None)
+        if after is not None:
+            refused = await after(name, args, result)
+            if refused is not None:
+                return refused
+        return result
 
-            if kind.startswith("agent."):
-                # Already the frontend's format. Forward, do not interpret.
-                await _emit(message)
-
-            elif kind == "tool_call":
-                name = message.get("name") or ""
-                args = message.get("args") or {}
-                tool = tools.get(name)
-                if tool is None:
-                    payload = {"ok": False, "error": f"unknown tool {name}"}
-                else:
-                    try:
-                        payload = tool.execute(args)
-                    except Exception as exc:  # noqa: BLE001 — a tool must not kill the turn
-                        logger.exception("[agent] tool %s raised", name)
-                        payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-                result.tools.append(ToolInvocation(name=name, args=args, result=payload))
-                await bridge.send({
-                    "type": "tool_result", "req_id": command["req_id"],
-                    "call_id": message.get("call_id"),
-                    "content": _json_dumps(payload),
-                })
-
-            elif kind == "turn_done":
-                result.final_text = message.get("final_text") or ""
-                result.error = message.get("error")
-                result.capped = bool(message.get("capped"))
-                # Token/cost for the log line only. The sidecar reports `null`
-                # rather than 0 when the provider did not say, so an unknown cost
-                # never reads as "free".
-                stats = message.get("stats") or {}
-                # `tools` is already accumulated from the round-trips above, which
-                # is the authoritative list: those results came from the real DB.
-
-            elif kind == "fatal":
-                result.error = message.get("message") or "sidecar failed"
-                await _emit({"type": "agent.run.error", "turn_id": turn_id,
-                             "message": result.error})
-    except Exception as exc:  # noqa: BLE001 — a failed turn must still be a reply
-        logger.exception("[agent] turn %s failed", turn_id)
-        result.error = f"{type(exc).__name__}: {exc}"
-        await _emit({"type": "agent.run.error", "turn_id": turn_id, "message": result.error})
+    engine = PiEngine(get_bridge())
+    result = await engine.run(spec, turn_id=turn_id, message=message, images=list(images or []),
+                              tools=tool_manifest(ctx), call_tool=call_tool, emit=emit)
+    if getattr(ctx, "sub_invocations", None):
+        result.tools = merge_sub_invocations(result.tools, ctx.sub_invocations)
+    stats = result.stats or {}
 
     # One line per turn so the log mirror (and /internal/debug/logs) shows where a
     # 20–80s turn actually went: how many tool round-trips, and which. The agent.*
@@ -237,6 +177,5 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     return result
 
 
-def _json_dumps(payload) -> str:
-    import json
-    return json.dumps(payload, ensure_ascii=False, default=str)
+#: The merge lives in the framework since Phase 9; the name is kept for the tests.
+_merge_sub_invocations = merge_sub_invocations

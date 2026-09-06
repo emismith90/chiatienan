@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import (accounts, chat, debug_api, drafts, knowledge, ledger, memory,
-                 memos, observations, places, roster, rooms)
+                 memos, observations, places, roomcms, roster, rooms)
 from app.auth import AuthCtx, require_admin, require_session
 from app.clock import today_ict
 from app.periods import resolve_period
@@ -99,6 +99,17 @@ _warn_if_workspace_is_ephemeral()
 
 app = FastAPI(title="chiatienan — PWA lunch bot")
 app.include_router(debug_api.router)
+
+
+@app.on_event("startup")
+async def _boot_kernel() -> None:
+    """Build the kernos kernel at boot (plan Task 2.4): seeds or re-syncs the default
+    profile and surfaces a bad plugin config at deploy rather than on the first turn."""
+    from app.kernel import kernel_for
+
+    report = kernel_for(get_db()).seed_report
+    if report.get("actions"):
+        log.info("[kernos] boot: %s", "; ".join(report["actions"]))
 
 
 @app.on_event("shutdown")
@@ -289,6 +300,41 @@ async def create_room(body: RoomIn, _=Depends(require_admin)):
     if settings.caddy_domain:
         out["invite_link"] = f"https://{settings.caddy_domain}/join/{out['invite_token']}"
     return out
+
+
+# The kernos content plane's admin API (plan Task 2.5): businesses, sources,
+# profiles, versions, publish, agents, space bindings, catalogue, audit — all
+# behind the same admin password as room creation. Rooms are spaces with
+# `space_id = str(room_id)`.
+from kernos.api import admin_router  # noqa: E402
+
+app.include_router(
+    admin_router(lambda: __import__("app.kernel", fromlist=["kernel_for"]).kernel_for(get_db()),
+                 dependencies=[Depends(require_admin)]),
+    prefix="/api/admin",
+)
+
+
+@app.get("/api/admin/rooms/{room_id}/resolved")
+async def admin_resolved_profile(room_id: int, _=Depends(require_admin)):
+    """What this room's bot runs, verbatim (kernos plan Task 1.9).
+
+    The resolved profile, the engine half the sidecar receives, and the pipeline
+    with every plugin's version and config — the one place to answer "what does
+    this room run" without reading code or env. Phase 2 makes it per room.
+    """
+    from dataclasses import asdict
+
+    from app.kernel import kernel_for
+
+    kernel = kernel_for(get_db())
+    spec = kernel.resolve(room_id)
+    return {
+        "room_id": room_id,
+        "spec": spec.model_dump(),
+        "engine_spec": asdict(spec.to_engine_spec()),
+        "pipeline": kernel.pipeline_for(spec).describe(),
+    }
 
 
 @app.post("/api/rooms/create")
@@ -1141,3 +1187,56 @@ async def bridge_smoke(x_admin_password: str | None = Header(default=None)):
     if not settings.admin_password or x_admin_password != settings.admin_password:
         raise HTTPException(status_code=401, detail="unauthorized")
     return await run_bridge_smoke()
+
+
+# --------------------------------------------------------------------- room CMS
+# The agent a room runs, readable by every member and editable by a bound room
+# (plan Phase 11). `app.roomcms` holds the rules; these are the doors.
+
+class AgentContentIn(BaseModel):
+    base_version_id: int | None = None
+    note: str | None = None
+    prompt_body: str | None = None
+    prompt_append: list[str] | None = None
+    skills: list[dict] | None = None
+    rules: list[dict] | None = None
+    source_etags: dict[str, str] | None = None
+
+
+class RepublishIn(BaseModel):
+    note: str | None = None
+
+
+@app.get("/api/rooms/{room_id}/agent")
+async def room_agent(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.view(kernel_for(get_db()), room_id)
+
+
+@app.get("/api/rooms/{room_id}/agent/versions")
+async def room_agent_versions(room_id: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.versions(kernel_for(get_db()), room_id)
+
+
+@app.get("/api/rooms/{room_id}/agent/versions/{version}")
+async def room_agent_version(room_id: int, version: int, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    return roomcms.version_detail(kernel_for(get_db()), room_id, version)
+
+
+@app.put("/api/rooms/{room_id}/agent/content")
+async def room_agent_edit(room_id: int, body: AgentContentIn, ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    out = roomcms.edit(kernel_for(get_db()), room_id, ctx.member_id, body.model_dump())
+    await hub.publish(room_id, {"type": "agent:changed"})
+    return out
+
+
+@app.post("/api/rooms/{room_id}/agent/versions/{version}/republish")
+async def room_agent_republish(room_id: int, version: int, body: RepublishIn,
+                               ctx: AuthCtx = Depends(require_session)):
+    _check_room(ctx, room_id)
+    out = roomcms.republish(kernel_for(get_db()), room_id, ctx.member_id, version, body.note)
+    await hub.publish(room_id, {"type": "agent:changed"})
+    return out

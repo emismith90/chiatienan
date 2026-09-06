@@ -1,16 +1,15 @@
-"""The LLM-facing ``CustomTool`` set — where every number lives.
+"""The host's tool composition point (plan Task 3.3).
 
-The model decides *when* to call these; the tools own all arithmetic and all
-QR-building (design D3). Each tool opens its own short-lived DB session, so a
-turn that fails before ``settle_period`` commits never half-writes.
-``propose_meal`` never writes at all — it only returns a draft payload for the
-user to confirm; the deterministic commit happens elsewhere via
-``ledger.record_meal``. Validation failures are returned as
-``{"ok": False, "error": ...}`` dicts (a clarifying-question result) rather
-than raised, so the model can ask the user instead of guessing.
+The tool bodies live in the packs — the money tools in the framework's
+``packs/lunch_ledger``, the restaurant and roster tools in ``app/packs`` — and
+this module is what the host and every test build them through: ``ToolContext``
+(the per-turn context the tools close over), ``CustomTool`` (the shape the
+executor runs), ``build_tools`` (the enabled packs' tools, in the legacy order)
+and ``tool_manifest`` (what the sidecar is told).
 
-Numbers that end up in a QR are computed and rendered entirely inside
-``settle_period`` — they never round-trip tool → LLM → tool.
+Money-safety (design D3) is unchanged by the move: the model decides *when* to
+call a tool; the tools own all arithmetic and all QR-building, and numbers that
+end up in a QR never round-trip tool → LLM → tool.
 """
 from __future__ import annotations
 
@@ -18,25 +17,10 @@ import logging
 import random
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any, Callable
 
-
-from sqlalchemy import select
-
-from app import accounts, ledger, roster, rooms
 from app.clock import today_ict
 from app.db import Database
-from app.models import Place
-from app.money import (
-    MoneyError,
-    itemized_adjustments,
-    net_transfers,
-    normalize_items,
-    prorate_items,
-    split_with_guests,
-)
-from app.notes import build_qr_note
-from app.periods import resolve_date, resolve_period
-from app.qr import QRError, make_qr_url
 
 logger = logging.getLogger("chiatienan")
 
@@ -45,9 +29,9 @@ logger = logging.getLogger("chiatienan")
 class CustomTool:
     """The LLM-facing tool shape, owned here now that the vendor SDK is gone.
 
-    Same three fields the SDK's class carried, so all 14 registrations below and
-    every executor body are byte-identical to what they were. Nothing about
-    arithmetic changed with the engine.
+    Same three fields the SDK's class carried, so every registration and every
+    executor body are byte-identical to what they were. Nothing about arithmetic
+    changed with the engine.
     """
 
     execute: object
@@ -72,1319 +56,116 @@ class ToolContext:
     turn_mentions: list[dict] = field(default_factory=list)
     # Names this turn looked up that pinned to no member (or to two). Kept so
     # ``propose_meal`` can refuse to quietly leave that person out of the split
-    # — see :func:`_dropped_names`.
+    # — see ``packs.lunch_ledger.tools._dropped_names``.
     unknown_names: dict[str, str] = field(default_factory=dict)
+    # The kernos seam (plan Task 1.4, review finding 1). When a pipeline resolved
+    # a profile it puts the engine spec and the rendered system/message here, and
+    # ``agent.run_turn`` uses them instead of building from ``settings``. ``None``
+    # means "build as today". Riding on ``ToolContext`` — the one argument every
+    # test fake of ``run_turn`` ignores — is what lets the frozen six-argument
+    # signature stay frozen.
+    engine_spec: object | None = None
+    system_override: str | None = None
+    message_override: str | None = None
+    # Which packs/tools the resolved profile enables (`spec.tool_packs`, dumped), set
+    # by the pipeline's run plugin (plan Task 3.1). `None` = today's 19 tools.
+    tool_config: dict | None = None
+    # What the framework's packs need from this host (plan Task 3.3): the card
+    # store (pending drafts, cancel), the local date, and the uniform draw. Filled
+    # by :func:`_inject` when left ``None``, so the tests that patch
+    # ``app.tools.today_ict`` / ``app.tools.random.choice`` still steer the tools.
+    cards: Any = None
+    today: Callable[[], date] | None = None
+    choice: Callable[[list], Any] | None = None
+    # The profile's tool-scope validation rules (plan Task 6.2), set by the run plugin:
+    # ``await validate_call(name, args) -> {ok: False, error} | None`` before a tool runs,
+    # ``await validate_result(name, args, result)`` after. ``None`` = no rules.
+    validate_call: Callable | None = None
+    validate_result: Callable | None = None
+    # Delegation (design §6, plan Task 7.1). ``agent`` is the agent record running this
+    # turn (``None`` = no agent, so no ``ask_*`` tools); ``depth`` is 0 for the room's
+    # manager and ``max_depth`` the **root** agent's limit, carried unchanged to every
+    # sub's context; ``turn`` is the ``TurnContext`` this tool context belongs to (the
+    # nested run copies principal/images from it); ``turn_id``/``started_at`` are the
+    # running turn's, set by ``agent.run_turn`` and the pipeline; ``calls_made`` counts
+    # this agent's own tool calls (the executor increments it before each); ``caps_override``
+    # is ``{max_tools, max_seconds}`` a nested run applies to its ``EngineSpec``;
+    # ``sub_invocations`` collects ``(own_call_index, ToolInvocation)`` a sub made, merged
+    # into the manager's ``TurnResult.tools`` after the engine returns.
+    agent: dict | None = None
+    depth: int = 0
+    max_depth: int | None = None
+    turn: Any = None
+    turn_id: str | None = None
+    started_at: float | None = None
+    calls_made: int = 0
+    caps_override: dict | None = None
+    sub_invocations: list = field(default_factory=list)
+
+    @property
+    def space_id(self):
+        """The pack-side name for the room (design §3: a *space*)."""
+        return self.room_id
 
 
-def _err(message: str) -> dict:
-    return {"ok": False, "error": message}
+def _inject(ctx: ToolContext) -> ToolContext:
+    if ctx.cards is None:
+        from app.hostadapters import RoomCards
+        ctx.cards = RoomCards(ctx.db)
+    if ctx.today is None:
+        ctx.today = lambda: today_ict()      # looked up at call time: tests patch it here
+    if ctx.choice is None:
+        ctx.choice = lambda pool: random.choice(pool)
+    return ctx
 
 
-def _parse_iso(value) -> date | None:
-    if not value:
-        return None
-    if isinstance(value, date):
-        return value
-    return date.fromisoformat(str(value))
+def _from_pack(tool) -> CustomTool:
+    return CustomTool(execute=tool.execute, description=tool.description, input_schema=tool.schema)
 
 
-def _dropped_names(ctx: "ToolContext", db: Database, participants: list[int],
-                   payer: int | None, guests: list[str]) -> list[str]:
-    """Names the turn looked up, never pinned down, and never accounted for.
+def _legacy_build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
+    """All 19 tools, in the order this module has always listed them: the three
+    host packs composed with no profile — every test fake, the bench, the probe."""
+    from app.packs import LEGACY_ORDER, host_packs
 
-    WHY — production, 2026-08-13: *"nay ăn bún cá với anh Hưng chị Nhím hết
-    175k"*. ``find_members`` matched Nhím and missed Hưng, the model called him a
-    guest **in its prose** and then proposed the meal without a ``guests``
-    entry. Two heads instead of three: every share on that card was 50% too big,
-    and nothing on it said a person had gone missing. A name is "accounted for"
-    once one of its words shows up in a participant/payer's name or in a guest
-    label — so resolving him on a second lookup, adding him as a member, or
-    listing him as a guest all clear it. Anything left is a person the split
-    silently forgot.
-    """
-    if not ctx.unknown_names:
-        return []
-    with db.session() as s:
-        tokens_by_id = roster.member_name_tokens(s, ctx.room_id)
-    accounted: set[str] = set()
-    for mid in [*participants, *([payer] if payer else [])]:
-        accounted |= tokens_by_id.get(mid, set())
-    for g in guests:
-        accounted |= roster.name_tokens(g)
-    return [raw for raw, _why in ctx.unknown_names.items()
-            if not (roster.name_tokens(raw) & accounted)]
+    _inject(ctx)
+    tools = {}
+    for pack in host_packs():
+        tools.update(pack.tools(ctx))
+    return {name: _from_pack(tools[name]) for name in LEGACY_ORDER}
 
-
-def _names_for(session, room_id, ids) -> dict[int, str]:
-    # include_inactive: a balance/settlement can reference a since-removed member.
-    return {
-        m.id: m.display_name
-        for m in roster.list_members(session, room_id, include_inactive=True)
-        if m.id in set(ids)
-    }
-
-
-# --------------------------------------------------------------------------- #
-# Schemas
-# --------------------------------------------------------------------------- #
-
-_FIND_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "names": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": (
-                "Names to look up (e.g. ['An', 'Bình']). Pass the name EXACTLY as the user"
-                " wrote it — the tool matches display name, nickname, aliases and the bank"
-                " account holder, with or without Vietnamese tones, and strips 'anh'/'chị'"
-                " itself. Do not de-accent or shorten it yourself."
-            ),
-        },
-        "all_active": {
-            "type": "boolean",
-            "description": (
-                "True to fetch the WHOLE roster — every active member of the room, with"
-                " nobody filtered out. Use it for 'cả nhóm' / 'cả team' / 'mọi người' and"
-                " for the English 'everyone' / 'all' / 'the whole group' (production said"
-                " 'log this for all' and only the Vietnamese triggers were documented)."
-            ),
-        },
-    },
-}
-
-_PROPOSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "payer": {"type": "integer", "description": "member id of the payer; blank = the sender."},
-        "participants": {"type": "array", "items": {"type": "integer"},
-                         # "tôi với Bình ăn" listed only Bình on one run, which
-                         # charges a two-person bill to one person. The sender is
-                         # a participant like anyone else — being the payer does
-                         # not put them in, and saying "tôi" does not leave them out.
-                         "description": "member ids of EVERYONE who ate, the sender included"
-                                        " when they ate ('tôi với Bình ăn' = both ids)."},
-        "total": {"type": "integer", "description": "Bill total, integer VND (840k → 840000)."},
-        "guests": {"type": "array", "items": {"type": "string"},
-                   "description": "Guest names (non-members who pay cash)."},
-        "adjustments": {"type": "array", "items": {
-            "type": "object",
-            "properties": {"member": {"type": "integer"}, "amount": {"type": "integer"}},
-            "required": ["member", "amount"]}},
-        "items": {
-            "type": "array",
-            "description": (
-                "Per-person mode ('ai ăn nấy trả'): the LIST price of what each person ate,"
-                " copied straight off the bill — do NOT pre-apply the discount or split the"
-                " difference yourself. One entry per participant, every participant exactly"
-                " once. The tool prorates the gap between Σ items and `total` (promo, ship,"
-                " service fee) across the items. Omit this to split the bill evenly."
-                " **Only when you KNOW who ate what** — the user said so, or the bill writes a"
-                " name next to each line. A bill that merely lists dishes does not say who"
-                " ordered them: guessing changes what each person owes and looks correct while"
-                " being invented. Split evenly instead."
-            ),
-            "items": {
-                "type": "object",
-                "properties": {
-                    "member": {"type": "integer", "description": "member id who ate this."},
-                    "amount": {"type": "integer", "description": "Its price on the bill, integer VND."},
-                    "label": {"type": "string", "description": "Dish name, e.g. 'cơm tấm'."},
-                },
-                "required": ["member", "amount"],
-            },
-        },
-        "discount_split": {
-            "type": "string",
-            "enum": ["proportional", "equal"],
-            "description": (
-                "Only with `items`. How to share the gap between Σ items and `total`:"
-                " 'proportional' (default) scales each dish price; 'equal' takes the same"
-                " amount off everyone — use it when the user says so ('chia đều phần giảm',"
-                " 'mỗi người trừ như nhau'). Either way the TOOL does the arithmetic."
-            ),
-        },
-        "dish": {"type": "string", "description": "Dish (if the user mentioned it)."},
-        "initiator": {"type": "string", "description": "Who initiated the meal (if any)."},
-        "note": {"type": "string", "description": "Free-form note (e.g. 'An đổi ý')."},
-        "day_word": {"type": "string", "description": "The day EXACTLY as the user said it ('thứ 5', 'hôm qua', '20/7'). The tool resolves it to a date (ICT) — never compute the date yourself. Omit = today."},
-        "occurred_on": {"type": "string", "description": "Deprecated: pre-resolved meal date, ISO YYYY-MM-DD. Prefer `day_word` so the tool does the date math. Ignored when `day_word` is given."},
-    },
-    "required": ["participants", "total"],
-}
-
-_VOID_SCHEMA = {
-    "type": "object",
-    "properties": {"meal_id": {"type": "integer"}},
-    "required": ["meal_id"],
-}
-
-_RANDOM_PICK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "label": {
-            "type": "string",
-            "description": "What the pick is for, as the user said it ('trả tiền', 'đi mua đồ ăn'). Cosmetic only.",
-        },
-    },
-}
-
-_PERIOD_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "keyword": {
-            "type": "string",
-            "enum": ["since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"],
-        },
-        "from": {"type": "string", "description": "ISO date for keyword=explicit."},
-        "to": {"type": "string", "description": "ISO date for keyword=explicit."},
-    },
-}
-
-_FIND_PLACES_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "names": {
-            "type": "array", "items": {"type": "string"},
-            "description": "Place names as the user wrote them ('thịnh lơ', 'quán bé bự').",
-        },
-        "all": {"type": "boolean", "description": "Return every place in the room."},
-    },
-}
-
-_ADD_PLACE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "aliases": {
-            "type": "array", "items": {"type": "string"},
-            "description": "Other spellings the group uses, including tone-free forms.",
-        },
-        "tags": {"type": "array", "items": {"type": "string"}},
-        "delivery": {
-            "type": "array", "items": {"type": "string"},
-            "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
-        },
-        "address": {"type": "string"},
-        "phone": {"type": "string"},
-        "walkable": {"type": "boolean",
-                     "description": "Can the group walk there from the office?"},
-    },
-    "required": ["name"],
-}
-
-_SUGGEST_LUNCH_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "budget": {"type": "string", "enum": ["rẻ", "vừa", "đắt"],
-                   "description": "Only places in this price band."},
-        "delivery": {"type": "boolean",
-                     "description": "True when the group wants to order in rather than walk out."},
-        "exclude": {"type": "array", "items": {"type": "string"},
-                    "description": "Places to leave out ('vừa ăn hôm qua rồi')."},
-        "today": {"type": "string", "description": "YYYY-MM-DD; omit for today."},
-    },
-}
-
-_REMEMBER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "about": {"type": "string",
-                  "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím')."},
-        "text": {"type": "string", "description": "Nội dung, tiếng Việt, một câu."},
-        "standing": {"type": "boolean",
-                     "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay."},
-        "gate": {"type": "string",
-                 "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM."},
-    },
-    "required": ["about", "text"],
-}
-
-_FORGET_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "about": {"type": "string"},
-        "text": {"type": "string", "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn."},
-    },
-    "required": ["about", "text"],
-}
-
-_ADD_MEMBER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "display_name": {"type": "string", "description": "Display name."},
-        "nickname": {"type": "string", "description": "Nickname used to sign in, unique within the room."},
-        "bank_code": {"type": "string"},
-        "account_number": {"type": "string"},
-        "account_holder": {"type": "string"},
-    },
-    "required": ["display_name", "nickname"],
-}
-
-_UPDATE_MEMBER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "target": {"type": ["string", "integer"], "description": "Member to update: nickname or numeric id."},
-        "display_name": {"type": "string"},
-        "nickname": {"type": "string", "description": "New nickname; must be unique in the room."},
-        "bank_code": {"type": "string"},
-        "account_number": {"type": "string"},
-        "account_holder": {"type": "string"},
-        "aliases": {"type": "array", "items": {"type": "string"}},
-        "active": {"type": "boolean", "description": "Set true to restore a previously removed member."},
-        "default_participant": {
-            "type": "boolean",
-            "description": (
-                "Whether this member is in the pool for a rut tham / random draw "
-                "(`pick_random`). Set false for someone who should never be drawn. It does "
-                "NOT affect splitting: 'cả nhóm' / 'everyone' always means the whole "
-                "roster, and leaving someone out of a meal is done per meal, by omitting "
-                "them from `participants`. Defaults true."
-            ),
-        },
-    },
-    "required": ["target"],
-}
-
-_DELETE_MEMBER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "target": {"type": ["string", "integer"], "description": "Member to remove: nickname or numeric id."},
-    },
-    "required": ["target"],
-}
-
-_PROPOSE_PAYMENT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "from": {"type": "integer", "description": "member id who paid; blank = the sender."},
-        "to": {"type": "integer", "description": "member id who received the money."},
-        "amount": {
-            "type": "integer",
-            "description": "Integer VND (125k → 125000). OMIT to pay off exactly what `from` currently owes `to`.",
-        },
-        "mode": {
-            "type": "string",
-            "enum": ["gross", "offset"],
-            "description": "For a two-way pair only: 'gross' = pay the full amount `from` owes `to`; 'offset' = settle the net difference. Omit otherwise.",
-        },
-        "note": {"type": "string"},
-    },
-    "required": ["to"],
-}
-
-_SETTLE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "keyword": {
-            "type": "string",
-            "enum": ["since_last", "this_week", "last_week", "today", "yesterday", "this_month", "explicit"],
-        },
-        "from": {"type": "string", "description": "ISO date. Supplying from/to means an explicit range; omit `keyword` (or pass 'explicit')."},
-        "to": {"type": "string", "description": "ISO date, inclusive. See `from`."},
-    },
-}
-
-
-# --------------------------------------------------------------------------- #
-# Tool implementations
-# --------------------------------------------------------------------------- #
 
 def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
-    db = ctx.db
+    """The tools this turn may call.
 
-    def find_members(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        names = list(args.get("names") or [])
-        all_active = bool(args.get("all_active"))
-        with db.session() as s:
-            res = roster.resolve(s, ctx.room_id, names=names,
-                                 mentions=ctx.turn_mentions, all_active=all_active)
-        asked = names + [str(m.get("nickname") or "?") for m in ctx.turn_mentions]
-        still_unknown = {str(n) for n in res["unresolved"]}
-        still_unknown |= {str(a["name"]) for a in res["ambiguous"]}
-        for raw in asked:
-            if raw in still_unknown:
-                ctx.unknown_names[raw] = "ambiguous" if raw not in res["unresolved"] else "unresolved"
-            else:
-                # Asked again and pinned down this time — no longer a hole.
-                ctx.unknown_names.pop(raw, None)
-        return {"ok": True, **res}
+    With no ``tool_config`` on the context — every test fake, the bench, the probe —
+    this is today's 19 tools in today's order. With one, the enabled packs are asked,
+    the per-tool overrides applied, and the result put back into legacy order so the
+    manifest the sidecar receives is stable (review F7).
+    """
+    if ctx.tool_config is None:
+        return _legacy_build_tools(ctx)
+    from app.kernel import kernel_for
+    from app.packs import LEGACY_ORDER
+    from kernos.packs import compose_tools
 
-    def propose_meal(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        try:
-            participants = [int(p) for p in (args.get("participants") or [])]
-        except (TypeError, ValueError):
-            return _err("Invalid participant list.")
-        total = args.get("total")
-        if not isinstance(total, int):
-            return _err("Missing total (integer VND).")
-        if not participants:
-            return _err("No participants provided.")
-        guests = [str(g) for g in (args.get("guests") or [])]
-        adjustments = {}
-        for adj in args.get("adjustments") or []:
-            try:
-                adjustments[int(adj["member"])] = int(adj["amount"])
-            except (KeyError, TypeError, ValueError):
-                return _err("Each adjustment must have numeric {member, amount}.")
-        payer = args.get("payer") or ctx.sender_member_id
-        if not payer:
-            return _err("Could not determine the payer.")
-        dropped = _dropped_names(ctx, db, participants, payer, guests)
-        if dropped:
-            names = ", ".join(f"«{n}»" for n in dropped)
-            if any(ctx.unknown_names.get(n) == "ambiguous" for n in dropped):
-                return _err(
-                    f"{names} khớp với hơn một người, và bữa này không có ai trong số họ. "
-                    "HỎI người dùng là ai (kèm tên các ứng viên `find_members` trả về) "
-                    "rồi mới đề xuất — đoán bừa là ghi nợ nhầm người."
-                )
-            return _err(
-                f"{names} đã được tra trong lượt này nhưng không khớp thành viên nào, "
-                "và cũng không có trong participants hay guests — chia như vậy là bỏ sót "
-                "người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: "
-                "(1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; "
-                "(2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác "
-                "(tên thật, tên ngân hàng, biệt danh); "
-                "(3) là người mới → `add_member` rồi cho id vào `participants`."
-            )
-        # Date resolution is authoritative here (like money-safety for amounts):
-        # the model passes the user's day *word* and the tool computes the date,
-        # so an LLM-computed occurred_on can never land a day off.
-        day_word = args.get("day_word")
-        occurred_on = args.get("occurred_on")
-        if day_word:
-            try:
-                occurred_on = resolve_date(str(day_word), today=today_ict()).isoformat()
-            except ValueError as exc:
-                return _err(str(exc))
-        elif occurred_on is not None:
-            try:
-                _parse_iso(occurred_on)
-            except ValueError:
-                return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
-
-        items = args.get("items") or []
-        discount_split = (args.get("discount_split") or "proportional").strip().lower()
-        if items:
-            if adjustments:
-                return _err(
-                    "Dùng `items` HOẶC `adjustments`, không dùng cả hai — "
-                    "`items` đã là số tiền của từng người rồi."
-                )
-            if guests:
-                return _err(
-                    "Ghi theo món chưa hỗ trợ khách lẻ. Bỏ khách ra (chia đều), "
-                    "hoặc ghi khách như một dòng món của người trả hộ."
-                )
-            try:
-                items = normalize_items(items, participants)
-                shares = prorate_items(
-                    total, {i["member"]: i["amount"] for i in items},
-                    discount_split=discount_split,
-                )
-                adjustments = itemized_adjustments(total, shares)
-            except MoneyError as exc:
-                return _err(str(exc))
-
-        try:
-            preview = split_with_guests(total, participants, len(guests), adjustments, payer_id=int(payer))
-        except MoneyError as exc:
-            return _err(str(exc))
-
-        # Place resolution is metadata and must NEVER block the bill (design
-        # D2): this is the deliberate opposite of the _dropped_names guard
-        # above, because a missing eater bills everyone wrong while a missing
-        # place tag only costs a statistic. Only confident tiers link; a weaker
-        # guess rides the card instead, where one tap fixes it (D3).
-        place_id = None
-        place_guess = None
-        dish_text = (args.get("dish") or "").strip()
-        if dish_text:
-            from app import places as places_mod
-
-            with db.session() as s:
-                hit, tier = places_mod.resolve_one(s, ctx.room_id, dish_text)
-                if hit is not None:
-                    place_guess = {"id": hit.id, "name": hit.name}
-                    if tier in places_mod.CONFIDENT_TIERS:
-                        place_id = hit.id
-
-        return {
-            "ok": True,
-            "type": "expense_draft",
-            "payer_member_id": int(payer),
-            "member_participants": participants,
-            "guests": guests,
-            "bill_total": total,
-            "adjustments": [{"member": m, "amount": a} for m, a in adjustments.items()],
-            "items": items,
-            "discount_split": discount_split if items else None,
-            "dish": args.get("dish"),
-            "place_id": place_id,
-            "place_guess": place_guess,
-            "initiator": args.get("initiator"),
-            "note": args.get("note"),
-            "per_head_preview": preview["per_head"],
-            "shares_preview": [{"member": m, "amount": a} for m, a in preview["shares"].items()],
-            "occurred_on": occurred_on,
-        }
-
-    def resolve_date_tool(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        try:
-            d = resolve_date(str(args.get("word") or ""), today=today_ict())
-        except ValueError as exc:
-            return _err(str(exc))
-        return {"ok": True, "date": d.isoformat()}
-
-    def cancel_draft(args, _tool_ctx=None) -> dict:
-        """Cancel a pending draft card by id. Writes nothing to the ledger.
-
-        The one draft action the bot may take on the user's word: confirming
-        still requires the button on the card (money-safety D3), but a stale
-        proposal blocks every settle and used to need a human to scroll back and
-        find the card. Cancelling loses nothing — the proposal can be re-made.
-        """
-        from app import drafts
-
-        args = args or {}
-        draft_id = args.get("draft_id")
-        if not isinstance(draft_id, int):
-            return _err("Missing draft_id (the # shown on the card).")
-        with db.session() as s:
-            try:
-                m = drafts.update_draft(s, draft_id, ctx.room_id, {"status": "cancelled"})
-            except (ledger.LedgerError, MoneyError) as exc:
-                return _err(str(exc))
-            return {"ok": True, "type": "draft_cancelled", "draft_id": m.id, "kind": m.kind}
-
-    def void_meal(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        meal_id = args.get("meal_id")
-        if not isinstance(meal_id, int):
-            return _err("Missing meal_id.")
-        with db.session() as s:
-            try:
-                return {
-                    "ok": True,
-                    **ledger.void_meal(s, meal_id, room_id=ctx.room_id, by=str(ctx.sender_member_id)),
-                }
-            except ledger.LedgerError as exc:
-                return _err(str(exc))
-
-    def pick_random(args, _tool_ctx=None) -> dict:
-        # The draw itself lives in the tool, never in the model — an LLM cannot
-        # be trusted to be uniform (or unmanipulable). The visible body is built
-        # server-side from `chosen`, so the winner can't be re-typed either.
-        args = args or {}
-        with db.session() as s:
-            members = {
-                m.id: m.display_name
-                for m in roster.list_members(s, ctx.room_id, default_only=True)
-            }
-        # The pool is every default-participant member of the group — no
-        # per-request subsetting (the tool takes no participant list), but a
-        # member flagged out of default group activities (default_participant
-        # = false) is skipped here.
-        pool_ids = list(members)
-        if not pool_ids:
-            return _err("Không có ai trong nhóm để bốc.")
-        chosen_id = random.choice(pool_ids)
-        label = (args.get("label") or "").strip() or None
-        return {
-            "ok": True,
-            "type": "random_pick",
-            "chosen": {"id": chosen_id, "name": members[chosen_id]},
-            "candidates": [{"id": i, "name": members[i]} for i in pool_ids],
-            "label": label,
-        }
-
-    def resolve_period_tool(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        with db.session() as s:
-            last = ledger.last_settlement(s, ctx.room_id)
-            try:
-                period = resolve_period(
-                    args.get("keyword"),
-                    today=today_ict(),
-                    last_settlement_to=last.period_to if last else None,
-                    explicit_from=_parse_iso(args.get("from")),
-                    explicit_to=_parse_iso(args.get("to")),
-                )
-            except ValueError as exc:
-                return _err(str(exc))
-        return {
-            "ok": True,
-            "from": period["from"].isoformat() if period["from"] else None,
-            "to": period["to"].isoformat(),
-            "keyword": period["keyword"],
-        }
-
-    def member_statement(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        member = args.get("member") or ctx.sender_member_id
-        if not member:
-            return _err("Không xác định được thành viên.")
-        try:
-            member = int(member)
-        except (TypeError, ValueError):
-            return _err("Không xác định được thành viên.")
-        with db.session() as s:
-            last = ledger.last_settlement(s, ctx.room_id)
-            period = resolve_period(
-                args.get("keyword"), today=today_ict(),
-                last_settlement_to=last.period_to if last else None,
-            )
-            stmt = ledger.statement_for(s, ctx.room_id, member, period["from"], period["to"])
-            ids = {r["other_id"] for r in stmt["owe"]} | {r["other_id"] for r in stmt["owed"]} \
-                | {member}
-            names = _names_for(s, ctx.room_id, ids)
-
-        def _row(r, key):
-            other_id = r["other_id"]
-            return {key: other_id, "name": names.get(other_id, "?"),
-                    "meal_id": r["meal_id"], "dish": r["dish"],
-                    "occurred_on": r["occurred_on"], "amount": r["amount"], "status": r["status"]}
-
-        owe = [_row(r, "creditor_id") for r in stmt["owe"]]
-        owed = [_row(r, "debtor_id") for r in stmt["owed"]]
-        return {
-            "ok": True, "type": "statement",
-            "member": {"id": member, "name": names.get(member, "?")},
-            "period": {"from": period["from"].isoformat() if period["from"] else None,
-                       "to": period["to"].isoformat()},
-            "owe": owe, "owed": owed,
-        }
-
-    def get_period_summary(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        with db.session() as s:
-            last = ledger.last_settlement(s, ctx.room_id)
-            period = resolve_period(
-                args.get("keyword"), today=today_ict(),
-                last_settlement_to=last.period_to if last else None,
-            )
-            timeline = ledger.period_timeline(s, ctx.room_id, period["from"], period["to"])
-            outstanding = ledger.outstanding_pairs(s, ctx.room_id, period["from"], period["to"])
-            ids = {r["debtor_id"] for r in outstanding} | {r["creditor_id"] for r in outstanding} \
-                | {e.get("payer_id") for e in timeline} \
-                | {e.get("from_id") for e in timeline} | {e.get("to_id") for e in timeline}
-            ids.discard(None)
-            names = _names_for(s, ctx.room_id, ids)
-        for e in timeline:
-            if e["kind"] == "meal":
-                e["payer_name"] = names.get(e["payer_id"], "?")
-            else:
-                e["from_name"] = names.get(e["from_id"], "?")
-                e["to_name"] = names.get(e["to_id"], "?")
-        return {
-            "ok": True, "type": "summary",
-            "period": {"from": period["from"].isoformat() if period["from"] else None,
-                       "to": period["to"].isoformat()},
-            "timeline": timeline,
-            "outstanding": [{**r,
-                             "debtor_name": names.get(r["debtor_id"], "?"),
-                             "creditor_name": names.get(r["creditor_id"], "?")}
-                            for r in outstanding],
-        }
-
-    def add_member(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        display_name = args.get("display_name")
-        nickname = args.get("nickname")
-        with db.session() as s:
-            room = rooms.room_by_id(s, ctx.room_id)
-            if room is None:
-                return _err("Room not found.")
-            try:
-                m = accounts.add_unclaimed(
-                    s,
-                    room,
-                    display_name=display_name,
-                    nickname=nickname,
-                    bank_code=args.get("bank_code"),
-                    account_number=args.get("account_number"),
-                    account_holder=args.get("account_holder"),
-                )
-            except accounts.AccountError as exc:
-                return _err(str(exc))
-            # The name that failed to resolve a moment ago now exists, so it is
-            # no longer a hole propose_meal has to complain about.
-            fresh = roster.name_tokens(m.display_name) | roster.name_tokens(m.nickname)
-            for raw in [k for k in ctx.unknown_names if roster.name_tokens(k) & fresh]:
-                ctx.unknown_names.pop(raw, None)
-            return {"ok": True, "member_id": m.id, "nickname": m.nickname}
-
-    def find_places(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        from app import places as places_mod
-
-        with db.session() as s:
-            if args.get("all"):
-                rows = places_mod.list_places(s, ctx.room_id)
-                return {"ok": True, "places": [
-                    {"id": p.id, "name": p.name, "slug": p.slug, "tags": p.tags,
-                     "walkable": p.walkable} for p in rows
-                ]}
-            res = places_mod.resolve(
-                s, ctx.room_id, names=[str(n) for n in args.get("names") or []]
-            )
-        return {"ok": True, **res}
-
-    def suggest_lunch(args, _tool_ctx=None) -> dict:
-        """Rank where the group should eat. **The tool decides the order.**
-
-        Every number behind the ranking — how long since, how often, how
-        expensive — is computed in Python (design D1). The model gets a decided
-        list and writes prose around it; it must never re-rank, and it never
-        sees a VND amount, only a band (D5), so a suggestion can never be
-        mistaken for a ledger figure.
-        """
-        args = args or {}
-        from app import places as places_mod
-
-        want_delivery = bool(args.get("delivery"))
-        budget = (args.get("budget") or "").strip() or None
-        exclude_raw = [str(x) for x in args.get("exclude") or []]
-        today = _parse_iso(args.get("today")) or today_ict()
-
-        with db.session() as s:
-            rows = places_mod.list_places(s, ctx.room_id)
-            counts = places_mod.stats(s, ctx.room_id, today=today)
-            excluded_ids = {
-                p.id for raw in exclude_raw
-                for p in [places_mod.resolve_best(s, ctx.room_id, raw, today=today)[0]]
-                if p is not None
-            }
-
-            pool = []
-            for p in rows:
-                # A temporary closure expires on its own (D11) — no cleanup job.
-                if p.closed_until and p.closed_until >= today:
-                    continue
-                # Going out and ordering in are different questions (D16).
-                if want_delivery:
-                    if not p.delivery:
-                        continue
-                elif not p.walkable:
-                    continue
-                if p.id in excluded_ids:
-                    continue
-                st = counts.get(p.id, {})
-                # An unknown band cannot be ruled out by a budget.
-                if budget and st.get("band") and st["band"] != budget:
-                    continue
-                pool.append((p, st))
-
-            def score(item) -> float:
-                """Familiarity first, minus a short-lived just-ate-there penalty.
-
-                An earlier version scored purely on days-since, which inverted the
-                whole feature: a favourite eaten every fortnight ranked *below* a
-                place nobody had been to, so the room's usuals would essentially
-                never be suggested. Frequency is the positive signal; recency is
-                only a penalty, and only for a few days.
-                """
-                p, st = item
-                days = st.get("days_since")
-                # Caps at 8 visits so one much-loved place cannot crowd out the
-                # rest of the rotation forever.
-                familiarity = min(st.get("times", 0), 8) * 6.0
-                # 30 the day you ate there, tapering to 0 by day 10.
-                recent_penalty = 0.0 if days is None else max(0.0, 30.0 - days * 3.0)
-                weekday = (st.get("weekday_counts") or {}).get(today.weekday(), 0) * 6.0
-                # A small nudge so never-eaten places surface sometimes...
-                novelty = 8.0 if days is None else 0.0
-                # ...but a directory import stays well behind the real favourites (D14).
-                untried = 25.0 if places_mod.UNTRIED_TAG in (p.tags or []) else 0.0
-                # Jitter so the same place does not lead every single day. Without
-                # it 40-odd never-eaten places tie exactly and stable sort falls
-                # back to alphabetical — "Bánh Mì Linh" forever. The TOOL decides,
-                # never the model (same rule as pick_random).
-                return (familiarity + weekday + novelty
-                        - recent_penalty - untried + random.uniform(0.0, 5.0))
-
-            pool.sort(key=score, reverse=True)
-
-            # Prose and clock rules for these candidates only — the file could
-            # grow for years and the turn stays small.
-            from app import observations as obs_mod
-            from app.clock import now_ict
-
-            now = now_ict()
-            notes = obs_mod.for_subjects(
-                ctx.room_id, [f"place:{p.slug}" for p, _ in pool], today=today)
-            by_subject: dict[str, list] = {}
-            for o in notes:
-                by_subject.setdefault(o.subject, []).append(o)
-
-            candidates = []
-            for p, st in pool:
-                mine = by_subject.get(f"place:{p.slug}", [])
-                status, minutes_left, kind, gate_note = "ok", None, None, None
-                for o in mine:
-                    if not o.gate:
-                        continue
-                    # Worst status wins: one shut door beats three fine ones.
-                    s_, left = obs_mod.gate_status(o, now=now, walk_minutes=p.walk_minutes)
-                    if s_ == "too_late" or (s_ == "act_now" and status == "ok"):
-                        status, minutes_left = s_, left
-                        kind, gate_note = obs_mod.gate_kind(o), o.text
-                candidates.append({
-                    "place_id": p.id,
-                    "name": p.name,
-                    "band": st.get("band"),
-                    "days_since": st.get("days_since"),
-                    "times": st.get("times", 0),
-                    "phone": p.phone,
-                    "tags": [t for t in (p.tags or []) if t != places_mod.UNTRIED_TAG],
-                    "untried": places_mod.UNTRIED_TAG in (p.tags or []),
-                    "status": status,
-                    "gate_kind": kind,
-                    "minutes_left": minutes_left,
-                    # The note the gate came from, so an explanation quotes the
-                    # actual reason rather than whichever note happened to be
-                    # first ("ăn được, mới sửa quán" is not why it is too late).
-                    "gate_note": gate_note,
-                    "notes": [o.text for o in mine],
-                })
-
-            # A place you cannot get to is not a weak suggestion, it is a wrong
-            # one — but it still ships with its reason, so Phoenix can say why.
-            candidates.sort(key=lambda c: c["status"] == "too_late")
-        return {"ok": True, "mode": "delivery" if want_delivery else "walk",
-                "candidates": candidates}
-
-    def _memo_subject(s, raw: str) -> tuple[str, str] | None:
-        """Resolve free text to ``("place:slug"|"member:nick", label)``, or None.
-
-        **A place only wins on a CONFIDENT tier, never a tie-break.** "Bún riêu cô
-        Trang" is a full restaurant name and matches exactly; a bare "cô Trang" is
-        a person in this room — two of them — and `resolve_best` would happily
-        tie-break it onto the restaurant, filing a note about a colleague against
-        a bún riêu shop. Requiring an exact/folded/prefix hit means the bare form
-        falls through to the roster where it belongs.
-
-        If the text plausibly names a person *as well*, refuse and let the model
-        ask. Across namespaces, ambiguity is never guessed (design D18).
-        """
-        from app import places as places_mod
-
-        place, tier = places_mod.resolve_one(s, ctx.room_id, raw)
-        res = roster.resolve(s, ctx.room_id, names=[raw])
-        person_plausible = bool(res["matched"] or res["ambiguous"])
-
-        if place is not None and tier in places_mod.CONFIDENT_TIERS and not person_plausible:
-            return f"place:{place.slug}", place.name
-        if len(res["matched"]) == 1 and place is None:
-            m = res["matched"][0]
-            return f"member:{roster._fold(m['display_name']).replace(' ', '-')}", m["display_name"]
-        return None
-
-    def remember(args, _tool_ctx=None) -> dict:
-        """Propose remembering a fact about a place or a person.
-
-        Proposal, not a write: an observation asserts something about a person or
-        a business, and TODO.md's "no way to verify a false claim" applies (D7).
-        """
-        args = args or {}
-        from app import memos
-
-        raw = (args.get("about") or "").strip()
-        text = (args.get("text") or "").strip()
-        if not raw or not text:
-            return _err("Cần biết ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
-        gate = (args.get("gate") or "").strip() or None
-        when = None if args.get("standing") else today_ict()
-        with db.session() as s:
-            found = _memo_subject(s, raw)
-            if found is None:
-                return _err(
-                    f"Không rõ «{raw}» là quán nào hay ai. Gọi `find_places` hoặc "
-                    "`find_members` để xác định trước, hoặc `add_place` nếu là quán mới."
-                )
-            subject, label = found
-            try:
-                m = memos.create(s, ctx.room_id, action="add", subject=subject,
-                                 subject_label=label, text=text, when=when, gate=gate)
-            except memos.MemoError as exc:
-                return _err(str(exc))
-            return {"ok": True, "type": "memo_draft", "memo_id": m.id,
-                    "subject": subject, "subject_label": label, "text": text}
-
-    def forget(args, _tool_ctx=None) -> dict:
-        """Propose deleting a remembered fact. Confirmed on a card, like adding."""
-        args = args or {}
-        from app import memos, observations as obs_mod
-
-        raw = (args.get("about") or "").strip()
-        text = (args.get("text") or "").strip()
-        if not raw or not text:
-            return _err("Cần biết xoá ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
-        with db.session() as s:
-            found = _memo_subject(s, raw)
-            if found is None:
-                return _err(f"Không rõ «{raw}» là quán nào hay ai.")
-            subject, label = found
-            existing = [o for o in obs_mod.load(ctx.room_id) if o.subject == subject]
-            if not any(o.text == text for o in existing):
-                return _err(
-                    f"Không có ghi nhớ nào của «{label}» khớp đúng nội dung đó. "
-                    f"Hiện có: {[o.text for o in existing] or 'chưa có gì'}."
-                )
-            m = memos.create(s, ctx.room_id, action="remove", subject=subject,
-                             subject_label=label, text=text)
-            return {"ok": True, "type": "memo_draft", "memo_id": m.id,
-                    "subject": subject, "subject_label": label, "text": text}
-
-    def add_place(args, _tool_ctx=None) -> dict:
-        """Create a restaurant row. Writes immediately, like ``add_member``.
-
-        A place is inert until someone eats there (design D7) — nothing about it
-        asserts anything, so it needs no confirm card. Observations do.
-        """
-        args = args or {}
-        from app import places as places_mod
-
-        name = (args.get("name") or "").strip()
-        if not name:
-            return _err("Missing place name.")
-        slug = places_mod.slugify(name)
-        with db.session() as s:
-            existing = s.scalars(
-                select(Place).where(Place.room_id == ctx.room_id, Place.slug == slug)
-            ).first()
-            if existing is not None:
-                return {"ok": True, "place_id": existing.id, "slug": existing.slug,
-                        "name": existing.name, "already_existed": True}
-            try:
-                p = places_mod.create_place(
-                    s, ctx.room_id, name=name,
-                    aliases=args.get("aliases") or [],
-                    tags=args.get("tags") or [],
-                    delivery=args.get("delivery") or [],
-                    address=args.get("address"), phone=args.get("phone"),
-                    walkable=bool(args.get("walkable", True)),
-                )
-            except places_mod.PlaceError as exc:
-                return _err(str(exc))
-            return {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name,
-                    "already_existed": False}
-
-    def update_member(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        target = args.get("target")
-        if target in (None, ""):
-            return _err("Missing target (nickname or id).")
-        with db.session() as s:
-            m = accounts.find_member(s, ctx.room_id, target)
-            if m is None:
-                return _err(f"No member found for '{target}'.")
-            try:
-                accounts.update_member(
-                    s, m,
-                    display_name=args.get("display_name"),
-                    nickname=args.get("nickname"),
-                    bank_code=args.get("bank_code"),
-                    account_number=args.get("account_number"),
-                    account_holder=args.get("account_holder"),
-                    aliases=args.get("aliases"),
-                    active=args.get("active"),
-                    default_participant=args.get("default_participant"),
-                )
-            except accounts.AccountError as exc:
-                return _err(str(exc))
-            return {
-                "ok": True, "member_id": m.id, "nickname": m.nickname,
-                "display_name": m.display_name, "active": m.active,
-                "default_participant": m.default_participant,
-            }
-
-    def delete_member(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        target = args.get("target")
-        if target in (None, ""):
-            return _err("Missing target (nickname or id).")
-        with db.session() as s:
-            m = accounts.find_member(s, ctx.room_id, target)
-            if m is None:
-                return _err(f"No member found for '{target}'.")
-            accounts.soft_delete_member(s, m)
-            return {
-                "ok": True, "member_id": m.id, "nickname": m.nickname,
-                "display_name": m.display_name,
-            }
-
-    def propose_payment(args, _tool_ctx=None) -> dict:
-        args = args or {}
-        to = args.get("to")
-        frm = args.get("from") or ctx.sender_member_id
-        if not frm:
-            return _err("Không xác định được người trả.")
-        if not to:
-            return _err("Thiếu người nhận.")
-        try:
-            frm_id, to_id = int(frm), int(to)
-        except (TypeError, ValueError):
-            return _err("from/to không hợp lệ.")
-        if frm_id == to_id:
-            return _err("Người trả và người nhận phải khác nhau.")
-        amount = args.get("amount")
-        if amount is not None and not isinstance(amount, int):
-            return _err("amount phải là số nguyên VND.")
-        with db.session() as s:
-            names = _names_for(s, ctx.room_id, [frm_id, to_id])
-            # _names_for returns only the ids that are real room members, so a
-            # hallucinated from/to would be missing here — reject it before the
-            # pay-off path can falsely report payment_settled.
-            if frm_id not in names or to_id not in names:
-                return _err("Không tìm thấy thành viên trong nhóm.")
-            if amount is None:
-                # Gross directional pay-off over the open (since_last) period. We
-                # do NOT net A<->B: a real cash payment settles what `from` owes
-                # `to`, per meal. Netting is only for settle_period's QR.
-                last = ledger.last_settlement(s, ctx.room_id)
-                period = resolve_period(
-                    "since_last", today=today_ict(),
-                    last_settlement_to=last.period_to if last else None,
-                )
-                edges = ledger.debt_breakdown(s, ctx.room_id, period["from"], period["to"])
-                gross_ft = sum(e.outstanding for e in edges
-                               if e.debtor == frm_id and e.creditor == to_id)
-                gross_tf = sum(e.outstanding for e in edges
-                               if e.debtor == to_id and e.creditor == frm_id)
-                mode = args.get("mode")
-
-                if gross_ft <= 0 and gross_tf <= 0:
-                    return {"ok": True, "type": "payment_settled",
-                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
-                            "to": {"id": to_id, "name": names.get(to_id, "?")}}
-                if gross_ft > 0 and gross_tf <= 0:
-                    amount = gross_ft
-                elif gross_ft <= 0 and gross_tf > 0:
-                    return {"ok": True, "type": "nothing_owed",
-                            "from": {"id": frm_id, "name": names.get(frm_id, "?")},
-                            "to": {"id": to_id, "name": names.get(to_id, "?")},
-                            "reverse_amount": gross_tf}
-                elif mode == "gross":
-                    amount = gross_ft
-                elif mode == "offset":
-                    net = gross_ft - gross_tf
-                    if net == 0:
-                        return {"ok": True, "type": "payment_settled",
-                                "from": {"id": frm_id, "name": names.get(frm_id, "?")},
-                                "to": {"id": to_id, "name": names.get(to_id, "?")}}
-                    if net > 0:
-                        amount = net
-                    else:  # net direction flips: to -> frm
-                        frm_id, to_id = to_id, frm_id
-                        amount = -net
-                else:
-                    return {
-                        "ok": True, "type": "payment_ambiguous",
-                        "from": {"id": frm_id, "name": names.get(frm_id, "?")},
-                        "to": {"id": to_id, "name": names.get(to_id, "?")},
-                        "gross": {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft},
-                        "offset": (
-                            {"from_member_id": frm_id, "to_member_id": to_id, "amount": gross_ft - gross_tf}
-                            if gross_ft >= gross_tf else
-                            {"from_member_id": to_id, "to_member_id": frm_id, "amount": gross_tf - gross_ft}
-                        ),
-                    }
-            if amount <= 0:
-                return _err("Số tiền phải lớn hơn 0.")
-        return {
-            "ok": True,
-            "type": "payment_draft",
-            "from_member_id": frm_id,
-            "to_member_id": to_id,
-            "amount": amount,
-            "note": args.get("note"),
-            "from_name": names.get(frm_id, "?"),
-            "to_name": names.get(to_id, "?"),
-        }
-
-    def settle_period(args, _tool_ctx=None) -> dict:
-        """Who owes whom right now, with QR codes: edges → net → QR → payload.
-
-        Read-only. It computes a running total and writes NOTHING — there is no
-        period-closing feature, so `settlements` stays empty and every window
-        keeps the whole ledger behind it. The tool used to take a `commit` flag
-        that wrote a Settlement row; nobody ever passed it, and the day someone
-        had, `resolve_period("since_last")` would have flipped from "the whole
-        ledger" to a bounded window for the ledger panel, quick-pay, and every
-        statement at once. Reintroduce it deliberately or not at all (see
-        ledger.record_settlement, kept for that purpose).
-        """
-        args = args or {}
-        with db.session() as s:
-            from app import drafts  # lazy: avoid import cycle at module load
-            pending = drafts.list_pending_drafts(s, ctx.room_id)
-            if pending:
-                summaries = []
-                for d in pending:
-                    att = d.attachments or {}
-                    if att.get("type") == "payment_draft":
-                        tf = att.get("transfers") or []
-                        ids = [x for t in tf for x in (t.get("from_member_id"), t.get("to_member_id"))]
-                        names = _names_for(s, ctx.room_id, ids)
-                        summaries.append({
-                            "draft_id": d.id, "kind": "payment",
-                            "transfers": [
-                                {"from_name": names.get(t.get("from_member_id"), "?"),
-                                 "to_name": names.get(t.get("to_member_id"), "?"),
-                                 "amount": t.get("amount", 0)} for t in tf],
-                        })
-                    else:
-                        names = _names_for(s, ctx.room_id, [att.get("payer_member_id")])
-                        summaries.append({
-                            "draft_id": d.id, "kind": "meal",
-                            "payer_name": names.get(att.get("payer_member_id"), "?"),
-                            "bill_total": att.get("bill_total", 0),
-                            "participant_count": len(att.get("member_participants") or []),
-                        })
-                return {
-                    "ok": True,
-                    "type": "settle_blocked",
-                    "pending": summaries,
-                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi tính.",
-                }
-
-            last = ledger.last_settlement(s, ctx.room_id)
-            try:
-                period = resolve_period(
-                    args.get("keyword"),
-                    today=today_ict(),
-                    last_settlement_to=last.period_to if last else None,
-                    explicit_from=_parse_iso(args.get("from")),
-                    explicit_to=_parse_iso(args.get("to")),
-                )
-            except ValueError as exc:
-                return _err(str(exc))
-
-            from_date, to_date = period["from"], period["to"]
-            # One computation behind the amounts, the per-meal QR notes and the
-            # "đã cân bằng" verdict. These edges carry FIFO-attributed payments,
-            # so `outstanding > 0` is exactly "still being repaid" — which is
-            # also why the note never names a meal that is already settled.
-            open_edges = [e for e in ledger.debt_breakdown(s, ctx.room_id, from_date, to_date)
-                          if e.outstanding > 0]
-            transfers = net_transfers(open_edges)
-
-            # Gated on the transfers themselves, not on period_balances: that
-            # number used to disagree with this one on a bounded window, so the
-            # room could be told "mọi người đã cân bằng" with transfers pending,
-            # or handed an empty transfer list with no explanation at all.
-            if not transfers:
-                return {
-                    "ok": True,
-                    "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
-                    "transfers": [],
-                    "message": "Mọi người đã cân bằng — không ai nợ ai trong kỳ này.",
-                }
-
-            # include_inactive: a transfer may involve a since-removed member.
-            members = {m.id: m for m in roster.list_members(s, ctx.room_id, include_inactive=True)}
-            fallback_note = f"Chia tien an {to_date.day}/{to_date.month}"
-
-            rows: list[dict] = []
-            warnings: list[str] = []
-            for t in transfers:
-                payee = members.get(t.to_member)
-                payer = members.get(t.from_member)
-                # Meals the payee (creditor) fronted that this debtor still owes
-                # on — the "what you're repaying" list for this transfer.
-                pair_meals = [
-                    {"date": e.occurred_on, "dish": e.dish}
-                    for e in open_edges
-                    if e.debtor == t.from_member and e.creditor == t.to_member
-                ]
-                note = build_qr_note(
-                    payer.display_name if payer else "",
-                    pair_meals,
-                    fallback=fallback_note,
-                )
-                row = {
-                    "from_id": t.from_member,
-                    "from_name": payer.display_name if payer else "?",
-                    "to_id": t.to_member,
-                    "to_name": payee.display_name if payee else "?",
-                    "amount": t.amount,
-                    "note": note,
-                    "qr_url": None,
-                }
-                try:
-                    row["qr_url"] = make_qr_url(payee, t.amount, note)
-                except QRError as exc:
-                    warnings.append(str(exc))
-                rows.append(row)
-
-            # Nothing is written. See the tool description: this is a running
-            # total, not a closing entry.
-
-        return {
-            "ok": True,
-            "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
-            "transfers": rows,
-            "warnings": warnings,
-        }
-
-    return {
-        "find_members": CustomTool(
-            execute=find_members,
-            description=("Look up member ids by name/nickname/real name/bank-account name, or the"
-                         " whole group (all_active — every active member, no exceptions). Returns"
-                         " `unresolved` (nobody by that name) and `ambiguous` (two people match —"
-                         " ask which one); neither may be ignored."),
-            input_schema=_FIND_SCHEMA,
-        ),
-        "propose_meal": CustomTool(
-            execute=propose_meal,
-            description="Propose a meal (does NOT record it) for the user to confirm. FINAL TOOL when logging a meal.",
-            input_schema=_PROPOSE_SCHEMA,
-        ),
-        "void_meal": CustomTool(
-            execute=void_meal,
-            description="Void a meal by meal_id to correct a mistake.",
-            input_schema=_VOID_SCHEMA,
-        ),
-        "cancel_draft": CustomTool(
-            execute=cancel_draft,
-            description=(
-                "Cancel a PENDING draft card by its # (e.g. a stale proposal blocking "
-                "settle_period). Records nothing. Confirming a draft is NOT possible from "
-                "chat — only the Confirm button on the card can do that."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {"draft_id": {"type": "integer",
-                                            "description": "The # shown on the draft card."}},
-                "required": ["draft_id"],
-            },
-        ),
-        "pick_random": CustomTool(
-            execute=pick_random,
-            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Draws from default-participant members only (see update_member's default_participant flag) — no per-request subsetting. The tool does the draw — never pick yourself.",
-            input_schema=_RANDOM_PICK_SCHEMA,
-        ),
-        "resolve_period": CustomTool(
-            execute=resolve_period_tool,
-            description="Turn a time keyword (since_last/this_week/...) into a concrete date range (ICT).",
-            input_schema=_PERIOD_SCHEMA,
-        ),
-        "resolve_date": CustomTool(
-            execute=resolve_date_tool,
-            description="Turn a day word ('thứ 2', 'hôm qua', '20/7') into an ISO date (ICT). Use before propose_meal when the user names a day.",
-            input_schema={"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]},
-        ),
-        "member_statement": CustomTool(
-            execute=member_statement,
-            description="A person's own statement: what they owe + are owed, per meal, with paid/unpaid status. There is no net/ròng figure — report the owe and owed rows as they are. Default member = the sender. Use for first-person questions ('tôi nợ ai', 'how much do I owe').",
-            input_schema={"type": "object", "properties": {
-                "member": {"type": "integer", "description": "member id; blank = the sender."},
-                "keyword": _PERIOD_SCHEMA["properties"]["keyword"],
-            }},
-        ),
-        "get_period_summary": CustomTool(
-            execute=get_period_summary,
-            description="Group summary: chronological timeline of meals + payments plus every open 'X owes Y' row (display only). Use for 'summary'/'current state'/'tổng kết'.",
-            input_schema={"type": "object", "properties": {"keyword": _PERIOD_SCHEMA["properties"]["keyword"]}},
-        ),
-        "settle_period": CustomTool(
-            execute=settle_period,
-            description=(
-                "Compute who pays whom right now + build VietQR codes for a period. "
-                "READ-ONLY: it is a running total ('tạm tính'), it does NOT close or reset "
-                "anything. If the user asks to chốt/reset, show this and say plainly that "
-                "closing a period is not supported yet."
-            ),
-            input_schema=_SETTLE_SCHEMA,
-        ),
-        "add_member": CustomTool(
-            execute=add_member,
-            description="Add a new member to the room (no PIN yet); they set their PIN on first sign-in.",
-            input_schema=_ADD_MEMBER_SCHEMA,
-        ),
-        "update_member": CustomTool(
-            execute=update_member,
-            description="Update a member's details (display_name, nickname, bank, aliases), restore a removed one (active:true), or exclude/include them from random draws (default_participant:false/true — draws only, never splits).",
-            input_schema=_UPDATE_MEMBER_SCHEMA,
-        ),
-        "delete_member": CustomTool(
-            execute=delete_member,
-            description="Remove a member from the group (soft-delete): they leave the roster and can't sign in, but their past meals/settlements are kept.",
-            input_schema=_DELETE_MEMBER_SCHEMA,
-        ),
-        "find_places": CustomTool(
-            execute=find_places,
-            description=(
-                "Look up restaurants the group knows by name ('thịnh lơ', 'quán bé bự'), "
-                "or list them all with all:true. Returns places, never people — use "
-                "`find_members` for people."
-            ),
-            input_schema=_FIND_PLACES_SCHEMA,
-        ),
-        "suggest_lunch": CustomTool(
-            execute=suggest_lunch,
-            description=(
-                "Decide where the group should eat ('trưa nay ăn gì?', 'ăn gì bây giờ'). "
-                "The TOOL ranks — do not re-order, do not pick a different one. Returns a "
-                "price band (rẻ/vừa/đắt), never an amount. Pass delivery:true when they "
-                "want to order in rather than walk out."
-            ),
-            input_schema=_SUGGEST_LUNCH_SCHEMA,
-        ),
-        "remember": CustomTool(
-            execute=remember,
-            description=(
-                "Đề xuất ghi nhớ một điều về quán hoặc về một người ('quán này hay hết gà', "
-                "'Giang thích bún riêu', 'phải gọi trước 11h30'). Tạo THẺ để người dùng xác "
-                "nhận — không ghi thẳng. Dùng standing:true cho luật lâu dài."
-            ),
-            input_schema=_REMEMBER_SCHEMA,
-        ),
-        "forget": CustomTool(
-            execute=forget,
-            description=(
-                "Đề xuất xoá một ghi nhớ đã có ('quán đó cải thiện rồi, bỏ ghi chú kia đi'). "
-                "Cũng cần xác nhận trên thẻ."
-            ),
-            input_schema=_FORGET_SCHEMA,
-        ),
-        "add_place": CustomTool(
-            execute=add_place,
-            description=(
-                "Add a restaurant the group has started going to. Writes immediately "
-                "(a place row is inert until someone eats there). Seed `aliases` with "
-                "every spelling the group actually types, including tone-free ones."
-            ),
-            input_schema=_ADD_PLACE_SCHEMA,
-        ),
-        "propose_payment": CustomTool(
-            execute=propose_payment,
-            description=(
-                "Propose a cash payment one member made to another for the user to confirm "
-                "(e.g. 'A trả B 100k', 'A đã trả B'). Does NOT write the ledger. FINAL TOOL for a "
-                "payment. Omit `amount` to pay off exactly what `from` owes `to`."
-            ),
-            input_schema=_PROPOSE_PAYMENT_SCHEMA,
-        ),
-    }
+    _inject(ctx)
+    composed = compose_tools(kernel_for(ctx.db).packs, ctx.tool_config.get("packs", []), ctx)
+    ordered = [n for n in LEGACY_ORDER if n in composed] + [n for n in composed if n not in LEGACY_ORDER]
+    return {n: _from_pack(composed[n]) for n in ordered}
 
 
-def tool_manifest() -> list[dict]:
+def tool_manifest(ctx: ToolContext | None = None) -> list[dict]:
     """`[{name, description, schema}]` for the sidecar's `run` command.
 
-    Built from `build_tools` against a throwaway context so the manifest can never
-    drift from the tools that actually execute — the model must be told about
-    exactly the schema the tool will validate against.
+    Built from `build_tools` so the manifest can never drift from the tools that
+    actually execute — the model must be told about exactly the schema the tool will
+    validate against. With a ``ctx`` the per-turn tool selection applies; without one
+    (the schema fixture, the probe) it is the full legacy set.
     """
-    from app.db import Database
-
-    ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
+    if ctx is None:
+        from app.db import Database
+        ctx = ToolContext(db=Database("sqlite:///:memory:"), room_id=0)
     return [
         {"name": name, "description": tool.description, "schema": tool.input_schema}
         for name, tool in build_tools(ctx).items()

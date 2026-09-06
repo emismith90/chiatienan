@@ -19,12 +19,20 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import memory, moneyguard
+from app import memory
 from app.clock import now_ict
 from app.config import settings
 from app.db import Database
 from app.models import Meal, Member, RoomMessage
 from app.summarize import summarize_messages
+# The deterministic bodies for the lunch ledger's tool results live in the pack
+# (plan Task 3.3); re-exported so `tests/test_chat_bodies.py` and `bench.graders`
+# keep their import path.
+from packs.ledger_tools.render import (  # noqa: F401
+    _payment_body, _random_pick_body, _settle_blocked_body, _settlement_body, _statement_body,
+    _summary_body, render_bot_attachments,
+)
+from packs.lunch_ledger.render import _meal_body  # noqa: F401
 
 log = logging.getLogger("chiatienan")
 
@@ -306,93 +314,6 @@ def recent_images(session: Session, room_id: int, *, before_id: int | None = Non
     return []
 
 
-def render_bot_attachments(result) -> dict | None:
-    settle = result.last_result("settle_period")
-    if settle:
-        if settle.get("type") == "settle_blocked":
-            return dict(settle)
-        return {"type": "settlement", **settle}
-    statement = result.last_result("member_statement")
-    if statement and statement.get("type") == "statement":
-        return {"type": "statement", **statement}
-    summary = result.last_result("get_period_summary")
-    if summary and summary.get("type") == "summary":
-        return {"type": "summary", **summary}
-    pick = result.last_result("pick_random")
-    if pick and pick.get("type") == "random_pick":
-        return {"type": "random_pick", **pick}
-    return None
-
-
-def _settlement_body(attachments: dict) -> str:
-    """Deterministic summary of a settlement, straight from the tool-result dict —
-    never from LLM prose (design D3, money-safety)."""
-    period = attachments.get("period") or {}
-    p_from, p_to = period.get("from"), period.get("to")
-    # "Provisional", not "Settled": nothing is recorded and no period closes, so a
-    # header that reads like a closing entry was telling the room the books had
-    # been ruled off when `settlements` had been empty since the ledger began.
-    header = (f"Provisional {p_from} → {p_to}:" if p_from
-              else f"Provisional through {p_to}:")
-
-    transfers = attachments.get("transfers") or []
-    lines = [header]
-    if transfers:
-        # The memo rides along the QR as the bank's addInfo, and it is the part
-        # people dispute ("sai nội dung chuyển khoản r"). It was only ever in the
-        # attachment, so nobody could see what it said without opening the card.
-        lines.extend(
-            f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ"
-            + (f" · ref: {t['note']}" if t.get("note") else "")
-            for t in transfers
-        )
-    else:
-        lines.append(attachments.get("message") or "Nobody owes anybody.")
-
-    for w in attachments.get("warnings") or []:
-        lines.append(f"⚠️ {w}")
-    return "\n".join(lines)
-
-
-def _payment_body(attachments: dict) -> str:
-    """Deterministic summary of recorded payment(s), from the tool/commit dict —
-    never LLM prose (money-safety)."""
-    transfers = attachments.get("transfers") or []
-    if not transfers:
-        return "💸 Payment recorded."
-    lines = [f"{t['from']['name']} paid {t['to']['name']} {t['amount']:,}đ" for t in transfers]
-    return "💸 " + lines[0] if len(lines) == 1 else "💸 Recorded:\n" + "\n".join(lines)
-
-
-def _settle_blocked_body(attachments: dict) -> str:
-    """Deterministic summary of a blocked settle (pending drafts must be
-    confirmed/cancelled first), straight from the tool-result dict — never from
-    LLM prose (design D3, money-safety)."""
-    lines = [attachments.get("message") or "There are drafts still unconfirmed."]
-    for p in attachments.get("pending") or []:
-        if p.get("kind") == "payment":
-            parts = ", ".join(
-                f"{t['from_name']}→{t['to_name']} {t['amount']:,}đ" for t in (p.get("transfers") or [])
-            )
-            lines.append(f"• #{p['draft_id']}: {parts}")
-        else:
-            lines.append(
-                f"• #{p['draft_id']}: {p.get('payer_name', '?')} paid "
-                f"{p.get('bill_total', 0):,}đ ({p.get('participant_count', 0)} people)"
-            )
-    # Production: this listed the blocking draft and stopped there, so people
-    # asked the bot to close it four different ways instead of scrolling up to
-    # the card. Say where the buttons are, and that chat can cancel it.
-    if attachments.get("pending"):
-        # The buttons are named as the card renders them, in English — an
-        # instruction that names a control the room cannot find is worse than none.
-        lines.append(
-            "Open the draft card above (by its # number) and press **Confirm** or "
-            '**Cancel** — or say "huỷ đề xuất #<số>" and I will cancel it for you.'
-        )
-    return "\n".join(lines)
-
-
 def _empty_turn_body(result) -> str:
     """What to say when the model produced no text.
 
@@ -424,110 +345,6 @@ def _empty_turn_body(result) -> str:
     return ("⚠️ I came back with nothing — nothing was recorded. Ask me again.")
 
 
-def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
-    """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
-
-    Room-scoped and void-aware on purpose: "Đã ghi #14" is a claim about *this*
-    room's ledger, and a voided meal is one the room decided never happened.
-    """
-    with db.session() as s:
-        meal = s.get(Meal, meal_id)
-        return meal is not None and meal.room_id == room_id and not meal.voided
-
-
-#: What the room sees instead of a forged confirmation. It has to say the thing
-#: the forgery hid — that the ledger is untouched — because the failure is
-#: invisible otherwise: nothing was written, so no balance moves and no card
-#: appears, and the next person to read the thread has only the bot's word.
-_FABRICATED_COMMIT_BODY = (
-    "⚠️ This meal was **not recorded** — nothing in the ledger changed.\n"
-    "Please say it again (attach the bill photo if you have one, and say who paid and "
-    "who shared) — it only reaches the ledger once a draft card appears and someone "
-    "presses **Confirm**."
-)
-
-
-def _meal_body(attachments: dict) -> str:
-    """Deterministic summary of a committed meal, straight from the tool-result
-    dict — never from LLM prose (design D3, money-safety)."""
-    payer = attachments.get("payer") or {}
-    shares = attachments.get("shares") or []
-    shares_str = ", ".join(f"{s['name']} {s['amount']:,}đ" for s in shares)
-    bill = attachments.get("bill_total", attachments.get("tracked_total", attachments.get("total_amount", 0)))
-    guests = attachments.get("guests") or []
-    guest_str = (f" (incl. {len(guests)} guest{'' if len(guests) == 1 else 's'} paying cash)"
-                 if guests else "")
-    dish = attachments.get("dish")
-    dish_str = f" — {dish}" if dish else ""
-    return (
-        f"Recorded #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} paid "
-        f"{bill:,}đ total{guest_str} • {shares_str}"
-    )
-
-
-def _statement_body(att: dict) -> str:
-    """Deterministic text for a personal statement — numbers from the tool dict.
-
-    Two sections and no total. The old closing line, "Ròng: -54.500đ", was the
-    one number in the reply nobody could act on: it is not what you send anyone,
-    it is not what anyone sends you, and when the two sections disagreed with it
-    (a debt in each direction) it read as though they had been cancelled out.
-    What you owe and what you are owed, per person per meal, is the whole answer.
-    """
-    name = (att.get("member") or {}).get("name", "?")
-    lines = [f"{name} — owes and is owed:"]
-    owe = att.get("owe") or []
-    owed = att.get("owed") or []
-    if owe:
-        lines.append("You owe:")
-        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'meal'}"
-                  f"{' – paid' if r['status'] == 'paid' else ''})" for r in owe]
-    if owed:
-        lines.append("You are owed:")
-        lines += [f"• {r['name']} {r['amount']:,}đ ({r.get('dish') or 'meal'})" for r in owed]
-    if not owe and not owed:
-        lines.append("You owe nobody, and nobody owes you.")
-    return "\n".join(lines)
-
-
-def _summary_body(att: dict) -> str:
-    """One-line headline for a group summary — numbers from the tool dict.
-
-    This used to print every row. Fifteen transactions arrived as one unbroken
-    paragraph, and when someone asked for it "day by day, as bullet points" they
-    got the identical blob back, because the body is rendered server-side and
-    cannot honour a formatting request. The detail belongs in the card below it
-    (grouped by day) and in the ledger panel the card can open — a chat bubble is
-    the wrong surface for a table.
-    """
-    period = att.get("period") or {}
-    timeline = att.get("timeline") or []
-    meals = sum(1 for e in timeline if e["kind"] == "meal")
-    payments = len(timeline) - meals
-    window = (f"{period.get('from')} → {period.get('to')}" if period.get("from")
-              else f"through {period.get('to')}")
-    if not timeline:
-        return f"Summary {window}: no transactions in this period."
-    parts = []
-    if meals:
-        parts.append(f"{meals} meal{'' if meals == 1 else 's'}")
-    if payments:
-        parts.append(f"{payments} payment{'' if payments == 1 else 's'}")
-    days = len({e.get("occurred_on") for e in timeline})
-    return (f"Summary {window}: {', '.join(parts)} across {days} "
-            f"day{'' if days == 1 else 's'} — details below.")
-
-
-def _random_pick_body(att: dict) -> str:
-    """Deterministic text for a random draw — the winner comes from the tool dict,
-    never the LLM, so it can't be re-typed into a different name."""
-    chosen = att.get("chosen") or {}
-    n = len(att.get("candidates") or [])
-    label = att.get("label")
-    tail = f" ({label})" if label else ""
-    return f"🎲 Picked{tail}: **{chosen.get('name', '?')}** — from {n} people."
-
-
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
                         text: str, images=None, emit=None,
                         before_id: int | None = None) -> RoomMessage:
@@ -539,185 +356,65 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     ``expense_draft`` for a human to edit/commit. The draft write itself
     (``drafts.create_draft``, which persists the new draft and retires any
     pending draft it re-proposes, without recording anything) runs under the
-    SAME lock as ``run_turn``, so the ledger's single-writer property covers
+    SAME lock as the model turn, so the ledger's single-writer property covers
     this path too.
 
-    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — forwarded to
-    :func:`app.agent.run_turn` for live ``agent.*`` progress.
-    """
-    from app import drafts
-    from app.agent import run_turn
-    from app.tools import ToolContext
+    Since plan Task 1.8 the body is the kernos pipeline: the room resolves to a
+    profile, and the stages — rollover, memory, history, image carry-over, prompt,
+    the model turn, the outcome decision, the reply validators, persistence — run
+    as plugins in the order the profile lists them (``app/default_profile.py`` is
+    today's order). What each plugin does is the block this function used to
+    contain, moved with its comments; ``tests/test_run_bot_turn_golden.py`` pins
+    that the result is byte-identical.
 
-    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
-                       sender_name=member_name, turn_mentions=[])
+    ``emit`` — optional ``Callable[[dict], Awaitable[None]]`` — receives live
+    ``agent.*`` progress, and, after the lock is released, the republished cards
+    whose buttons must disappear.
+    """
+    from app.kernel import kernel_for
+    from app.tools import ToolContext
+    from kernos.kernel import LegacyAgentEventSink, Principal, TurnContext, flush
+
+    kernel = kernel_for(db)
+    spec = kernel.resolve(room_id)
+    ctx = TurnContext(
+        space_id=str(room_id),
+        principal=Principal(member_id, member_name),
+        text=text,
+        images=list(images or []),
+        before_id=before_id,
+        profile=spec,
+        tool_ctx=ToolContext(db=db, room_id=room_id, sender_member_id=member_id,
+                             sender_name=member_name, turn_mentions=[]),
+        sink=LegacyAgentEventSink(emit),
+        extras={"agent": kernel.agent_for(room_id)},     # who runs the room; its `delegates_to` enables `ask_*` (design §6)
+    )
 
     async with _agent_lock:
-        await _maybe_rollover(db, room_id)
-        mem_text = memory.load_memory(room_id)
-        with db.session() as s:
-            history = build_history(
-                s, room_id, watermark=memory.read_watermark(room_id),
-                before_id=before_id, limit=settings.history_max_messages,
-            )
-            # "bill pasted, then @phoenix in the next message" is the normal way
-            # people use this — carry the recent bill into the turn.
-            if not images:
-                images = recent_images(s, room_id, before_id=before_id) or None
-        result = await run_turn(text, ctx, images=images, emit=emit,
-                                memory=mem_text or None, history=history or None)
+        await kernel.pipeline_for(spec).run(ctx)
 
-        # A meal turn never writes directly: the LLM only proposes, and the
-        # turn ends with an editable draft card for the human to confirm
-        # (design D3, money-safety).
-        proposal = result.last_result("propose_meal")
-        # Collapse multiple proposals for the SAME (from,to) pair to the LAST
-        # one (a model self-correction "100k… actually 150k"), preserving order.
-        # Distinct pairs (real multi-payer) are untouched.
-        _by_pair: dict[tuple[int, int], dict] = {}
-        for p in result.all_results("propose_payment"):
-            if p.get("type") == "payment_draft":
-                _by_pair[(p["from_member_id"], p["to_member_id"])] = {
-                    "from_member_id": p["from_member_id"], "to_member_id": p["to_member_id"],
-                    "amount": p["amount"], "note": p.get("note")}
-        payment_transfers = list(_by_pair.values())
-        # Cards this turn retired by re-proposing them, published below so their
-        # Confirm/Cancel buttons disappear everywhere instead of lingering as a
-        # pending draft that blocks the next settle.
-        superseded_payloads: list[dict] = []
-        if proposal:
-            payload = {k: proposal.get(k) for k in (
-                "payer_member_id", "member_participants", "guests", "bill_total",
-                "adjustments", "items", "discount_split", "dish", "initiator", "note",
-                "per_head_preview", "occurred_on")}
-            payload["raw_input"] = text
-            payload["logged_by"] = str(member_id)
-            payload["turn_id"] = result.turn_id
-            with db.session() as s:
-                new_msg, superseded = drafts.create_draft(s, room_id, payload)
-                superseded_payloads = [message_to_dict(m, None) for m in superseded]
-        elif payment_transfers:
-            payload = {"transfers": payment_transfers, "turn_id": result.turn_id}
-            with db.session() as s:
-                new_msg, superseded = drafts.create_payment_draft(s, room_id, payload)
-                superseded_payloads = [message_to_dict(m, None) for m in superseded]
-        else:
-            attachments = render_bot_attachments(result)
-
-            # Money turns get a body built server-side from the tool-result
-            # dict, so the visible text can never disagree with the
-            # QR/attachment numbers (the LLM's `final_text` is never used for
-            # the amounts themselves).
-            if attachments and attachments.get("type") == "settlement":
-                body = _settlement_body(attachments)
-            elif attachments and attachments.get("type") == "settle_blocked":
-                body = _settle_blocked_body(attachments)
-            elif attachments and attachments.get("type") == "statement":
-                body = _statement_body(attachments)
-            elif attachments and attachments.get("type") == "summary":
-                body = _summary_body(attachments)
-            elif attachments and attachments.get("type") == "random_pick":
-                body = _random_pick_body(attachments)
-            else:
-                body = result.final_text or _empty_turn_body(result)
-                # The one path where money reaches the room as LLM prose. Report
-                # it (see app.moneyguard); enforcing comes after the log is quiet.
-                if result.final_text:
-                    # …except for the one class that is wrong however the numbers
-                    # were obtained: prose that says the ledger was written when
-                    # no tool wrote it. 2026-08-14, room 3 — a bill photo and
-                    # "log this for all" came back in 6.1s with `tools=0` as a
-                    # word-perfect forgery of `_meal_body`: "Đã ghi #14 — Texas
-                    # Chicken: Bạch Mai trả tổng 793,760đ • …". There was no meal
-                    # #14, "Bạch Mai" is the branch on the receipt rather than
-                    # anyone in the room, and the split listed six of seven
-                    # members. Nothing distinguished it from a real confirmation,
-                    # so the room believed it, and asking again just reproduced
-                    # it. Reporting is not enough for this one: the message must
-                    # not be posted.
-                    #
-                    # `meal_exists` is what makes that stick across repeats. The
-                    # forgery was posted, so its numbers joined the room's own
-                    # history, and the history legitimately backs amounts — which
-                    # quietly cleared every retelling (three more over 44
-                    # minutes, `tools=0` each time). The ledger cannot be talked
-                    # round: "Đã ghi #14" is checked against `meals`.
-                    forged = moneyguard.fabricated_commit(
-                        body, f"{text}\n{history or ''}", result.tools,
-                        meal_exists=lambda mid: _meal_exists(db, room_id, mid),
-                    )
-                    if forged is not None:
-                        log.error(
-                            "suppressed fabricated commit: room=%s turn=%s amounts=%s "
-                            "images=%d tools=%s text=%r",
-                            room_id, result.turn_id, forged, len(images or []),
-                            [inv.name for inv in result.tools], body[:400],
-                        )
-                        body = _FABRICATED_COMMIT_BODY
-                    else:
-                        # The history counts as the user having said it. A number the
-                        # room stated two messages ago and the bot repeats back
-                        # ("bạn nói tổng 324k") is not invented money, and flagging it
-                        # buries the alerts that matter — the benchmark's `p102`/`p104`
-                        # replies were reported as unbacked for quoting a total from the
-                        # conversation they were handed.
-                        stray = moneyguard.unbacked_amounts(
-                            body, f"{text}\n{history or ''}", result.tools)
-                        if stray:
-                            # images=N matters for triage. Replaying four days of
-                            # production through this: of the alerts that survive a
-                            # tool-output allow-set, all but one were prices the model
-                            # read off a bill photo — correct, but unattributable by
-                            # construction because image content is not text. Those
-                            # stay a warning; the forgeries above are what blocks.
-                            log.warning(
-                                "unbacked money in reply: room=%s turn=%s amounts=%s images=%d tools=%s",
-                                room_id, result.turn_id, stray, len(images or []),
-                                [inv.name for inv in result.tools],
-                            )
-
-            with db.session() as s:
-                new_msg = post_message(s, room_id, None, body, attachments=attachments, kind="bot")
-
-            # No ledger:changed here any more: settle_period is read-only, so a
-            # settlement cannot alter a balance. Meal and payment commits emit it
-            # from their own routes.
-
-        # A draft the bot cancelled on request is the same situation as a
-        # superseded one: open clients still show its buttons until the card
-        # itself is republished.
-        cancelled_ids = [r.get("draft_id") for r in result.all_results("cancel_draft")]
-        if cancelled_ids:
-            with db.session() as s:
-                for draft_id in cancelled_ids:
-                    card = s.get(RoomMessage, draft_id) if draft_id else None
-                    if card is not None and card.room_id == room_id:
-                        superseded_payloads.append(message_to_dict(card, None))
-
+    # A card this turn superseded or cancelled is republished so open clients stop
+    # showing its buttons — outside the lock, exactly where it was emitted before.
     if emit:
-        for stale in superseded_payloads:
-            await emit({"type": "message", **stale})
+        await flush(ctx.pending_events, ctx.sink)
 
-    return new_msg
+    return ctx.persisted
 
 
 async def _maybe_rollover(db: Database, room_id: int) -> None:
     """Fold messages older than the recent window into ``memory.md`` and advance
-    the watermark. No-op when nothing has aged out. Caller holds ``_agent_lock``."""
-    cutoff = now_ict() - timedelta(weeks=settings.memory_window_weeks)
-    with db.session() as s:
-        wm = memory.read_watermark(room_id)
-        aged = memory.messages_to_summarize(s, room_id, watermark=wm, older_than=cutoff)
-        if not aged:
-            return
-        through_id = aged[-1].id
-        rendered = _render_messages(s, room_id, aged)
-    summary = await summarize_messages(rendered, kind="rollover")
-    if summary:
-        memory.append_summary(room_id, summary_text=summary, through_id=through_id,
-                              through_at=now_ict().isoformat(), header="Auto-saved (older than 10 weeks)")
-    # On a blank/failed summary we leave the watermark untouched so the aged
-    # messages are retried next turn — never silently dropped.
+    the watermark. No-op when nothing has aged out. Caller holds ``_agent_lock``.
+
+    The logic lives in :func:`kernos.plugins.rollover_once` (the pipeline's first
+    ``context`` plugin); this wrapper runs it through this host's adapters with the
+    env-configured window, so there is one implementation, not two.
+    """
+    from app.hostadapters import build_adapters
+    from kernos.plugins import rollover_once
+
+    await rollover_once(str(room_id), adapters=build_adapters(db),
+                        window_weeks=settings.memory_window_weeks,
+                        header="Auto-saved (older than 10 weeks)", kind="rollover")
 
 
 async def clear_context(db: Database, room_id: int, *, up_to_id: int, emit=None) -> RoomMessage:

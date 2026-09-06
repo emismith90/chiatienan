@@ -1,0 +1,607 @@
+{
+  "version": 1,
+  "engine": "pi",
+  "corpus": "typical",
+  "repeat": 5,
+  "judge_model": null,
+  "partial": true,
+  "cases_run": 1,
+  "records": [
+    {
+      "version": 1,
+      "case_id": "G12",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000,
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý"
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 200000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "phở",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Đề xuất đã ra: phở 200k, An trả, ăn An + Bình, chia 2 — mỗi người 100k. Emi rủ cơ, ghi chú \"An đổi ý\". Bấm xác nhận trên thẻ để ghi vào sổ.",
+      "error": null,
+      "elapsed_s": 9.002005641000096,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G12",
+      "rep": 1,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000,
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý"
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 200000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "phở",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Đã chuẩn thẻ nháp: phở 200k, An trả — An và Bình ăn (Emi rủ đi), chia đều 2 người, ghi chú \"An đổi ý\". Bấm xác nhận trên thẻ để ghi vào sổ 😊",
+      "error": null,
+      "elapsed_s": 6.092537653000136,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G12",
+      "rep": 2,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000,
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý"
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 200000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "phở",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Được, thẻ nháp đã treo — phở 200k, An trả, chia đều 2 người (An + Bình), Emi rủ đi, ghi chú \"An đổi ý\". Bấm xác nhận trên thẻ để ghi vô sổ! 🍜",
+      "error": null,
+      "elapsed_s": 4.320331560000113,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G12",
+      "rep": 3,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000,
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý"
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 200000,
+            "adjustments": [],
+            "items": [],
+            "discount_split": null,
+            "dish": "phở",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": null
+          }
+        }
+      ],
+      "final_text": "Phở 200k chia đều 2 người: An với Bình, mỗi người 100k. Emi rủ đi (chỉ khởi xướng). Nháp đã tạo — bấm xác nhận trên thẻ để ghi.",
+      "error": null,
+      "elapsed_s": 4.218409689000055,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G12",
+      "rep": 4,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Emi"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [
+              "Emi"
+            ],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000,
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý"
+          },
+          "result": {
+            "ok": false,
+            "error": "«Emi» đã được tra trong lượt này nhưng không khớp thành viên nào, và cũng không có trong participants hay guests — chia như vậy là bỏ sót người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: (1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; (2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác (tên thật, tên ngân hàng, biệt danh); (3) là người mới → `add_member` rồi cho id vào `participants`."
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000
+          },
+          "result": {
+            "ok": false,
+            "error": "«Emi» đã được tra trong lượt này nhưng không khớp thành viên nào, và cũng không có trong participants hay guests — chia như vậy là bỏ sót người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: (1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; (2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác (tên thật, tên ngân hàng, biệt danh); (3) là người mới → `add_member` rồi cho id vào `participants`."
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "dish": "phở",
+            "note": "An đổi ý",
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000
+          },
+          "result": {
+            "ok": false,
+            "error": "«Emi» đã được tra trong lượt này nhưng không khớp thành viên nào, và cũng không có trong participants hay guests — chia như vậy là bỏ sót người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: (1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; (2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác (tên thật, tên ngân hàng, biệt danh); (3) là người mới → `add_member` rồi cho id vào `participants`."
+          }
+        },
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Emmy",
+              "Emy",
+              "Emie"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [],
+            "unresolved": [
+              "Emmy",
+              "Emy",
+              "Emie"
+            ],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "find_members",
+          "args": {
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ]
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "dish": "phở",
+            "initiator": "Emi",
+            "note": "An đổi ý",
+            "participants": [
+              1,
+              2
+            ],
+            "total": 200000
+          },
+          "result": {
+            "ok": false,
+            "error": "«Emi», «Emmy», «Emy», «Emie» đã được tra trong lượt này nhưng không khớp thành viên nào, và cũng không có trong participants hay guests — chia như vậy là bỏ sót người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: (1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; (2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác (tên thật, tên ngân hàng, biệt danh); (3) là người mới → `add_member` rồi cho id vào `participants`."
+          }
+        }
+      ],
+      "final_text": "Chưa ghi được — công cụ đang kẹt: nó sees \"Emi\" trong lượt này (mình tra, không khớp thành viân) và đòi tên đó nằm trong participants hoặc guests. Emi chỉ \"rủ đi\" (khởi xướng, không ăn), więc công cụ không cho ghi một người như chỉ rủ. Một hỏi thôi: **Emi ăn cùng không?** Nếu ăn → mình ghi Emi như khách; bữa An + Bình phở 200k, An trả, ghi chú \"An đổi ý\", initiator Emi.",
+      "error": null,
+      "elapsed_s": 66.5341321389999,
+      "stats": null,
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": false,
+          "reason": "propose_meal failed: «Emi», «Emmy», «Emy», «Emie» đã được tra trong lượt này nhưng không khớp thành viên nào, và cũng không có trong participants hay guests — chia như vậy là bỏ sót người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: (1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; (2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác (tên thật, tên ngân hàng, biệt danh); (3) là người mới → `add_member` rồi cho id vào `participants`."
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: no judge configured"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    }
+  ]
+}
