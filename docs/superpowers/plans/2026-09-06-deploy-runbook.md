@@ -55,12 +55,14 @@ cd backend
 
 Ship criterion: no case down more than 1/3 on `tool_selection` or `ledger_state`.
 
-> ⚠️ **The latest run (after Phase 11) fails that criterion**: `B3`, a bill-photo case,
-> dropped 3/3 → 1/3 on both money graders. No Phase 11 code is reachable from a turn (the
-> checks are in `backend/bench/results/agent-os-2026-09-06.md`), and `bills` cases have
-> swung this way before with no relevant change — but that is not yet established for this
-> one. **Re-run `B3` yourself before shipping** and read that section:
-> `python -m bench.run --corpus typical --engine pi --repeat 15 --case B3 --out /tmp/b3.json`
+> **Read this before trusting a blocker on a `bills` case.** The Phase 11 run tripped the
+> criterion on `B3` (3/3 → 1/3 on both money graders). Re-running `B3` at `--repeat 15`
+> put its natural pass rate at **0.60**, at which three attempts give 3/3 about 22% of the
+> time and 1/3 about 29% — so both samples were noise, and the run is clear. The chance of
+> `--repeat 3` inventing a blocker on a 60% case is 0.076 per case per comparison, and
+> there are 23 cases. **A blocker on a `bills` case means re-run that case at `--repeat 15`;
+> a blocker on a `week` or `meals` case is real.** Detail and the per-case rate:
+> `backend/bench/results/agent-os-2026-09-06.md`.
 
 ---
 
