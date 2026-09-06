@@ -1532,8 +1532,113 @@ identity 0/0. Review findings F1–F12 all landed.
 
 ## Phase 7 — Agents and sub-agents
 
-- `ask_<sub>` generated tools; nested pipeline run with `depth+1` and min caps; result
-  merging; `sub.*` events. **Proof:** merged results pass `unbacked_amounts`.
+### Facts that shape this phase (from the code, 2026-09-06)
+
+- `kn_agents` already carries `role` (`manager` | `sub`), `delegates_to` (a JSON list, never
+  validated), `max_depth` (default 2) and `capabilities`; a space binds to a manager only
+  (`store.bind_space`); there is `get_agent(id)`, `list_agents(business_id)`,
+  `default_agent(business)` and no lookup by slug.
+- `TurnContext.depth` (default 0) and `ToolInvocation.from_agent` exist and nothing sets
+  or reads them; `TurnResult.last_result/all_results` do not filter on `from_agent`.
+  `TurnEvent` types `sub.started`/`sub.finished` exist and map to `agent.sub.started/
+  finished`, which the frontend ignores (additive).
+- The run stage is `LegacyRunTurn` → the frozen `agent.run_turn(text, tool_ctx, images,
+  emit, memory, history)` → `PiEngine.run(spec, tools=tool_manifest(ctx), call_tool)`. The
+  sidecar caps a run by `EngineSpec.max_tools`/`max_seconds`, which come from
+  `ctx.engine_spec` (the profile's `caps`). `PiEngine` records the executor's payload
+  verbatim as the invocation's `result` and sends the same payload to the model.
+- `chat.run_bot_turn` resolves a **spec**; the agent behind it is
+  `kernel.resolver.describe(space_id)["agent"]`. The whole pipeline runs under
+  `chat._agent_lock`, an `asyncio.Lock` that is **not reentrant** — a nested run must not
+  take it. `Pipeline.run` puts itself on `ctx.extras["pipeline"]` (Task 6.2).
+- `moneyguard.backed_amounts` counts numbers in every invocation's `args` and `result`;
+  the reply validators read `ctx.result.tools`; the packs' `render` reads
+  `result.last_result/all_results`; `EvalCapture` records the enabled packs'
+  `money_tools` calls; the trace row's `tools` already carry `from_agent`.
+- Golden fixtures compare persisted messages, events and what the fake engine was handed;
+  the seeded agents have `delegates_to = []`, so nothing below runs for them.
+
+### Decisions taken for this phase
+
+1. **Delegation is a kernos pack, `kernos.agents.DelegationPack`** (id `delegation`,
+   `handles_money: False`, no draft kinds), implicitly enabled for a turn whose agent has
+   a non-empty `delegates_to`: the run plugin appends `{pack: "delegation"}` to the
+   turn's `tool_config` and puts the agent record and `depth` on `ToolContext`.
+   `tools(ctx)` generates `ask_<sub_slug>(task: string)` for each `delegates_to` entry
+   that names a `sub` agent of the same business (anything else is logged and skipped;
+   `store.create_agent/update_agent` refuse a `delegates_to` entry that is not a `sub` of
+   the business, and a `sub` that is bound or default). The tool's description is the
+   sub's `name` plus `capabilities.description` when set. A sub at `depth ≥
+   manager.max_depth` gets no `ask_*` tools — recursion stops there; a sub's own
+   `delegates_to` is honoured within that limit.
+2. **Executing `ask_<sub>` is a nested pipeline run inside the executor** (`Kernel.run_sub`):
+   the sub's profile (its agent's published version, with runtime) builds its pipeline;
+   stages `context → validate` run (no `persist`, no `after`: a sub posts nothing and is
+   traced as a **span** of the manager — its trace rows join the manager's `ctx.trace`
+   with `span=<slug>` and `depth`), same space and principal, `text=task`, `depth+1`, a
+   fresh `ToolContext` for the sub (same db/room/sender, `tool_config` from the sub's
+   `tool_packs`, `agent=sub`). Caps are the **minimum** of the manager's remaining budget
+   and the sub's own: `max_tools − calls made so far` (the executor counts on
+   `ToolContext.calls_made`) and `max_seconds − elapsed` (`Pipeline.run` stamps
+   `ctx.extras["started_at"]`); the sub's `ToolContext.caps_override` is applied to its
+   `EngineSpec` by `agent.run_turn`. The nested run never touches `_agent_lock` (held by
+   the manager's turn) and never posts a message.
+3. **Results merge, text does not.** The tool returns to the model `{ok, text, results}`
+   (the sub's final text and its structured tool results); the **recorded** invocation
+   is `{ok, agent, results}` — `PiEngine` records `payload["_record"]` when present and
+   sends the payload without it (a documented executor contract), so a sub's prose can
+   never launder a number into the allow-set. Every tool invocation the sub made is
+   appended to the manager's `TurnResult.tools` tagged `from_agent=<slug>` (collected on
+   `ToolContext.sub_invocations`, merged by `agent.run_turn` after the engine returns).
+   `TurnResult.last_result/all_results` consider **own** invocations only (`from_agent is
+   None`), so a sub's `propose_*` result is data for the manager and never a card; the
+   reply validators read `.tools` — the union — so every number any tool produced backs
+   the manager's reply and a number that appears only in the sub's text does not.
+4. **Events**: `sub.started` (`agent`, `task`) and `sub.finished` (`agent`, `elapsed_ms`,
+   `tools`, `error`) on the manager's sink with the manager's `turn_id`; the sub's own
+   `agent.*` events are forwarded through the manager's sink with `parent_turn_id` and
+   `agent` added (the frontend ignores the extra keys; an AG-UI sink can nest them).
+5. **Out of scope, stated**: the eval host runs a profile, not an agent — `ask_*` tools
+   do not appear in an eval run until Phase 8 gives the runner an agent; `EvalCapture`
+   records the manager's own money calls only (`from_agent is None`); a sub's turn is
+   not separately traced (it is a span).
+
+### Task 7.1 (PR 7a): delegation
+
+**Files:** `kernos/agents.py` (new), `kernos/engine/base.py` (own-only reads, the `_record`
+contract), `kernos/engine/pi/engine.py`, `kernos/kernel/pipeline.py` (`started_at`),
+`kernos/content/store.py` (delegates_to validation), `app/kernel.py` (`run_sub`,
+`agent_for`), `app/chat.py` (agent on `extras`), `app/plugins/run.py`, `app/tools.py`,
+`app/agent.py` (caps override, merge, `calls_made`), tests.
+
+- [ ] `TurnResult.last_result/all_results` own-only; `PiEngine` records `_record`;
+      `Pipeline.run` stamps `started_at`; `store` validates `delegates_to`.
+- [ ] `DelegationPack(agents_of, run_sub)` per decisions 1–2; `Kernel.run_sub(parent_ctx,
+      sub_agent, task) -> (text, results, invocations)` per decisions 2–4; `Kernel.agent_for
+      (space_id)`; `run_bot_turn` puts the agent on `ctx.extras["agent"]`; `LegacyRunTurn`
+      passes agent/depth/tool_config; `agent.run_turn` applies `caps_override`, counts calls,
+      merges `sub_invocations`.
+- [ ] Proof (`tests/test_delegation.py`, a manager + a `sub` "auditor" on a lunch room, one
+      fake engine branching on `ctx.depth`): the manager's manifest carries `ask_auditor`
+      and the sub's does not; the merged `TurnResult.tools` is `[ask_auditor (own),
+      settle_period (from_agent=auditor)]` and the recorded `ask_auditor` result has no
+      `text`; a manager reply quoting an amount from the sub's **result** passes
+      `unbacked_amounts`, one quoting an amount that appears only in the sub's **text** is
+      flagged; a sub's `propose_payment` result creates no card; the sub's engine spec caps
+      are the minimum (a manager with 3 tools left and a sub with 40 → 3); at `max_depth`
+      the sub gets no `ask_*` tools; `agent.sub.started/finished` carry the parent turn id
+      and the sub's `agent.*` events carry `parent_turn_id`; the trace has the sub's rows
+      as `span=auditor`; `create_agent(delegates_to=["nope"])` and a manager as a delegate
+      are refused; golden 9/9; full suite unedited; layering green.
+- [ ] Commit: `kernos.agents: ask_<sub> delegation — nested run with min caps, results merged as from_agent, text never backed`
+
+### Task 7.2: Docs and state of play
+
+- [ ] Design §6 as built; README (agents); plan state of play.
+
+**Proof for the phase:** merged results pass `unbacked_amounts`; a sub's text never backs a number.
+
+**Phase 7 — state of play:** _(filled as tasks complete)_
 
 ## Phase 8 — AI-ready
 
