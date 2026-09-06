@@ -138,3 +138,20 @@ class Engine(Protocol):
     async def run(self, spec: EngineSpec, *, turn_id: str, message: str, images: list | None,
                   tools: list[dict | ToolSpec], call_tool: ToolExecutor,
                   emit: EventEmitter | None) -> TurnResult: ...
+
+
+def merge_sub_invocations(own: list, subs: list) -> list:
+    """The manager's own invocations with each sub-agent's calls right after the
+    ``ask_*`` call that made them (``(own_call_index, invocation)`` pairs), so the
+    record reads in the order things happened (design §6)."""
+    from collections import defaultdict
+    after = defaultdict(list)
+    for index, inv in subs:
+        after[index].append(inv)
+    merged = []
+    for i, inv in enumerate(own):
+        merged.append(inv)
+        merged.extend(after.pop(i, []))
+    for rest in after.values():
+        merged.extend(rest)
+    return merged

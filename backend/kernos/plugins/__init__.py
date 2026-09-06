@@ -6,3 +6,4 @@ from kernos.plugins.persist import Cards  # noqa: F401
 from kernos.plugins.render import DEFAULT_EMPTY, PackRender, empty_turn_body  # noqa: F401
 from kernos.plugins.after import EvalCapture, Trace, capture_case, summarize, tool_calls  # noqa: F401
 from kernos.plugins.validate import NonNegative, SumEquals, UniqueMembers, validators, values_at  # noqa: F401
+from kernos.plugins.run import EngineRun, prepare_tool_context, tool_executor  # noqa: F401

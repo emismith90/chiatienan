@@ -2121,8 +2121,8 @@ Confirmed by the gate: the facts block (layering test, pyproject, every `agent_s
 `ScriptedEngine`), `kernos/api/agui.py` (new: `AguiEventSink`, `to_agui`, `from_legacy`),
 `app/kernel.py` (subclasses `BaseKernel`), tests.
 
-- [ ] `kernos.plugins.run.EngineRun(engine, packs)` (`kernos.run.engine`) per F1.
-- [ ] `BaseKernel(store, data, adapters, *, packs, resolver, eval_mode)` per F2 (hooks
+- [x] `kernos.plugins.run.EngineRun(engine, packs)` (`kernos.run.engine`) per F1.
+- [x] `BaseKernel(store, data, adapters, *, packs, resolver, eval_mode)` per F2 (hooks
       `null_tool_context`, `sub_tool_context`, `eval_runner_argv`, `on_packs_registered`;
       `default_business_id`) owns what both kernels need: the framework plugin wiring (`Rollover … EvalCapture,
       validators()`, `DelegationPack`, `OsAdminPack`, `CollectionsPack`), `pipeline_for`
@@ -2132,10 +2132,10 @@ Confirmed by the gate: the facts block (layering test, pyproject, every `agent_s
       its prompt/run/validate plugins, seeding and the tool-context factory. `app.kernel.
       Kernel`'s public names and behaviour are unchanged (golden 9/9, the admin API contract
       documented in `kernos/api/admin.py` becomes `BaseKernel`'s).
-- [ ] `kernos.engine.fake.ScriptedBridge(script)` + `ScriptedEngine(script) =
+- [x] `kernos.engine.fake.ScriptedBridge(script)` + `ScriptedEngine(script) =
       PiEngine(ScriptedBridge(script))` (F11); `tests/test_delegation.py` imports the
       framework class.
-- [ ] `AguiEventSink(write, *, thread_id)` — **stateful** per F3 (lazy `RUN_STARTED`, text
+- [x] `AguiEventSink(write, *, thread_id)` — **stateful** per F3 (lazy `RUN_STARTED`, text
       message open/close, `TOOL_CALL_*` from complete args, `toolCallId` prefixed with the
       sub's slug, `finish()` emits `RUN_FINISHED` after the host's `flush`): `emit(TurnEvent)`
       and `emit_raw(legacy dict)` both produce AG-UI events (`RUN_STARTED`, `TEXT_MESSAGE_START/CONTENT/END`, `TOOL_CALL_START/ARGS/END`,
@@ -2143,12 +2143,22 @@ Confirmed by the gate: the facts block (layering test, pyproject, every `agent_s
       `CUSTOM` for `validation.*` and `message.republished`), `threadId = space_id`, `runId =
       turn_id`, one `messageId` per assistant message; the mapping is tested both ways
       against `to_legacy`.
-- [ ] Proof (`tests/kernos/test_agui.py`, `tests/kernos/test_fake_engine.py`,
+- [x] Proof (`tests/kernos/test_agui.py`, `tests/kernos/test_fake_engine.py`,
       `tests/test_base_kernel.py`): every `TurnEvent` type maps; a legacy `agent.text.delta`
       stream becomes `TEXT_MESSAGE_START/CONTENT…/END` once; the fake engine reproduces a
       `FakeBridge` script's `TurnResult` field for field incl. `_record`; `app.kernel.Kernel`
       is a `BaseKernel` and the full suite is unchanged.
-- [ ] Commit: `kernos.host: BaseKernel, a scripted engine and the AG-UI sink (PR 9a)`
+- [x] Commit: `kernos.host: BaseKernel, a scripted engine and the AG-UI sink (PR 9a)`
+
+      _As built (2026-09-06):_ `kernos.plugins.run` also exports `prepare_tool_context` and
+      `tool_executor`, which `app/plugins/run.py::LegacyRunTurn` and `app.agent.run_turn` now
+      share with `kernos.run.engine` (one executor policy, no copy); `merge_sub_invocations`
+      moved to `kernos.engine.base` (`app.agent._merge_sub_invocations` is an alias);
+      `BaseKernel` takes `(store, data, adapters, *, runtime, resolver=None, eval_mode,
+      admin_url)` with `register_framework_packs()`, `register_framework_plugins()`,
+      `register_engine(engine)` and `build_gates()` as explicit steps the host calls in its
+      order; `start_eval_run` asks `eval_runner_argv` before any store lookup. Suite 1259
+      passed, 1 skipped; sidecar 70/70; golden 9/9; layering green; no pre-existing test edited.
 
 ### Task 9.2 (PR 9b): package export/import
 

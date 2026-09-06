@@ -24,7 +24,6 @@ import inspect
 import logging
 import time
 import uuid
-from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from app.config import settings
 from app.prompt import build_system_prompt
 from app.tools import ToolContext, build_tools, tool_manifest
 from kernos.engine import EngineSpec, ToolInvocation, TurnResult  # noqa: F401  (re-exported)
+from kernos.engine.base import merge_sub_invocations
 
 logger = logging.getLogger("chiatienan")
 
@@ -158,7 +158,7 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     result = await engine.run(spec, turn_id=turn_id, message=message, images=list(images or []),
                               tools=tool_manifest(ctx), call_tool=call_tool, emit=emit)
     if getattr(ctx, "sub_invocations", None):
-        result.tools = _merge_sub_invocations(result.tools, ctx.sub_invocations)
+        result.tools = merge_sub_invocations(result.tools, ctx.sub_invocations)
     stats = result.stats or {}
 
     # One line per turn so the log mirror (and /internal/debug/logs) shows where a
@@ -177,17 +177,5 @@ async def run_turn(user_text: str, ctx: ToolContext, images=None, emit=None,
     return result
 
 
-def _merge_sub_invocations(own: list, subs: list) -> list:
-    """The manager's own invocations with each sub-agent's calls right after the
-    ``ask_*`` call that made them (``(own_call_index, invocation)`` pairs), so the
-    record reads in the order things happened (design §6)."""
-    after = defaultdict(list)
-    for index, inv in subs:
-        after[index].append(inv)
-    merged = []
-    for i, inv in enumerate(own):
-        merged.append(inv)
-        merged.extend(after.pop(i, []))
-    for rest in after.values():
-        merged.extend(rest)
-    return merged
+#: The merge lives in the framework since Phase 9; the name is kept for the tests.
+_merge_sub_invocations = merge_sub_invocations

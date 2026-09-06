@@ -19,36 +19,11 @@ from app.tools import ToolContext
 from kernos.agents import DelegationPack, FLOOR_SECONDS
 from kernos.content import Invalid
 from kernos.engine import ToolInvocation, TurnResult
+from kernos.engine.fake import ScriptedBridge
 from kernos.engine.pi import PiEngine
 from kernos.engine.base import EngineSpec
 from kernos.kernel import Stage
 from tests.test_ledger import _seed_room
-
-
-class ScriptedBridge:
-    """One bridge, several runs: the first ``run`` command gets ``scripts[0]`` (the
-    manager), every later one the next script (the subs, in call order). Records
-    every command and everything Python sent back."""
-
-    def __init__(self, *scripts):
-        self._scripts = list(scripts)
-        self.runs: list[dict] = []
-        self.sent: list[dict] = []
-
-    async def request(self, command):
-        self.runs.append(command)
-        script = self._scripts.pop(0)
-        for message in script:
-            yield dict(message, req_id=command["req_id"])
-
-    async def send(self, message):
-        self.sent.append(message)
-
-    def tool_result(self, call_id: str) -> dict:
-        for m in self.sent:
-            if m["type"] == "tool_result" and m["call_id"] == call_id:
-                return json.loads(m["content"])
-        raise AssertionError(f"no tool_result for {call_id}")
 
 
 def _room(db, n=3):
