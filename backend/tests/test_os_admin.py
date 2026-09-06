@@ -101,6 +101,7 @@ async def test_reads_are_references_never_evidence_and_traces_are_redacted_untru
               {"type": "tool_call", "call_id": "b2", "name": "cms_get_turn_trace", "args": {"turn_id": first}},
               {"type": "tool_call", "call_id": "b3", "name": "cms_log", "args": {"level": "info", "message": "tổng 777,000đ"}},
               {"type": "tool_call", "call_id": "b4", "name": "cms_get_profile", "args": {}},
+              {"type": "tool_call", "call_id": "b5", "name": "cms_get_friction", "args": {}},
               _turn_done("Lần trước 654,321đ, và tổng 777,000đ.")]
     fake, reply = await _turn(monkeypatch, db, room_id, mm, "@phoenix xem lại", script)
     trace = _trace(k, room_id)
@@ -113,10 +114,14 @@ async def test_reads_are_references_never_evidence_and_traces_are_redacted_untru
     profile = fake.tool_result("b4")
     assert profile["scope"] == [] and profile["verbs"] == ["read"] and "models" in profile["blacklist"]
     assert [s["name"] for s in profile["editable"]["skills"]][:1] == ["balances"]
+    friction = fake.tool_result("b5")                       # over the space's own stored traces
+    assert friction["ok"] and friction["scanned"] == 1 and friction["clean"] is True     # the first turn was clean
+    assert friction["findings"] == [] and "_record" not in friction
     # what was recorded: references only, and the pack's args back nothing (F1)
     recorded = {t["name"]: t for t in trace["tools"]}
     assert recorded["cms_get_turn_trace"]["result"] == {"ok": True, "turn_id": first}
     assert set(recorded["cms_get_turns"]["result"]) == {"ok", "count"} and set(recorded["cms_get_profile"]["result"]) == {"ok", "profile_id", "version_id"}
+    assert recorded["cms_get_friction"]["result"] == {"ok": True, "scanned": 1, "findings": []}
     assert "654321" not in json.dumps([t["result"] for t in trace["tools"]])
     assert reply.kind == "bot"
     assert [(v["plugin"], v["reason"]) for v in trace["summary"]["verdicts"]] == [
