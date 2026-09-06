@@ -4,6 +4,11 @@
 > Task 9.4 docs). Nothing in the plan remains open; §5 below is kept as the record of how it
 > was done. What a successor could still take up is listed in the plan's closing note:
 > the frontend `DraftCard` ticket, running the benchmark with a key, and the eventual split.
+>
+> **Both of the first two are now done (2026-09-06, later still).** The generic
+> `DraftCard` is in the frontend (`frontend/src/components/chat/draft-card.tsx`), and the
+> benchmark ran where a key existed: `backend/bench/results/agent-os-2026-09-06.md`. Only
+> the split (design §12.1) and a card designed for the poker draft remain.
 
 Written 2026-09-06 for whoever continues (a different model may pick this up). Everything
 below is self-contained: what is done, the rules that governed the work, and a step-by-step
@@ -51,7 +56,9 @@ plan for what remains — Phase 9 (Portability) and the closing notes.
    purpose; anything else records a reference only (`_record`, see `kernos/engine/pi/engine.py`)
    and/or is a non-evidence pack (`BasePack.evidence = False`).
 5. **No secrets in git**, no real names, bank accounts or `qr_url`s in fixtures/docs.
-6. **Benchmark** needs `OPEN_ROUTER_KEY` (absent here → say "not run here").
+6. **Benchmark** needs `OPEN_ROUTER_KEY` (absent while the phases were built → "not run
+   here"). It has since been run where a key existed, on the finished branch:
+   `backend/bench/results/agent-os-2026-09-06.md`.
 7. **Commit messages** end with:
    ```
    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

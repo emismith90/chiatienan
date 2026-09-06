@@ -293,7 +293,7 @@ values.
 | sidecar `node --test` | 69 / 69 (65 + 4 for `settings`/`extensions`) |
 | golden fixtures (Task 1.0) | 9 / 9 replay byte-identical through the pipeline |
 | `GET /api/admin/rooms/{id}/resolved` | `engine_spec` equals `agent.default_engine_spec()`; pipeline lists today's plugins in order |
-| benchmark `bench.run --corpus typical --repeat 3` | **not run here** — no `OPEN_ROUTER_KEY` in this environment. Run where the key exists before merging and record the results commit hash here. Note the benchmark exercises `run_turn` (the engine move), not the pipeline; the golden fixtures cover the swap. |
+| benchmark `bench.run --corpus typical --repeat 3` | Not run at the time of Phase 1 (no `OPEN_ROUTER_KEY` in that environment). **Run 2026-09-06 on the finished branch**: 69 turns, 0 errored, `tool_selection` 69/69, `ledger_state` 55/60 — see `backend/bench/results/agent-os-2026-09-06.md` for the two failing cases and why neither is this branch's. Note the benchmark exercises `run_turn` (the engine move), not the pipeline; the golden fixtures cover the swap. |
 
 Deviations from the task text, all behaviour-neutral: the runner does not execute
 `resolve` (the pipeline is built *from* the resolved profile, so `Kernel.resolve`
@@ -2259,12 +2259,21 @@ behaviour is unchanged throughout: the nine golden fixtures are byte-identical, 
 pre-existing test on `origin/main` is untouched, and every new capability is opt-in
 (a pack in `tool_packs`, a capability on an agent, a binding on a room).
 
+**The benchmark ran (2026-09-06), on the finished branch.** 69 turns of `typical` at
+`--repeat 3`, 0 errored: `tool_selection` 69/69 = 1.00, `ledger_state` 55/60 = 0.92,
+p50 3.8s, $0.137. All five money-grader failures are two cases, and neither is this
+branch's: `B2` fails on `origin/main` too and fails worse there, and `G12` fails both
+trees in the same two ways while the system prompt, user message, tool manifest,
+skills, context files and caps this branch hands the model are byte-identical to
+main's for that case. The 14 `MISSING` cases in `--compare` are the `prod` corpus,
+which is never committed. Numbers, evidence files and what the run does not measure:
+`backend/bench/results/agent-os-2026-09-06.md`.
+
 Known limits, stated in the phases that own them: `ask_*` tools do not appear in eval
 runs (no agent tree in the eval world — Phase 7/8); a steward reviews itself only and its
 schedule is the operator's (Phase 8); the frontend renders `game_draft` and other new
 card kinds through the generic `DraftCard` (2026-09-06, after the plan) — readable and
-confirmable, but not a card designed for the kind; the benchmark was not run here
-(`OPEN_ROUTER_KEY` absent); the sidecar directory keeps its
+confirmable, but not a card designed for the kind; the sidecar directory keeps its
 name until the framework is split out (Phase 9 F8); the package name `kernos` (design
 §11 item 6) is still the operator's call.
 
