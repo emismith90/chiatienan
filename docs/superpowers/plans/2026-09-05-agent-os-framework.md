@@ -1271,7 +1271,7 @@ Notes: `kernos.data.schema.check_schema` mirrors `agent_sidecar/schema.js` rule 
       does not (F4); full suite unedited; layering green.
 - [x] Commit: `kernos.data: generated find/upsert/delete tools per collection; gate 1 checks pack ids`
 
-Notes: gate 1 takes `packs` and `tool_names_of`; the kernel's `static_tool_names` builds a pack's names with the null context and returns `None` for `collections`. The end-to-end test converts the generated manifest with `agent_sidecar/schema.js` under node. 1160 tests, 1 skipped; sidecar 69.
+Notes: gate 1 takes `packs` and `tool_names_of`; the kernel's `static_tool_names` builds a pack's names with the null context and returns `None` for `collections`. The end-to-end test converts the generated manifest with `agent_sidecar/schema.js` under node. 1155 tests, 1 skipped; sidecar 69.
 
 ### Task 5.3: Docs and state of play
 
@@ -1290,13 +1290,172 @@ that enables `collections` — schema-validated writes, `find` returning rows in
 order with a `more` flag and never a count; a model-computed total in the reply is
 caught by `unbacked_amounts`. Gate 1 now checks pack ids and static override names.
 Admin routes for definitions and paginated documents. The seeded lunch profile is
-unchanged; the host's knowledge modules stay where they are. Baseline 986 → 1160
+unchanged; the host's knowledge modules stay where they are. Baseline 986 → 1155
 tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
 
 ## Phase 6 — `poker_ledger`
 
-- Pack per §7.2; `chips-conserved` validation rule; skills; suite; a poker business.
-  **Proof:** its suite green; the lunch suite unchanged.
+### Facts that shape this phase (from the code, 2026-09-06)
+
+- `ledger_core` is the shared money domain (members, cash `payments`, FIFO debt edges,
+  netting, VietQR, periods, statements, settlements) and its edges come from registered
+  **edge sources** (`pack.contributions`, Task 3.4). `Payment.ref_kind` exists (default
+  `"meal"`) but `Payment.meal_id` is a foreign key to `meals` — a payment cannot target a
+  game row. `DebtEdge` still carries `meal_id`/`dish` (F5 rename deferred); FIFO sorts by
+  `(occurred_on, meal_id)` and targets payments by `(debtor, creditor, meal_id)`.
+- The tools the two businesses share — `find_members`, `propose_payment`, `settle_period`,
+  `member_statement`, `get_period_summary`, `resolve_period`, `resolve_date`,
+  `pick_random`, `cancel_draft` — live in `packs/lunch_ledger` with the `payment_draft`
+  kind and the settlement/statement/summary/random-pick bodies. Nothing about them is
+  lunch except the module they sit in.
+- `ProfileSpec.validation` (`ValidationRuleRef`: id, scope, plugin, config, tool,
+  on_fail) is declared and **never runs**: `pipeline_dict()` does not fold it into the
+  `validate_args`/`validate_result` stages, and `agent.run_turn`'s `call_tool` never
+  consults `Pipeline.validate` (`Stage.validate_args` exists; `Pipeline.validate(stage,
+  ctx)` exists; nothing calls it). Gate 2's `handles_money` reads pipeline plugins only.
+- `Database.create_all` binds the host's, `ledger_core`'s and the content plane's
+  tables; it does **not** call any pack's `bind(engine)` (Phase 3 F8 promised it; the
+  lunch pack has no tables of its own so nothing noticed). A pack with tables needs it.
+- Skills and rules are host files (`app/agent_skills/{skills/*/SKILL.md, rules/*.mdc}`)
+  read by `app.agent`; the seeded profile snapshots them as sources. `ToolPack` has no
+  way to ship content (prompt, skills, rules). `ensure_seeded` is generic per business
+  (`business_slug, spec, agent_slug, sources`) and boot seeds one (`lunch`).
+- `app/evalworld.build_world` takes fixtures from `lunch_ledger_pack()` by name;
+  `evalhost.import_lunch_suite` imports from `bench.corpus`. `ToolSelection` compares
+  `member_amount_lists` entries as `(member, amount)` pairs — a poker entry is
+  `{member, buy_in, cash_out}`.
+- The frontend renders `expense_draft`/`payment_draft` cards; there is no `game_draft`
+  card. The backend is the headless scope of this work: `commit_any` dispatches on any
+  registered kind, so the API proves the pack; a card UI is the frontend's later work.
+
+### Decisions taken for this phase
+
+1. **The shared tools become their own pack, `ledger_tools`** (`packs/ledger_tools`,
+   `handles_money: True`): the nine tools above, the `payment_draft` kind, and the
+   settlement/statement/summary/random-pick bodies and decision, moved verbatim from
+   `packs/lunch_ledger`. `lunch_ledger` keeps `propose_meal`, `void_meal`, the
+   `expense_draft` kind, the meal bodies and `contributions`. Both businesses enable
+   `ledger_tools`; the seeded lunch profile's `tool_packs` becomes `[lunch_ledger,
+   ledger_tools, room_members, lunch_places]`; `LEGACY_ORDER` still governs the manifest
+   and the golden replays stay byte-identical (render order: lunch first for the meal
+   draft, then `ledger_tools` for payment drafts and typed bodies — the same precedence
+   `decide()` has today). `MONEY_TOOLS` splits accordingly.
+2. **Validation rules run** (design §5.4), proven by `chips-conserved`.
+   `ProfileSpec.pipeline_dict()` folds `validation` refs with scope `tool_args` /
+   `tool_result` into those stages as entries `{id: plugin, version, config: {**config,
+   rule: id, tool, on_fail}}`; the run plugin puts a `validate_call(name, args) ->
+   error | None` hook on `ToolContext` (`TurnContext.extras["pipeline"]` is set by the
+   caller — `run_bot_turn` and the eval host); `agent.run_turn`'s `call_tool` consults it
+   before executing and returns the error dict instead (the `{ok: false, error}`
+   convention — the model asks). Pre-built validators in `kernos/plugins/validate.py`:
+   `kernos.validate.sum_equals` (`left`/`right` are paths in a tiny subset:
+   `field`, `field[*].sub`; integers; `tolerance` default 0), `kernos.validate.non_negative`
+   (paths), `kernos.validate.unique_members` (path to a member-id list or a list of
+   objects with `member`). Each declares `handles_money = True`, so gate 2 keeps counting.
+   `scope: reply` rules are **not** folded (the seeded pipeline's reply validators are
+   plugins already; folding them is a later, separate change).
+3. **`poker_ledger`** (`packs/poker_ledger`, `handles_money: True`): tables `games (id,
+   room_id, played_on, note, house, raw_input, logged_by, source, voided, voided_by,
+   voided_at, created_at)` and `game_entries (id, game_id, member_id, buy_in, cash_out)`
+   on the pack's own `Base`, bound by `bind(engine)`; `Database.create_all` calls every
+   host pack's `bind` (the gap above, closed). Pure money in
+   `packs/poker_ledger/money.py`: `net_positions(entries, house)` (Σ buy_in = Σ cash_out +
+   house **exactly**, `house ≥ 0`, amounts ≥ 0, unique members, ≥ 2 players — a
+   `PokerError` otherwise) and `game_edges(game_id, played_on, nets)`: for each loser, one
+   edge per winner, the loss split across winners proportionally to their wins with
+   largest-remainder rounding so **each loser's edges sum exactly to their loss**; a
+   winner's receipts equal their win up to `(number of losers − 1)` đồng of rounding,
+   stated in the result. The edge's `meal_id` slot carries the game id and `dish` the
+   label `"game #N"` (a space belongs to one business, so game and meal ids never share a
+   FIFO pool; payments toward game debts are untargeted — `Payment.meal_id` cannot
+   reference a game). Tools: `propose_game(entries[{member, buy_in, cash_out}], house?,
+   day_word?/played_on?, note?)` → `game_draft` payload with the nets and edges preview
+   (the tool enforces the invariant itself — the rule in decision 2 is the profile's
+   earlier, configurable check, the tool is the floor); `void_game(game_id)`;
+   `game_history(keyword?)`. Kind `game_draft` (editable entries/house/note; `prepare`
+   recomputes nets; commit writes `games` + `game_entries`; card `game_result`: "#12 —
+   5 players, pot 2,500,000đ • winners … / losers …"). `contributions` = the edges of
+   every non-voided game of the space. Fixtures `game_recorded`, `leave_pending`,
+   `confirm_pending`, `payment`, `add_member`, `settle`, through the same `world`
+   contract. Graders: `poker_ledger.eval.tool_selection` (`ToolSelection` with
+   `compared_args = ["entries", "house", "from", "to", "amount"]` and a `propose_game`
+   equivalence hook that reduces entries to the nets map) and
+   `poker_ledger.eval.game_state` (blocking: the draft's nets and the settlement's
+   transfers against the case's expectation) — both in the pack; `prose` reuses the
+   kernos class with the pack's outcome classifier.
+4. **A pack can ship its content.** `ToolPack` gains `content() -> {prompt_body,
+   skills: [{name, description, body}], rules: [{slug, content, tags}]}` (`BasePack`
+   default empty). `poker_ledger.content()` ships `record-game` and `poker-balances`
+   skills, the `money-safety` rule verbatim (business-agnostic) and a prompt body built
+   from the lunch template's variables. The **host** builds the poker `ProfileSpec`
+   (`app/poker_profile.py`: the pack's content + this host's models/caps/runtime/pipeline
+   — the same pipeline as lunch minus nothing; `tool_packs = [poker_ledger, ledger_tools,
+   room_members]`; `validation = [chips-conserved, non-negative buy-ins/cash-outs,
+   unique members]`) and boot seeds business `poker` with agent `dealer`
+   (`ensure_seeded`, managed_by boot, no default binding — a table binds to the dealer
+   through the admin API). Seeding is content only: nothing runs unless a room is bound.
+5. **Eval world and suite by business.** `evalworld.build_world(db, case, fixtures)` takes
+   the fixtures of the business's packs (the host resolves business → packs through the
+   profile's `tool_packs`); `ToolPack.eval_cases() -> list[dict]` (`BasePack` default
+   `[]`) lets a pack ship its golden cases as content; `evalhost.import_pack_suite(store,
+   business_id, pack)` imports them plus the pack's graders as suite `{pack.id}-golden`;
+   lunch keeps the bench import. Poker's golden cases: three recorded games with known
+   nets and edges (`tests/golden/poker.py`), a settle case with QR payees, an
+   ambiguous cash-out case (Σ does not conserve) that must **ask** (expects no
+   `propose_game` draft: `tools_ok: []`, `expect.asks: true` — the grader passes when
+   the tool returned an error or was not called and the reply is prose).
+
+### Task 6.1 (PR 6a): `ledger_tools` out of `lunch_ledger`
+
+- [ ] `packs/ledger_tools/{__init__.py,tools.py,render.py}` — moved verbatim; `lunch_ledger`
+      imports nothing from it (both import `ledger_core`); `app/packs` registers it and
+      the seeded profile enables it; `MONEY_TOOLS` → `LUNCH_TOOLS` + `LEDGER_TOOLS`; the
+      branch-added partition tests updated; `chat.py` re-exports follow the bodies.
+- [ ] Proof: golden 9/9; regrade identity 0/0; full suite unedited; `tool_manifest()`
+      byte-identical (`test_tools_manifest.py`); layering green.
+- [ ] Commit: `packs: ledger_tools — the tools two ledger businesses share`
+
+### Task 6.2 (PR 6b): validation rules run
+
+- [ ] `pipeline_dict()` folds `validation` (decision 2); `Registry.build_pipeline` accepts
+      the folded entries (validators are registered plugins at `validate_args`/
+      `validate_result`); `TurnContext.extras["pipeline"]` set by `run_bot_turn` and the
+      eval host; `LegacyRunTurn` sets `tool_ctx.validate_call`; `agent.run_turn` honours it.
+- [ ] `kernos.validate.{sum_equals,non_negative,unique_members}`; path subset documented;
+      `on_fail: return_error` is the only tool-scope action (a `warn` rule records a
+      `warn` verdict in the trace and lets the call through).
+- [ ] Proof: a lunch profile with a `sum_equals` rule on `propose_meal` (`total` vs
+      `items[*].amount`) refuses a mismatched call with the rule's error and the trace
+      shows the `validate_args` verdict; without the rule the seeded pipeline is unchanged
+      (golden 9/9); gate 1 refuses a rule naming an unknown validator or a bad path.
+- [ ] Commit: `kernos: validation rules run at validate_args/validate_result; sum_equals, non_negative, unique_members`
+
+### Task 6.3 (PR 6c): the poker pack and business
+
+- [ ] `packs/poker_ledger/{__init__.py,models.py,money.py,tools.py,render.py,fixtures.py,
+      eval.py,content/}` per decisions 3–5; `Database.create_all` binds host packs;
+      `ToolPack.content()`/`eval_cases()`; `app/poker_profile.py`; boot seeds `poker`/`dealer`;
+      `evalworld` fixtures by business; `import_pack_suite`; admin `POST
+      /businesses/{id}/eval/import` imports the pack suite for a non-lunch business.
+- [ ] Proof: `tests/test_poker_money.py` (nets, edges exact per loser, rounding bound,
+      every invariant refused with a clear error); `tests/golden/poker.py` +
+      `tests/test_poker_pack.py` (a table bound to the dealer: `propose_game` through
+      `run_bot_turn` with a fake engine → `game_draft` card → `commit_any` writes the game
+      → `settle_period` shows losers→winners transfers with QR → `member_statement` rows name
+      `game #1` → `void_game` clears them; `chips-conserved` refuses a short table before
+      the tool runs and the tool refuses it too without the rule; `game_history`); the poker
+      suite green under an oracle engine (`import_pack_suite` + `run_suite`), the lunch
+      suite unchanged (golden 9/9, regrade identity, `typical` import count unchanged);
+      a lunch room sees no poker tools and a poker table no meal tools; layering green.
+- [ ] Commit: `packs: poker_ledger — games, chips conserved, edges from losers to winners; the poker business`
+
+### Task 6.4: Docs and state of play
+
+- [ ] Design §7.2 as built; README (second business); plan state of play.
+
+**Proof for the phase:** the poker suite green; the lunch suite unchanged.
+
+**Phase 6 — state of play:** _(filled as tasks complete)_
 
 ## Phase 7 — Agents and sub-agents
 
