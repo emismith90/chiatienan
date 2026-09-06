@@ -447,7 +447,7 @@ export function ProfileDialog({
 export function RoomView({ roomId }: { roomId: number }) {
   const {
     messages, typing, timelines, activeTurn, hasMore, loadingEarlier, loadEarlier, send,
-    ledgerVersion, knowledgeVersion,
+    ledgerVersion, knowledgeVersion, agentVersion,
   } = useRoom(roomId);
   const { memberId } = useSession();
   const online = useOnline();
@@ -627,7 +627,8 @@ export function RoomView({ roomId }: { roomId: number }) {
           tab lists place cards with chips, and at 260 every one of them wrapped. */}
       <div className="hidden w-[320px] shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] lg:block">
         <SidePanel roomId={roomId} selfId={memberId} ledgerVersion={ledgerVersion}
-                   knowledgeVersion={knowledgeVersion} range={ledgerRange}
+                   knowledgeVersion={knowledgeVersion} agentVersion={agentVersion}
+                   onAgentSaved={() => setPanelTab("agent")} range={ledgerRange}
                    onClearRange={() => setLedgerRange(null)}
                    tab={panelTab} onTab={setPanelTab} />
       </div>
@@ -646,7 +647,8 @@ export function RoomView({ roomId }: { roomId: number }) {
             className="absolute right-0 top-0 h-full w-[82%] max-w-sm border-l border-[var(--border)] bg-[var(--bg-surface)] shadow-xl"
           >
             <SidePanel roomId={roomId} selfId={memberId} ledgerVersion={ledgerVersion}
-                       knowledgeVersion={knowledgeVersion} range={ledgerRange}
+                       knowledgeVersion={knowledgeVersion} agentVersion={agentVersion}
+                       range={ledgerRange}
                        onClearRange={() => setLedgerRange(null)}
                        tab={panelTab} onTab={setPanelTab} />
           </div>

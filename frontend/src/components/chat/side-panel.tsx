@@ -1,12 +1,14 @@
 "use client";
+import { AgentPanel } from "./agent-panel";
 import { KnowledgePanel } from "./knowledge-panel";
 import { LedgerPanel } from "./ledger-panel";
 
-export type PanelTab = "ledger" | "knowledge";
+export type PanelTab = "ledger" | "knowledge" | "agent";
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: "ledger", label: "Ledger" },
   { id: "knowledge", label: "Memory" },
+  { id: "agent", label: "Bot" },
 ];
 
 /**
@@ -22,12 +24,15 @@ const TABS: { id: PanelTab; label: string }[] = [
  * knowledge *fetch*, so a room that never opens the tab never pays for it.
  */
 export function SidePanel({
-  roomId, selfId, ledgerVersion, knowledgeVersion, range, onClearRange, tab, onTab,
+  roomId, selfId, ledgerVersion, knowledgeVersion, agentVersion = 0, onAgentSaved,
+  range, onClearRange, tab, onTab,
 }: {
   roomId: number;
   selfId: number | null;
   ledgerVersion: number;
   knowledgeVersion: number;
+  agentVersion?: number;
+  onAgentSaved?: () => void;
   range?: { from: string; to: string } | null;
   onClearRange?: () => void;
   tab: PanelTab;
@@ -62,6 +67,10 @@ export function SidePanel({
       <div className={`flex min-h-0 flex-1 flex-col ${tab === "knowledge" ? "" : "hidden"}`}>
         <KnowledgePanel roomId={roomId} version={knowledgeVersion}
                         active={tab === "knowledge"} />
+      </div>
+      <div className={`flex min-h-0 flex-1 flex-col ${tab === "agent" ? "" : "hidden"}`}>
+        <AgentPanel roomId={roomId} version={agentVersion}
+                    active={tab === "agent"} onSaved={onAgentSaved ?? (() => {})} />
       </div>
     </aside>
   );

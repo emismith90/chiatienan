@@ -430,3 +430,24 @@ export async function streamRoom(
     events.forEach(onEvent);
   }
 }
+
+// --------------------------------------------------------------- room CMS
+// The agent a room runs (backend `app/roomcms.py`, plan Phase 11). Reading is
+// open to every member; `can_edit` says whether this room may write, which is a
+// property of the room's binding, not of the person.
+
+export const roomAgent = (roomId: number) => req(`/api/rooms/${roomId}/agent`);
+
+export const roomAgentVersions = (roomId: number) => req(`/api/rooms/${roomId}/agent/versions`);
+
+export const roomAgentVersion = (roomId: number, version: number) =>
+  req(`/api/rooms/${roomId}/agent/versions/${version}`);
+
+export const saveRoomAgent = (roomId: number, body: any) =>
+  req(`/api/rooms/${roomId}/agent/content`, { method: "PUT", body: JSON.stringify(body) });
+
+export const republishRoomAgent = (roomId: number, version: number, note?: string) =>
+  req(`/api/rooms/${roomId}/agent/versions/${version}/republish`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
