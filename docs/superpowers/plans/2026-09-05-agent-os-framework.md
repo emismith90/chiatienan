@@ -1702,9 +1702,216 @@ number the manager copies from a sub's text into a tool's args is backed (F11a).
 
 ## Phase 8 — AI-ready
 
-- `os_admin` pack (§8.2); `capabilities`, `self_change_scope`, blacklist; `kn_change_proposals`
-  and the proposal card; in-turn loop bounds; steward brief as a prompt template.
-  **Proof:** the §8.5 steward scenario end to end.
+### Facts that shape this phase (from the code, 2026-09-06)
+
+- **Gate 5 (reflexivity) already exists**: `PublishGates.check` refuses an `agent:*` publish
+  whose spec differs from the published one on `BLACKLIST_FIELDS` (`builtin_tools`,
+  `models`, `tool_packs`, `pipeline`, `eval`, `extensions`, `settings`, `runtime`, `caps`),
+  on a fenced validation rule (`on_fail: block` or a `tool_args`/`tool_result` scope), a
+  rule tagged `money`, or `meta.handles_money`. Every publish runs gates 1–5; the only
+  bypass is boot seeding. Nothing else in the store distinguishes actors, except
+  `DataStore.put_collection`, which refuses `agent:*`.
+- **Sources are upstream of drafts.** `create_draft` snapshots the business's sources into
+  the new draft *per kind* (`rules`, `skills`, `templates`, the system prompt replace what
+  the base had). A draft-only edit to a skill is therefore lost the next time anyone
+  drafts, unless the source changes too; a source edit changes every future draft of
+  every profile of the business, immediately and ungated. Boot re-syncs the seeded
+  profile from code while it is unedited, so **adding a source to a business changes the
+  seeded profile's skills** — a shipped "steward brief" cannot be a seeded source.
+- `kn_agents.capabilities` (JSON) exists and nothing reads it; there is no
+  `self_change_scope`, no `max_self_iterations`, no proposals table. The admin API covers
+  sources, drafts, publish, rollback, agents, bindings, eval and `/audit`; nothing runs a
+  turn.
+- **Eval runs are jobs**: `Kernel.start_eval_run` spawns `python -m app.evalhost run …`;
+  `run_suite` is an `async` function callable in-process; gate 4 reads finished runs whose
+  `spec_sha` matches; the runner skips `review: true` cases, so a case an agent adds for
+  review can never count toward the gate that judges it. `kn_eval_runs` has no `agent_id`
+  (Phase 7 F12); the eval host runs a profile under a `StaticResolver` with no agent, so
+  neither `ask_*` nor any agent-conditional tool appears in an eval run.
+- **Traces** are per space: `list_traces(space_id, limit)` (summaries: verdicts, tools,
+  cost, `capped`, error) and `get_trace(space_id, ref)` (full rows, tool calls with args
+  and results).
+- **Cards are generic** (Phase 3d): a pack's `DraftKind` gives `app.drafts` a `commit`,
+  a `card`, `editable`, `stamps`; `POST /api/rooms/{id}/drafts/{id}/commit` commits any
+  registered kind (`commit_any`) as the room member who pressed the button; the frontend
+  renders unknown kinds as a blank bubble (TODO: generic `DraftCard`). The pipeline's
+  render stage turns a pack's `Draft` outcome into a card with `logged_by`/`turn_id`
+  stamps; `Cards` persists it.
+- The delegation pack (Phase 7) shows the pattern for an agent-conditional pack: tools
+  generated from `ToolContext.agent`, enabled by the run plugin for the turn, a nested
+  operation the host injects, an executor that awaits an awaitable tool result.
+- Golden fixtures and every seeded profile: no `os_admin` pack, `capabilities = {}`.
+
+### Decisions taken for this phase
+
+1. **Capabilities are content on the agent and fail closed.** `kn_agents.capabilities`
+   is `{"cms": [verbs], "self_change_scope": [paths], "max_self_iterations": n}`;
+   `create_agent`/`update_agent` validate it: verbs ⊆ {`read`, `draft`, `eval`,
+   `publish`}, scope ⊆ {`persona`, `prompt.body`, `prompt.append`, `skills`, `rules`,
+   `templates`, `memory`, `validation.warn`} (the blacklist can never be listed — it is
+   not in the vocabulary), `max_self_iterations` an int 1–10 (default 3 when absent).
+   **Default is `{}`** — no verbs, no tools — for every agent including the seeded ones
+   (deviation from §8.3's "read/draft/eval by default for a manager", stated: a second
+   explicit switch beside enabling the pack, so an admin turns self-administration on
+   knowingly and a room's behaviour never changes by a default).
+2. **`kernos.osadmin.OsAdminPack`** (id `os_admin`, `handles_money: False`), enabled like
+   any pack by a profile's `tool_packs`; `tools(ctx)` generates only the tools the agent's
+   `cms` verbs allow (no agent or no verbs → no tools). HTTP-free: it is built with the
+   kernel's `store`, `gates`, `start_eval_run`, `resolver.describe` and the trace store —
+   the same calls the admin API makes. The tools (§8.2, as amended):
+   - `cms_get_profile()` — read — the running agent, profile and published version ids, the
+     resolved spec's editable parts (persona, prompt, skills, rules, templates, memory,
+     validation with `on_fail`), the blacklist and the agent's own scope.
+   - `cms_get_turns(limit=20, only_flagged=false)` / `cms_get_turn_trace(turn_id)` — read —
+     this space's trace summaries (turn id, when, tools, verdicts, `capped`, error, cost);
+     one turn's full record (tool calls with args and results, plugin rows).
+   - `cms_get_eval_results(suite=null)` — read — the business's suites and, per suite, the
+     latest finished run's summary (graders, rates) plus the failing records' ids and
+     reasons; with a suite, its last 5 runs.
+   - `cms_draft_change(kind, slug, body, rationale, frontmatter=null)` — draft — `kind` ∈
+     {`prompt_append`, `prompt_body`, `skill`, `rule`, `template`, `memory`}: opens (or
+     reuses, within the turn) **one draft version of the agent's own profile** based on the
+     published one, patches it (a skill/rule/template is replaced by slug or appended;
+     `memory` takes a JSON object of `Memory` fields; a rule tagged `money` is refused here
+     already — it could only ever be proposed and the tool says so), records the change
+     as a **pending source change** on the draft (see 4), and returns `{version_id,
+     version, diff}` where `diff` is a unified diff of the changed part. Bounded by
+     `max_self_iterations` per turn together with `cms_run_eval`.
+   - `cms_run_eval(suite, version_id)` — eval — starts the run as a **job** (`Kernel.
+     start_eval_run`, one running run per business at a time) and returns `{run_id,
+     status: "running"}`; the agent reads it later with `cms_get_eval_results`. Deviation
+     from §8.5's in-turn loop, stated: a suite is minutes of real model calls, and Phase 7
+     F1 showed what a nested long operation does to the manager's `max_seconds` — the
+     loop spans turns instead, which is also what a steward on a schedule does.
+   - `cms_propose_publish(version_id, rationale)` — draft — creates a `kn_change_proposals`
+     row (agent, version, rationale, diff vs published, the latest matching eval run if
+     any, the pending source changes, status `pending`) and returns it; the pack's `render`
+     turns the last own successful `cms_propose_publish` result into a `Draft("change_
+     proposal", …)`, so the room gets a card (4).
+   - `cms_publish(version_id, rationale)` — publish — the agent's **own** profile only;
+     refused unless `changed_paths(published, candidate) ⊆ self_change_scope` and
+     `blacklisted_changes` is empty; then `store.publish(actor="agent:<slug>", gates)` (gates
+     1–5 all apply) and the pending source changes are applied; recorded as a proposal with
+     status `auto_published`. Any refusal returns `{ok: false, error}` naming the paths.
+   - `cms_add_eval_case(turn_id, expect, tags)` — eval — the turn's trace becomes a
+     `review: true` case (`source: "agent"`, actor `agent:<slug>`) the runner skips until a
+     human clears `review`.
+   - `cms_log(level, message, data=null)` — read — appends `{level, message, data}` to
+     `ctx.extras["agent_log"]`; the Trace plugin writes it as `summary.agent_log`; also a
+     host log line.
+   Every store call carries `actor="agent:<slug>"` and the rationale goes into the audit
+   row's `after`.
+3. **Scope is checked in code, in one place.** `kernos.content.gates.changed_paths(previous,
+   spec) -> list[str]` returns the coarse paths that differ (`persona`, `prompt.body`,
+   `prompt.append`, `skills`, `rules`, `rules[tag=money]`, `templates`, `memory`,
+   `validation.warn`, `validation[on_fail=block|scope=tool_*]`, `retry`, and every blacklist
+   field by name); `outside_scope(previous, spec, scope) -> list[str]` = changed −
+   allowed, where `rules[tag=money]` and the blacklist are never allowed. `cms_publish`
+   refuses on a non-empty result; gate 5 stays as the backstop for any agent publish that
+   reaches `store.publish` some other way.
+4. **A proposal is a store row and, in this host, a card.** `kn_change_proposals(id,
+   business_id, agent_id, profile_id, version_id, rationale, diff, eval_run_id,
+   source_changes, status pending|approved|rejected|auto_published, decided_by, decided_at,
+   last_error, created_at)`; store: `create_proposal`, `get_proposal`, `list_proposals
+   (business_id, status)`, `decide_proposal(id, status, by, error)`. **Approval** =
+   `Kernel.approve_proposal(id, actor)`: gates 1–4 run through `store.publish(actor=<the
+   approver>)` (a human approver is not an agent, so gate 5 does not apply — that is the
+   point of a proposal); on success the pending **source changes are written**
+   (`put_source`, actor `agent:<slug>` with `approved_by` in the frontmatter's audit) so
+   future drafts keep the change; on a `GateError` the proposal stays `pending` with
+   `last_error` set and the failures are returned. Admin API: `GET /api/admin/proposals?
+   business_id&status`, `GET /proposals/{id}`, `POST /proposals/{id}/approve`, `POST
+   /proposals/{id}/reject`. The room card is `DraftKind("change_proposal", commit=approve,
+   card=…)`: **Confirm** on the card approves as `human:<member_id>` (through the same
+   `Kernel.approve_proposal`), cancel rejects. Stated risk for the gate: any room member
+   can approve a change to the room's own agent (prompt, skills, non-money rules) — the
+   gates still apply, and the change is to the agent that serves that room; the admin API
+   remains the operator's path. The frontend renders the card blank until the generic
+   `DraftCard` ticket lands (TODO updated); the admin API is the working UI meanwhile.
+5. **Eval runs carry the agent** (Phase 7 F12): `kn_eval_runs.agent_id` (nullable,
+   additive); `start_eval_run(…, agent_id=None)`, `POST …/eval?suite=&agent_id=`; the
+   eval host puts the agent record on `ctx.extras["agent"]` when the run has one, so an
+   agent-conditional pack (`os_admin`) shows its tools in eval. **`ask_*` in eval stays
+   out**: the eval world is a fresh database per case with no agent tree, so a sub has no
+   published profile there; recorded as the Phase 8 limit.
+6. **The steward brief ships as text, not as a seeded source** (fact 2): `kernos.osadmin.
+   STEWARD_BRIEF` (read the last N turns' traces; list moneyguard warnings, `capped` turns
+   and eval failures; propose at most one change with a rationale and an eval run
+   attached; never publish outside your scope) exposed at `GET /api/admin/steward/brief`;
+   an operator installs it as a `skill` source of a business whose agent has the pack and
+   the verbs, or sends it as the message of a turn. **The schedule is out of scope**: this
+   host has no scheduler and no system principal; a cron that posts the brief through the
+   room API is the operator's, documented.
+7. **Out of scope, stated**: a proposal for *another* agent's profile (a steward reviewing
+   others — `cms_draft_change` and `cms_publish` are own-profile only in this phase;
+   `cms_propose_publish` accepts only drafts the agent itself created); editing sources
+   directly; a token/cost budget per turn (the eval loop is a job, the in-turn bound is
+   `max_self_iterations`); the frontend card.
+
+### Review gate — _(to be filled by the second Fable before Task 8.1 starts)_
+
+### Task 8.1 (PR 8a): capabilities, scope, proposals, eval agent
+
+**Files:** `kernos/content/models.py` (`ChangeProposal`, `EvalRun.agent_id`),
+`kernos/content/store.py` (capabilities validation, proposals), `kernos/content/gates.py`
+(`changed_paths`, `outside_scope`), `kernos/api/admin.py` (proposal routes, `agent_id`),
+`app/kernel.py` (`approve_proposal`, `start_eval_run(agent_id)`), `app/evalhost.py` (agent on
+extras), tests.
+
+- [ ] `capabilities` validated on create/update (decision 1) with `agent_capabilities(agent)`
+      returning the normalised triple; `kn_change_proposals` + store methods; `changed_paths`
+      / `outside_scope`; `Kernel.approve_proposal` (gates → publish → source changes; a
+      `GateError` leaves it pending with `last_error`); admin routes; `agent_id` on runs and
+      the eval host's `extras["agent"]`.
+- [ ] Proof (`tests/kernos/test_scope.py`, `tests/test_proposals.py`): capability
+      vocabulary refusals; `changed_paths` on each editable part and each blacklist field;
+      `outside_scope` never allows `rules[tag=money]` even when listed; a proposal approved
+      by a human publishes a version that changes `models` (out of scope for the agent) and
+      writes the source changes; one whose gates fail stays pending with the failure; reject;
+      `agent_id` round-trips on a run and the eval host hands the agent to the pipeline.
+- [ ] Commit: `kernos.content: agent capabilities, self-change scope and change proposals (PR 8a)`
+
+### Task 8.2 (PR 8b): the `os_admin` pack and the proposal card
+
+**Files:** `kernos/osadmin.py` (new: `OsAdminPack`, `STEWARD_BRIEF`, the `change_proposal`
+draft kind and card body), `kernos/plugins/after.py` (`summary.agent_log`), `app/kernel.py`
+(registration with the host's store/gates/run starter), `kernos/api/admin.py`
+(`GET /steward/brief`), `TODO.md`, tests.
+
+- [ ] Tools per decision 2, generated from the agent's verbs; the per-turn draft and the
+      `max_self_iterations` bound on `ctx.extras`; `render` → `Draft("change_proposal")` from
+      the last own `cms_propose_publish`; the draft kind's commit = `approve_proposal` as
+      `human:<member>`, card = "✅ Published v{n} of {profile}: {rationale}" / failure text;
+      `cms_log` → `summary.agent_log`.
+- [ ] Proof (`tests/test_os_admin.py`, the real `run_turn` on a scripted bridge as in
+      Phase 7): no pack or no verbs → no `cms_*` tools and the golden set is untouched; a
+      `read` agent sees exactly the read tools; `cms_draft_change(skill)` opens one draft of
+      the agent's own profile based on the published version, a second call in the same
+      turn reuses it, the third beyond `max_self_iterations` is refused; a `money` rule is
+      refused at draft time; `cms_propose_publish` makes a `pending` proposal and the turn
+      ends with a `change_proposal` card whose payload carries the proposal id and diff;
+      **Confirm** on the card (the commit route) publishes through the gates and writes the
+      skill source so a fresh draft keeps the change; a proposal changing `models` (drafted
+      through the admin API on the agent's behalf, since the tool cannot) approved by a human
+      publishes; `cms_publish` by an agent with `publish` + scope `[prompt.append]`
+      publishes a prompt append itself (proposal `auto_published`, audit actor `agent:…`),
+      is refused for a skill change (outside scope) and for a change to `models`
+      (blacklist) naming the path; a `cms_run_eval` starts a job (spawn spied) and
+      `cms_get_eval_results` reads a finished run; `cms_add_eval_case` writes a `review:
+      true` case the runner skips; `cms_log` lands in the trace summary; `cms_get_turns`
+      lists the flagged turn; layering green; golden 9/9.
+- [ ] Commit: `kernos.osadmin: the CMS as a capability-gated tool pack — draft, evaluate, propose; publish only inside the self-change scope`
+
+### Task 8.3: Docs and state of play
+
+- [ ] Design §8 as built (defaults fail closed, eval as a job, the card's approver, the
+      steward schedule out of scope); README (self-administration); plan state of play.
+
+**Proof for the phase:** an agent with `draft` proposes a skill change with an eval run
+attached, a human approves it through the gates, the source follows; an agent with
+`publish` cannot publish past its scope or the blacklist.
+
+**Phase 8 — state of play:** _(filled as tasks complete)_
 
 ## Phase 9 — Portability
 
