@@ -703,6 +703,19 @@ whether the pack interface is real.
 | Eval | golden games with known nets; a settle case; an ambiguous-cash-out case that must ask |
 | Seed | none (no places); a `Collection` "house-rules" is a natural optional extra |
 
+As built (Phase 6): `packs/poker_ledger` — tables `games`/`game_entries` on its own
+`Base`; tools `propose_game`, `void_game`, `game_history`; kind `game_draft`; the
+invariant Σ buy_in = Σ cash_out + house with tolerance 0 as the profile's
+`chips-conserved` rule (`kernos.validate.sum_equals` at `validate_args`) **and** as the
+tool's own check; edges losers → winners exact on both sides (the house's cut is borne
+by the losers in proportion to their losses and is a debt to nobody — the table kept
+it); `contributions` and `timeline` registered with the core; content (prompt, skills
+`record-game`/`poker-balances`, a poker rule on top of the shared money-safety core that
+`ledger_tools` ships); fixtures; graders and five golden cases as content. The tools
+every ledger business shares moved from the lunch pack to `packs/ledger_tools`. The
+business is boot-seeded (`poker`, agent `dealer`) and a table binds to it through the
+admin API; the frontend's `game_draft` card is a follow-up.
+
 ### 7.3 What poker forces out of the host and into `ledger_core`
 
 Everything poker and lunch share is not framework and not host: members with bank

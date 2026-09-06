@@ -1510,15 +1510,25 @@ pack (`packs/poker_ledger/golden.py`, imported as suite `poker_ledger-golden`) r
 under `tests/golden/`, because a pack's golden cases are its content (decision 5). The
 `game_state` grader compares settlement transfers as a set (netting order is the core's).
 The `bench.graders` shim keeps its lunch import path; `compare_settlement` and
-`balances_by_member` now live in `packs/ledger_tools/eval.py`. 1203 tests, 1 skipped.
+`balances_by_member` now live in `packs/ledger_tools/eval.py`. 1222 tests, 1 skipped.
 
 ### Task 6.4: Docs and state of play
 
-- [ ] Design §7.2 as built; README (second business); plan state of play.
+- [x] Design §7.2 as built; README (second business); plan state of play.
 
 **Proof for the phase:** the poker suite green; the lunch suite unchanged.
 
-**Phase 6 — state of play:** _(filled as tasks complete)_
+**Phase 6 — state of play (2026-09-06):** Tasks 6.1–6.4 done as three commits (0cb75c5 6a,
+96a3521 6b, 70c2f78 6c). The second money business exists as `packs/poker_ledger` on the
+shared `ledger_core` + `packs/ledger_tools`: debt edges keyed by what they reference,
+timeline sources, the shared tools injected with the host's QR builder, memo wording and
+draft-kind registry; validation rules run at the per-call stages through the frozen
+executor; the poker pack ships tables, exact money, tools, a draft kind, content, fixtures,
+graders and golden cases, and boot seeds business `poker`/agent `dealer` as content. Gate 1
+checks pack ids, override names, rule tools and stage/scope; gate 2 counts pack money
+flags; gate 5 fences tool-scope rules. The frontend has no `game_draft` card yet
+(`TODO.md`). Baseline 986 → 1222 tests (+1 skipped), sidecar 69; golden 9/9; regrade
+identity 0/0. Review findings F1–F12 all landed.
 
 ## Phase 7 — Agents and sub-agents
 

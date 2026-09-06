@@ -102,6 +102,16 @@ and place resolver at registration (`app/packs/lunch.py`). `tests/test_lunch_led
 runs it against a stub host; `ledger_core/` is the money domain underneath (meals,
 payments, FIFO debt edges, netting, periods, VietQR) that lunch and poker share.
 
+### A second business: the poker ledger (`backend/packs/poker_ledger/`)
+
+Boot seeds a second business, `poker` (agent `dealer`), next to lunch. Bind a room to it
+(`PUT /api/admin/spaces/{room_id}/binding`) and the bot records game nights instead of
+meals: every player's buy-in and cash-out, chips conserved exactly (rake and tips as an
+explicit `house`), debts from losers to winners settled with the same VietQR flow. Both
+businesses share `backend/packs/ledger_tools` (statements, settlement, payments, the
+random draw) over `backend/ledger_core`. The frontend has no card for a game draft yet
+(`TODO.md`); the API commits one like any other draft.
+
 ### The agent kernel (`backend/kernos/`)
 
 `kernos` is a host-agnostic framework the bot now runs on — a turn pipeline with
