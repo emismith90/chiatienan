@@ -1425,13 +1425,13 @@ tests (+1 skipped), sidecar 69; golden 9/9. Review findings F1–F10 all landed.
 
 Positions confirmed by the gate: the F5 rename now; `house ≥ 0`, tolerance 0; seed `poker` unconditionally (content only); reply-scope rules not folded; `bench.run` without rules.
 
-### Task 6.1 (PR 6a): `ledger_tools` out of `lunch_ledger`
+### Task 6.1 (PR 6a): `ledger_tools` out of `lunch_ledger` — done
 
-- [ ] `ledger_core`: the F5 rename (`DebtEdge.ref_kind/ref_id/label`, `meal_id`/`dish`
+- [x] `ledger_core`: the F5 rename (`DebtEdge.ref_kind/ref_id/label`, `meal_id`/`dish`
       properties; FIFO keys include `ref_kind`; `Payment.ref_kind` passed through — F1);
       `period_timeline` over registered **timeline sources** (`ToolPack.timeline`, lunch =
       today's rows — F2a).
-- [ ] `packs/ledger_tools/{__init__.py,tools.py,render.py,eval.py,fixtures.py}` — the nine
+- [x] `packs/ledger_tools/{__init__.py,tools.py,render.py,eval.py,fixtures.py}` — the nine
       shared tools, `payment_draft`, the typed bodies (summary counts by `kind`), the
       shared outcome classification, `payment`/`add_member`/`settle` fixtures; takes
       `qr` and `fallback_note` at registration (F2c); `settle_period`'s pending listing and
@@ -1440,11 +1440,19 @@ Positions confirmed by the gate: the F5 rename now; `house ≥ 0`, tolerance 0; 
       `timeline`, its fixtures; `app/packs` registers both and the seeded profile enables
       both; `MONEY_TOOLS` → `LUNCH_TOOLS` + `LEDGER_TOOLS`; branch-added tests updated;
       `chat.py` re-exports follow the bodies.
-- [ ] Proof: golden 9/9; regrade identity 0/0; full suite unedited; `tool_manifest()`
+- [x] Proof: golden 9/9; regrade identity 0/0; full suite unedited; `tool_manifest()`
       byte-identical (`test_tools_manifest.py`); a room with meal #N and game-shaped
       edge #N (a stub source) for one pair and a targeted payment attributes to the meal
       only (F1); layering green.
-- [ ] Commit: `ledger_core/packs: ref-keyed debt edges, timeline sources; ledger_tools — the tools two ledger businesses share`
+- [x] Commit: `ledger_core/packs: ref-keyed debt edges, timeline sources; ledger_tools — the tools two ledger businesses share`
+
+Notes: `DebtEdge` keeps its field names (`meal_id`, `dish` are on the wire and in the
+pre-existing `test_money.py` constructor calls) and gains `ref_kind` plus `ref_id`/`label`
+properties — the key change is what F1 asked for; every FIFO key includes `ref_kind`.
+Same-day edges of different kinds pool in `(ref_kind, id)` order — deterministic. The
+blocked-settle body treats a `kind`-less pending entry as a meal (the shape before kinds
+carried a name; `test_chat.py` pins it). `ledger_core.notes` still carries the lunch memo
+wording (`"bua trua"`) — a 6c item alongside the rule split. 1158 tests, 1 skipped.
 
 ### Task 6.2 (PR 6b): validation rules run
 

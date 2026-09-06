@@ -5,25 +5,29 @@ import app.agent as agent_mod
 from app import chat
 from app.agent import TurnResult
 from app.kernel import kernel_for
-from app.packs import LEGACY_ORDER, MEMBER_TOOLS, MONEY_TOOLS, PLACES_TOOLS, LunchPlacesPack, RoomMembersPack, lunch_ledger_pack
+from app.packs import LEGACY_ORDER, MEMBER_TOOLS, MONEY_TOOLS, PLACES_TOOLS, LunchPlacesPack, RoomMembersPack, ledger_tools_pack, lunch_ledger_pack
+from packs.ledger_tools import LEDGER_TOOLS
+from packs.lunch_ledger import LUNCH_TOOLS
 from app.tools import ToolContext, _legacy_build_tools, build_tools, tool_manifest
 from kernos.content import ToolPackRef
 from kernos.packs import PackError
 from tests.test_ledger import _seed_room
 
 
-def test_the_three_packs_partition_the_legacy_tools_in_legacy_order(db):
+def test_the_four_packs_partition_the_legacy_tools_in_legacy_order(db):
     room_id, m = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id)
     legacy = _legacy_build_tools(ctx)
     assert tuple(legacy) == LEGACY_ORDER and len(LEGACY_ORDER) == 19
-    money, places, members = lunch_ledger_pack().tools(ctx), LunchPlacesPack().tools(ctx), RoomMembersPack().tools(ctx)
-    assert set(money) == MONEY_TOOLS and set(places) == PLACES_TOOLS and set(members) == MEMBER_TOOLS
+    lunch, shared = lunch_ledger_pack().tools(ctx), ledger_tools_pack().tools(ctx)
+    places, members = LunchPlacesPack().tools(ctx), RoomMembersPack().tools(ctx)
+    assert set(lunch) == LUNCH_TOOLS and set(shared) == LEDGER_TOOLS and LUNCH_TOOLS | LEDGER_TOOLS == MONEY_TOOLS
+    assert set(places) == PLACES_TOOLS and set(members) == MEMBER_TOOLS
     assert not (MONEY_TOOLS & PLACES_TOOLS) and not (MONEY_TOOLS & MEMBER_TOOLS) and not (PLACES_TOOLS & MEMBER_TOOLS)
     assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
     # composed through the seam with all packs on: same names, same order, same schemas
     kernel_for(db)
-    ctx.tool_config = {"packs": [{"pack": "lunch_ledger"}, {"pack": "room_members"}, {"pack": "lunch_places"}]}
+    ctx.tool_config = {"packs": [{"pack": "lunch_ledger"}, {"pack": "ledger_tools"}, {"pack": "room_members"}, {"pack": "lunch_places"}]}
     composed = build_tools(ctx)
     assert list(composed) == list(legacy)
     assert [(n, t.description, t.input_schema) for n, t in composed.items()] == \
@@ -35,14 +39,15 @@ def test_disabling_and_redescribing_a_tool_is_content(db):
     room_id, m = _seed_room(db, 2)
     kernel_for(db)
     ctx = ToolContext(db=db, room_id=room_id, tool_config={"packs": [
-        {"pack": "lunch_ledger", "tools": {"pick_random": {"enabled": False},
+        {"pack": "lunch_ledger"},
+        {"pack": "ledger_tools", "tools": {"pick_random": {"enabled": False},
                                           "settle_period": {"description": "Who pays whom."}}}]})
     tools = build_tools(ctx)
     assert "pick_random" not in tools and "find_places" not in tools          # places pack not enabled
     assert tools["settle_period"].description == "Who pays whom."
     assert [t["name"] for t in tool_manifest(ctx)] == [n for n in LEGACY_ORDER if n in MONEY_TOOLS and n != "pick_random"]
     with pytest.raises(PackError):
-        build_tools(ToolContext(db=db, room_id=room_id, tool_config={"packs": [{"pack": "lunch_ledger", "tools": {"zzz": {}}}]}))
+        build_tools(ToolContext(db=db, room_id=room_id, tool_config={"packs": [{"pack": "ledger_tools", "tools": {"zzz": {}}}]}))
 
 
 async def test_a_bound_profile_without_pick_random_never_offers_it_to_the_engine(db, monkeypatch):
@@ -50,7 +55,8 @@ async def test_a_bound_profile_without_pick_random_never_offers_it_to_the_engine
     k = kernel_for(db)
     pid = k.seed_report["profile_id"]
     d = k.store.create_draft(pid, actor="admin")
-    k.store.update_draft(d["id"], {"tool_packs": [{"pack": "lunch_ledger", "tools": {"pick_random": {"enabled": False}}},
+    k.store.update_draft(d["id"], {"tool_packs": [{"pack": "lunch_ledger"},
+                                                  {"pack": "ledger_tools", "tools": {"pick_random": {"enabled": False}}},
                                                   {"pack": "room_members"}, {"pack": "lunch_places"}]}, actor="admin")
     k.store.publish(d["id"], actor="admin", gates=k.gates, override_reason="test")
     seen = {}

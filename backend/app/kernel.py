@@ -87,7 +87,8 @@ class Kernel:
         for pack in packs:
             self.graders.register_all(pack.graders())
         drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
-        ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
+        ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()],
+                              timeline_sources=[p.timeline for p in self.packs.list()])
 
     def static_tool_names(self, pack) -> set[str] | None:
         """A pack's tool names for gate 1, or ``None`` when they depend on the space

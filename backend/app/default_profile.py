@@ -68,7 +68,7 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
             "persist": [e(id="kernos.persist.cards", version="1")],
             "after": [e(id="kernos.after.trace", version="1", config={"keep_days": 30})],
         },
-        tool_packs=[ToolPackRef(pack="lunch_ledger"), ToolPackRef(pack="room_members"),
-                    ToolPackRef(pack="lunch_places")],
+        tool_packs=[ToolPackRef(pack="lunch_ledger"), ToolPackRef(pack="ledger_tools"),
+                    ToolPackRef(pack="room_members"), ToolPackRef(pack="lunch_places")],
         meta={"handles_money": True},
     )

@@ -14,7 +14,8 @@ from ledger_core import clock, ledger
 from ledger_core.money import MoneyError, prorate_items, split_shares
 from ledger_core.moneyguard import unbacked_amounts
 from ledger_core.periods import resolve_period
-from packs.lunch_ledger import render
+from packs.ledger_tools.eval import SHARED_CARD_LABELS, shared_body_kind
+from packs.ledger_tools import render
 
 #: Arguments whose value is money, or decides who owes it. Everything else the
 #: model sends is free-form and deliberately not compared. `guests` and
@@ -96,45 +97,16 @@ Reply with JSON only: {"ok": true|false, "reason": "<one short sentence>"}.
 # user's message" when the user's message contained no amount at all. Amount
 # provenance is `moneyguard`'s job, deterministically, in stage 1.
 
-CARD_LABELS = {
-    "expense_draft": "an expense draft card",
-    "payment_draft": "a payment draft card",
-    "settlement": "a server-rendered settlement body",
-    "settle_blocked": "a server-rendered blocked-settle body",
-    "statement": "a server-rendered statement body",
-    "summary": "a server-rendered summary body",
-    "random_pick": "a server-rendered random-pick body",
-}
+CARD_LABELS = {"expense_draft": "an expense draft card", **SHARED_CARD_LABELS}
 
 
 def posted_body_kind(record: dict) -> str | None:
-    """Which card `chat.py` would post for this turn, or None for plain prose.
-
-    Mirrors the selection at `chat.py:511-558` **in chat's own precedence order**,
-    not in tool-call order: a `propose_meal` proposal wins, then a
-    `propose_payment` draft, then `render_bot_attachments`
-    (`chat.py:304-319`) in its order.
-
-    Note that a successful `settle_period` result does **not** carry
-    `type: "settlement"` — `render_bot_attachments` stamps that on. Matching
-    result types alone would therefore miss every settlement, leave its discarded
-    prose graded, and fail it as an empty reply.
-    """
+    """Which card the room would see for this turn, or None for plain prose — in the
+    render decision's own precedence: the meal proposal (this pack, first in profile
+    order), then the shared bodies (`ledger_tools`, next)."""
     if _ok_results(record, "propose_meal"):
         return "expense_draft"
-    if any(r.get("type") == "payment_draft" for r in _ok_results(record, "propose_payment")):
-        return "payment_draft"
-
-    settle = _ok_results(record, "settle_period")
-    if settle:
-        return "settle_blocked" if settle[-1].get("type") == "settle_blocked" else "settlement"
-    for tool_name, kind in (("member_statement", "statement"),
-                            ("get_period_summary", "summary"),
-                            ("pick_random", "random_pick")):
-        results = _ok_results(record, tool_name)
-        if results and results[-1].get("type") == kind:
-            return kind
-    return None
+    return shared_body_kind(record)
 
 
 # --------------------------------------------------------------------------- #

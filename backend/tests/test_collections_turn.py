@@ -39,7 +39,7 @@ def _publish_with_collections(k):
 def test_generated_tools_follow_the_lunch_tools_and_convert_in_the_sidecar(db):
     room_id, m, k, bid = _setup(db)
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0],
-                      tool_config={"packs": [{"pack": "lunch_ledger"}, {"pack": "room_members"},
+                      tool_config={"packs": [{"pack": "lunch_ledger"}, {"pack": "ledger_tools"}, {"pack": "room_members"},
                                              {"pack": "lunch_places"}, {"pack": "collections"}]})
     names = [t["name"] for t in tool_manifest(ctx)]
     assert names[:19] == [t["name"] for t in tool_manifest()] and names[19:] == ["rota_find", "rota_upsert", "rota_delete"]

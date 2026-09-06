@@ -28,10 +28,11 @@ from app.summarize import summarize_messages
 # The deterministic bodies for the lunch ledger's tool results live in the pack
 # (plan Task 3.3); re-exported so `tests/test_chat_bodies.py` and `bench.graders`
 # keep their import path.
-from packs.lunch_ledger.render import (  # noqa: F401
-    _meal_body, _payment_body, _random_pick_body, _settle_blocked_body, _settlement_body,
-    _statement_body, _summary_body, render_bot_attachments,
+from packs.ledger_tools.render import (  # noqa: F401
+    _payment_body, _random_pick_body, _settle_blocked_body, _settlement_body, _statement_body,
+    _summary_body, render_bot_attachments,
 )
+from packs.lunch_ledger.render import _meal_body  # noqa: F401
 
 log = logging.getLogger("chiatienan")
 

@@ -16,8 +16,6 @@ created (for ``confirm_pending``'s ``ref``).
 """
 from __future__ import annotations
 
-from ledger_core import ledger
-
 
 def draft_payload(step: dict, ids: dict[str, int]) -> dict:
     """The draft a prior step creates.
@@ -46,11 +44,6 @@ def draft_payload(step: dict, ids: dict[str, int]) -> dict:
     return payload
 
 
-def add_member(world, step: dict, ids: dict, drafts_by_step: dict, actor) -> None:
-    ids[step["new_member"]] = world.add_member(display_name=step["new_member"].upper(),
-                                               nickname=step["new_member"])
-
-
 def meal(world, step: dict, ids: dict, drafts_by_step: dict, actor) -> None:
     """`meal_confirmed` and `leave_pending`: create the draft; commit only the former."""
     draft_id = world.create_card("expense_draft", draft_payload(step, ids))
@@ -63,22 +56,9 @@ def confirm_pending(world, step: dict, ids: dict, drafts_by_step: dict, actor) -
     world.commit_card(drafts_by_step[step["ref"]], actor)
 
 
-def payment(world, step: dict, ids: dict, drafts_by_step: dict, actor) -> None:
-    with world.session() as s:
-        ledger.record_payment(s, room_id=world.space_id, from_member_id=ids[step["from"]],
-                              to_member_id=ids[step["to"]], amount=step["amount"], logged_by=str(actor))
-
-
-def settle(world, step: dict, ids: dict, drafts_by_step: dict, actor) -> None:
-    # Read-only: it changes nothing, so a prior settle needs no replay.
-    return None
-
-
+#: `add_member`, `payment` and `settle` are `packs.ledger_tools.fixtures` (shared).
 FIXTURES = {
-    "add_member": add_member,
     "meal_confirmed": meal,
     "leave_pending": meal,
     "confirm_pending": confirm_pending,
-    "payment": payment,
-    "settle": settle,
 }

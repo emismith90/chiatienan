@@ -59,6 +59,18 @@ class DraftKind:
     card: Callable[..., tuple[str, dict]] | None = None
     prepare: Callable[[dict], dict] | None = None
     signature: Callable[[dict], Any] | None = None
+    #: ``summary(session, space_id, payload) -> dict`` — how a *pending* card of this kind
+    #: is described to a human by another pack (a blocked settle lists them); the dict
+    #: carries ``kind`` and whatever the body needs (Phase 6 review F2b).
+    summary: Callable[..., dict] | None = None
+    #: ``exists(session, space_id, record_id) -> bool`` — does the committed record with
+    #: this id exist (the fabricated-commit validator asks; Phase 6 review F6).
+    exists: Callable[..., bool] | None = None
+
+    def describe_pending(self, session, space_id, payload: dict) -> dict:
+        if self.summary is not None:
+            return self.summary(session, space_id, payload)
+        return {"kind": self.kind, "label": self.kind}
 
 
 @runtime_checkable
@@ -70,6 +82,11 @@ class ToolPack(Protocol):
     cancel_tools: frozenset[str]
     #: tools whose calls carry money — what eval capture records (plan Task 4.3)
     money_tools: frozenset[str]
+    #: tools whose success is a write or a proposal — a reply claiming "recorded" without
+    #: one of these is a forgery (Phase 6 review F6); default = ``money_tools``
+    commit_tools: frozenset[str]
+    #: the pack's own tables' metadata, if any (bound by ``bind``; exported by the host)
+    metadata: Any
 
     def tools(self, ctx: Any) -> dict[str, PackTool]: ...
     def draft_kinds(self) -> dict[str, DraftKind]: ...
@@ -79,6 +96,9 @@ class ToolPack(Protocol):
     def seed(self, session: Any, space_id: str) -> None: ...
     def bind(self, engine: Any) -> None: ...
     def graders(self) -> dict[str, Callable[..., Any]]: ...      # eval grader factories by plugin id
+    def timeline(self, session: Any, space_id: str, from_date: Any, to_date: Any) -> list[dict]: ...
+    def content(self) -> dict: ...                                # {prompt_body, skills, rules} a business can seed
+    def eval_cases(self) -> list[dict]: ...                       # golden cases the pack ships, as content
 
 
 class BasePack:
@@ -89,6 +109,11 @@ class BasePack:
     handles_money: bool = False
     cancel_tools: frozenset[str] = frozenset()
     money_tools: frozenset[str] = frozenset()
+    metadata: Any = None
+
+    @property
+    def commit_tools(self) -> frozenset[str]:
+        return self.money_tools
 
     def tools(self, ctx: Any) -> dict[str, PackTool]:
         return {}
@@ -113,6 +138,15 @@ class BasePack:
 
     def graders(self) -> dict[str, Callable[..., Any]]:
         return {}
+
+    def timeline(self, session: Any, space_id: str, from_date: Any, to_date: Any) -> list[dict]:
+        return []
+
+    def content(self) -> dict:
+        return {"prompt_body": None, "skills": [], "rules": []}
+
+    def eval_cases(self) -> list[dict]:
+        return []
 
     def __repr__(self) -> str:
         return f"<pack {self.id}@{self.version}>"

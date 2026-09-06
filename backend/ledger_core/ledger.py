@@ -370,9 +370,9 @@ def debt_breakdown(
     — the enabled packs' ``contributions``), the meals by default.
     """
     payments = [
-        {"from": f, "to": t, "amount": a, "meal_id": mid}
-        for f, t, a, mid in session.execute(
-            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id)
+        {"from": f, "to": t, "amount": a, "meal_id": mid, "ref_kind": kind}
+        for f, t, a, mid, kind in session.execute(
+            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id, Payment.ref_kind)
             .where(Payment.room_id == room_id, Payment.voided.is_(False))
         ).all()
     ]
@@ -435,16 +435,24 @@ def outstanding_pairs(
             for (d, c), amt in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
-def period_timeline(
-    session: Session, room_id: int, from_date: date | None, to_date: date
-) -> list[dict]:
-    """Meals + payments in the window as one list ordered by (occurred_on, created_at)."""
+#: Where a period's timeline events come from (Phase 6 review F2): each source is
+#: ``(session, space_id, from_date, to_date) -> list[dict]`` of ``{"kind", "occurred_on",
+#: "created_at", …}`` rows. The ledger adds its payments itself. With none registered
+#: the timeline is the meals', as it always was.
+TimelineSource = Callable[[Session, int, "date | None", date], list[dict]]
+_timeline_sources: list[TimelineSource] | None = None
+
+
+def set_timeline_sources(sources: list[TimelineSource] | None) -> None:
+    global _timeline_sources
+    _timeline_sources = list(sources) if sources is not None else None
+
+
+def meal_timeline(session: Session, room_id: int, from_date: date | None, to_date: date) -> list[dict]:
+    """The meals in the window as timeline events — the lunch business's source."""
     meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
     if from_date is not None:
         meal_conds.append(Meal.occurred_on >= from_date)
-        pay_conds.append(Payment.occurred_on >= from_date)
-
     events: list[dict] = []
     meal_rows = session.execute(
         select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on,
@@ -463,6 +471,19 @@ def period_timeline(
                        "occurred_on": occ.isoformat(), "total": total,
                        "participant_ids": participants.get(mid, []),
                        "created_at": created.isoformat() if created else ""})
+    return events
+
+
+def period_timeline(
+    session: Session, room_id: int, from_date: date | None, to_date: date
+) -> list[dict]:
+    """Every registered source's events + payments in the window, as one list ordered
+    by (occurred_on, created_at)."""
+    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
+    if from_date is not None:
+        pay_conds.append(Payment.occurred_on >= from_date)
+    sources = _timeline_sources if _timeline_sources is not None else [meal_timeline]
+    events: list[dict] = [e for source in sources for e in source(session, room_id, from_date, to_date)]
     for pid, f, t, amt, occ, created in session.execute(
         select(Payment.id, Payment.from_member_id, Payment.to_member_id, Payment.amount,
                Payment.occurred_on, Payment.created_at).where(*pay_conds)

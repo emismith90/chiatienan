@@ -7,6 +7,7 @@ text — is handed to it here.
 from __future__ import annotations
 
 from app import places, qr
+from packs.ledger_tools import LedgerToolsPack
 from packs.lunch_ledger import LunchLedgerPack
 
 
@@ -25,4 +26,18 @@ def resolve_place(session, space_id, text: str) -> tuple[dict | None, bool]:
 
 
 def lunch_ledger_pack() -> LunchLedgerPack:
-    return LunchLedgerPack(qr=qr.make_qr_url, place_resolver=resolve_place)
+    return LunchLedgerPack(place_resolver=resolve_place)
+
+
+def _fallback_note(to_date) -> str:
+    """The bank memo when no record names the debt — this host's lunch wording."""
+    return f"Chia tien an {to_date.day}/{to_date.month}"
+
+
+def _draft_kinds():
+    from app import drafts
+    return drafts.draft_kinds()
+
+
+def ledger_tools_pack() -> LedgerToolsPack:
+    return LedgerToolsPack(qr=qr.make_qr_url, fallback_note=_fallback_note, draft_kinds=_draft_kinds)

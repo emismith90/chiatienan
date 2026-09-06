@@ -18,7 +18,7 @@ from app import clock
 from app.clock import ICT
 from app.hostadapters import RoomCards
 from app.models import Member, Room
-from app.packs import lunch_ledger_pack
+from app.packs import ledger_tools_pack, lunch_ledger_pack
 
 
 @contextlib.contextmanager
@@ -99,7 +99,7 @@ def build_world(db, case) -> tuple[int, dict[str, int], dict[str, int]]:
     # The step kinds are the lunch pack's fixtures (`packs.lunch_ledger.fixtures`):
     # the bench sequences them and freezes the clock, the pack knows how to put a
     # room into "meal confirmed" or "payment recorded" state — through `_World`.
-    fixtures = lunch_ledger_pack().fixtures()
+    fixtures = {**ledger_tools_pack().fixtures(), **lunch_ledger_pack().fixtures()}
     world = World(db, room_id)
     for step in case.prior_steps:
         kind = step["kind"]

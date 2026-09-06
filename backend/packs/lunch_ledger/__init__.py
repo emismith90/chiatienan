@@ -1,12 +1,9 @@
-"""``lunch_ledger``: the shared-meal ledger as a portable pack (plan Tasks 3.3, 3.4).
-
-Tools (`tools.py`), the outcome decision and the deterministic reply bodies
-(`render.py`), the two draft kinds it can commit — with the confirmation cards the
-room sees afterwards — the debt edges it contributes to balances, and the
-world-building fixtures the eval bench replays (`fixtures.py`). Everything the
-pack needs from a host is injected: the QR builder and the place resolver here at
-registration, the card store, clock and draw on the per-turn context (see
-``tools.py``).
+"""``lunch_ledger``: what the shared-meal business *adds* to the ledger (plan Tasks
+3.3, 3.4, 6.1): `propose_meal`/`void_meal`, the `expense_draft` kind with its
+committed-meal card, the meals' debt edges and timeline events, its fixtures and its
+eval graders. Everything a ledger business shares — statements, settlement, payments,
+the random draw — is ``packs.ledger_tools``, enabled next to this pack. Injected: the
+place resolver at registration; the card store, clock and draw on the per-turn context.
 """
 from __future__ import annotations
 
@@ -17,11 +14,7 @@ from ledger_core import drafts as core
 from ledger_core import ledger, roster
 from packs.lunch_ledger import fixtures, render, tools
 
-MONEY_TOOLS = frozenset({
-    "find_members", "propose_meal", "void_meal", "cancel_draft", "pick_random",
-    "resolve_period", "resolve_date", "member_statement", "get_period_summary",
-    "settle_period", "propose_payment",
-})
+LUNCH_TOOLS = frozenset({"propose_meal", "void_meal"})
 
 
 def _names(session, space_id) -> dict[int, str]:
@@ -57,51 +50,31 @@ def meal_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
     return render._meal_body(meal_att), meal_att
 
 
-def _commit_payment(session, space_id, att: dict, *, logged_by) -> dict:
-    transfers = core.require_transfers(att)
-    core.record_payment_transfers(session, space_id, transfers, logged_by=logged_by)
-    return {"transfers": transfers}
-
-
-def payment_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
+def meal_summary(session, space_id, att: dict) -> dict:
+    """A pending meal draft, for another pack's blocked-settle listing."""
     names = _names(session, space_id)
-    pay_att = {
-        "type": "payment",
-        "transfers": [
-            {"from": {"id": t["from_member_id"], "name": names.get(t["from_member_id"], "?")},
-             "to": {"id": t["to_member_id"], "name": names.get(t["to_member_id"], "?")},
-             "amount": t["amount"]}
-            for t in res["transfers"]
-        ],
-    }
-    return render._payment_body(pay_att), pay_att
+    return {"kind": "meal", "payer_name": names.get(att.get("payer_member_id"), "?"),
+            "bill_total": att.get("bill_total", 0),
+            "participant_count": len(att.get("member_participants") or [])}
 
 
 class LunchLedgerPack(BasePack):
     id, version, handles_money = "lunch_ledger", "1", True
-    cancel_tools = frozenset({"cancel_draft"})
-    #: The tools whose call *is* the turn's money answer — what eval capture records as
-    #: the expectation. The lookups a model makes on its way (`find_members`,
-    #: `resolve_period`, `resolve_date`) are scaffolding and must not become mandatory.
-    money_tools = MONEY_TOOLS - {"find_members", "resolve_period", "resolve_date"}
+    money_tools = LUNCH_TOOLS
 
-    def __init__(self, *, qr: Callable[[Any, int, str], str],
-                 place_resolver: Callable[[Any, Any, str], tuple[dict | None, bool]] | None = None) -> None:
-        self._qr = qr
+    def __init__(self, *, place_resolver: Callable[[Any, Any, str], tuple[dict | None, bool]] | None = None) -> None:
         self._place_resolver = place_resolver
 
     def tools(self, ctx) -> dict[str, PackTool]:
-        return tools.build(ctx, qr=self._qr, place_resolver=self._place_resolver)
+        return tools.build(ctx, place_resolver=self._place_resolver)
 
     def draft_kinds(self) -> dict[str, DraftKind]:
         return {
             "expense_draft": DraftKind(
                 "expense_draft", _commit_meal, editable=frozenset(core.EDITABLE),
                 stamps=frozenset({"raw_input", "logged_by", "turn_id"}),
-                card=meal_card, prepare=core.sync_items, signature=core.draft_signature),
-            "payment_draft": DraftKind(
-                "payment_draft", _commit_payment, stamps=frozenset({"turn_id"}),
-                card=payment_card, signature=core.draft_signature),
+                card=meal_card, prepare=core.sync_items, signature=core.draft_signature,
+                summary=meal_summary),
         }
 
     def render(self, result):
@@ -110,6 +83,10 @@ class LunchLedgerPack(BasePack):
     def contributions(self, session, space_id) -> list:
         """The meals' gross debt edges, the whole ledger, unwindowed (review F4)."""
         return ledger.meal_edges(session, space_id)
+
+    def timeline(self, session, space_id, from_date, to_date) -> list[dict]:
+        """The meals in the window, for the period summary (Phase 6 review F2)."""
+        return ledger.meal_timeline(session, space_id, from_date, to_date)
 
     def fixtures(self):
         return dict(fixtures.FIXTURES)

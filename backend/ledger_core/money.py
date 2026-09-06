@@ -379,10 +379,15 @@ def split_with_guests(
 
 @dataclass(frozen=True)
 class DebtEdge:
-    """One participant's gross debt to a meal's payer, for a single meal.
+    """One debtor's gross debt to one creditor for one recorded thing — a meal, a
+    game — with ``paid`` the portion covered by ad-hoc payments (attributed
+    oldest-first by :func:`apply_payments_fifo`); ``outstanding`` never goes negative.
 
-    ``paid`` is the portion covered by ad-hoc payments (attributed oldest-first
-    by :func:`apply_payments_fifo`); ``outstanding`` never goes negative.
+    ``meal_id``/``dish`` are the reference id and label, named for the first business
+    (they are on the wire in statements and cards); ``ref_kind`` says what kind of
+    record they name, and it is part of every FIFO key, so a meal #5 and a game #5
+    between the same two people never share a payment (Phase 6 review F1).
+    ``ref_id``/``label`` are the business-neutral names.
     """
     debtor: int
     creditor: int
@@ -391,6 +396,15 @@ class DebtEdge:
     occurred_on: date
     amount: int
     paid: int = 0
+    ref_kind: str = "meal"
+
+    @property
+    def ref_id(self) -> int:
+        return self.meal_id
+
+    @property
+    def label(self) -> str | None:
+        return self.dish
 
     @property
     def outstanding(self) -> int:
@@ -404,7 +418,8 @@ class DebtEdge:
 
 
 def build_debt_edges(meals: list[dict]) -> list[DebtEdge]:
-    """One :class:`DebtEdge` per (participant≠payer, meal), gross, ``paid=0``."""
+    """One :class:`DebtEdge` per (participant≠payer, meal), gross, ``paid=0``,
+    ``ref_kind="meal"``."""
     edges: list[DebtEdge] = []
     for m in meals:
         payer = m["payer_id"]
@@ -420,18 +435,20 @@ def build_debt_edges(meals: list[dict]) -> list[DebtEdge]:
 
 def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> list[DebtEdge]:
     """Attribute payments to edges. A payment with ``meal_id`` settles that exact
-    edge first (⑦ quick action); the rest apply to the pair oldest-meal-first.
+    edge first (⑦ quick action) — the edge of the same ``ref_kind`` (a payment's
+    ``ref_kind`` defaults to ``"meal"``); the rest apply to the pair oldest-first.
 
     Returns new edges with ``paid`` set. Payment beyond an edge/pair total is
     ignored (never makes ``outstanding`` negative). Deterministic:
-    ``(occurred_on, meal_id)`` order.
+    ``(occurred_on, ref_kind, meal_id)`` order.
     """
-    targeted: dict[tuple[int, int, int], int] = {}
+    targeted: dict[tuple[int, int, str, int], int] = {}
     pool: dict[tuple[int, int], int] = {}
     for p in payments or []:
         mid = p.get("meal_id")
         if mid is not None:
-            targeted[(p["from"], p["to"], mid)] = targeted.get((p["from"], p["to"], mid), 0) + p["amount"]
+            key = (p["from"], p["to"], p.get("ref_kind") or "meal", mid)
+            targeted[key] = targeted.get(key, 0) + p["amount"]
         else:
             pool[(p["from"], p["to"])] = pool.get((p["from"], p["to"]), 0) + p["amount"]
 
@@ -442,9 +459,9 @@ def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> l
     # person, so it must keep counting. Without the spill, `statement_for` showed
     # a debt as "unpaid" while `per_payer_transfers`, which never sees meal_id,
     # counted the payment: two views, one payment, a silent disagreement.
-    edge_capacity: dict[tuple[int, int, int], int] = {}
+    edge_capacity: dict[tuple[int, int, str, int], int] = {}
     for e in edges:
-        key = (e.debtor, e.creditor, e.meal_id)
+        key = (e.debtor, e.creditor, e.ref_kind, e.meal_id)
         edge_capacity[key] = edge_capacity.get(key, 0) + e.amount
     for key, amount in list(targeted.items()):
         capacity = edge_capacity.get(key, 0)
@@ -454,9 +471,9 @@ def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> l
             pool[pair] = pool.get(pair, 0) + (amount - capacity)
 
     out: list[DebtEdge] = []
-    for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id)):
+    for e in sorted(edges, key=lambda e: (e.occurred_on, e.ref_kind, e.meal_id)):
         paid = 0
-        tk = (e.debtor, e.creditor, e.meal_id)
+        tk = (e.debtor, e.creditor, e.ref_kind, e.meal_id)
         if targeted.get(tk):
             take = min(targeted[tk], e.amount)
             targeted[tk] -= take
@@ -468,5 +485,5 @@ def apply_payments_fifo(edges: list[DebtEdge], payments: list[dict] | None) -> l
             if take:
                 pool[(e.debtor, e.creditor)] = avail - take
                 paid += take
-        out.append(DebtEdge(e.debtor, e.creditor, e.meal_id, e.dish, e.occurred_on, e.amount, paid))
+        out.append(DebtEdge(e.debtor, e.creditor, e.meal_id, e.dish, e.occurred_on, e.amount, paid, e.ref_kind))
     return out

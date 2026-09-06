@@ -23,9 +23,10 @@ __version__ = "0.1.0"
 
 def configure(*, member_model: type | None = None, directory: MemberDirectory | None = None,
               space_attr: str = "room_id", now: Callable[[], datetime] | None = None,
-              edge_sources: list | None = None) -> None:
+              edge_sources: list | None = None, timeline_sources: list | None = None) -> None:
     """Bind the host's member model (or a directory of your own), its clock, and the
-    packs whose ``contributions`` feed the balances (``ledger.set_edge_sources``)."""
+    packs whose ``contributions`` feed the balances (``ledger.set_edge_sources``) and
+    whose ``timeline`` feeds the period summary (``ledger.set_timeline_sources``)."""
     if directory is None and member_model is not None:
         directory = SqlMemberDirectory(member_model, space_attr=space_attr)
     if directory is not None:
@@ -34,3 +35,5 @@ def configure(*, member_model: type | None = None, directory: MemberDirectory | 
         _clock.set_provider(now)
     if edge_sources is not None:
         _ledger.set_edge_sources(edge_sources)
+    if timeline_sources is not None:
+        _ledger.set_timeline_sources(timeline_sources)
