@@ -490,6 +490,165 @@ class ContentStore:
             s.delete(row)
         self._changed()
 
+    # ---------------------------------------------------------------------- eval
+
+    def _by_slug(self, s: Session, model, business_id: int, slug: str):
+        return s.scalar(select(model).where(model.business_id == business_id, model.slug == slug))
+
+    def put_case(self, business_id: int, slug: str, case: dict, *, actor: str, tags: list | None = None,
+                 source: str = "manual", review: bool = False) -> dict:
+        """Upsert by (business, slug) — importing twice changes nothing but ``updated_at``."""
+        with self._session() as s:
+            self._business(s, business_id)
+            row = self._by_slug(s, m.EvalCaseRow, business_id, slug)
+            before = _row(row) if row else None
+            if row is None:
+                row = m.EvalCaseRow(business_id=business_id, slug=slug, case=case)
+                s.add(row)
+            row.case, row.tags, row.source, row.review = case, list(tags or []), source, bool(review)
+            row.updated_at = m.utcnow()
+            s.flush()
+            self.log(s, actor, "put", "eval_case", f"{business_id}/{slug}",
+                     before={"source": before["source"], "review": before["review"]} if before else None,
+                     after={"source": source, "review": bool(review)})
+            return _row(row)
+
+    def get_case(self, business_id: int, slug: str) -> dict:
+        with self._session() as s:
+            row = self._by_slug(s, m.EvalCaseRow, business_id, slug)
+            if row is None:
+                raise NotFound(f"no eval case {slug!r}")
+            return _row(row)
+
+    def list_cases(self, business_id: int, *, review: bool | None = None, source: str | None = None,
+                   full: bool = False) -> list[dict]:
+        with self._session() as s:
+            q = select(m.EvalCaseRow).where(m.EvalCaseRow.business_id == business_id)
+            if review is not None:
+                q = q.where(m.EvalCaseRow.review.is_(review))
+            if source is not None:
+                q = q.where(m.EvalCaseRow.source == source)
+            rows = [_row(r) for r in s.scalars(q.order_by(m.EvalCaseRow.id)).all()]
+            return rows if full else [{k: v for k, v in r.items() if k != "case"} for r in rows]
+
+    def delete_case(self, business_id: int, slug: str, *, actor: str) -> None:
+        with self._session() as s:
+            row = self._by_slug(s, m.EvalCaseRow, business_id, slug)
+            if row is None:
+                raise NotFound(f"no eval case {slug!r}")
+            s.delete(row)
+            self.log(s, actor, "delete", "eval_case", f"{business_id}/{slug}")
+
+    def put_suite(self, business_id: int, slug: str, *, actor: str, case_slugs: list, graders: list,
+                  judge: dict | None = None, repeat: int = 1) -> dict:
+        for g in graders:
+            if not isinstance(g, dict) or not g.get("plugin"):
+                raise Invalid("each suite grader is {plugin, name?, config?}")
+        with self._session() as s:
+            self._business(s, business_id)
+            row = self._by_slug(s, m.EvalSuite, business_id, slug)
+            if row is None:
+                row = m.EvalSuite(business_id=business_id, slug=slug)
+                s.add(row)
+            row.case_slugs, row.graders, row.judge, row.repeat = list(case_slugs), list(graders), dict(judge or {}), max(1, int(repeat))
+            row.updated_at = m.utcnow()
+            s.flush()
+            self.log(s, actor, "put", "eval_suite", f"{business_id}/{slug}",
+                     after={"cases": len(case_slugs), "graders": [g.get("plugin") for g in graders]})
+            return _row(row)
+
+    def get_suite(self, business_id: int, slug: str) -> dict:
+        with self._session() as s:
+            row = self._by_slug(s, m.EvalSuite, business_id, slug)
+            if row is None:
+                raise NotFound(f"no eval suite {slug!r}")
+            return _row(row)
+
+    def list_suites(self, business_id: int) -> list[dict]:
+        with self._session() as s:
+            return [_row(r) for r in s.scalars(select(m.EvalSuite).where(m.EvalSuite.business_id == business_id)
+                                                .order_by(m.EvalSuite.slug)).all()]
+
+    def delete_suite(self, business_id: int, slug: str, *, actor: str) -> None:
+        """Refused while runs exist: they are the evidence gate 4 read."""
+        with self._session() as s:
+            row = self._by_slug(s, m.EvalSuite, business_id, slug)
+            if row is None:
+                raise NotFound(f"no eval suite {slug!r}")
+            if s.scalar(select(m.EvalRun.id).where(m.EvalRun.suite_id == row.id).limit(1)) is not None:
+                raise Conflict(f"suite {slug!r} has runs; they are publish evidence and stay")
+            s.delete(row)
+            self.log(s, actor, "delete", "eval_suite", f"{business_id}/{slug}")
+
+    def put_rubric(self, business_id: int, slug: str, body: str, *, actor: str) -> dict:
+        with self._session() as s:
+            self._business(s, business_id)
+            row = self._by_slug(s, m.Rubric, business_id, slug)
+            if row is None:
+                row = m.Rubric(business_id=business_id, slug=slug)
+                s.add(row)
+            row.body, row.updated_at = body, m.utcnow()
+            s.flush()
+            self.log(s, actor, "put", "rubric", f"{business_id}/{slug}")
+            return _row(row)
+
+    def get_rubric(self, business_id: int, slug: str) -> dict:
+        with self._session() as s:
+            row = self._by_slug(s, m.Rubric, business_id, slug)
+            if row is None:
+                raise NotFound(f"no rubric {slug!r}")
+            return _row(row)
+
+    def list_rubrics(self, business_id: int) -> list[dict]:
+        with self._session() as s:
+            return [_row(r) for r in s.scalars(select(m.Rubric).where(m.Rubric.business_id == business_id)
+                                                .order_by(m.Rubric.slug)).all()]
+
+    def create_run(self, suite_id: int, profile_version_id: int, spec_sha: str, *, actor: str,
+                   judge_model: str | None = None) -> dict:
+        with self._session() as s:
+            if s.get(m.EvalSuite, suite_id) is None:
+                raise NotFound(f"no eval suite #{suite_id}")
+            row = m.EvalRun(suite_id=suite_id, profile_version_id=profile_version_id, spec_sha=spec_sha,
+                            judge_model=judge_model)
+            s.add(row)
+            s.flush()
+            self.log(s, actor, "start", "eval_run", row.id,
+                     after={"suite_id": suite_id, "profile_version_id": profile_version_id, "spec_sha": spec_sha})
+            return _row(row)
+
+    def finish_run(self, run_id: int, *, status: str, records: list | None = None, summary: dict | None = None,
+                   error: str | None = None) -> dict:
+        if status not in ("done", "failed"):
+            raise Invalid("a run finishes as 'done' or 'failed'")
+        with self._session() as s:
+            row = s.get(m.EvalRun, run_id)
+            if row is None:
+                raise NotFound(f"no eval run #{run_id}")
+            row.status, row.finished, row.error = status, m.utcnow(), error
+            row.records, row.summary = list(records or []), dict(summary or {})
+            s.flush()
+            return _row(row)
+
+    def get_run(self, run_id: int) -> dict:
+        with self._session() as s:
+            row = s.get(m.EvalRun, run_id)
+            if row is None:
+                raise NotFound(f"no eval run #{run_id}")
+            return _row(row)
+
+    def list_runs(self, *, suite_id: int | None = None, profile_version_id: int | None = None,
+                  limit: int = 50) -> list[dict]:
+        """Newest first, without ``records`` (the summary carries the verdict counts)."""
+        with self._session() as s:
+            q = select(m.EvalRun)
+            if suite_id is not None:
+                q = q.where(m.EvalRun.suite_id == suite_id)
+            if profile_version_id is not None:
+                q = q.where(m.EvalRun.profile_version_id == profile_version_id)
+            rows = s.scalars(q.order_by(m.EvalRun.id.desc()).limit(limit)).all()
+            return [{k: v for k, v in _row(r).items() if k != "records"} for r in rows]
+
     # -------------------------------------------------------------------- traces
 
     def write_trace(self, space_id: str, turn_id: str | None, *, started: str, finished: str,

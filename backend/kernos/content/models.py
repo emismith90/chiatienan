@@ -147,3 +147,62 @@ class TurnTrace(Base):
     summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     tools: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     trace: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
+
+class EvalCaseRow(Base):
+    """An eval case as content (design §5.5): ``case`` is ``kernos.eval.EvalCase.to_dict()``
+    (images included); ``review`` marks a case no human has confirmed — never graded."""
+
+    __tablename__ = "kn_eval_cases"
+    __table_args__ = (UniqueConstraint("business_id", "slug"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("kn_businesses.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    case: Mapped[dict] = mapped_column(JSON, nullable=False)
+    tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)   # manual | imported | captured
+    review: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+
+
+class EvalSuite(Base):
+    """``graders`` is ``[{plugin, name?, config?}]``; ``judge`` is ``{model, rubric}`` or ``{}``."""
+
+    __tablename__ = "kn_eval_suites"
+    __table_args__ = (UniqueConstraint("business_id", "slug"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("kn_businesses.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    case_slugs: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    graders: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    judge: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    repeat: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+
+
+class Rubric(Base):
+    __tablename__ = "kn_rubrics"
+    __table_args__ = (UniqueConstraint("business_id", "slug"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("kn_businesses.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    body: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+
+
+class EvalRun(Base):
+    """One run of a suite against one profile version; ``spec_sha`` is what gate 4
+    matches against the candidate (``kernos.eval.spec_sha``)."""
+
+    __tablename__ = "kn_eval_runs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    suite_id: Mapped[int] = mapped_column(ForeignKey("kn_eval_suites.id"), nullable=False, index=True)
+    profile_version_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    spec_sha: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)   # running | done | failed
+    started: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
+    finished: Mapped[str | None] = mapped_column(String(32))
+    judge_model: Mapped[str | None] = mapped_column(String(200))
+    records: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)

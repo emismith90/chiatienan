@@ -23,6 +23,24 @@ from kernos.registry.registry import ConfigError, RegistryError
 from kernos.content.spec import BindingOverrides, ProfileSpec
 
 
+
+class EvalCaseIn(BaseModel):
+    case: dict
+    tags: list[str] = []
+    source: str = "manual"
+    review: bool = False
+
+
+class EvalSuiteIn(BaseModel):
+    case_slugs: list[str] = []
+    graders: list[dict] = []
+    judge: dict = {}
+    repeat: int = 1
+
+
+class RubricIn(BaseModel):
+    body: str
+
 class BusinessIn(BaseModel):
     slug: str
     name: str
@@ -263,6 +281,65 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
             "engine_spec": asdict(spec.to_engine_spec()),
             "pipeline": k.pipeline_for(spec).describe(),
         }
+
+    # ----------------------------------------------------------------- eval
+    @r.get("/businesses/{business_id}/eval/cases")
+    def eval_cases(business_id: int, review: bool | None = None, source: str | None = None):
+        return _wrap(lambda: get_kernel().store.list_cases(business_id, review=review, source=source))
+
+    @r.get("/businesses/{business_id}/eval/cases/{slug}")
+    def eval_case(business_id: int, slug: str):
+        return _wrap(lambda: get_kernel().store.get_case(business_id, slug))
+
+    @r.put("/businesses/{business_id}/eval/cases/{slug}")
+    def put_eval_case(business_id: int, slug: str, body: EvalCaseIn, x_actor: str | None = Header(default=None)):
+        return _wrap(lambda: get_kernel().store.put_case(
+            business_id, slug, body.case, actor=_actor(x_actor), tags=body.tags, source=body.source, review=body.review))
+
+    @r.delete("/businesses/{business_id}/eval/cases/{slug}", status_code=204)
+    def delete_eval_case(business_id: int, slug: str, x_actor: str | None = Header(default=None)):
+        _wrap(lambda: get_kernel().store.delete_case(business_id, slug, actor=_actor(x_actor)))
+
+    @r.get("/businesses/{business_id}/eval/suites")
+    def eval_suites(business_id: int):
+        return _wrap(lambda: get_kernel().store.list_suites(business_id))
+
+    @r.get("/businesses/{business_id}/eval/suites/{slug}")
+    def eval_suite(business_id: int, slug: str):
+        return _wrap(lambda: get_kernel().store.get_suite(business_id, slug))
+
+    @r.put("/businesses/{business_id}/eval/suites/{slug}")
+    def put_eval_suite(business_id: int, slug: str, body: EvalSuiteIn, x_actor: str | None = Header(default=None)):
+        return _wrap(lambda: get_kernel().store.put_suite(
+            business_id, slug, actor=_actor(x_actor), case_slugs=body.case_slugs, graders=body.graders,
+            judge=body.judge, repeat=body.repeat))
+
+    @r.delete("/businesses/{business_id}/eval/suites/{slug}", status_code=204)
+    def delete_eval_suite(business_id: int, slug: str, x_actor: str | None = Header(default=None)):
+        _wrap(lambda: get_kernel().store.delete_suite(business_id, slug, actor=_actor(x_actor)))
+
+    @r.get("/businesses/{business_id}/eval/rubrics")
+    def rubrics(business_id: int):
+        return _wrap(lambda: get_kernel().store.list_rubrics(business_id))
+
+    @r.put("/businesses/{business_id}/eval/rubrics/{slug}")
+    def put_rubric(business_id: int, slug: str, body: RubricIn, x_actor: str | None = Header(default=None)):
+        return _wrap(lambda: get_kernel().store.put_rubric(business_id, slug, body.body, actor=_actor(x_actor)))
+
+    @r.get("/eval/graders")
+    def eval_graders():
+        k = get_kernel()
+        registry = getattr(k, "graders", None)
+        return registry.ids() if registry is not None else []
+
+    @r.get("/eval/runs")
+    def eval_runs(suite_id: int | None = None, profile_version_id: int | None = None,
+                  limit: int = Query(default=50, le=500)):
+        return get_kernel().store.list_runs(suite_id=suite_id, profile_version_id=profile_version_id, limit=limit)
+
+    @r.get("/eval/runs/{run_id}")
+    def eval_run(run_id: int):
+        return _wrap(lambda: get_kernel().store.get_run(run_id))
 
     # ---------------------------------------------------------------- turns
     @r.get("/spaces/{space_id}/turns")

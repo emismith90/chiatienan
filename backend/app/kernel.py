@@ -23,6 +23,7 @@ from app.plugins.run import LegacyRunTurn
 from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.adapters import HostAdapters
 from kernos.content.traces import StoreTraces
+from kernos.eval import GraderRegistry
 from kernos.content import (
     ContentStore, DbResolver, ProfileSpec, PublishGates, Resolver, Runtime, StaticResolver, ensure_seeded,
 )
@@ -41,6 +42,7 @@ class Kernel:
         self.adapters: HostAdapters = build_adapters(db)
         from app.packs import host_packs
         self.packs = PackRegistry()
+        self.graders = GraderRegistry()
         self.register_packs(*host_packs())
         self.store = ContentStore(db.session)
         self.registry = Registry()
@@ -74,6 +76,8 @@ class Kernel:
         from app import drafts
 
         self.packs.register_all(packs)
+        for pack in packs:
+            self.graders.register_all(pack.graders())
         drafts.set_draft_kinds({k: dk for p in self.packs.list() for k, dk in p.draft_kinds().items()})
         ledger_core.configure(edge_sources=[p.contributions for p in self.packs.list()])
 

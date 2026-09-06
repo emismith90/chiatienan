@@ -68,6 +68,8 @@ class ToolPack(Protocol):
     handles_money: bool
     #: tools whose successful result names a card to republish (`draft_id`)
     cancel_tools: frozenset[str]
+    #: tools whose calls carry money — what eval capture records (plan Task 4.3)
+    money_tools: frozenset[str]
 
     def tools(self, ctx: Any) -> dict[str, PackTool]: ...
     def draft_kinds(self) -> dict[str, DraftKind]: ...
@@ -76,6 +78,7 @@ class ToolPack(Protocol):
     def fixtures(self) -> dict[str, Callable[..., Any]]: ...
     def seed(self, session: Any, space_id: str) -> None: ...
     def bind(self, engine: Any) -> None: ...
+    def graders(self) -> dict[str, Callable[..., Any]]: ...      # eval grader factories by plugin id
 
 
 class BasePack:
@@ -85,6 +88,7 @@ class BasePack:
     version: str = "1"
     handles_money: bool = False
     cancel_tools: frozenset[str] = frozenset()
+    money_tools: frozenset[str] = frozenset()
 
     def tools(self, ctx: Any) -> dict[str, PackTool]:
         return {}
@@ -106,6 +110,9 @@ class BasePack:
 
     def bind(self, engine: Any) -> None:
         return None
+
+    def graders(self) -> dict[str, Callable[..., Any]]:
+        return {}
 
     def __repr__(self) -> str:
         return f"<pack {self.id}@{self.version}>"

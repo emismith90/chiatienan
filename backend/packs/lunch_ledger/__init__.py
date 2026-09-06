@@ -80,6 +80,7 @@ def payment_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
 class LunchLedgerPack(BasePack):
     id, version, handles_money = "lunch_ledger", "1", True
     cancel_tools = frozenset({"cancel_draft"})
+    money_tools = MONEY_TOOLS
 
     def __init__(self, *, qr: Callable[[Any, int, str], str],
                  place_resolver: Callable[[Any, Any, str], tuple[dict | None, bool]] | None = None) -> None:
@@ -109,3 +110,7 @@ class LunchLedgerPack(BasePack):
 
     def fixtures(self):
         return dict(fixtures.FIXTURES)
+
+    def graders(self):
+        from packs.lunch_ledger import eval as lunch_eval
+        return dict(lunch_eval.GRADERS)

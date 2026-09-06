@@ -1001,41 +1001,41 @@ must wire; `turn_id` falls back to the result's when the run plugin did not set 
 `profile_version_id` is stored but null until the resolver exposes the version it
 served (Task 4.3 wires it with gate 4). 1125 tests, 1 skipped; sidecar 69.
 
-### Task 4.2 (PR 4b): eval core — cases, graders, runner, tables
+### Task 4.2 (PR 4b): eval core — cases, graders, runner, tables — done
 
 **Files:** `kernos/eval/{__init__.py,case.py,graders.py,runner.py}` (new), `kernos/content/
 models.py` (+4 tables), `kernos/content/store.py`, `kernos/api/admin.py`, `packs/lunch_ledger/eval.py`
 (new), `bench/graders.py` → shim, `bench/corpus/__init__.py` (`Case.to_eval_case`), tests.
 
-- [ ] `EvalCase` dataclass + `to_dict/from_dict` (images kept — F6); `Record` helpers
+- [x] `EvalCase` dataclass + `to_dict/from_dict` (images kept — F6); `Record` helpers
       (`RECORD_VERSION = 1` moves here, `bench.run` imports it); `Verdict`; `Grader` protocol
       with `blocking: bool` (F10) + `GraderRegistry` (`register(id, factory)`, `build(ref)`
       where a suite entry is `{plugin, name?, config}` and `name` defaults to the id's last
       segment — the key in `record.grades` and in `eval.gate`); `Judge` protocol;
       `spec_sha(spec)` over `stored()` minus `eval` (F4, F8).
-- [ ] `kernos.eval.graders.ToolSelection(config, equivalence)` = `grade_tool_selection` with
+- [x] `kernos.eval.graders.ToolSelection(config, equivalence)` = `grade_tool_selection` with
       `compared_args`, `unordered`, `member_amount_lists`, `sender_defaulted` from config and
       the per-tool equivalence hook injected (F1); `Prose(unbacked, judge, outcome_kind)` =
       `grade_prose` with the amount checker and the outcome classifier injected. Both
       `blocking`: `ToolSelection` yes, `Prose` no.
-- [ ] `packs/lunch_ledger/eval.py`: `LedgerState` grader (blocking; + `compare_settlement`,
+- [x] `packs/lunch_ledger/eval.py`: `LedgerState` grader (blocking; + `compare_settlement`,
       `balances_by_member`, draft comparison — verbatim), `share_map` (the propose_meal
       equivalence), `posted_body_kind`, `PROSE_RUBRIC`, `MONEY_ARGS`, `graders()` → the
       pack's registrations with its hooks (`ToolPack.graders()` and `money_tools` join the
       protocol with `BasePack` defaults `{}` / `frozenset()`).
-- [ ] `bench.graders` shim: `grade_tool_selection`, `grade_ledger_state`, `grade_prose`,
+- [x] `bench.graders` shim: `grade_tool_selection`, `grade_ledger_state`, `grade_prose`,
       `compare_settlement`, `balances_by_member`, `posted_body_kind`, `summarize_cost_latency`,
       `PROSE_RUBRIC`, `MONEY_ARGS`, `Verdict` with today's signatures.
-- [ ] Tables + store CRUD (`put_case/list_cases/get_case/delete_case`, `put_suite/…`,
+- [x] Tables + store CRUD (`put_case/list_cases/get_case/delete_case`, `put_suite/…`,
       `put_rubric/…`, `create_run/finish_run/get_run/list_runs`) + admin routes.
-- [ ] `kernos.eval.Runner`: sequential, `repeat` per suite (default 1), one world per case
+- [x] `kernos.eval.Runner`: sequential, `repeat` per suite (default 1), one world per case
       and repetition, `review: true` cases skipped and recorded as such (F9), grades
       isolated (a grader that raises → `passed: None, reason: grader raised`, counted as
       `ungraded_grader_raised` — F2), a `run_turn`/world exception → `record.error`; summary
       per grader `{name, blocking, passed, failed, ungraded_no_expectation,
       ungraded_grader_raised, rate}` + cost/latency + `judge_model`; an unknown grader ref
       → run `status: failed`; `run(suite, cases, spec, version_id) -> EvalRun`.
-- [ ] Proof: `tests/test_eval_regrade_identity.py` — `bench.regrade` over
+- [x] Proof: `tests/test_eval_regrade_identity.py` — `bench.regrade` over
       `bench/results/pi-typical-r3.json` and `pi-typical-r3-before-fixes.json` changes 0
       verdicts through the plugin graders with the expected `skipped` counts (F7);
       pre-existing `test_bench_graders.py`/`test_bench_run.py` unedited and green (they are
@@ -1044,7 +1044,16 @@ models.py` (+4 tables), `kernos/content/store.py`, `kernos/api/admin.py`, `packs
       one ungraded, one review-skipped, one raising grader) and checks the summary, the
       stored run, and `spec_sha` (no-op edit and threshold edit keep it, a prompt edit
       changes it).
-- [ ] Commit: `kernos.eval: cases, graders as plugins, runner and eval tables; lunch graders in the pack`
+- [x] Commit: `kernos.eval: cases, graders as plugins, runner and eval tables; lunch graders in the pack`
+
+Notes: the pack registers its graders under **pack-qualified** ids
+(`lunch_ledger.eval.{tool_selection,ledger_state,prose}`) built from the kernos
+`ToolSelection`/`Prose` classes with its hooks — two money packs on one kernel never
+collide on a generic id; a suite entry's `name` (e.g. `prose_quality`) is the record key.
+`ToolPack` gained `money_tools` and `graders()`; the kernel keeps a `GraderRegistry` fed
+by `register_packs`. Identity: 0 changed on both stored runs (skipped 42/57 without the
+prod corpus, 0/15 with it). A suite with runs cannot be deleted (`Conflict`): runs are
+gate evidence. 1135 tests, 1 skipped; sidecar 69.
 
 ### Task 4.3 (PR 4c): the lunch suite as content; gate 4; eval_capture
 
