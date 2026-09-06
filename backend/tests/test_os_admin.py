@@ -5,7 +5,7 @@ import pytest
 
 from app import chat, drafts
 from app.kernel import Kernel, kernel_for
-from app.tools import ToolContext
+from app.tools import ToolContext, build_tools
 from kernos.content import StaticResolver, ProfileSpec, ToolPackRef
 from kernos.content import models as m
 from kernos.eval import EvalCase, Runner, spec_sha
@@ -134,7 +134,7 @@ async def test_reads_are_references_never_evidence_and_traces_are_redacted_untru
 
 # ------------------------------------------------------------------ draft/propose
 
-async def test_draft_change_opens_one_own_draft_and_a_proposal_ends_the_turn_as_a_body(db, monkeypatch):
+async def test_draft_change_opens_one_own_draft_and_the_proposal_becomes_a_card_the_room_confirms(db, monkeypatch):
     room_id, mm, k = _room(db, {"cms": ["read", "draft"]})
     bid, pid = k.seed_report["business_id"], k.seed_report["profile_id"]
     k.store.put_source(bid, "skill", "balances", body="drifted, unpublished", actor="admin")      # snapshot noise (F6)
@@ -147,7 +147,8 @@ async def test_draft_change_opens_one_own_draft_and_a_proposal_ends_the_turn_as_
          "args": {"kind": "rule", "slug": "money-safety", "body": "relaxed", "rationale": "x"}},
         {"type": "tool_call", "call_id": "d4", "name": "cms_draft_change",
          "args": {"kind": "rule", "slug": "new-rule", "body": "r", "rationale": "x", "frontmatter": {"tags": ["money"]}}},
-        {"type": "tool_call", "call_id": "d5", "name": "cms_propose_publish", "args": {"version_id": 0, "rationale": "x"}},
+        {"type": "tool_call", "call_id": "d5", "name": "cms_propose_publish",
+         "args": {"version_id": 0, "rationale": "two turns guessed the payer"}},
         {"type": "tool_call", "call_id": "d6", "name": "cms_publish", "args": {"version_id": 0, "rationale": "x"}},
         _turn_done("Đã đề xuất."),
     ]
@@ -183,16 +184,30 @@ async def test_draft_change_opens_one_own_draft_and_a_proposal_ends_the_turn_as_
     assert [(c["kind"], c["slug"]) for c in row["source_changes"]] == [("skill", "record-meal")]
     assert row["source_changes"][0]["if_match"] == k.store.get_source(bid, "skill", "record-meal")["etag"]
     assert row["base_version_id"] == k.store.get_profile(pid)["published_version_id"]
-    # the reply is a body naming the proposal, not a card (F4)
-    assert reply.kind == "bot" and reply.body.startswith(f"📋 Proposal #{prop['proposal_id']} opened for v{d1['version']}")
-    assert f"/api/admin/proposals/{prop['proposal_id']}" in reply.body
+    # the turn ends as a CARD the room can confirm, because this room's own agent wrote
+    # the proposal (Phase 10.3); it shows the diff, warns that the bot is shared, and
+    # carries the proposal id
+    assert reply.kind == "change_proposal"
+    assert reply.attachments["proposal_id"] == prop["proposal_id"] and reply.attachments["status"] == "pending"
+    assert f"#{prop['proposal_id']}" in reply.body and "two turns guessed the payer" in reply.body
+    assert "```diff" in reply.body and "Always ask who paid" in reply.body       # the change is shown, not summarised
+    assert "for every room that has not been given its own" in reply.body
+    assert "every publish gate still applies" in reply.body
     with db.session() as s:
-        assert drafts.list_pending_drafts(s, room_id) == []
+        assert [d.id for d in drafts.list_pending_drafts(s, room_id)] == [reply.id]
     trace = _trace(k, room_id)
     assert {t["name"]: t["result"] for t in trace["tools"]}["cms_propose_publish"] == {"ok": True, "proposal_id": prop["proposal_id"]}
-    # a human approves: the version publishes and the skill source follows
-    out = k.approve_proposal(prop["proposal_id"], actor="hung")
-    assert out["status"] == "approved"
+    # …and it does not freeze the ledger the way a money card does (Phase 10.3)
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=mm[0]))
+    settled = tools["settle_period"].execute({})
+    assert settled["ok"] and settled.get("type") != "settle_blocked" and "transfers" in settled
+    # confirming it is what publishes: the version goes live and the skill source follows
+    with db.session() as s:
+        card = drafts.commit_any(s, reply.id, room_id, logged_by=str(mm[0]))
+    assert card.body.startswith("✅ Published v") and card.attachments["type"] == "change_published"
+    assert f"member:{mm[0]}" in card.body
+    out = k.store.get_proposal(prop["proposal_id"])
+    assert out["status"] == "approved" and out["decided_by"] == f"member:{mm[0]}"
     assert k.store.published_spec(pid)["prompt"]["append"][-1] == "Ask before assuming the payer."
     assert k.store.get_source(bid, "skill", "record-meal")["body"].endswith("Always ask who paid.")
     fresh = k.store.create_draft(pid, actor="admin")
@@ -322,3 +337,40 @@ def test_the_steward_brief_is_served(api_client_room):
     client, _h, _r, _m = api_client_room
     r = client.get("/api/admin/steward/brief", headers={"X-Admin-Password": "test-admin-pw"})
     assert r.status_code == 200 and r.json()["brief"].startswith("# Steward brief") and "cms_publish" in r.json()["brief"]
+
+
+async def test_a_card_the_gates_refuse_stays_pending_and_can_be_confirmed_again(db, monkeypatch):
+    """Phase 8 review F4's second objection: a confirm that fails must not leave a
+    committed card with an unpublished proposal."""
+    from ledger_core.ledger import LedgerError
+    room_id, mm, k = _room(db, {"cms": ["read", "draft"]})
+    pid = k.seed_report["profile_id"]
+    # a draft that gate 3 will refuse: a model with no probe on record
+    v = k.store.create_draft(pid, actor="agent:phoenix", snapshot=False)
+    k.store.update_draft(v["id"], {"models": {**k.store.published_spec(pid)["models"], "text": "nobody/unprobed"}},
+                         actor="agent:phoenix")
+    script = [{"type": "tool_call", "call_id": "p1", "name": "cms_propose_publish",
+               "args": {"version_id": v["id"], "rationale": "swap the model"}},
+              _turn_done("Đề xuất xong.")]
+    _fake, reply = await _turn(monkeypatch, db, room_id, mm, "@phoenix đổi model", script)
+    assert reply.kind == "change_proposal"
+    proposal_id = reply.attachments["proposal_id"]
+
+    with pytest.raises(LedgerError, match="Not published"):                    # the route answers 409
+        with db.session() as s:
+            drafts.commit_any(s, reply.id, room_id, logged_by=str(mm[0]))
+    with db.session() as s:
+        pending = drafts.list_pending_drafts(s, room_id)
+    assert [d.id for d in pending] == [reply.id]                                # still confirmable
+    prop = k.store.get_proposal(proposal_id)
+    assert prop["status"] == "pending" and "probe" in prop["last_error"] and prop["decided_by"] is None
+    assert k.store.get_profile(pid)["published_version_id"] != v["id"]
+
+    # fix the reason, confirm again: the same card publishes
+    k.store.upsert_model("nobody/unprobed", provider="openrouter", name="U")
+    k.store.set_probe("nobody/unprobed", {"ok": True, "checked_at": k.adapters.clock.now().isoformat()})
+    with db.session() as s:
+        card = drafts.commit_any(s, reply.id, room_id, logged_by=str(mm[0]))
+    assert card.attachments["type"] == "change_published"
+    assert k.store.get_proposal(proposal_id)["status"] == "approved"
+    assert k.store.published_spec(pid)["models"]["text"] == "nobody/unprobed"

@@ -401,16 +401,18 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
         args = args or {}
         pending = ctx.cards.pending(ctx.space_id)
         with db.session() as s:
-            if pending:
-                # Each pending card is described by the pack that owns its kind
-                # (`DraftKind.summary` — Phase 6 review F2b); this pack knows none by name.
-                summaries = [{"draft_id": d.id, **describe_pending(s, ctx.space_id, d.kind, d.attachments or {})}
-                             for d in pending]
+            # Each pending card is described by the pack that owns its kind
+            # (`DraftKind.summary` — Phase 6 review F2b); this pack knows none by name.
+            # A card that is not about money (a configuration proposal) waits for a person
+            # too, but it owes nobody anything and must not freeze the ledger.
+            summaries = [x for x in ({"draft_id": d.id, **describe_pending(s, ctx.space_id, d.kind, d.attachments or {})}
+                                     for d in pending) if x.pop("blocks", True)]
+            if summaries:
                 return {
                     "ok": True,
                     "type": "settle_blocked",
                     "pending": summaries,
-                    "message": f"Có {len(pending)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi tính.",
+                    "message": f"Có {len(summaries)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi tính.",
                 }
 
             last = ledger.last_settlement(s, ctx.space_id)

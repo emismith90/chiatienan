@@ -39,8 +39,8 @@ from kernos.content.gates import BLACKLIST_FIELDS, blacklisted_changes, changed_
 from kernos.content.spec import ProfileSpec
 from kernos.eval.case import spec_sha
 from kernos.eval.gate import latest_matching_run
-from kernos.kernel.context import Body
-from kernos.packs import BasePack, PackTool, err
+from kernos.kernel.context import Body, Draft
+from kernos.packs import BasePack, DraftKind, PackTool, err
 
 log = logging.getLogger("kernos.osadmin")
 
@@ -105,14 +105,19 @@ class OsAdminPack(BasePack):
 
     def __init__(self, store, *, gates: Callable[[], Any], describe: Callable[[Any], dict | None] | None,
                  start_run: Callable[..., dict] | None, traces, eval_mode: bool = False,
-                 admin_url: str = "/api/admin/proposals/{id}", now: Callable[[], datetime] = _utcnow) -> None:
+                 admin_url: str = "/api/admin/proposals/{id}", now: Callable[[], datetime] = _utcnow,
+                 approve: Callable[..., dict] | None = None) -> None:
         """``store`` is the content store; ``gates()`` the publish gates; ``describe(space_id)``
         what a space resolves to (``agent``, ``profile_id``, ``version_id``; ``None`` under a
         static resolver); ``start_run(suite, version_id, *, actor, agent_id)`` the host's job
-        starter; ``traces`` a ``TraceStore``; ``eval_mode`` exposes the read tools only (F5)."""
+        starter; ``traces`` a ``TraceStore``; ``eval_mode`` exposes the read tools only (F5).
+
+        ``approve(proposal_id, *, actor) -> dict`` turns a proposal into a **card** the
+        room can confirm (plan Phase 10.3). Leave it ``None`` and a proposal is reported
+        as a body pointing at the admin API, which is what Phase 8 shipped."""
         self._store, self._gates, self._describe = store, gates, describe
         self._start_run, self._traces, self._eval_mode = start_run, traces, eval_mode
-        self._admin_url, self._now = admin_url, now
+        self._admin_url, self._now, self._approve = admin_url, now, approve
 
     # ------------------------------------------------------------------ tools
 
@@ -124,6 +129,7 @@ class OsAdminPack(BasePack):
         verbs = caps["cms"] & ({"read"} if self._eval_mode else set(VERB_TOOLS))
         if not verbs:
             return {}
+        self._card_space = getattr(ctx, "space_id", None)
         t = _Tools(self, ctx, agent, caps)
         out: dict[str, PackTool] = {}
         for verb in VERB_TOOLS:
@@ -133,8 +139,15 @@ class OsAdminPack(BasePack):
                 out[name] = PackTool(name, *t.spec(name), getattr(t, name))
         return out
 
-    def render(self, result) -> Body | None:
-        """A proposal this turn opened is the reply (F4): no card, the admin API approves."""
+    def render(self, result) -> Body | Draft | None:
+        """A proposal this turn opened is the turn's outcome.
+
+        With ``approve`` wired **and** this space's own agent being the one that authored
+        the proposal, it is a card the room can confirm (Phase 10.3). Otherwise it is a
+        body pointing at the admin API: a room must never be handed a button for a change
+        it is not part of (Phase 8 review F4), and a sub-agent's turn persists nothing at
+        all, so a delegated review always reports rather than proposes (Phase 7 decision
+        3 — a sub's outcome is text)."""
         rec = result.last_result("cms_propose_publish")
         if not rec or not rec.get("proposal_id"):
             return None
@@ -143,13 +156,101 @@ class OsAdminPack(BasePack):
             version = self._store.get_version(prop["version_id"])
         except ContentError:
             return None
+        paths = ", ".join(prop["diff"].get("paths") or []) or "—"
+        if self._approve is not None and self._authored_here(prop):
+            return Draft("change_proposal", {"proposal_id": prop["id"], "version": version["version"],
+                                             "profile_id": prop["profile_id"], "rationale": prop["rationale"],
+                                             "paths": prop["diff"].get("paths") or [],
+                                             "diff": prop["diff"].get("unified") or "",
+                                             "shared": self._is_shared(prop["profile_id"])})
         url = self._admin_url.format(id=prop["id"])
         return Body(f"📋 Proposal #{prop['id']} opened for v{version['version']}: {prop['rationale']}\n"
-                    f"Changes: {', '.join(prop['diff'].get('paths') or []) or '—'}. A person approves it at {url}.",
-                    None, claimed_by_pack=True)
+                    f"Changes: {paths}. A person approves it at {url}.", None, claimed_by_pack=True)
+
+    def _space(self, space_id: Any) -> dict:
+        return (self._describe(str(space_id)) if self._describe is not None else None) or {}
+
+    def _authored_here(self, prop: dict) -> bool:
+        """Is the agent this space runs the one that opened the proposal?"""
+        agent = self._space(self._card_space).get("agent") or {}
+        return agent.get("id") == prop["agent_id"]
+
+    def _is_shared(self, profile_id: int) -> bool:
+        """True when the profile being changed is the business's default — so confirming
+        here changes the bot in every space that has not been given an agent of its own."""
+        try:
+            default = self._store.default_agent(self._store.get_profile(profile_id)["business_id"])
+        except ContentError:
+            return False
+        return bool(default) and default["profile_id"] == profile_id
+
+    #: The space the current turn is rendering for; set by ``tools`` (the render stage has
+    #: no context of its own).
+    _card_space: Any = None
+
+    def draft_kinds(self) -> dict[str, DraftKind]:
+        if self._approve is None:
+            return {}
+        return {"change_proposal": DraftKind(
+            "change_proposal", self._commit_proposal, stamps=frozenset({"turn_id"}),
+            card=_proposal_card, summary=_proposal_summary, blocks_settlement=False,
+            body=proposal_body)}
+
+    def _commit_proposal(self, session, space_id, payload: dict, *, logged_by) -> dict:
+        """Confirm: publish the proposed version through every gate, as the person who
+        pressed the button. A gate refusal leaves the proposal pending and the card
+        unconfirmed, so it can be retried once the reason is fixed (Phase 8 review F4)."""
+        actor = f"member:{logged_by}" if logged_by else "member:unknown"
+        try:
+            decided = self._approve(payload["proposal_id"], actor=actor)
+        except ContentError as exc:
+            raise ProposalRefused(f"Not published: {exc}") from exc
+        return {"proposal_id": decided["id"], "status": decided["status"], "by": actor,
+                "version": payload.get("version")}
 
     def content(self) -> dict:
         return {"prompt_body": None, "skills": [], "rules": []}
+
+
+class ProposalRefused(ValueError):
+    """A confirm that the gates refused. ``ValueError`` so a host's draft store reports it
+    the way it reports any other refused commit, leaving the card pending."""
+
+
+#: How much of a diff a card shows before it stops being readable in a chat bubble.
+DIFF_LINES = 24
+
+
+def _proposal_card(session, space_id, payload: dict, result: dict) -> tuple[str, dict]:
+    return (f"✅ Published v{result.get('version')} — {payload.get('rationale') or 'no reason given'}\n"
+            f"Approved by {result.get('by')}. Undo it with a rollback in the admin API.",
+            {"type": "change_published", "proposal_id": result["proposal_id"], "version": result.get("version")})
+
+
+def _proposal_summary(session, space_id, payload: dict) -> dict:
+    return {"kind": "change_proposal", "proposal": payload.get("proposal_id"),
+            "paths": payload.get("paths") or []}
+
+
+def proposal_body(payload: dict) -> str:
+    """What the pending card says. It shows the diff, because a person cannot consent to
+    a change they have not been shown, and says plainly how far the change reaches."""
+    lines = [f"⚙️ **Proposed change to the bot** (#{payload.get('proposal_id')} → v{payload.get('version')})",
+             "", payload.get("rationale") or "No reason given.", ""]
+    if payload.get("paths"):
+        lines += [f"Touches: {', '.join(payload['paths'])}", ""]
+    diff = (payload.get("diff") or "").splitlines()
+    if diff:
+        shown = diff[:DIFF_LINES]
+        lines += ["```diff", *shown]
+        if len(diff) > DIFF_LINES:
+            lines.append(f"… {len(diff) - DIFF_LINES} more lines")
+        lines += ["```", ""]
+    if payload.get("shared"):
+        lines.append("⚠️ This room uses the shared default bot, so confirming changes it "
+                     "**for every room that has not been given its own**.")
+    lines.append("Nothing changes until someone presses **Confirm** — and every publish gate still applies.")
+    return "\n".join(lines)
 
 
 class _Tools:

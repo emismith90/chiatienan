@@ -101,7 +101,10 @@ def create_card(session: Session, room_id: int, kind: str, payload: dict) -> tup
         att = dk.prepare(att)
     att.pop("logged_by", None)
     superseded = _supersede_duplicates(session, room_id, att)
-    new_draft = chat.post_message(session, room_id, None, body="", attachments=att, kind=kind)
+    # A kind that says how it reads gets a readable body, so a client that does not yet
+    # know the kind shows the text rather than an empty bubble (plan Phase 10.3).
+    body = dk.body(att) if dk.body is not None else ""
+    new_draft = chat.post_message(session, room_id, None, body=body, attachments=att, kind=kind)
     return new_draft, superseded
 
 
@@ -152,7 +155,15 @@ def _commit(session: Session, draft_id: int, room_id: int, logged_by: str | None
     att = dict(m.attachments or {})
     if att.get("status") != "pending":
         raise ledger.LedgerError("This draft has already been processed.")
-    res = dk.commit(session, room_id, att, logged_by=logged_by)
+    try:
+        res = dk.commit(session, room_id, att, logged_by=logged_by)
+    except ledger.LedgerError:
+        raise
+    except ValueError as exc:
+        # A kind whose commit refuses (a configuration change the publish gates rejected)
+        # is a refused commit like any other: the card stays pending and the route answers
+        # 409, so it can be confirmed again once the reason is fixed (Phase 8 review F4).
+        raise ledger.LedgerError(str(exc)) from exc
     body, card_att = dk.card(session, room_id, att, res) if dk.card else ("", None)
     card = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
 

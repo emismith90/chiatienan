@@ -71,11 +71,21 @@ class DraftKind:
     #: ``exists(session, space_id, record_id) -> bool`` — does the committed record with
     #: this id exist (the fabricated-commit validator asks; Phase 6 review F6).
     exists: Callable[..., bool] | None = None
+    #: Whether a pending card of this kind should stop a settlement. True for anything
+    #: that owes money and is not yet decided; False for a card that is not about money
+    #: at all (a configuration proposal — plan Phase 10.3), which must never freeze the
+    #: ledger just by sitting there.
+    blocks_settlement: bool = True
+    #: ``body(payload) -> str`` — what a **pending** card of this kind reads as. A host
+    #: that renders cards from their attachments can leave this ``None`` (the lunch kinds
+    #: do); a kind whose card a client does not know yet needs it, or the room sees an
+    #: empty bubble (plan Phase 10.3).
+    body: Callable[[dict], str] | None = None
 
     def describe_pending(self, session, space_id, payload: dict) -> dict:
-        if self.summary is not None:
-            return self.summary(session, space_id, payload)
-        return {"kind": self.kind, "label": self.kind}
+        described = self.summary(session, space_id, payload) if self.summary is not None else {
+            "kind": self.kind, "label": self.kind}
+        return {"blocks": self.blocks_settlement, **described}
 
 
 @runtime_checkable

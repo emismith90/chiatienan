@@ -115,7 +115,10 @@ class BaseKernel:
             DelegationPack(self.subs_of, self.run_sub),
             OsAdminPack(self.store, gates=lambda: self.gates, describe=self.agent_space,
                         start_run=lambda *a, **kw: self.start_eval_run(*a, **kw), traces=StoreTraces(self.store),
-                        eval_mode=self.eval_mode, admin_url=self.admin_url),
+                        eval_mode=self.eval_mode, admin_url=self.admin_url,
+                        # a proposal becomes a card the room can confirm; the gates still
+                        # decide, and a refusal leaves it pending (plan Phase 10.3)
+                        approve=self.approve_proposal),
         )
 
     def register_framework_plugins(self) -> None:
