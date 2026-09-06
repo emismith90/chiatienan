@@ -947,6 +947,26 @@ Benchmark: not run here (no `OPEN_ROUTER_KEY`). Phase 3 gate findings F1–F8 al
    judge `{model: settings.bench_judge_model or null, rubric: "prose"}`) and rubric
    `prose`. Idempotent (upsert by slug).
 
+### Review gate (second Fable, 2026-09-06) — findings and dispositions
+
+| id | sev | finding | disposition |
+|---|---|---|---|
+| F1 | high | The "generic" graders are not generic: `grade_tool_selection` uses `_share_map` (`app.money.prorate_items/split_shares`) and special-cases `propose_meal`; `grade_prose` needs `posted_body_kind`, which hardcodes lunch tool/result names. A kernos grader cannot import either. | Taken, option (a): `kernos.eval.graders.ToolSelection(config, equivalence={tool: fn})` — the per-tool "same money under another encoding" hook is injected; `Prose(unbacked, judge, outcome_kind)` takes the outcome classifier. `packs/lunch_ledger/eval.py` provides `share_map` and `posted_body_kind` and registers both graders with its hooks; the `bench.graders` shim wires the same, so identity holds. |
+| F2 | high | Vacuous-pass vectors in gate 4: rate over `passed is not None` means graders that raise on every case, an unregistered pack grader or a mis-built world yield an undefined rate and the gate passes. | Taken. Gate rule: every blocking grader needs `graded ≥ 1` and `grader_raised == 0`, else refuse with the reason; summary separates `ungraded_no_expectation` from `ungraded_grader_raised`; a `run_turn`/world exception sets `record.error` so money graders return `False`; an unknown grader ref fails the run (`status: failed`), which the gate refuses. Proof line added. |
+| F3 | high | Running the suite in the serving process is unsafe: `run_bot_turn` takes `_agent_lock` per case, `frozen_clock` patches the global clock every production turn reads, and a fresh `Kernel()` re-runs boot seeding and resets the module-level draft kinds / edge sources. | Taken. A run is a **job**: `python -m app.evalhost run --suite S --version V` in its own process; `POST …/versions/{v}/eval` creates the run row (`status: running`), spawns it and returns 202 with the run id. The job drives the candidate pipeline directly — `Kernel(db, resolver=StaticResolver(spec)).pipeline_for(spec).run(ctx)` — never `run_bot_turn`, never the lock. In tests the runner is called in-process with a fake `run_turn`. |
+| F4 | high | The gate-4 hook gets the spec only; suites are per business and runs per version. | Taken. `eval_gate(spec, *, profile_id, version_id)`; `store.publish` passes them; `spec_sha` defined once in `kernos.eval` and used by run and gate. `tests/kernos/test_gates.py` (branch-added) updated. |
+| F5 | med | `Dockerfile` copies only `pyproject.toml` and `app/` — `kernos`, `ledger_core`, `packs` are missing (a Phase 1–3 gap), and the eval path would import `bench` in prod. | Taken. 4a fixes the Dockerfile COPY (prerequisite). `frozen_clock`, the world seeding and `_World` move to `app/evalworld.py`; `bench.world` imports them (the F6 pattern), so runs work wherever the app runs; only the corpus **import** stays dev-only (`bench.corpus`, lazy, documented exception). |
+| F6 | med | Importing `typical` with images dropped plants guaranteed failures (bills B1–B3); `typical` is 23 cases without the gitignored prod file, 37 with. | Taken. Images stay in the case JSON (base64). Proof states both counts; the importer upserts by slug so it is idempotent in either environment. |
+| F7 | med | The identity proof is weak: `pi-typical-r3.json` has 0 `False` tool_selection verdicts, so "0 changed" cannot catch a more lenient grader; regrade never touches `ledger_state`/`prose`. | Taken. Identity runs over `pi-typical-r3.json` **and** `pi-typical-r3-before-fixes.json` (36 False), asserting `changed == 0` and the expected `skipped`; `ledger_state`/`prose` relocation is covered by the pre-existing oracle tests in `test_bench_run.py`/`test_bench_graders.py`, said so in the proof. |
+| F8 | med | Gate 4 vs rollback (a superseded version has no run) and vs threshold edits (whole-spec sha invalidates the run when only `eval.*` changed). | Taken. `skip_eval` next to `skip_probe`, set by `rollback`; `spec_sha` is over `stored()` minus `eval`; tests for no-op edit / threshold edit / prompt edit. |
+| F9 | med | `eval_capture` as written is not replayable (all tool names become mandatory, args carry db ids, `actor` is an id, no retention, and review-exclusion is moot since suites list cases by slug). | Taken. Capture only the pack's money tools (`ToolPack.money_tools`, default empty; lunch = `MONEY_TOOLS`); store a `members` snapshot keyed `m{id}` (display_name, nickname — no bank fields) and rewrite ids→keys in `args` and `actor`; `keep_days` for unreviewed captured rows; the Runner always skips `review: true` cases and records them as skipped. |
+| F10 | med | Blocking graders by hardcoded name; three unreconciled namespaces (gate keys, suite plugin ids, record `grades` keys); no `repeat`. | Taken. `Grader.blocking: bool` declared by the grader; a suite grader entry has `name` (default: the id's last segment) used as the key in `record.grades` and in `eval.gate`; `repeat` on the suite (default 1 — a gate run is a publish precondition; comparison runs keep bench's 3) and the gate rate is over all records of the run. |
+| F11 | low | after-in-finally details: `turn_id` is `None` when the turn raised before `run`; `finally` runs on `CancelledError`; the after plugin's own trace row is appended after it returns; summary must tolerate `result`/`outcome` being `None`. | Taken. Trace rows keyed by their own id, `turn_id` nullable + indexed, the route accepts either; `after` plugins guarded with `except Exception`, `BaseException` propagates after recording; (c) documented; a test with a raising `context` plugin. |
+| F12 | low | The trace should carry tool calls with args and results (§8.6, Phase 8's `cms_add_eval_case(turn_id)`), not names only. | Taken. `tools: [{name, args, result}]` in the trace row (the eval record shape), so a trace → eval case is a copy. PII noted (settlement results carry `qr_url`); retention is the control. |
+| F13 | low | `settings.bench_judge_model` does not exist; the judge needs `OPEN_ROUTER_KEY`. | Taken. `Settings.bench_judge_model` (env `BENCH_JUDGE_MODEL`, default none); `judge_model` recorded on the run; no judge → prose not graded, never blocks. |
+
+Confirmed by the gate: the facts block above (trace recorded but unpersisted, `after` in `PIPELINE_ORDER`, error re-raised before `after`), the layering edges, the unused gate-4 hook, `LedgerState` fitting the pack within layering, the golden test's insensitivity to a side table, and the shim surface the pre-existing bench tests need.
+
 ### Task 4.1 (PR 4a): the turn trace
 
 **Files:** `kernos/kernel/pipeline.py`, `kernos/plugins/after.py` (new), `kernos/adapters/protocols.py`
@@ -954,20 +974,25 @@ Benchmark: not run here (no `OPEN_ROUTER_KEY`). Phase 3 gate findings F1–F8 al
 `kernos/content/store.py` (write/list/get/prune), `kernos/api/admin.py`, `app/kernel.py`,
 `app/default_profile.py`, tests.
 
+- [ ] Prerequisite (F5): `Dockerfile` copies `kernos/`, `ledger_core/`, `packs/` next to `app/`.
 - [ ] `Pipeline.run`: stages before `after` as today; `after` in `finally`, each plugin
-      guarded (log + `ctx.record(..., "error")`, no re-raise).
-- [ ] `kernos.after.trace` plugin: summary + trace → `TraceStore.write(space_id, turn_id,
-      summary, trace)`; `keep_days` config prunes older rows on write. `InMemoryTraces`.
-- [ ] `kn_turn_traces` (id, space_id, turn_id, agent_id?, profile_version_id?, started,
-      finished, summary JSON, trace JSON); `ContentStore.write_trace/list_traces/get_trace/
-      prune_traces`; `GET /spaces/{space_id}/turns?limit` (summaries), `GET
-      /spaces/{space_id}/turns/{turn_id}` (full).
+      guarded (`except Exception` → log + `ctx.record(..., "error")`, no re-raise;
+      `BaseException` propagates after recording — F11).
+- [ ] `kernos.after.trace` plugin: summary + `tools: [{name, args, result}]` (F12) + trace →
+      `TraceStore.write(...)`; tolerates `ctx.result`/`ctx.outcome` being `None`; `keep_days`
+      config prunes older rows on write. `InMemoryTraces`.
+- [ ] `kn_turn_traces` (id, space_id, turn_id nullable+indexed, profile_version_id?, started,
+      finished, summary JSON, tools JSON, trace JSON); `ContentStore.write_trace/list_traces/
+      get_trace/prune_traces`; `GET /spaces/{space_id}/turns?limit` (summaries), `GET
+      /spaces/{space_id}/turns/{ref}` (full; `ref` is a row id or a turn id — F11).
 - [ ] Seeded pipeline gains `after: [kernos.after.trace]`; the golden replays still
       byte-identical (the trace is a side table; `test_run_bot_turn_golden` compares the
       persisted reply). Boot re-syncs the seeded profile.
-- [ ] Proof: a turn writes one trace row whose summary names the tools and the outcome;
-      a run plugin that raises still leaves a trace with `error`; the admin routes return
-      it; pruning removes rows older than `keep_days`; full suite unedited.
+- [ ] Proof: a turn writes one trace row whose summary names the tools and the outcome and
+      whose `tools` carry args and results; a `context` plugin and a `run` plugin that raise
+      each still leave a trace with `error` (and `turn_id` null for the former); the admin
+      routes return it by row id and by turn id; pruning removes rows older than
+      `keep_days`; full suite unedited.
 - [ ] Commit: `kernos: turn traces — after stage in finally, kn_turn_traces, admin turns API`
 
 ### Task 4.2 (PR 4b): eval core — cases, graders, runner, tables
@@ -976,31 +1001,43 @@ Benchmark: not run here (no `OPEN_ROUTER_KEY`). Phase 3 gate findings F1–F8 al
 models.py` (+4 tables), `kernos/content/store.py`, `kernos/api/admin.py`, `packs/lunch_ledger/eval.py`
 (new), `bench/graders.py` → shim, `bench/corpus/__init__.py` (`Case.to_eval_case`), tests.
 
-- [ ] `EvalCase` dataclass + `to_dict/from_dict`; `Record` helpers (`RECORD_VERSION = 1`
-      moves here, `bench.run` imports it); `Verdict`; `Grader` protocol + `GraderRegistry`
-      (`register(id, factory)`, `build(ref)`); `Judge` protocol.
-- [ ] `kernos.eval.graders.ToolSelection(config)` = `grade_tool_selection` with
-      `compared_args`, `unordered`, `member_amount_lists`, `sender_defaulted` from config
-      (defaults = lunch's lists so the shim is byte-identical); `Prose(unbacked, judge)`
-      = `grade_prose` with the checker injected (`ledger_core.moneyguard.unbacked_amounts`
-      in chiatienan) and `card_labels` config for "not graded: the room saw …".
-- [ ] `packs/lunch_ledger/eval.py`: `LedgerState` grader (+ `compare_settlement`,
-      `balances_by_member`, draft comparison — verbatim), `PROSE_RUBRIC`, `MONEY_ARGS`
-      config, `graders()` → the pack's grader registrations (`ToolPack.graders()` joins
-      the protocol with a `BasePack` default of `{}`).
+- [ ] `EvalCase` dataclass + `to_dict/from_dict` (images kept — F6); `Record` helpers
+      (`RECORD_VERSION = 1` moves here, `bench.run` imports it); `Verdict`; `Grader` protocol
+      with `blocking: bool` (F10) + `GraderRegistry` (`register(id, factory)`, `build(ref)`
+      where a suite entry is `{plugin, name?, config}` and `name` defaults to the id's last
+      segment — the key in `record.grades` and in `eval.gate`); `Judge` protocol;
+      `spec_sha(spec)` over `stored()` minus `eval` (F4, F8).
+- [ ] `kernos.eval.graders.ToolSelection(config, equivalence)` = `grade_tool_selection` with
+      `compared_args`, `unordered`, `member_amount_lists`, `sender_defaulted` from config and
+      the per-tool equivalence hook injected (F1); `Prose(unbacked, judge, outcome_kind)` =
+      `grade_prose` with the amount checker and the outcome classifier injected. Both
+      `blocking`: `ToolSelection` yes, `Prose` no.
+- [ ] `packs/lunch_ledger/eval.py`: `LedgerState` grader (blocking; + `compare_settlement`,
+      `balances_by_member`, draft comparison — verbatim), `share_map` (the propose_meal
+      equivalence), `posted_body_kind`, `PROSE_RUBRIC`, `MONEY_ARGS`, `graders()` → the
+      pack's registrations with its hooks (`ToolPack.graders()` and `money_tools` join the
+      protocol with `BasePack` defaults `{}` / `frozenset()`).
 - [ ] `bench.graders` shim: `grade_tool_selection`, `grade_ledger_state`, `grade_prose`,
       `compare_settlement`, `balances_by_member`, `posted_body_kind`, `summarize_cost_latency`,
       `PROSE_RUBRIC`, `MONEY_ARGS`, `Verdict` with today's signatures.
 - [ ] Tables + store CRUD (`put_case/list_cases/get_case/delete_case`, `put_suite/…`,
       `put_rubric/…`, `create_run/finish_run/get_run/list_runs`) + admin routes.
-- [ ] `kernos.eval.Runner`: sequential, one world per case, grades isolated (a grader that
-      raises → `passed: None, reason: grader raised`), summary per grader
-      `{passed, failed, ungraded, rate}` + cost/latency; `run(suite, cases, spec) -> EvalRun`.
+- [ ] `kernos.eval.Runner`: sequential, `repeat` per suite (default 1), one world per case
+      and repetition, `review: true` cases skipped and recorded as such (F9), grades
+      isolated (a grader that raises → `passed: None, reason: grader raised`, counted as
+      `ungraded_grader_raised` — F2), a `run_turn`/world exception → `record.error`; summary
+      per grader `{name, blocking, passed, failed, ungraded_no_expectation,
+      ungraded_grader_raised, rate}` + cost/latency + `judge_model`; an unknown grader ref
+      → run `status: failed`; `run(suite, cases, spec, version_id) -> EvalRun`.
 - [ ] Proof: `tests/test_eval_regrade_identity.py` — `bench.regrade` over
-      `bench/results/pi-typical-r3.json` changes 0 verdicts through the plugin graders;
-      pre-existing `test_bench_graders.py` unedited and green; `tests/kernos/test_eval_core.py`
-      runs the `Runner` over two stub cases with a stub world and a fake `run_turn`
-      (one pass, one fail, one ungraded) and checks the summary and the stored run.
+      `bench/results/pi-typical-r3.json` and `pi-typical-r3-before-fixes.json` changes 0
+      verdicts through the plugin graders with the expected `skipped` counts (F7);
+      pre-existing `test_bench_graders.py`/`test_bench_run.py` unedited and green (they are
+      the oracle for `ledger_state`/`prose`); `tests/kernos/test_eval_core.py` runs the
+      `Runner` over stub cases with a stub world and a fake `run_turn` (one pass, one fail,
+      one ungraded, one review-skipped, one raising grader) and checks the summary, the
+      stored run, and `spec_sha` (no-op edit and threshold edit keep it, a prompt edit
+      changes it).
 - [ ] Commit: `kernos.eval: cases, graders as plugins, runner and eval tables; lunch graders in the pack`
 
 ### Task 4.3 (PR 4c): the lunch suite as content; gate 4; eval_capture
@@ -1009,23 +1046,34 @@ models.py` (+4 tables), `kernos/content/store.py`, `kernos/api/admin.py`, `packs
 `kernos/eval/gate.py` (new), `kernos/plugins/after.py` (`eval_capture`), `app/kernel.py`,
 `kernos/api/admin.py`, `tests/test_layering.py` (exception), tests.
 
-- [ ] `app/evalhost.py`: `import_lunch_suite(store, business_id)` (decision 7),
-      `world_factory(case)` and `run_turn(case, world, spec)` for the `Runner`
-      (candidate spec through a `StaticResolver`, fresh DB per case, frozen clock,
-      `chat.run_bot_turn`), `judge_for(spec)` from settings. Kernel exposes
-      `run_suite(suite_slug, version_id)` and `importers`.
+- [ ] `app/evalworld.py`: `frozen_clock`, the member seeding and `_World` move here from
+      `bench.world`, which imports them (F5) — runs need no `bench`.
+- [ ] `app/evalhost.py`: `import_lunch_suite(store, business_id)` (decision 7; lazy
+      `bench.corpus`, the documented exception), `world_factory(case)` and
+      `run_turn(case, world, spec)` for the `Runner` — the candidate pipeline driven
+      directly through `Kernel(db, resolver=StaticResolver(spec))`, a fresh DB per case,
+      never `run_bot_turn` or `_agent_lock` (F3) — `judge_for(spec)` from
+      `Settings.bench_judge_model` (F13); a `__main__` that runs one suite against one
+      version as a **job** and writes the run.
 - [ ] `POST /businesses/{id}/eval/import` → the importer; `POST /profiles/{id}/versions/{v}/eval?suite=`
-      runs synchronously and returns the run (the test uses a fake engine; the real one
-      is minutes and is a CLI/admin action, not a request the UI waits on — documented).
-- [ ] `kernos.eval.gate.eval_gate(store, spec, version_id)` per decision 5, wired into
-      `PublishGates` by the kernel; `review: true` cases excluded from gate runs.
-- [ ] `kernos.after.eval_capture` per decision 6; registered, opt-in.
-- [ ] Proof: importing yields one `kn_eval_cases` row per `typical` case with the golden
-      ids preserved and a suite naming three graders, and importing twice changes
-      nothing; a profile that names the suite cannot publish without a run; a run with
-      a fake engine that fails one money case blocks the publish and the failure names
-      the case; a prose failure alone does not block; a captured turn appears as a
-      `review: true` case and is not part of the gate's run set; full suite unedited.
+      creates the run row (`status: running`), spawns `python -m app.evalhost …` and returns
+      202 with the run id; `GET /eval/runs/{id}` reads it.
+- [ ] `kernos.eval.gate.eval_gate(store, spec, *, profile_id, version_id)` per decisions 5
+      and F2/F8/F10: for each named suite the latest run with the candidate's `spec_sha`,
+      `status: done`; every blocking grader `graded ≥ 1`, `grader_raised == 0`, rate ≥
+      `eval.gate[name]` (default 1.0); `skip_eval` for rollback. Wired into `PublishGates`
+      by the kernel.
+- [ ] `kernos.after.eval_capture` per decision 6 as amended by F9 (money tools only,
+      member snapshot keyed `m{id}` without bank fields, ids→keys, `keep_days`); registered,
+      opt-in.
+- [ ] Proof: importing yields one `kn_eval_cases` row per `typical` case (23 without the
+      gitignored prod corpus, 37 with) with the golden ids preserved, images kept, and a
+      suite naming three graders; importing twice changes nothing; a profile that names
+      the suite cannot publish without a run; a run with a fake engine that fails one
+      money case blocks the publish and the failure names the case; a run whose grader
+      raises on every case blocks; a prose failure alone does not block; rollback skips
+      the gate; a captured turn appears as a `review: true` case with keys, not ids, and
+      the Runner skips it; full suite unedited.
 - [ ] Commit: `kernos.eval: lunch suite imported as content, gate 4 over stored runs, eval_capture`
 
 ### Task 4.4: Docs and state of play
