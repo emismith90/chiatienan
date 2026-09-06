@@ -1960,18 +1960,232 @@ via `all_tool_names` — F8), `kernos/api/admin.py` (`GET /steward/brief`), test
 
 ### Task 8.3: Docs and state of play
 
-- [ ] Design §8 as built (defaults fail closed, eval as a job, the card's approver, the
-      steward schedule out of scope); README (self-administration); plan state of play.
+- [x] Design §8 as built (defaults fail closed, eval as a job, no room card, the steward
+      schedule out of scope); README (self-administration); plan state of play.
 
 **Proof for the phase:** an agent with `draft` proposes a skill change with an eval run
 attached, a human approves it through the gates, the source follows; an agent with
 `publish` cannot publish past its scope or the blacklist.
 
-**Phase 8 — state of play:** _(filled as tasks complete)_
+**Phase 8 — state of play (2026-09-06):** Tasks 8.1–8.3 done; F1–F14 all in the build (see
+the dispositions and the "as built" notes under 8.1 and 8.2). Capabilities, scope and
+proposals are content (`kernos.content.capabilities`, `gates.changed_paths/outside_scope`,
+`kn_change_proposals`, `Kernel.approve_proposal`); the `os_admin` pack is the CMS as tools,
+reference-recorded and non-evidence; eval runs carry `agent_id` and the eval host runs in
+eval mode. Proof: `tests/kernos/test_scope.py`, `tests/test_proposals.py`,
+`tests/test_os_admin.py` (16 tests). Suite 1251 passed, 1 skipped; sidecar 70/70; golden
+9/9; layering green; no pre-existing test edited. Zero behaviour change: no seeded profile
+enables `os_admin`, every agent's `capabilities` is `{}`. Stated limits: `ask_*` tools do not
+appear in eval runs (no agent tree in the eval world); a steward reviews itself only; the
+schedule is the operator's; the room card is not built (the admin API approves).
 
 ## Phase 9 — Portability
 
-- `examples/minimal_host`; `kernos.api.agui` sink; Pi-package export/import; sidecar
-  extension registry; move the sidecar to `backend/kernos_sidecar/` and update
-  Dockerfile/CI; packaging metadata for PyPI/npm; `git subtree split` rehearsal.
-  **Proof:** the example host runs a "hello" business with no `app`/`packs` on its path.
+### Facts that shape this phase (from the code, 2026-09-06)
+
+- **Layering is already a test** (`tests/test_layering.py`): `kernos → kernos` only; `app`,
+  `packs`, `ledger_core`, `bench` each have their allowed edges; two documented lazy
+  exceptions. `pyproject.toml` packages `app*, kernos*, ledger_core*, packs*` as one
+  distribution named `chiatienan`; there is no separate `kernos` metadata and no version.
+- **The sidecar lives at `backend/agent_sidecar/`** and is referenced by `app/pi_bridge.py`
+  (`SIDECAR_DIR`, `KEY_ENV = "OPEN_ROUTER_KEY"`, `PI_MODEL`/`PI_VISION_MODEL` child defaults),
+  the Dockerfile (`COPY agent_sidecar`, `npm ci`), CI (`working-directory: backend/agent_sidecar`,
+  `cache-dependency-path`), the README, and four design/plan documents. Its `package.json` is
+  `chiatienan-agent-sidecar` (private). Its `session.js` carries this host's names (`KEY_ENV`,
+  `chiatienan-pi-cwd`/`-agent` temp dirs) and long money-safety comments; `extensions.js`
+  already is the extension registry (empty; unknown ids fail the turn); `settings` of the
+  run command already become an in-memory `SettingsManager`. The framework side
+  (`kernos.engine.pi.bridge.PiBridge`) is host-neutral: `entry`, `node`, `cwd`, `key_env`,
+  `pi_key_env`, `child_env_defaults`.
+- **In-memory adapters exist for every protocol** (`kernos.adapters.memory`: history,
+  memory, knowledge, messages, cards, completion, clock, traces, principals, a
+  `RecordingSink`); `HostAdapters` is a dataclass of nine. `ensure_seeded(store,
+  business_slug, business_name, spec, agent_slug, agent_name, sources, catalogue_rows)`
+  seeds a business from a `ProfileSpec`. `admin_router(get_kernel, dependencies=)` is a
+  FastAPI router over a duck-typed kernel (`store`, `registry`, `gates`, `resolver`, `data`,
+  `probe`, `business_for`, `reserved_tool_names`, `start_eval_run`, `import_eval_suite`,
+  `packs`, `graders`, `pipeline_for` …) — `app.kernel.Kernel` is the only implementation and
+  the contract is implicit.
+- **Events**: `kernos.kernel.events` has the typed `TurnEvent` set and one sink,
+  `LegacyAgentEventSink` (the `agent.*` names + `{"type":"message"}` republish). The Pi engine
+  emits already-legacy dicts through `emit_raw`; typed events come from the kernel's own
+  plugins (`sub.started/finished`, `message.republished`). There is no AG-UI mapping.
+- **Content ↔ files**: sources are `kind ∈ prompt|rule|skill|template` with `slug`, `title`,
+  `body`, `frontmatter` (`description`, `delivery`, `tags`, `kind`); a published version is a
+  `ProfileSpec` JSON (`stored()` minus `runtime`). Pi packages (A.9, `docs/packages.md`) are
+  `package.json` with a `pi` manifest (`skills[]`, `prompts[]`, `extensions[]`, `themes[]`)
+  or the convention directories `skills/**/SKILL.md`, `prompts/*.md`, `extensions/`,
+  `themes/`; a skill is a folder with `SKILL.md` (frontmatter `name`, `description`);
+  `settings.json` carries model/thinking/compaction. The design (§2 row "Package") fixes the
+  two uses: import a package's skills/prompts as sources; export a published profile as a
+  package (`skills/`, `prompts/`, `AGENTS.md` for the system prompt and rules,
+  `settings.json`).
+- **Two pre-existing tests pin the sidecar path**: `tests/test_tool_schemas_fixture.py` and
+  `tests/test_tools_manifest.py` (both on `origin/main`, which this branch never edits) read
+  `agent_sidecar/test/fixtures/tool-schemas.json`; `bench/dump_schemas.py` writes it and
+  `bench/run.py` checks `agent_sidecar/main.js` exists; `tests/test_collections_turn.py`
+  (branch-added) runs node on `agent_sidecar/schema.js`. A move must keep those paths
+  resolving.
+
+### Decisions taken for this phase
+
+1. **The example host is a test fixture first, a file second.** `examples/minimal_host/
+   host.py` (≈120 lines): a FastAPI app with one space, one business `hello` seeded from a
+   `ProfileSpec` built in the file, one `HelloPack` with one tool (`say_hello(name)` → a typed
+   `Body`), the in-memory adapters, `admin_router` mounted at `/admin` with no auth
+   dependency, a `POST /spaces/{id}/turns` that runs the pipeline with a **fake engine**
+   (`kernos.engine.fake.ScriptedEngine`, new: replays a script of tool calls and a final text
+   — the same shape the tests' `FakeBridge` gives, but as an `Engine`, so a host can run
+   turns with no Node and no key) and streams the AG-UI events. Acceptance:
+   `tests/test_minimal_host.py` imports it with `sys.modules` guarded — the test fails if any
+   `app`, `packs`, `ledger_core` or `bench` module is imported by the host — and drives one
+   turn end to end. **`app.kernel.Kernel` is not reused**: the example builds its own small
+   `Kernel` from framework parts, which is what proves the parts compose; the pieces that
+   both kernels need (registry wiring of the framework plugins, `pipeline_for` caching,
+   `agent_for`, `run_sub`, `approve_proposal`, `start_eval_run`) move to
+   `kernos.host.BaseKernel`, which `app.kernel.Kernel` then subclasses. Zero behaviour change
+   for the app is the golden test plus the unchanged public names.
+2. **`kernos.api.agui.AguiEventSink`** maps `TurnEvent`s to AG-UI events (`RUN_STARTED`,
+   `TEXT_MESSAGE_START/CONTENT/END`, `TOOL_CALL_START/ARGS/END`, `TOOL_CALL_RESULT`,
+   `STEP_STARTED/FINISHED` for sub-agent spans, `RUN_FINISHED`, `RUN_ERROR`, and a `CUSTOM`
+   event for `validation.*` and `message.republished`), with `threadId = space_id`, `runId =
+   turn_id`, `messageId` per assistant message. **`emit_raw` translates the legacy dicts too**
+   — the Pi engine speaks legacy, so a host choosing the AG-UI sink must get AG-UI for
+   `agent.text.delta`/`agent.tool.*`/`agent.run.*` as well (the mapping table is the inverse of
+   `to_legacy`, tested both ways). The sink is a pure function of events; SSE framing is the
+   host's.
+3. **Export/import as a Pi package is a store-level function pair, exposed on the admin API.**
+   `kernos.content.package.export_profile(store, profile_id) -> dict[path, bytes]` writes
+   `package.json` (`pi` manifest, `keywords: ["pi-package"]`, `kernos` block with the
+   business slug, profile, version, `spec_sha`), `skills/<slug>/SKILL.md` (frontmatter
+   `name`/`description`), `prompts/<slug>.md` (templates), `AGENTS.md` (the system prompt body,
+   then every rule under its slug — pi loads `AGENTS.md` into the system prompt, which is the
+   nearest stock-pi equivalent of a context file), `settings.json` (`defaultProvider`/model,
+   `thinkingLevel`, `compaction` from `spec.settings`), and `kernos.json` — the **whole
+   stored spec** so a kernos import is lossless (pipeline, packs, validation, eval, caps are
+   not Pi concepts and would otherwise be lost). `GET /api/admin/profiles/{id}/export`
+   returns a zip. `import_package(store, business_id, files, *, actor) -> dict` reads
+   `skills/**/SKILL.md` and `prompts/*.md` (and `AGENTS.md` as `prompt`/`system` + rules when
+   a `kernos.json` is absent) into **sources**, and, when `kernos.json` is present, creates a
+   **draft** version from it (never publishes — the gates are the import's reviewer, and an
+   imported `kernos.json` may name packs and plugins the host does not have; gate 1 says so).
+   `POST /api/admin/businesses/{id}/import` takes the zip. Secrets never travel: `runtime`
+   is excluded already; `settings.json` carries no key. Money rules keep their `money` tag.
+4. **The sidecar moves to `backend/kernos_sidecar/`** as a `git mv` with the package renamed
+   `kernos-sidecar`; the host-specific names leave `session.js` (`KEY_ENV` becomes a run-
+   command field the bridge already maps — `pi_key_env` — and the temp-dir names become
+   `kernos-pi-cwd`/`-agent`); the money-safety comments stay (they document a real
+   defect, and the design says the sidecar owns no arithmetic for every host). `app.pi_bridge.
+   SIDECAR_DIR`, the Dockerfile, CI (`working-directory`, `cache-dependency-path`), the
+   README and the test that runs `schema.js` follow. The extension registry is already there
+   (`extensions.js`); Phase 9 adds nothing to it but a test that an unknown id fails the turn
+   (exists) and the doc line.
+5. **Packaging metadata, no publish.** `backend/kernos/pyproject.toml`? No — one repo, one
+   `pyproject.toml`; instead `kernos/__init__.py` gets `__version__ = "0.9.0"` and
+   `pyproject.toml` gains a `[project.optional-dependencies] host = [...]` note and the
+   `kernos_sidecar/package.json` a real `version`. The `git subtree split` is **rehearsed as a
+   test-free script** `scripts/split_kernos.sh` (documented, not run in CI) that lists the
+   paths a split would take (`backend/kernos`, `backend/kernos_sidecar`, `backend/examples`,
+   the layering test) — the design says the split happens when a second host exists, and
+   the example host is not that host. PyPI/npm names are not reserved in this phase
+   (design §11 open item 6 stays open; recorded).
+6. **Out of scope, stated**: an AG-UI *server* (SSE endpoint) in the app — chiatienan keeps
+   its `agent.*` SSE; the AG-UI sink is proven by the example host; importing Pi
+   `extensions/` (code) — an imported package's extensions are listed and ignored with a
+   warning (code never enters through content); themes.
+
+### Review gate — _(to be filled by the second Fable before Task 9.1 starts)_
+
+### Task 9.1 (PR 9a): `kernos.host.BaseKernel`, the fake engine and the AG-UI sink
+
+**Files:** `kernos/host.py` (new: `BaseKernel`), `kernos/engine/fake.py` (new:
+`ScriptedEngine`), `kernos/api/agui.py` (new: `AguiEventSink`, `to_agui`, `from_legacy`),
+`app/kernel.py` (subclasses `BaseKernel`), tests.
+
+- [ ] `BaseKernel(db_sessions, adapters, *, packs, registry, resolver, traces, eval_mode)`
+      owns what both kernels need: the framework plugin wiring (`Rollover … EvalCapture,
+      validators()`, `DelegationPack`, `OsAdminPack`, `CollectionsPack`), `pipeline_for`
+      caching and `invalidate`, `agent_for`/`agent_space`, `subs_of`, `run_sub`,
+      `approve_proposal`/`reject_proposal`, `start_eval_run`/`spawn`, `static_tool_names`/
+      `reserved_tool_names`, `business_for`, `capture_case`; the host subclass adds its packs,
+      its prompt/run/validate plugins, seeding and the tool-context factory. `app.kernel.
+      Kernel`'s public names and behaviour are unchanged (golden 9/9, the admin API contract
+      documented in `kernos/api/admin.py` becomes `BaseKernel`'s).
+- [ ] `ScriptedEngine(script)` implements `Engine`: replays `tool_call`/`turn_done` entries
+      exactly as the sidecar would answer (calls `call_tool`, appends the invocation,
+      honours `_record`, emits `agent.*` events), so a host runs turns with no Node and no
+      key; the delegation tests' `ScriptedBridge` stays (it tests the bridge path).
+- [ ] `AguiEventSink(write)`: `emit(TurnEvent)` and `emit_raw(legacy dict)` both produce
+      AG-UI events (`RUN_STARTED`, `TEXT_MESSAGE_START/CONTENT/END`, `TOOL_CALL_START/ARGS/END`,
+      `TOOL_CALL_RESULT`, `STEP_STARTED/FINISHED` for `sub.*`, `RUN_FINISHED`, `RUN_ERROR`,
+      `CUSTOM` for `validation.*` and `message.republished`), `threadId = space_id`, `runId =
+      turn_id`, one `messageId` per assistant message; the mapping is tested both ways
+      against `to_legacy`.
+- [ ] Proof (`tests/kernos/test_agui.py`, `tests/kernos/test_fake_engine.py`,
+      `tests/test_base_kernel.py`): every `TurnEvent` type maps; a legacy `agent.text.delta`
+      stream becomes `TEXT_MESSAGE_START/CONTENT…/END` once; the fake engine reproduces a
+      `FakeBridge` script's `TurnResult` field for field incl. `_record`; `app.kernel.Kernel`
+      is a `BaseKernel` and the full suite is unchanged.
+- [ ] Commit: `kernos.host: BaseKernel, a scripted engine and the AG-UI sink (PR 9a)`
+
+### Task 9.2 (PR 9b): package export/import
+
+**Files:** `kernos/content/package.py` (new), `kernos/api/admin.py` (export/import routes),
+tests.
+
+- [ ] `export_profile(store, profile_id, *, version_id=None) -> dict[str, bytes]` per
+      decision 3 (`package.json`, `skills/<slug>/SKILL.md`, `prompts/<slug>.md`, `AGENTS.md`,
+      `settings.json`, `kernos.json`); `import_package(store, business_id, files, *, actor)
+      -> {sources: [...], draft: version | None, ignored: [...]}` per decision 3 (sources from
+      `skills/**/SKILL.md`, `prompts/*.md`, `AGENTS.md`; a draft from `kernos.json`, never
+      published; `extensions/` and `themes/` listed as ignored). `GET /api/admin/profiles/
+      {id}/export` (zip) and `POST /api/admin/businesses/{id}/import` (zip upload).
+- [ ] Proof (`tests/kernos/test_package.py`, `tests/test_admin_package.py`): the lunch
+      profile exports to a package whose `SKILL.md` frontmatter is `name`/`description`,
+      whose `AGENTS.md` carries the system prompt and every rule, whose `settings.json`
+      names the model, and whose `kernos.json` round-trips to an equal stored spec; no
+      `runtime`, no secret, no key in any file; importing that package into a fresh
+      business creates the sources and a draft equal to the export; importing a stock pi
+      package (skills + prompts, no `kernos.json`) creates sources only; an import naming a
+      pack the host lacks is a draft gate 1 refuses at publish, never an error at import;
+      the money rule keeps its tag.
+- [ ] Commit: `kernos.content.package: export a profile as a Pi package, import a package as sources and a draft (PR 9b)`
+
+### Task 9.3 (PR 9c): the sidecar move and the example host
+
+**Files:** `backend/kernos_sidecar/` (moved from `agent_sidecar/`), `app/pi_bridge.py`,
+`Dockerfile`, `.github/workflows/ci.yml`, `README.md`, `examples/minimal_host/host.py` (new),
+`tests/test_layering.py` (the example is a layer: `examples → kernos`), tests.
+
+- [ ] `git mv backend/agent_sidecar backend/kernos_sidecar`; `package.json` name
+      `kernos-sidecar`, `version 0.9.0`; `session.js` temp-dir names generic, `KEY_ENV` read
+      from the run command's env as the bridge already maps it; a **compatibility path**
+      keeps the pinned tests resolving (fact: two `origin/main` tests read
+      `agent_sidecar/test/fixtures/tool-schemas.json`; `bench/` reads `agent_sidecar/main.js`)
+      — `backend/agent_sidecar` becomes a symlink to `kernos_sidecar` committed in git, and
+      the Dockerfile copies `kernos_sidecar` (a symlink in the image is not needed); CI
+      `working-directory` and `cache-dependency-path` follow.
+- [ ] `examples/minimal_host/host.py` per decision 1 with `HelloPack`, the in-memory
+      adapters, `BaseKernel`, `admin_router`, `ScriptedEngine` and `AguiEventSink`;
+      `tests/test_minimal_host.py` imports it under a `sys.modules` guard that fails on any
+      `app`/`packs`/`ledger_core`/`bench` import, runs one turn (`say_hello` → a typed body),
+      asserts the AG-UI stream and the admin API answer; `tests/test_layering.py` gains
+      `examples: {kernos, examples}`.
+- [ ] Proof: sidecar 70/70 from the new directory; the two pinned tests pass unchanged
+      through the symlink; `bench.dump_schemas` writes the fixture at the new path via the
+      same symlink; the example host's test; the full suite; golden 9/9.
+- [ ] Commit: `kernos_sidecar + examples/minimal_host: the sidecar moves, a host with no chiatienan on its path runs a turn (PR 9c)`
+
+### Task 9.4: docs, state of play, `TODO.md`
+
+- [ ] Design §12 as built (BaseKernel, the fake engine, the compatibility symlink, what
+      export carries); README (kernos_sidecar, export/import, the example host); `TODO.md`
+      "BIG: agent engine export/import" closed with the file format; `kernos/__init__.py`
+      `__version__`; `scripts/split_kernos.sh` (documented rehearsal, not run); plan state of
+      play and the closing note for the whole plan.
+
+**Proof for the phase:** the example host runs a "hello" business with no `app`/`packs`/
+`ledger_core` on its path; a profile exported as a Pi package imports back as an equal draft.
+
+**Phase 9 — state of play:** _(filled as tasks complete)_
+

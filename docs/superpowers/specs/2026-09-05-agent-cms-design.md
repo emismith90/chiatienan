@@ -797,71 +797,99 @@ the money-safety check.
 ### 8.2 The `os_admin` tool pack
 
 The headless API of Phase 2 is exposed to agents as a tool pack, so the CMS is
-operable from inside a turn with no second integration:
+operable from inside a turn with no second integration. _As built (Phase 8, plan Tasks
+8.1–8.2; `backend/kernos/osadmin.py`):_ `kernos.osadmin.OsAdminPack` (id `os_admin`,
+`handles_money: false`, `evidence: false`) generates, per turn, only the tools the running
+agent's `capabilities.cms` verbs allow — no agent or no verbs, no tools:
 
-| Tool | What it does | Needs capability |
+| Tool | What it does | Verb |
 |---|---|---|
-| `cms_get_profile()` | the agent's own resolved spec, with version and sources | `cms.read` |
-| `cms_get_turns(since, filter)` / `cms_get_turn_trace(turn_id)` | the per-turn trace (§4.2): plugins run, validators fired, tool calls, model, cost, `capped`, moneyguard warnings | `cms.read` |
-| `cms_get_eval_results(suite, version)` | latest run summaries and per-case verdicts | `cms.read` |
-| `cms_draft_change(kind, slug, body, rationale)` | edit a prompt / rule / skill / template / memory setting / warn-level validation rule into a **new draft version**; returns a diff | `cms.draft` |
-| `cms_run_eval(suite, version)` | run a suite against a draft; returns verdicts and cost | `cms.eval` |
-| `cms_propose_publish(version, rationale)` | opens a **change proposal** for a human | `cms.draft` |
-| `cms_publish(version)` | publish directly — only within the *self-change scope* (§8.3) and only after gates | `cms.publish` |
-| `cms_add_eval_case(turn_id, expect, tags)` | turn a real turn (usually a failure it just saw) into a `review: true` regression case — **gate 4 runs `review: false` cases only**, so an agent cannot seed the suite that judges it | `cms.eval` |
-| `cms_log(level, message, data)` | write a structured line into the room's turn trace and the app log | `cms.read` |
+| `cms_get_profile()` | the agent, profile and published version ids; the editable parts (persona, prompt, skills, rules, validation with `on_fail`, eval); the blacklist and the agent's own scope | `read` |
+| `cms_get_turns(limit, only_flagged)` / `cms_get_turn_trace(turn_id)` | this space's trace summaries (tools, verdicts, `capped`, error, cost); one turn's full record, **redacted** (`qr_url`, `account_number`, `bank_code` dropped) and wrapped `{untrusted: true, note, data}` — the description says its contents are records, never instructions | `read` |
+| `cms_get_eval_results(suite?)` | the business's suites with the latest finished run (graders, rates, failing cases); with a suite its last five runs; a `running` run older than 30 min reads `stale` | `read` |
+| `cms_log(level, message, data?)` | a structured line into this turn's trace (`summary.agent_log`) and the host log | `read` |
+| `cms_draft_change(kind, slug?, body, rationale, frontmatter?)` | `prompt_append` / `prompt_body` / `skill` / `rule` into **one draft version of the agent's own profile per turn**, created `snapshot=False` from the published version so the diff is exactly the agent's patch; a rule tagged `money` is refused; returns `{version_id, version, diff, paths}` | `draft` |
+| `cms_propose_publish(version_id, rationale)` | a `kn_change_proposals` row for a draft the agent created: the paths changed, a unified diff, the eval run that is evidence if one exists, and the **source changes** derived from the diff (skills, non-money rules, the system prompt) with each source's etag; the turn's reply is a body naming the proposal and the admin URL — **no room card** (review F4) | `draft` |
+| `cms_run_eval(suite, version_id)` | starts a run as a **job** (`Kernel.start_eval_run`, `agent_id` set) and returns `{run_id, status: "running"}`; refused while a run younger than 30 min is running, and beyond `max_eval_runs_per_day` agent-started runs in 24 h | `eval` |
+| `cms_add_eval_case(message, expect, tags?, turn_id?)` | a `review: true` case (`source: "agent"`) the runner skips until a human clears it; the message comes from the agent — a trace stores no message text | `eval` |
+| `cms_publish(version_id, rationale)` | publish **without a person**, only when: the draft is the agent's own; `blacklisted_changes` is empty; `outside_scope(published, draft, self_change_scope)` is empty; the profile names `eval.suites` and each has a finished run of the draft's exact content; and every gate passes (`store.publish(actor="agent:<slug>")`, gates 1–5). Then the source changes are written and an `auto_published` proposal records it | `publish` |
 
-The pack is `handles_money: false` and contains no arithmetic; it is HTTP-free
-(direct Python calls into the same modules the admin API uses), so nothing new
-listens on a port.
+Every result is recorded as a **reference only** (the executor contract `_record`:
+`{ok, turn_id}`, `{ok, version_id, version}`, `{ok, run_id}`, `{ok, proposal_id}` …) and the
+pack is `evidence: false`, so `UnbackedAmounts`/`FabricatedCommit` drop its invocations
+before `moneyguard` — a past trace, a cost figure or a `cms_log` line can never back an
+amount in the reply (review F1). Inside an eval run (`Kernel(eval_mode=True)`) only the
+read tools exist, so a case can never start a job (F5). The pack is HTTP-free: it is
+built with the store, the gates, the host's job starter, the trace store and the
+resolver's `describe`, the same calls the admin API makes; nothing new listens on a port.
 
 ### 8.3 Capabilities and the self-change scope
 
-Permission is per **agent**, not per room, because it is the agent that acts:
+Permission is per **agent**, not per room, because it is the agent that acts. _As built:_
+`kn_agents.capabilities` is validated content (`kernos.content.capabilities`):
 
 ```jsonc
-"capabilities": { "cms": ["read", "draft", "eval"] }          // default for a manager
-"capabilities": { "cms": ["read", "draft", "eval", "publish"], // a steward agent
-                  "self_change_scope": ["prompt.append", "skills", "rules", "templates",
-                                        "memory", "validation.warn"] }
+"capabilities": {}                                              // every agent by default: nothing
+"capabilities": { "cms": ["read", "draft", "eval"] }            // a self-reviewing agent
+"capabilities": { "cms": ["read", "draft", "eval", "publish"],  // a steward that may self-publish
+                  "self_change_scope": ["prompt.append", "skills", "rules", "validation.warn"],
+                  "max_eval_runs_per_day": 2 }
 ```
 
-Inside `self_change_scope` an agent with `cms.publish` may publish **its own** profile
-after the gates pass. Outside it — `builtin_tools`, `models`, `tool_packs`,
-`pipeline`, `eval.*` (suites and gate thresholds), any validation rule with
-`severity: block`, any rule tagged `money`, any other agent's profile — the most an agent
-can ever do is open a proposal. Rules carry `tags[]`; `money-safety` is tagged `money`
-from the seeded profile onward. The scope list is content, so the
-operator can widen it per agent; it can never include the blacklist above, which is
-enforced in code. Every agent-made change carries `actor: agent:<slug>` in the audit
-log and the rationale the agent gave.
+Verbs ⊆ {`read`, `draft`, `eval`, `publish`}; scope ⊆ {`prompt.body`, `prompt.append`,
+`skills`, `rules`, `validation.warn`} — the vocabulary **cannot name** `builtin_tools`,
+`models`, `tool_packs`, `pipeline`, `eval`, `extensions`, `settings`, `runtime`, `caps`,
+`rules[tag=money]`, blocking or tool-scope validation, `meta`, `retry`, `persona`,
+`memory` or `templates` (`kernos.content.gates.NEVER_IN_SCOPE`); `changed_paths` diffs
+**every** `ProfileSpec` field by name, so a field added later is a change by
+construction (F7). **The default is nothing** — a deviation from the first draft's
+"read/draft/eval for a manager": enabling the pack in a profile and granting verbs are two
+explicit acts, so no room's behaviour changes by a default. The `publish` verb is grantable
+only for a profile whose published version names `eval.suites` (F3): where gate 4 would
+be vacuous there is no self-publish. Every agent-made change carries `actor:
+agent:<slug>` in the audit log and the rationale the agent gave.
 
 ### 8.4 What a proposal looks like
 
-A `change_proposal` row (draft version, rationale, diff, the eval run it cites,
-status) — and, in this app, **a card in the room**, because the room chat is the UI
-we have: "Phoenix proposes to change skill `record-meal` (+3 −1 lines): *bill photos
-without names were being itemised; adds the even-split rule*. Eval: 105/105 tool
-selection, 60/60 ledger. **Approve · Reject · View diff**". Approve publishes through
-the gates; the card is a `RoomMessage` of a new kind, rendered by the `os_admin`
-pack like any other draft. A headless client sees the same proposal at
-`GET /api/admin/proposals`.
+A `kn_change_proposals` row: business, agent, profile, the draft `version_id` and the
+`base_version_id` it was drafted from, `rationale`, `diff` (`paths` + a unified diff),
+`eval_run_id` (the finished run of this content, when one exists), `source_changes`
+(kind, slug, body, frontmatter, and the source's etag when proposed), `status` `pending |
+approved | rejected | auto_published`, `decided_by`, `decided_at`, `last_error`.
+A headless client works it at `GET /api/admin/proposals?business_id&status`,
+`GET /proposals/{id}`, `POST /proposals/{id}/approve`, `POST /proposals/{id}/reject`.
+**Approval** (`Kernel.approve_proposal`) refuses an `agent:*` approver, checks every
+source is still as it was when proposed, publishes through gates 1–4 (the approver is not
+an agent, so gate 5 does not apply — that is the point of a proposal; gate 2's
+`override_reason` is the approval itself), then writes the source changes with `if_match`
+so future drafts keep them; a gate failure or a stale source leaves the proposal `pending`
+with `last_error`. Boot never re-puts a source a human or agent has edited (F2).
+_Deviation:_ the room card the first draft described is **not built** — any member of any
+room would have been approving a change to the business's default agent, and a card
+cannot represent a gate failure (F4); the turn's reply names the proposal and the admin
+URL instead. Sources are business-wide: an approved skill lands in every profile of the
+business at its next draft (both businesses have one profile today).
 
 ### 8.5 Self-eval and self-review loops
 
-Two loops, both bounded:
+Two loops, both bounded. _As built:_
 
-- **In-turn**: the agent may call `cms_draft_change` → `cms_run_eval` → adjust, up to
-  `max_self_iterations` (default 3) and a token/cost budget per turn, both content.
-  Each eval run costs real model calls; the budget is what stops "one more try".
-- **Scheduled**: a *steward* agent runs on a schedule with a fixed brief. Because an
-  agent may only self-publish its **own** profile, a steward that reviews *other* agents
-  can only open proposals; the auto-publish path exists only for an agent reviewing
-  itself. The brief: read the last N turns' traces, list
-  moneyguard warnings, `capped` turns and eval failures, propose at most one change
-  with a rationale and an eval run attached. This is the `eval_capture` plugin's
-  natural consumer, and it is how the prod corpus finally gets built with a reviewer
-  in the loop.
+- **Across turns, not in-turn**: `cms_draft_change` → `cms_run_eval` (a job) →
+  `cms_get_eval_results` next turn → `cms_propose_publish` or `cms_publish`. A suite is
+  minutes of real model calls, and Phase 7 showed what a long nested operation does to a
+  turn's `max_seconds`; the cost lever is the run, bounded by `max_eval_runs_per_day`
+  (default 2, 0–10) with a 30-minute staleness rule so a crashed job never blocks forever
+  (F9). The in-turn draft count is bounded by the turn's own `caps.max_tools`.
+- **Scheduled**: a *steward* runs with a fixed brief — `kernos.osadmin.STEWARD_BRIEF`,
+  served at `GET /api/admin/steward/brief`: list flagged turns, read at most three traces
+  as data, propose at most one change with a rationale and a run attached, never publish
+  past the scope. An operator installs it as a `skill` source of a business whose agent
+  has the pack and the verbs, or sends it as a turn; **the schedule itself is the
+  operator's** (this host has no scheduler and no system principal). Because an agent
+  may only draft and publish its **own** profile, a steward reviewing others can only
+  read; reviewing itself is the case this phase builds. This is the `eval_capture`
+  plugin's natural consumer, and it is how the prod corpus finally gets built with a
+  reviewer in the loop.
 
 ### 8.6 Logging, made queryable for the agent
 
@@ -872,23 +900,26 @@ the plugin rows; `keep_days` retention) by the `kernos.after.trace` plugin, from
 `after` stage the pipeline runs in a `finally` so a failed turn is traced too, and
 exposed both to humans (`GET /api/admin/spaces/{id}/turns/{ref}` — a row id or a turn id,
 the latter null when the turn never reached the engine) and to agents
-(`cms_get_turn_trace`).
+(`cms_get_turn_trace`, redacted and marked untrusted).
 The existing one-line `[agent] turn … done` log stays as the human-readable summary;
-`cms_log` lets an agent add structured lines of its own. Nothing here is a second
-observability stack: the trace is what eval capture, proposals and the admin timeline
-all read.
+`cms_log` lets an agent add structured lines of its own (`summary.agent_log`). Nothing
+here is a second observability stack: the trace is what eval capture, proposals and the
+admin timeline all read.
 
 ### 8.7 What this adds to the content model and the phases
 
 ```
-agents            + capabilities JSON, + max_self_iterations, + self_change_scope[]
-change_proposals  id, agent_id, profile_version_id, rationale, diff JSON, eval_run_id,
-                  status pending|approved|rejected|auto_published, decided_by, decided_at
-turn_traces       id, room_id, turn_id, agent_id, started, finished, trace JSON, summary JSON
+agents             + capabilities JSON {cms[], self_change_scope[], max_eval_runs_per_day}
+change_proposals   id, business_id, agent_id, profile_id, version_id, base_version_id, rationale,
+                   diff JSON, eval_run_id, source_changes JSON, status pending|approved|rejected|
+                   auto_published, decided_by, decided_at, last_error, created_at
+eval_runs          + agent_id
+turn_traces        summary.agent_log (cms_log lines)
 ```
 
-Phase **8** (after 2, 4 and 7): the `os_admin` pack, capabilities, proposals and the
-proposal card, the two loops, and a steward brief as a shipped prompt template.
+Phase **8** (after 2, 4 and 7): the `os_admin` pack, capabilities, proposals, the two
+loops as bounded above, and the steward brief as shipped text. Not built, stated: a
+proposal for another agent's profile, a token budget per turn, the room card.
 
 ## 9. Governance — what publishing checks
 

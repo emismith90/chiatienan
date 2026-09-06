@@ -151,6 +151,14 @@ tool budget and hands back its text and structured tool results (`backend/kernos
 The sub's results back the manager's numbers, its text never does, and only the manager's
 own `propose_*` calls make cards. The seeded agents delegate to nobody, so a room behaves
 exactly as before until an admin adds a sub.
+Self-administration is opt-in twice: a profile enables the `os_admin` pack and the agent's
+`capabilities` grant verbs (`read` its configuration, traces and eval results; `draft` a change to
+its own prompt, skills or non-money rules and propose it; `eval` start a suite as a job and add a
+review case; `publish` itself, only inside its `self_change_scope`, never on the blacklist, and only
+with a finished eval run of the exact content). Proposals live at `/api/admin/proposals` and are
+approved or rejected there by a person; approval publishes through the gates and writes the sources
+so the change survives the next draft. Nothing a `cms_*` tool returns can back a number in a reply
+(`backend/kernos/osadmin.py`). The steward brief is at `GET /api/admin/steward/brief`.
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
