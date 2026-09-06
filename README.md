@@ -109,8 +109,9 @@ Boot seeds a second business, `poker` (agent `dealer`), next to lunch. Bind a ro
 meals: every player's buy-in and cash-out, chips conserved exactly (rake and tips as an
 explicit `house`), debts from losers to winners settled with the same VietQR flow. Both
 businesses share `backend/packs/ledger_tools` (statements, settlement, payments, the
-random draw) over `backend/ledger_core`. The frontend has no card for a game draft yet
-(`TODO.md`); the API commits one like any other draft.
+random draw) over `backend/ledger_core`. The frontend has no bespoke card for a game
+draft: it renders through the generic `DraftCard` (title, the payload's fields, Confirm /
+Cancel), which any registered `*_draft` kind falls back to.
 
 ### The agent kernel (`backend/kernos/`)
 
@@ -174,7 +175,8 @@ is `kernos-sidecar`; the directory keeps its name until the framework is split o
 - `app/join/[token]/page.tsx` — join screen: pick an unclaimed name or create an
   account, set a PIN, or identify with nickname + PIN.
 - `components/chat/` — `room-view`, `message-list`, `composer` (with paste-to-attach
-  + `mention-dropdown`), `bot-message`, `expense-draft-card`, `balance-table`,
+  + `mention-dropdown`), `bot-message`, `expense-draft-card`, `draft-card` (the
+  generic fallback for a kind with no card of its own), `balance-table`,
   `agent-timeline` (live tool progress), `zoomable-image`.
 - `hooks/use-room.ts` — SSE subscription + optimistic-send merge/dedupe by id.
 - `lib/` — `api`, `sse`, `session`, `format`, `theme`, `sw-register`, `utils`.

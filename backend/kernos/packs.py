@@ -50,6 +50,11 @@ class DraftKind:
     field list a card edit may patch; ``stamps`` names the kernel-owned fields the
     render stage adds to the payload (``raw_input``, ``logged_by``, ``turn_id``) — a
     pack never sees principals.
+
+    ``kind`` should end in ``_draft``: chiatienan's frontend routes any message kind
+    with that suffix to a card (the generic one when it has no bespoke card) and
+    replaces it in place when the status flips. A kind named otherwise still works
+    over the API, but renders as a blank bubble there.
     """
 
     kind: str

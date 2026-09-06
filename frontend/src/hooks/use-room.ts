@@ -102,8 +102,9 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
       // backend re-publishes the SAME draft id with attachments.status flipped
       // (pending -> committed/cancelled) after Confirm / Cancel, so that update
       // must replace the stored message in place or the card would look pending
-      // forever (buttons never go away). Applies to both draft kinds.
-      if (e.kind === "expense_draft" || e.kind === "payment_draft") {
+      // forever (buttons never go away). Applies to every draft kind — the two
+      // lunch ones, a memo card, and whatever a pack registers next.
+      if (e.kind?.endsWith("_draft")) {
         return { ...s, messages: s.messages.map((m, i) => (i === existingIdx ? msg : m)) };
       }
       return s;

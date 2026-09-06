@@ -2262,8 +2262,9 @@ pre-existing test on `origin/main` is untouched, and every new capability is opt
 Known limits, stated in the phases that own them: `ask_*` tools do not appear in eval
 runs (no agent tree in the eval world — Phase 7/8); a steward reviews itself only and its
 schedule is the operator's (Phase 8); the frontend renders `game_draft` and other new
-card kinds as blank bubbles until the generic `DraftCard` ticket lands (`TODO.md`); the
-benchmark was not run here (`OPEN_ROUTER_KEY` absent); the sidecar directory keeps its
+card kinds through the generic `DraftCard` (2026-09-06, after the plan) — readable and
+confirmable, but not a card designed for the kind; the benchmark was not run here
+(`OPEN_ROUTER_KEY` absent); the sidecar directory keeps its
 name until the framework is split out (Phase 9 F8); the package name `kernos` (design
 §11 item 6) is still the operator's call.
 

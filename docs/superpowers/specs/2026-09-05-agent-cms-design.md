@@ -742,7 +742,8 @@ it); `contributions` and `timeline` registered with the core; content (prompt, s
 `ledger_tools` ships); fixtures; graders and five golden cases as content. The tools
 every ledger business shares moved from the lunch pack to `packs/ledger_tools`. The
 business is boot-seeded (`poker`, agent `dealer`) and a table binds to it through the
-admin API; the frontend's `game_draft` card is a follow-up.
+admin API; the frontend renders a `game_draft` through the generic `DraftCard` fallback
+(2026-09-06, after the plan), and a card designed for a game is still a follow-up.
 
 ### 7.3 What poker forces out of the host and into `ledger_core`
 

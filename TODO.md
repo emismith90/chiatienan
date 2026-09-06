@@ -1,11 +1,16 @@
 # TODO
 
-- **Generic draft card in the frontend (Phase 6 follow-up).** The backend now commits any
-  registered draft kind through `POST /drafts/{id}/commit` (a poker `game_draft`, for
-  one), but `message-list.tsx` renders unknown kinds as a blank human bubble and
-  `use-room.ts` only replaces status flips for the two lunch kinds. Add a generic
-  `DraftCard` fallback for any `*_draft` kind (body + attachment summary + Confirm/Cancel)
-  and make the in-place replacement apply to `kind.endsWith("_draft")`.
+- **Generic draft card in the frontend — done (2026-09-06).** Any `*_draft` kind with no
+  card of its own (a poker `game_draft`) renders through
+  `frontend/src/components/chat/draft-card.tsx`: the kind as a title, the payload's
+  fields as a summary (the kernel's `type`/`status`/`turn_id`/`raw_input`/`logged_by`
+  hidden), and Confirm / Cancel on the generic draft routes. `use-room.ts` replaces the
+  status flip in place for `kind.endsWith("_draft")`, which also fixes the memo card's
+  buttons after Confirm. A list of objects is spelled out row by row (per-player buy-in
+  and cash-out, each debt edge), because Confirm writes those numbers to the ledger and
+  a person has to be able to check them. Remaining: a card designed for the poker draft —
+  the field list carries no units (a money row and a count look alike) and no member
+  names beyond what the payload itself holds.
 
 - **Balance redesign** (short name, balance center alignment)
 
