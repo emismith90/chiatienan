@@ -1,195 +1,232 @@
-# Prod deploy runsheet — branch `claude/headless-cms-pi-harness-nn18pb`
+# Operations — the Agent OS in production
 
-Written 2026-09-06. Production runs `main` (`5066d85`, 2026-08-26) with **7 real users
-and a live money ledger**. This branch is Phases 1–11 of the Agent OS / headless-CMS
-work. Read the whole sheet before starting; the steps are ordered and step 5 is the only
-one that changes what your users see.
+Phases 1–11 (PR #50) **merged and deployed on 2026-09-07** as `e218d1d`. This was the
+one-time ship sheet; it is now the standing operations doc. Three parts:
+
+1. [What is live, and what is still off](#1-what-is-live-and-what-is-still-off) — read this first.
+2. [The two remaining opt-ins](#2-the-two-remaining-opt-ins) — the live decisions still to make.
+3. [Standing procedures](#3-standing-procedures) — deploy, verify, roll back. Applies to every deploy.
+
+The record of the 2026-09-07 deploy itself is in [§4](#4-the-2026-09-07-deploy-as-it-happened).
 
 ---
 
-## 0. What this deploy actually does
+## 1. What is live, and what is still off
 
-| | |
+| | State in production |
 |---|---|
-| **Schema** | Automatic and additive. `Database.create_all()` on container start adds the 16 `kn_` tables, the ledger tables and pack tables; `sync_additive_columns` adds missing columns. Nothing is dropped, renamed or retyped. **No manual migration.** |
-| **Existing data** | Untouched — rooms, members, messages, meals, ledger edges. Tested, not asserted. |
-| **The bot's behaviour** | Unchanged. Same 19 tools, same order, same prompt. |
-| **New, visible** | Every turn writes a trace row (`kn_turn_traces`, 30-day retention). A **Bot** tab appears in the side panel, read-only until step 5. |
-| **Seeded but off** | Collections, the poker business, delegation, the CMS tools, the steward. A pack only produces tools when a profile lists it, and agent capabilities default to none. |
+| Content plane | **live** — 16 `kn_` tables, created additively on container start |
+| Turn traces | **live** — every turn writes a row (`kn_turn_traces`, 30-day retention) |
+| Seeded businesses | **live** — `lunch` (profile 1) and `poker` (profile 2), both `managed_by: boot` |
+| The **Bot** tab | **live, read-only in every room** — no room has a binding |
+| Room editing | **off** — needs a binding ([§2.1](#21-turn-on-room-editing)) |
+| The steward | **seeded, unreachable** — agent 3, `delegates_to: []` ([§2.2](#22-turn-on-the-steward)) |
+| Collections, poker room, delegation, CMS tools | **off** — no profile lists the packs |
+| The bot's behaviour | **unchanged** — 19 tools, same order, same prompt |
 
-Phase 11 (the room CMS) is the first thing here that ships **on** — but only as a
-*reader*, because editing needs a binding that does not exist until you make it in
-step 5.
+Verified on the live box after the deploy:
+
+```
+kn_agents:  phoenix  manager default caps={}                          delegates=[]
+            dealer   manager default caps={}                          delegates=[]
+            steward  sub             caps={"cms":["read","draft"], "manages_profiles":[1]}  delegates=[]
+kn_space_bindings: (empty)
+kn_profiles: 1 lunch/default boot · 2 poker/default boot · 3 lunch/steward boot
+```
+
+Nothing points at the steward and no room is bound, so every new surface is inert until
+somebody in §2 decides otherwise.
 
 ---
 
-## 1. Verify the build before you ship it
+## 2. The two remaining opt-ins
+
+Independent of each other, both reversible. **Neither is done.**
+
+### 2.1 Turn on room editing
+
+Until a room has its own binding, the Bot tab is a reader. Editing is gated on a binding
+rather than on membership because `POST /api/rooms/create` is public — an unbound room
+resolves to the same default agent the real room runs, so a stranger's room would
+otherwise be a way in.
 
 ```bash
-cd backend && .venv/bin/python -m pytest tests -q          # expect: 1309 passed, 1 skipped
-cd agent_sidecar && node --test                             # expect: 69/69
-cd ../../frontend && npx tsc --noEmit && npx vitest run      # expect: 301 passed, tsc clean
+export A="X-Admin-Password: $ADMIN_PASSWORD"; export H="X-Actor: hung"
+export B=https://chiatienan.duckdns.org/api/admin
+
+curl -sS -H "$A" $B/agents                       # phoenix is agent 1
+curl -sS -X PUT $B/spaces/3/binding -H "$A" -H "$H" \
+  -H "Content-Type: application/json" -d '{"agent_id": 1}'
 ```
 
-That includes the golden fixtures (9/9, byte-identical replies), the layering test, the
-19-tool manifest, and `tests/test_prod_migration.py` — the deploy rehearsal, which boots
-this branch over a database shaped like production's and checks the table above.
+Room 3 is the real room. Binding it to `phoenix` — the agent it already runs — changes no
+behaviour; it is an authorisation fact.
 
-Confirm no test that exists on `main` was edited:
+After it: any member of room 3 can edit the system prompt, the skills and the non-money
+rules, and republish any earlier version. They **cannot** touch the model, the caps, the
+pipeline, the tool packs, the builtin tools or any money-tagged rule.
+
+**Undo:** `curl -X DELETE $B/spaces/3/binding -H "$A" -H "$H"`
+
+**Know before you do it:** the first member edit flips profile 1's `managed_by` from
+`boot` to `human`, and from then on **a deploy stops refreshing that profile's prompt,
+skills and rules from code**. The Bot tab says so on screen. To re-sync later, take a draft,
+patch it with what `build_default_spec` produces, and publish.
+
+### 2.2 Turn on the steward
 
 ```bash
-comm -12 <(git diff --name-only origin/main -- backend/tests | sort) \
-         <(git ls-tree -r origin/main --name-only backend/tests | sort)
+curl -sS -X PATCH $B/agents/1 -H "$A" -H "$H" \
+  -H "Content-Type: application/json" -d '{"delegates_to": [3]}'
 ```
 
-Empty output = clean.
+Phoenix's manifest goes 19 → **20 tools** (`ask_steward`). That is a real change to what the
+model sees, so **run the benchmark and compare before leaving it on** ([§3.1](#31-before-a-deploy)).
+Undo with `{"delegates_to": []}`.
 
-**Benchmark (real model, real money-graders).** Latest run on this tip is recorded in
-`backend/bench/results/agent-os-2026-09-06.md`. To repeat:
+Then `@phoenix nhờ steward xem lại` makes it read the friction detectors and, when a pattern
+is clear, draft one change and open a proposal. It cannot publish: a person approves at
+`POST $B/proposals/<id>/approve`.
+
+---
+
+## 3. Standing procedures
+
+### 3.1 Before a deploy
+
+```bash
+cd backend && .venv/bin/python -m pytest tests -q      # expect: 1318 passed, 1 skipped
+cd agent_sidecar && node --test                         # expect: 69/69
+cd ../../frontend && npx tsc --noEmit && npx vitest run  # expect: 301 passed, tsc clean
+```
+
+The one skip is `test_scenario_week_llm.py` — a real-model scenario test, opt-in behind
+`RUN_LLM_EVAL=1`. Included in the above: the golden fixtures (9/9 byte-identical replies),
+the layering test, the 19-tool manifest, and `test_prod_migration.py`, which boots the tree
+over a production-shaped database.
+
+**Benchmark** — needed whenever you change what the model sees (prompt, skills, tool
+manifest) or touch code a money turn executes:
 
 ```bash
 cd backend
 .venv/bin/python -m bench.run --corpus typical --engine pi --repeat 3 --out /tmp/now.json
-.venv/bin/python -m bench.report --compare bench/results/pi-typical-phase10-2026-09-06.json /tmp/now.json
+.venv/bin/python -m bench.report --compare bench/results/pi-typical-phase11-2026-09-06.json /tmp/now.json
 ```
 
-Ship criterion: no case down more than 1/3 on `tool_selection` or `ledger_state`.
+Ship criterion: no case down more than 1/3 on `tool_selection` or `ledger_state`. Each
+blocker reports a Fisher exact p-value and says whether it is distinguishable from sampling
+noise, with the re-run command when it is not. **A blocker marked `WITHIN NOISE` means
+re-run that case at `--repeat 15`, not stop.** `bills` cases go through the vision model and
+are genuinely flaky (`B3`'s measured rate is 0.60); `week` and `meals` cases are close to
+deterministic, so a drop there is real. Background:
+[`backend/bench/results/agent-os-2026-09-06.md`](../../../backend/bench/results/agent-os-2026-09-06.md).
 
-Each blocker now reports a Fisher exact p-value and tells you whether it can be
-distinguished from sampling noise at the sample size you ran — with the exact re-run
-command when it cannot. **A blocker marked `WITHIN NOISE` is not a reason to stop; it is a
-reason to re-run that case at `--repeat 15`.** One marked otherwise, or on a `week` or
-`meals` case (close to deterministic), is real.
+If you are shipping a branch, check you have not edited a test that predates it:
 
-> Why this exists: the Phase 11 run tripped the criterion on `B3` (3/3 → 1/3). `B3`'s
-> measured pass rate is **0.60**, at which `--repeat 3` gives 3/3 about 22% of the time and
-> 1/3 about 29% — both samples were noise. The chance of `--repeat 3` inventing a blocker
-> on a 60% case is 0.076 per case per comparison, across 23 cases. Detail:
-> `backend/bench/results/agent-os-2026-09-06.md`.
+```bash
+comm -12 <(git diff --name-only $(git merge-base HEAD origin/main) -- backend/tests | sort) \
+         <(git ls-tree -r $(git merge-base HEAD origin/main) --name-only backend/tests | sort)
+```
 
----
-
-## 2. Back up production first
+### 3.2 Back up first, for anything that touches the schema
 
 ```bash
 ssh -i ~/.ssh/digitalocean-openclaw root@chiatienan.duckdns.org
 cd /opt/chiatienan
-docker compose exec backend python -c "import sqlite3,datetime,os; os.makedirs('/data/backups',exist_ok=True); sqlite3.connect('/data/chiatienan.db').backup(sqlite3.connect(f'/data/backups/pre-agentos-{datetime.date.today()}.db'))"
-df -h /var/lib/docker && docker image prune -af     # a full disk is how a deploy silently ships stale code
+docker compose exec backend python -c "import sqlite3,datetime,os; os.makedirs('/data/backups',exist_ok=True); sqlite3.connect('/data/chiatienan.db').backup(sqlite3.connect(f'/data/backups/backup-{datetime.date.today()}.db'))"
+df -h /var/lib/docker && docker image prune -af    # a full disk is how a deploy silently ships stale code
 ```
 
-If SSH times out with no banner that is the network, not the key — use a phone hotspot or
-the DigitalOcean web console (see the `deploy-chiatienan` skill).
+SSH timing out with no banner is the network, not the key — phone hotspot, or the
+DigitalOcean web console. See the `deploy-chiatienan` skill.
 
----
+### 3.3 Deploy
 
-## 3. Deploy
+Merge to `main`, or **Actions → Deploy → Run workflow**. CI builds images, pushes to GHCR,
+the droplet pulls. Never `up -d --build` on the 512 MB host. The workflow's last step fails
+the job if the running tag ≠ `github.sha`.
 
-Merge the PR to `main`, or **Actions → Deploy → Run workflow**. The runner builds images,
-pushes to GHCR, and the droplet pulls — never `up -d --build` on the 512 MB host.
+### 3.4 Verify — take a baseline *before*, compare *after*
 
-Then verify the running image is actually this commit:
+This is what caught nothing on 2026-09-07 and is exactly why it is worth doing. Capture the
+"before" while the old code is still live:
 
 ```bash
-cd /opt/chiatienan
-docker compose ps --format '{{.Service}} {{.Image}}'    # must match the deployed SHA
-docker compose logs --tail=100 backend | grep -iE "error|traceback|no such column"
+export D="X-Debug-Key: $DEBUG_API_KEY"; export X=https://chiatienan.duckdns.org/internal/debug
+curl -sS -H "$D" $X/ping > /tmp/before-ping.json
+for t in meals members payments meal_shares settlements places; do
+  curl -sS -H "$D" "$X/tables/$t.csv" -o "/tmp/before-$t.csv"; done
 ```
 
-`deploy.yml` now fails the job when the running tag ≠ `github.sha`, but spot-check anyway.
-
----
-
-## 4. Confirm the room is unchanged
-
-Through the export API — no SSH needed:
+After the deploy, re-fetch and diff the row counts, and fingerprint the ledger:
 
 ```bash
-export H="X-Debug-Key: $DEBUG_API_KEY"; export B=https://chiatienan.duckdns.org/internal/debug
-curl -sS -H "$H" $B/ping            # row counts match what they were
-curl -sS -H "$H" "$B/conversation.txt?room_id=3&days=1"
+python3 - <<'PY'
+import csv, hashlib
+rows = [r for r in csv.DictReader(open('/tmp/after-meals.csv'))
+        if r['room_id'] == '3' and r['voided'] == 'False']
+print(len(rows), sum(float(r['total_amount']) for r in rows),
+      hashlib.sha256(''.join(sorted(r['id'] + r['total_amount'] for r in rows)).encode()).hexdigest()[:16])
+PY
 ```
 
-Then in the app: send `@phoenix ai nợ ai` and confirm a normal answer. Open the **Bot**
-tab — it should render the prompt, skills and rules **read-only**, with the notice that
-this room runs the shared default bot.
-
-> After a frontend deploy, unregister the service worker and clear caches before deciding
-> a UI change "didn't work" — the SW serves stale chunks.
-
-**Stop here if you only wanted the framework.** Everything below changes behaviour.
-
----
-
-## 5. Turn on room editing (optional, reversible)
-
-Editing needs the room to have its **own binding** — membership is not a permission,
-because `POST /api/rooms/create` is public and an unbound room resolves to the same
-default agent your real room runs. Until you do this, nobody can edit anything.
+Then the log, and the app:
 
 ```bash
-# ids first
-curl -sS -H "X-Admin-Password: $ADMIN_PASSWORD" https://chiatienan.duckdns.org/api/admin/agents
-# bind room 3 to phoenix (same agent, same profile — an authorisation fact, not a change)
-curl -sS -X PUT https://chiatienan.duckdns.org/api/admin/spaces/3/binding \
-  -H "X-Admin-Password: $ADMIN_PASSWORD" -H "X-Actor: hung" \
-  -H "Content-Type: application/json" -d '{"agent_id": <phoenix id>}'
+curl -sS -H "$D" "$X/logs?lines=400" | grep -E "(ERROR|CRITICAL)[: ]|Traceback \(most recent"
 ```
 
-After this, any member of room 3 can edit the prompt, the skills and the non-money rules
-from the Bot tab, and republish any earlier version. They **cannot** touch the model, the
-caps, the pipeline, the tool packs, the builtin tools or any money-tagged rule — those
-stay behind the admin password.
+> Grep for `ERROR` with a word boundary. `uvicorn.error` is a *logger name* that appears on
+> ordinary INFO lines ("Application startup complete"), and a loose `-i error` matches all
+> of them — it looks like two dozen errors when there are none.
 
-**Undo:** `DELETE /api/admin/spaces/3/binding` returns the room to view-only.
+In the app: send a normal question in the room and confirm a normal answer; open the **Bot**
+tab and confirm it renders read-only with the shared-bot notice. After a frontend deploy,
+unregister the service worker and clear caches before deciding a UI change did not work —
+the SW serves stale chunks.
 
-**Know this before you do it:** the first member edit flips the profile's `managed_by`
-to `human`, and from then on a deploy **stops refreshing that profile's prompt, skills
-and rules from code**. The Bot tab says so. To re-sync later, publish a fresh draft from
-`build_default_spec` through the admin API.
+### 3.5 Roll back
+
+- **App:** re-run Deploy on the previous commit SHA. The schema is additive, so older code
+  runs against the newer tables without complaint.
+- **A bad bot edit:** the Bot tab's **Republish** on any earlier version — it writes a new
+  version rather than rewriting history. Or `POST $B/profiles/1/rollback -d '{"version": N}'`.
+- **Data:** restore `/data/backups/backup-<date>.db` with the stack stopped.
 
 ---
 
-## 6. Turn on the steward (optional, independent of step 5)
+## 4. The 2026-09-07 deploy, as it happened
 
-```bash
-curl -sS -X PATCH https://chiatienan.duckdns.org/api/admin/agents/<phoenix id> \
-  -H "X-Admin-Password: $ADMIN_PASSWORD" -H "X-Actor: hung" \
-  -H "Content-Type: application/json" -d '{"delegates_to": [<steward id>]}'
+Merged `e218d1d` at 10:01Z; CI green (run 105); Deploy run 35 green in both jobs, including
+*Verify the running images match this commit*. Prod picked it up at 10:06:50Z.
+
+Startup log, in full:
+
+```
+17:06:49 INFO uvicorn.error: Started server process [1]
+17:06:49 INFO kernos.content: schema: added payments.ref_kind
+17:06:50 INFO chiatienan: [kernos] boot: business created; source skill/balances created;
+         source skill/pick-random created; source skill/record-meal created;
+         source skill/record-payment created; source skill/suggest-lunch created;
+         source rule/money-safety created; profile created; version 1 published;
+         default agent created; catalogue …deepseek… added; catalogue …qwen… added
+17:06:50 INFO uvicorn.error: Application startup complete.
 ```
 
-Phoenix's manifest goes 19 → **20 tools** (`ask_steward`). That is a real change to what
-the model sees, so **re-run the benchmark from step 1 and compare** before leaving it on.
-Undo by setting `delegates_to` back to `[]`.
+One additive column, the seed, no errors, no tracebacks.
 
-Asking it (`@phoenix nhờ steward xem lại`) makes it read the friction detectors, and when
-a pattern is clear, draft one change and open a proposal. It cannot publish: a person
-approves at `POST /api/admin/proposals/<id>/approve`.
+Data integrity, baseline captured before the deploy and compared after:
 
----
+| table | before | after |
+|---|---|---|
+| meals | 32 | 32 |
+| meal_shares | 121 | 121 |
+| payments | 74 | 74 |
+| members | 11 | 11 |
+| places | 100 | 100 |
+| settlements | 0 | 0 |
+| rooms / messages | 4 / 467 | 4 / 467 |
 
-## 7. Rollback
-
-- **App:** re-run the Deploy workflow on the previous commit SHA. The schema is additive,
-  so `main`'s code runs against the new tables without complaint.
-- **A bad bot edit:** the Bot tab's **Republish** button on any earlier version — that is
-  what it is for, and it writes a new version rather than rewriting history.
-- **Data:** restore `/data/backups/pre-agentos-<date>.db` (stop the stack first).
-
----
-
-## 8. Known gaps, stated plainly
-
-- **A member with edit rights can still get the bot to do arithmetic in `bash`.** The
-  enforced invariants hold — a ledger write needs a confirmed card, and a forged "Đã ghi"
-  is blocked — but `bash` is enabled and `backed_amounts` counts a builtin's output as
-  evidence, so no validator warns about a bash-derived number in prose. Fixing that
-  changes live validator behaviour and is a phase of its own. This is the main reason
-  step 5 is opt-in.
-- **The Confirm button for a steward proposal card is not in the UI yet** (`TODO.md`);
-  the card renders its rationale and diff, and approval goes through the admin API.
-- **Gate 4 (eval) is vacuous** until a profile names `eval.suites`. Load the corpus with
-  `.venv/bin/python -m app.evalhost import` (23 cases, 3 graders, offline) if you want it
-  to bite.
-- **The `prod` benchmark corpus is `.gitignore`d** (real conversation), so 14 of a
-  comparison's blockers are `MISSING` by construction.
+Room 3's live ledger: **23 meals, 8,229,960đ, sha `2f300cff1293decc` — identical before and
+after.** Nothing was disturbed.

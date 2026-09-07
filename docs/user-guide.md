@@ -7,8 +7,8 @@ Two audiences, in order:
 - **[Part 2 — the operator](#part-2-the-operator).** The admin API: bindings, agents,
   gates, eval, packages. You need the admin password for all of it.
 
-For deploying, see the
-[deploy runsheet](superpowers/plans/2026-09-06-deploy-runbook.md). For the code, see the
+For deploying and for the operator switches, see
+[Operations](superpowers/plans/2026-09-06-deploy-runbook.md). For the code, see the
 [developer guide](developer-guide.md).
 
 ---
