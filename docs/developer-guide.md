@@ -116,6 +116,22 @@ the host at resolve time. Never compare specs without excluding it.
 `NEVER_IN_SCOPE` is the blacklist plus `rules[tag=money]`, blocking validators, `persona`,
 `meta`, `memory`, `retry`, `templates` — paths no scope can name, however it is written.
 
+### The two doors into it
+
+| | Who | Code |
+|---|---|---|
+| the room's **Bot** tab | any member of a *bound* space | `app/roomcms.py` → `frontend/src/components/chat/agent-panel.tsx` |
+| `/admin` | anyone with `ADMIN_PASSWORD` | `kernos/api/admin.py` → `frontend/src/app/admin/` |
+
+They differ in authority, not in machinery: both go through `store.publish` and the same
+five gates. The room door is scoped to `ROOM_EDITABLE` and refuses money-tagged rules; the
+admin door has no scope, which is why its UI shows the model, caps, pipeline and packs
+read-only rather than as fields — the API keeps them, the screen does not offer them.
+
+Two credentials, two clients: `frontend/src/lib/api.ts` attaches the room bearer,
+`admin-api.ts` attaches `X-Admin-Password`, and `src/lib/__tests__/admin-api.test.ts`
+asserts neither header ever reaches the other's routes.
+
 ## 4. The standing rules
 
 These are why the code looks the way it does. Break them and the tests will tell you.

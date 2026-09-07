@@ -142,6 +142,28 @@ failure.
 
 # Part 2: the operator
 
+## The screen: `/admin`
+
+`https://chiatienan.duckdns.org/admin` — sign in with the admin password and the name you
+want in the audit log. Four tabs:
+
+| Tab | What it is for |
+|---|---|
+| **Live** | businesses, profiles (with `managed_by`), agents, bindings; the two switches below |
+| **Content** | edit a source, take a draft, see the diff, publish |
+| **Proposals** | what the steward has proposed, with the diff — approve or reject |
+| **Audit** | who changed what, when, with the before and after |
+
+Two things about the password. It is kept **for that browser tab only** and forgotten when
+the tab closes — a reload keeps it, closing the tab does not. And it is one shared secret
+with full power over every business and profile, so it is the real credential: the name
+you type is self-declared and only labels the log.
+
+The screen deliberately does **not** offer the model, the caps, the pipeline, the tool
+packs or the builtin tools. They are shown, read-only, and changed through the API below.
+
+## The API
+
 Everything here needs `X-Admin-Password`. `X-Actor` names you in the audit log; it is
 self-declared, so treat the password as the real credential.
 
@@ -202,8 +224,9 @@ curl -sS -X POST $B/profiles/1/versions/4/publish -H "$A" -H "$H" \
 ```
 
 **Roll back**: `POST $B/profiles/1/rollback -d '{"version": 3}'`. Note this re-publishes the
-same row; the room's own Republish button drafts a new version instead and keeps more
-history. Prefer the room button when either would do.
+same row, overwriting its note and timestamp, so that version stops being a record of
+what happened. The room's Republish button and the admin screen's **New draft from vN**
+both reach the same place additively. Prefer either over `rollback`.
 
 **Re-sync a profile to the code** after someone edited it by hand (`managed_by: human`):
 take a draft, patch it with what `build_default_spec` produces, and publish.

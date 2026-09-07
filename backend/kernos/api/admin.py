@@ -217,6 +217,33 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
     def version(profile_id: int, version: int):
         return _wrap(lambda: get_kernel().store.find_version(profile_id, version))
 
+    @r.get("/profiles/{profile_id}/versions/{version}/diff")
+    def version_diff(profile_id: int, version: int, against: int | None = Query(default=None)):
+        """What ``version`` changed, and the unified diff, against ``against``.
+
+        ``against`` defaults to the version before this one. Version 1 has nothing before
+        it, and `changed_paths(None, spec)` would report *every* field as changed — an
+        origin changed nothing, so it reports no paths and an empty diff.
+        """
+        from kernos.content.gates import changed_paths
+        from kernos.osadmin import _unified
+
+        def go():
+            store = get_kernel().store
+            mine = store.find_version(profile_id, version)
+            other = version - 1 if against is None else against
+            base = store.find_version(profile_id, other) if other >= 1 else None
+            if base is None:
+                return {"version": version, "against": None, "paths": [], "diff": ""}
+            return {
+                "version": version,
+                "against": base["version"],
+                "paths": changed_paths(base["spec"], mine["spec"]),
+                "diff": _unified(base["spec"], mine["spec"], f"profile {profile_id}",
+                                 before=f"v{base['version']}", after=f"v{version}"),
+            }
+        return _wrap(go)
+
     @r.patch("/profiles/{profile_id}/versions/{version}")
     def patch_version(profile_id: int, version: int, patch: dict = Body(...), x_actor: str | None = Header(default=None)):
         def go():
@@ -314,6 +341,12 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         return _wrap(lambda: get_kernel().store.update_agent(agent_id, patch, actor=_actor(x_actor)))
 
     # --------------------------------------------------------------- spaces
+    @r.get("/bindings")
+    def bindings():
+        """Every bound space. A binding is what lets a space's own members edit its
+        agent, so "which spaces are bound" is an authorisation question, not a listing."""
+        return get_kernel().store.list_bindings()
+
     @r.get("/spaces/{space_id}/binding")
     def binding(space_id: str):
         row = get_kernel().store.get_binding(space_id)

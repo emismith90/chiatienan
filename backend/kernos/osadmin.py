@@ -89,10 +89,16 @@ def _redact(obj: Any) -> Any:
     return obj
 
 
-def _unified(old: Any, new: Any, label: str) -> str:
+def _unified(old: Any, new: Any, label: str, *, before: str = "published", after: str = "draft") -> str:
+    """A unified diff of two specs (or two strings).
+
+    ``before``/``after`` name the two sides. They default to the proposal case — a draft
+    against what is published — but the admin revision log diffs two arbitrary versions,
+    where "published"/"draft" would be a lie.
+    """
     a = (old if isinstance(old, str) else json.dumps(old, indent=1, ensure_ascii=False, sort_keys=True)).splitlines()
     b = (new if isinstance(new, str) else json.dumps(new, indent=1, ensure_ascii=False, sort_keys=True)).splitlines()
-    return "\n".join(difflib.unified_diff(a, b, fromfile=f"{label} (published)", tofile=f"{label} (draft)", lineterm=""))
+    return "\n".join(difflib.unified_diff(a, b, fromfile=f"{label} ({before})", tofile=f"{label} ({after})", lineterm=""))
 
 
 def _schema(props: dict, required: list[str]) -> dict:

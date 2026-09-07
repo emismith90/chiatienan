@@ -43,12 +43,18 @@ somebody in §2 decides otherwise.
 
 Independent of each other, both reversible. **Neither is done.**
 
+Both are switches on the **Live** tab of `/admin` (sign in with `ADMIN_PASSWORD`), which
+says what each one does before it does it. The `curl` form of each is below, and is what
+the tab calls.
+
 ### 2.1 Turn on room editing
 
 Until a room has its own binding, the Bot tab is a reader. Editing is gated on a binding
 rather than on membership because `POST /api/rooms/create` is public — an unbound room
 resolves to the same default agent the real room runs, so a stranger's room would
 otherwise be a way in.
+
+`/admin` → **Live** → *Bindings*: space id `3`, agent `phoenix`, **Bind**. Or:
 
 ```bash
 export A="X-Admin-Password: $ADMIN_PASSWORD"; export H="X-Actor: hung"
@@ -74,6 +80,8 @@ skills and rules from code**. The Bot tab says so on screen. To re-sync later, t
 patch it with what `build_default_spec` produces, and publish.
 
 ### 2.2 Turn on the steward
+
+`/admin` → **Live** → *Agents* → tick **ask_steward** under `phoenix`. Or:
 
 ```bash
 curl -sS -X PATCH $B/agents/1 -H "$A" -H "$H" \
@@ -182,7 +190,8 @@ curl -sS -H "$D" "$X/logs?lines=400" | grep -E "(ERROR|CRITICAL)[: ]|Traceback \
 > of them — it looks like two dozen errors when there are none.
 
 In the app: send a normal question in the room and confirm a normal answer; open the **Bot**
-tab and confirm it renders read-only with the shared-bot notice. After a frontend deploy,
+tab and confirm it renders read-only with the shared-bot notice; open `/admin`, sign in,
+and confirm the **Live** tab lists the businesses, profiles and agents. After a frontend deploy,
 unregister the service worker and clear caches before deciding a UI change did not work —
 the SW serves stale chunks.
 
@@ -190,8 +199,9 @@ the SW serves stale chunks.
 
 - **App:** re-run Deploy on the previous commit SHA. The schema is additive, so older code
   runs against the newer tables without complaint.
-- **A bad bot edit:** the Bot tab's **Republish** on any earlier version — it writes a new
-  version rather than rewriting history. Or `POST $B/profiles/1/rollback -d '{"version": N}'`.
+- **A bad bot edit:** the Bot tab's **Republish** on any earlier version, or `/admin` →
+  **Content** → the version → **New draft from vN**, then **Publish**. Both write a new
+  version rather than rewriting history, which `POST $B/profiles/1/rollback` does not.
 - **Data:** restore `/data/backups/backup-<date>.db` with the stack stopped.
 
 ---
