@@ -1,5 +1,6 @@
 """The generated collection tools end to end (plan Task 5.2)."""
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -18,6 +19,24 @@ ROTA = {"type": "object", "required": ["week", "who"],
         "properties": {"week": {"type": "string", "description": "ISO week"}, "who": {"type": "string"},
                        "brings": {"type": "string", "enum": ["cards", "chips"]}, "players": {"type": "integer"}}}
 SIDECAR = Path(__file__).resolve().parent.parent / "agent_sidecar"
+
+
+def _require_sidecar_deps() -> None:
+    """The one place a pytest test executes the sidecar's own JavaScript.
+
+    That is deliberate — a Python/TypeBox schema drift does not show up as a red build,
+    it shows up as the model sending arguments the tool rejects — so the check must not
+    quietly disappear. Hence the asymmetry: a contributor without `npm ci` gets a skip
+    telling them the command, but in CI a missing install is a **failure**, because a
+    silent skip there would lose exactly the signal this test exists for.
+    """
+    if (SIDECAR / "node_modules").is_dir():
+        return
+    message = (f"the sidecar's dependencies are not installed: run `npm ci` in {SIDECAR}. "
+               "CI installs them in the backend job (.github/workflows/ci.yml).")
+    if os.environ.get("CI"):
+        raise AssertionError(f"CI must install the sidecar before pytest — {message}")
+    pytest.skip(message)
 
 
 def _setup(db, n=2):
@@ -48,6 +67,7 @@ def test_generated_tools_follow_the_lunch_tools_and_convert_in_the_sidecar(db):
     assert tools["rota_upsert"].input_schema["properties"]["data"] == ROTA
     assert tools["rota_find"].input_schema["properties"]["where"]["properties"] == {"who": {"type": "string"}}
     # the sidecar's own converter accepts the whole manifest
+    _require_sidecar_deps()
     script = ('import { toTypeBoxManifest } from "./schema.js"; let s=""; process.stdin.on("data", d => s += d);'
               'process.stdin.on("end", () => { const out = toTypeBoxManifest(JSON.parse(s)); console.log(Object.keys(out).length); });')
     manifest = {t["name"]: t["schema"] for t in tool_manifest(ctx)}
