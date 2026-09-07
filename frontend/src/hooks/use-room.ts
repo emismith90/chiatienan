@@ -26,6 +26,10 @@ export type RoomState = {
   /** Same idea for the knowledge panel: bumped on `knowledge:changed`, which the
    * write routes AND the memo card's commit emit (both write `observations.md`). */
   knowledgeVersion?: number;
+  /** And for the Bot panel: bumped on `agent:changed`, which a room CMS publish or
+   * republish emits, so a second member's open panel reloads rather than editing
+   * over a version that has already moved (plan Phase 11, review F15). */
+  agentVersion?: number;
 };
 
 /** Initial scrollback window (days). Only messages this recent are fetched and
@@ -46,6 +50,7 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
   if (e.type === "knowledge:changed") {
     return { ...s, knowledgeVersion: (s.knowledgeVersion ?? 0) + 1 };
   }
+  if (e.type === "agent:changed") return { ...s, agentVersion: (s.agentVersion ?? 0) + 1 };
   if (e.type === "bot.typing") return { ...s, typing: true };
   // `bot.done` is terminal: clear the typing indicator AND any live turn. The
   // per-turn `agent.run.finished` that normally clears `activeTurn` is
@@ -102,8 +107,9 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
       // backend re-publishes the SAME draft id with attachments.status flipped
       // (pending -> committed/cancelled) after Confirm / Cancel, so that update
       // must replace the stored message in place or the card would look pending
-      // forever (buttons never go away). Applies to both draft kinds.
-      if (e.kind === "expense_draft" || e.kind === "payment_draft") {
+      // forever (buttons never go away). Applies to every draft kind — the two
+      // lunch ones, a memo card, and whatever a pack registers next.
+      if (e.kind?.endsWith("_draft")) {
         return { ...s, messages: s.messages.map((m, i) => (i === existingIdx ? msg : m)) };
       }
       return s;
@@ -385,6 +391,7 @@ export function useRoom(roomId: number) {
     hasMore: state.hasMore,
     ledgerVersion: state.ledgerVersion ?? 0,
     knowledgeVersion: state.knowledgeVersion ?? 0,
+    agentVersion: state.agentVersion ?? 0,
     loadingEarlier,
     loadEarlier,
     send,

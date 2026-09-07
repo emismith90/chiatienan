@@ -9,7 +9,7 @@ uv.lock
 *.db-wal
 *.db-shm
 .pytest_cache/
-data/
+/data/
 node_modules/
 backend/agent_sidecar/node_modules/
 .next/

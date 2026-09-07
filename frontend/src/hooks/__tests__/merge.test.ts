@@ -145,4 +145,41 @@ describe("mergeEvent", () => {
     expect(s1.messages.length).toBe(1);
     expect(s1.messages[0].attachments.status).toBe("cancelled");
   });
+
+  it("replaces any other *_draft kind in place too (a pack's own card)", () => {
+    // The in-place replacement is keyed on the kind suffix, not on a list of
+    // two, so a kind the frontend learns about later (a poker `game_draft`, a
+    // memo card) stops showing its buttons after Confirm as well.
+    const s0: RoomState = {
+      messages: [
+        { id: 8, kind: "game_draft", body: "", attachments: { status: "pending", pot: 2_500_000 } },
+        { id: 9, kind: "memo_draft", body: "", attachments: { status: "pending", text: "Đóng cửa thứ hai." } },
+      ],
+      typing: false,
+      timelines: {},
+      activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, {
+      type: "message", id: 8, kind: "game_draft", body: "",
+      attachments: { status: "committed", pot: 2_500_000 },
+    });
+    const s2 = mergeEvent(s1, {
+      type: "message", id: 9, kind: "memo_draft", body: "",
+      attachments: { status: "committed", text: "Đóng cửa thứ hai." },
+    });
+    expect(s2.messages.length).toBe(2);
+    expect(s2.messages[0].attachments.status).toBe("committed");
+    expect(s2.messages[1].attachments.status).toBe("committed");
+  });
+
+  it("still ignores a repeat of a non-draft message id", () => {
+    const s0: RoomState = {
+      messages: [{ id: 12, kind: "bot", body: "first", attachments: null }],
+      typing: false,
+      timelines: {},
+      activeTurn: null,
+    };
+    const s1 = mergeEvent(s0, { type: "message", id: 12, kind: "bot", body: "second", attachments: null });
+    expect(s1).toBe(s0);
+  });
 });

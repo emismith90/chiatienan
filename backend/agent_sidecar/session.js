@@ -5,19 +5,15 @@
  * owns **no arithmetic**: all money tools execute in Python over the real DB, so a
  * number never crosses to the model's side of the wire (design D3).
  */
-import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, SessionManager }
-  from "@earendil-works/pi-coding-agent";
+import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, SessionManager,
+  SettingsManager } from "@earendil-works/pi-coding-agent";
 
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { resolveExtensions } from "./extensions.js";
 import { toTypeBox } from "./schema.js";
-
-/** Constant, not configurable. One less knob to get wrong in prod. */
-export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-
-export const KEY_ENV = "OPEN_ROUTER_KEY";
 
 /**
  * Wrap one Python tool as a pi tool.
@@ -97,14 +93,22 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   // directory — nothing of ours lives there, but keeping it stable (under
   // DATA_DIR, passed by Python) lets pi cache its model catalogue instead of
   // refetching it every turn.
-  const cwd = ensureDir(req.cwd || join(tmpdir(), "chiatienan-pi-cwd"));
-  const agentDir = ensureDir(req.agent_dir || join(tmpdir(), "chiatienan-pi-agent"));
+  const cwd = ensureDir(req.cwd || join(tmpdir(), "kernos-pi-cwd"));
+  const agentDir = ensureDir(req.agent_dir || join(tmpdir(), "kernos-pi-agent"));
+
+  // Both are optional and absent from every command today (plan Task 1.4): a
+  // profile's `settings` become an in-memory SettingsManager (nothing on disk to
+  // drift), and its `extensions` resolve against the sidecar's registry.
+  const settingsManager = buildSettingsManager(req.settings);
+  const extensionFactories = resolveExtensions(req.extensions);
 
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
     systemPromptOverride: () => req.system || "",
     agentsFilesOverride: () => ({ agentsFiles: buildAgentsFiles(req) }),
+    ...(settingsManager ? { settingsManager } : {}),
+    ...(extensionFactories.length ? { extensionFactories } : {}),
   });
   await loader.reload();
 
@@ -118,6 +122,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     customTools,
     ...toolOptionsFor(req.builtin_tools, customTools.map((tool) => tool.name)),
     sessionManager: SessionManager.inMemory(cwd),
+    ...(settingsManager ? { settingsManager } : {}),
   });
 
   return { session, model, dispose: () => session.dispose() };
@@ -156,6 +161,17 @@ export function toolOptionsFor(builtins, customNames) {
   return { tools: [...enabled, ...(customNames || [])] };
 }
 
+
+/**
+ * A profile's pi `settings` block → `SettingsManager.inMemory`, or `null` when the
+ * command carries none (today's commands), so nothing about session construction
+ * changes for a profile that does not set it.
+ */
+export function buildSettingsManager(settings) {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return null;
+  if (!Object.keys(settings).length) return null;
+  return SettingsManager.inMemory(settings);
+}
 
 export function resolveModel(runtime, req) {
   const hasImages = Boolean(req.images && req.images.length);

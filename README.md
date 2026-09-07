@@ -19,6 +19,16 @@ no amount that ends up in a QR is ever computed or transcribed by the model.
 Meals are never written by the model directly: it can only *propose*, and a
 person edits/commits the draft.
 
+## Documentation
+
+| I want to… | Read |
+|---|---|
+| use the bot, and change how it behaves from the **Bot** tab | [User guide](docs/user-guide.md) |
+| run it as an operator — bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
+| understand the architecture, or add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
+| ship it to production | [Deploy runsheet](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
+| know why it is shaped this way | [Design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
+
 > Design: [`docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md`](docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md)
 > and the [chat-UX overhaul](docs/superpowers/specs/2026-07-20-chat-ux-overhaul-design.md).
 > (The original [Teams-bot design](docs/superpowers/specs/2026-07-20-chiatienan-teams-lunch-bot-design.md)
@@ -36,7 +46,8 @@ Caddy (auto-TLS)
                                    │
    room chat ── @phoenix ────────┤  chat.py     @phoenix detect + dispatch (serialized)
    live updates ◀── SSE ──────────┤  realtime.py in-process RoomHub pub/sub
-                                   │  agent.py    shim → agent_sidecar (Node, Pi on OpenRouter)
+                                   │  kernel.py   kernos pipeline: the turn as ordered plugins
+                                   │  agent.py    shim → kernos.engine.pi → agent_sidecar (Node, Pi)
                                    │  tools.py    CustomTools (all arithmetic + QR)
                                    │  drafts.py   editable expense-draft lifecycle
                                    │  ledger/roster/accounts/qr/money/periods
@@ -76,16 +87,80 @@ Caddy (auto-TLS)
 | `auth.py` | Bearer-session (`require_session`) + admin-password (`require_admin`) guards |
 | `rooms.py` | Room create + lookup by invite token / id |
 | `chat.py` | Persist/list messages, `@phoenix` detection, agent dispatch (serialized), deterministic bot-reply rendering |
-| `drafts.py` | Expense-draft lifecycle: persist, edit, commit, supersede, cancel |
-| `tools.py` | The LLM-facing `CustomTool` set (find/propose/void/period/balances/settle + member CRUD) |
+| `drafts.py` | Draft-card lifecycle, generic over the packs' `DraftKind`s: persist, edit, commit, supersede, cancel |
+| `tools.py` | The host's tool composition point: `ToolContext`, `CustomTool`, `build_tools` (the enabled packs' tools in the legacy order), `tool_manifest` |
+| `packs/` | this host's packs: the registration of the framework's `lunch_ledger` (QR builder + place resolver injected), `lunch_places` (restaurants, memos), `room_members` (member CRUD) |
 | `prompt.py` | Vietnamese-aware system prompt + tool guidance |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
-| `agent.py` | ~200-line shim: builds the run command, forwards `agent.*` events, executes tools, hydrates `TurnResult` |
-| `pi_bridge.py` | the sidecar subprocess: JSONL framing and `req_id` demultiplexing. No pi semantics |
+| `kernel.py` | kernos composition root: registry of plugins, host adapters, resolver → the pipeline `chat.run_bot_turn` runs |
+| `plugins/` | this app's pipeline plugins: persona prompt, the `run_turn` seam, the money validators (fabricated commit, unbacked amounts) |
+| `hostadapters.py` · `default_profile.py` | the kernos host adapters over this app's modules; the seeded default profile (today's bot as a `ProfileSpec`) |
+| `agent.py` | shim over `kernos.engine.pi.PiEngine`: builds the `EngineSpec`, executes tools, logs one line; `run_turn`'s signature is frozen |
+| `pi_bridge.py` | shim over `kernos.engine.pi.PiBridge`: sidecar path, our key name, `PI_*` defaults, the per-process singleton |
 | `agent_sidecar/` | **Node.** Owns the whole Pi harness: provider, session, event normalization, turn caps, answer assembly |
 | `realtime.py` | In-process `RoomHub` pub/sub feeding the SSE streams |
 | `pi_smoke.py` | Guarded sidecar liveness check (B3) |
+
+### The lunch ledger as a pack (`backend/packs/lunch_ledger/`)
+
+The money tools (find/propose/void/period/statement/summary/settle/payment/draw/cancel),
+the outcome decision and the deterministic reply bodies, the two draft kinds and the
+eval-world fixtures — importing `kernos` and `ledger_core` only. What it needs from a
+host is injected: the card store, clock and draw on the per-turn context, the QR builder
+and place resolver at registration (`app/packs/lunch.py`). `tests/test_lunch_ledger_pack.py`
+runs it against a stub host; `ledger_core/` is the money domain underneath (meals,
+payments, FIFO debt edges, netting, periods, VietQR) that lunch and poker share.
+
+### A second business: the poker ledger (`backend/packs/poker_ledger/`)
+
+Boot seeds a second business, `poker` (agent `dealer`), next to lunch. Bind a room to it
+(`PUT /api/admin/spaces/{room_id}/binding`) and the bot records game nights instead of
+meals: every player's buy-in and cash-out, chips conserved exactly (rake and tips as an
+explicit `house`), debts from losers to winners settled with the same VietQR flow. Both
+businesses share `backend/packs/ledger_tools` (statements, settlement, payments, the
+random draw) over `backend/ledger_core`. The frontend has no bespoke card for a game
+draft: it renders through the generic `DraftCard` (title, the payload's fields, Confirm /
+Cancel), which any registered `*_draft` kind falls back to.
+
+### The agent kernel (`backend/kernos/`)
+
+`kernos` is a host-agnostic agent framework: a turn pipeline with typed stages, a plugin
+registry with schema-validated configs, an `Engine` protocol (Pi is the first engine), nine
+host adapter protocols, and a versioned content plane. chiatienan is its first host;
+`examples/minimal_host/` is a second one with no chiatienan module on its path, and
+`tests/test_layering.py` enforces that nothing under `kernos/` imports the app.
+
+**The bot's configuration is data, not code.** Its prompt, rules, skills, models, caps and
+pipeline are versioned content in `kn_` tables, seeded from code on first boot and re-synced
+while nobody has edited it. A publish goes through five gates (schema, money safety, model
+probe, eval, reflexivity). Every turn leaves a trace row. Rooms nobody binds keep running the
+seeded default, byte for byte.
+
+What that buys, in one line each:
+
+- **A room CMS** — every member reads the agent their room runs under a **Bot** tab, with a
+  revision log and a Republish button; a room with its own binding can edit the prompt, the
+  skills and the non-money rules. The model, caps, pipeline, packs and money rules stay
+  behind the admin password.
+- **A steward** (off by default) — a sub-agent that reads six deterministic detectors over
+  the room's own traces and, when a pattern is clear, proposes one change for a person to
+  approve.
+- **Self-administration** — the CMS as a capability-gated tool pack, so an agent can read
+  its own configuration and propose changes to it, inside a scope, never on the blacklist.
+- **A second business** (`packs/poker_ledger/`) sharing `ledger_core` and nothing else,
+  which is what proves the framework is not lunch-shaped.
+- **Portability** — a published profile exports as a Pi package and imports as sources plus
+  a draft, never a publish.
+
+**Read next:**
+
+| | |
+|---|---|
+| Using the bot and the Bot tab, and the operator's admin tasks | [`docs/user-guide.md`](docs/user-guide.md) |
+| Architecture, the standing rules, and how to add a pack, plugin, business, agent or host | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| Shipping it to production, step by step | [`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
+| Why any of it is shaped this way | [design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
 
 ### Frontend (`frontend/src/`, Next.js 16 / React 19)
 
@@ -93,7 +168,8 @@ Caddy (auto-TLS)
 - `app/join/[token]/page.tsx` — join screen: pick an unclaimed name or create an
   account, set a PIN, or identify with nickname + PIN.
 - `components/chat/` — `room-view`, `message-list`, `composer` (with paste-to-attach
-  + `mention-dropdown`), `bot-message`, `expense-draft-card`, `balance-table`,
+  + `mention-dropdown`), `bot-message`, `expense-draft-card`, `draft-card` (the
+  generic fallback for a kind with no card of its own), `balance-table`,
   `agent-timeline` (live tool progress), `zoomable-image`.
 - `hooks/use-room.ts` — SSE subscription + optimistic-send merge/dedupe by id.
 - `lib/` — `api`, `sse`, `session`, `format`, `theme`, `sw-register`, `utils`.
@@ -124,6 +200,11 @@ Caddy (auto-TLS)
 Bill photos must be **pasted inline** (the composer supports paste-to-attach).
 Edit your own display name and bank details on the profile screen so the
 settlement QR can pay you.
+
+The side panel's **Bot** tab shows the bot's own configuration — its prompt, skills and
+rules — with a revision log of who changed what and a Republish button on any earlier
+version. Reading is open to everyone in the room; editing needs the room to have its own
+binding. See the [user guide](docs/user-guide.md#the-bot-tab).
 
 ## Local development
 

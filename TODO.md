@@ -1,5 +1,17 @@
 # TODO
 
+- **Generic draft card in the frontend — done (2026-09-06).** Any `*_draft` kind with no
+  card of its own (a poker `game_draft`) renders through
+  `frontend/src/components/chat/draft-card.tsx`: the kind as a title, the payload's
+  fields as a summary (the kernel's `type`/`status`/`turn_id`/`raw_input`/`logged_by`
+  hidden), and Confirm / Cancel on the generic draft routes. `use-room.ts` replaces the
+  status flip in place for `kind.endsWith("_draft")`, which also fixes the memo card's
+  buttons after Confirm. A list of objects is spelled out row by row (per-player buy-in
+  and cash-out, each debt edge), because Confirm writes those numbers to the ledger and
+  a person has to be able to check them. Remaining: a card designed for the poker draft —
+  the field list carries no units (a money row and a count look alike) and no member
+  names beyond what the payload itself holds.
+
 - **Balance redesign** (short name, balance center alignment)
 
 - **Blame feature.** Now chat/action run on trust, no way to verify. A false claim is not reversible/fixable → figure out a way to "blame" and exclude the transaction.
@@ -18,8 +30,18 @@
 
 - **Randomizer** — randomly pick 1 person from the group (e.g. who pays / who fetches lunch).
 
-- **BIG: agent engine export/import**
-  - Define mounting point vs skeleton.
-  - What to export.
-  - Import flow, with sanitize via separate import workflow (installation agent).
-  - A UI/CMS for upload/config agent.
+- **Agent engine export/import — done (Agent OS Phase 9).** A published profile exports as a
+  Pi package (`GET /api/admin/profiles/{id}/export`: `skills/<slug>/SKILL.md`, `prompts/*.md`,
+  `AGENTS.md`, `.pi/settings.json`, `kernos.json`) and imports into a business as sources plus a
+  draft that the publish gates review (`POST /api/admin/businesses/{id}/import[?replace=true]`).
+  Remaining: a UI for upload (the admin API is the only surface), and the split of `kernos`
+  into its own repository when a second real host exists (design §12.1).
+
+- **Room CMS follow-ups (Phase 11).** Two things the review gate named and this phase did
+  not do. (1) **Builtin tools count as evidence.** `moneyguard.backed_amounts` treats every
+  invocation's output as backing and `validate._evidence` excludes only `evidence=False`
+  *packs* — `bash` is a builtin, so a bash-computed amount in prose passes as "backed" and
+  `UnbackedAmounts` does not warn. Excluding builtins changes live validator behaviour, so
+  it needs its own phase and a benchmark run. (2) **Copy-on-write per room** — a room-owned
+  profile would still share `kn_sources`, which is per *business*, so it isolates nothing
+  until sources are per profile. Today's answer is the binding plus a shared-bot notice.

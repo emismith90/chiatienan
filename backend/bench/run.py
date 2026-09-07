@@ -36,7 +36,7 @@ from bench import corpus, graders
 from bench.world import build_world, frozen_clock
 
 #: Kept in the record so a stale results file cannot be silently misread.
-RECORD_VERSION = 1
+from kernos.eval import RECORD_VERSION  # noqa: E402
 
 
 def _invocation_dicts(result) -> list[dict]:

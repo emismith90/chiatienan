@@ -68,6 +68,8 @@ class Settings:
     qr_template: str
     # Deploy
     caddy_domain: str
+    # Eval: the LLM judge for prose grading (`bench.judge`); unset = prose not graded.
+    bench_judge_model: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -103,6 +105,7 @@ class Settings:
             database_url=(os.environ.get("DATABASE_URL") or "").strip() or "sqlite:////data/chiatienan.db",
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",
             admin_password=(os.environ.get("ADMIN_PASSWORD") or "").strip(),
+            bench_judge_model=(os.environ.get("BENCH_JUDGE_MODEL") or "").strip() or None,
             debug_api_key=(os.environ.get("DEBUG_API_KEY") or "").strip(),
             log_file=(os.environ.get("LOG_FILE") or "").strip() or "/data/logs/app.log",
             log_max_bytes=_int_env("LOG_MAX_BYTES", 5_000_000),

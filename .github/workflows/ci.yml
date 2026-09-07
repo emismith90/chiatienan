@@ -40,6 +40,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install ".[test]"
 
+      # One pytest test (`test_collections_turn.py`) feeds the Python-generated tool
+      # manifest through the sidecar's OWN TypeBox converter, because that boundary is
+      # where a drift shows up as the model sending arguments the tool rejects rather
+      # than as a red build. That subprocess needs the sidecar's deps, so this job
+      # installs them too — the `sidecar` job's `npm ci` is a different checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/agent_sidecar/package-lock.json
+
+      - name: Install the sidecar (for the cross-language schema test)
+        working-directory: backend/agent_sidecar
+        run: npm ci
+
       - name: Run tests
         # The LLM eval (RUN_LLM_EVAL) stays opt-in and needs Cursor creds, so it
         # is not run here. Conftest points every path at temp SQLite + a test

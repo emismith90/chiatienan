@@ -136,9 +136,24 @@ class Database:
         self._sessionmaker = sessionmaker(bind=self.engine, expire_on_commit=False, future=True)
 
     def create_all(self) -> None:
-        """Bring the schema up to the models: missing tables, then missing columns."""
+        """Bring the schema up to the models: missing tables, then missing columns.
+
+        The ledger's tables (``ledger_core``, plan Task 3.2) and the kernos content
+        plane's ``kn_`` tables (Task 2.4) live in the same database and are brought up
+        here too, with the same additive discipline.
+        """
+        from kernos.content import bind as bind_content
+        from ledger_core import bind as bind_ledger
+
         Base.metadata.create_all(self.engine)
         _sync_additive_columns(self.engine)
+        bind_ledger(self.engine)
+        bind_content(self.engine)
+        # A pack with tables of its own binds them here too (plan Task 6.3). Lazy: the
+        # packs import the models, never this module.
+        from app.packs import host_packs
+        for pack in host_packs():
+            pack.bind(self.engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:

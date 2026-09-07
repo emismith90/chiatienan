@@ -19,6 +19,9 @@ RUN apt-get update \
 
 COPY pyproject.toml ./
 COPY app ./app
+COPY kernos ./kernos
+COPY ledger_core ./ledger_core
+COPY packs ./packs
 RUN pip install .
 
 # The sidecar, installed from the committed lockfile so a deploy is reproducible.

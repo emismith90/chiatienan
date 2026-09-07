@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+# Riêng cho bàn bài (bắt buộc)
+- Câu xác nhận "Recorded game #<số>: … winners … / losers …" là của hệ thống, sinh ra sau
+  khi bàn bấm Confirm. Bạn không tự viết câu đó và không nói "đã ghi ván".
+- Bàn phải cân chip: Σ buy-in = Σ cash-out + house. Lệch → hỏi ai thiếu/dư hoặc phần lệch
+  có phải tiền bàn (`house`) không. KHÔNG tự sửa một con số cho cân.
+- Ai thắng/thua bao nhiêu và ai trả ai: công cụ tính, thẻ hiện. Không tự cộng trừ.

@@ -102,6 +102,15 @@ class Case:
     had_images: bool = False
     expect: dict = field(default_factory=dict)
 
+    def to_eval_case(self, *, tags: list[str] | None = None, review: bool = False):
+        """The content-plane shape (``kernos.eval.EvalCase``), images included."""
+        from kernos.eval import EvalCase
+        return EvalCase(id=self.id, source=self.source, day=self.day, actor=self.actor,
+                        members=copy.deepcopy(self.members), prior_steps=copy.deepcopy(self.prior_steps),
+                        message=self.message, history=self.history, images=copy.deepcopy(self.images),
+                        had_images=self.had_images, expect=copy.deepcopy(self.expect),
+                        tags=list(tags or []), review=review)
+
 
 def _money_args(spec: dict, kind: str) -> dict:
     """The money-bearing arguments the model must get right, in corpus keys."""
