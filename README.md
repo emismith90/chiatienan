@@ -25,7 +25,8 @@ person edits/commits the draft.
 |---|---|
 | use the bot, and change how it behaves from the **Bot** tab | [User guide](docs/user-guide.md) |
 | run it as an operator — bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
-| understand the architecture, or add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
+| understand how it is put together, and how it sits on `kernos` | [Architecture](docs/architecture.md) |
+| add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
 | deploy it, or turn on room editing / the steward | [Operations](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
 | know why it is shaped this way | [Design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
 
@@ -158,7 +159,8 @@ What that buys, in one line each:
 | | |
 |---|---|
 | Using the bot and the Bot tab, and the operator's admin tasks | [`docs/user-guide.md`](docs/user-guide.md) |
-| Architecture, the standing rules, and how to add a pack, plugin, business, agent or host | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| How the pieces fit, and how the app sits on the framework | [`docs/architecture.md`](docs/architecture.md) |
+| The standing rules, and how to add a pack, plugin, business, agent or host | [`docs/developer-guide.md`](docs/developer-guide.md) |
 | Shipping it to production, step by step | [`docs/superpowers/plans/2026-09-06-deploy-runbook.md`](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
 | Why any of it is shaped this way | [design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
 

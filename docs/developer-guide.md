@@ -1,6 +1,8 @@
 # Developer guide — architecture, and how to extend it
 
-For using the thing, see the [user guide](user-guide.md). For shipping it and running it,
+For using the thing, see the [user guide](user-guide.md). For the structural view — the
+runtime topology, the layers, and how the app is wired onto `kernos` — the
+[architecture](architecture.md). For shipping it and running it,
 [Operations](superpowers/plans/2026-09-06-deploy-runbook.md). The reasoning behind
 every decision is in the [design spec](superpowers/specs/2026-09-05-agent-cms-design.md)
 and the [phase plan](superpowers/plans/2026-09-05-agent-os-framework.md).
