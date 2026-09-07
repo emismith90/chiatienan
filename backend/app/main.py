@@ -1207,28 +1207,38 @@ class RepublishIn(BaseModel):
     note: str | None = None
 
 
+def _room_kernel():
+    """`kernel_for` is imported inside the functions that need it everywhere else in
+    this module, so it is not a module-level name — calling it as one shipped a 500 to
+    production (`tests/test_room_cms_routes.py` is the regression). One helper rather
+    than five local imports."""
+    from app.kernel import kernel_for
+
+    return kernel_for(get_db())
+
+
 @app.get("/api/rooms/{room_id}/agent")
 async def room_agent(room_id: int, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
-    return roomcms.view(kernel_for(get_db()), room_id)
+    return roomcms.view(_room_kernel(), room_id)
 
 
 @app.get("/api/rooms/{room_id}/agent/versions")
 async def room_agent_versions(room_id: int, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
-    return roomcms.versions(kernel_for(get_db()), room_id)
+    return roomcms.versions(_room_kernel(), room_id)
 
 
 @app.get("/api/rooms/{room_id}/agent/versions/{version}")
 async def room_agent_version(room_id: int, version: int, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
-    return roomcms.version_detail(kernel_for(get_db()), room_id, version)
+    return roomcms.version_detail(_room_kernel(), room_id, version)
 
 
 @app.put("/api/rooms/{room_id}/agent/content")
 async def room_agent_edit(room_id: int, body: AgentContentIn, ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
-    out = roomcms.edit(kernel_for(get_db()), room_id, ctx.member_id, body.model_dump())
+    out = roomcms.edit(_room_kernel(), room_id, ctx.member_id, body.model_dump())
     await hub.publish(room_id, {"type": "agent:changed"})
     return out
 
@@ -1237,6 +1247,6 @@ async def room_agent_edit(room_id: int, body: AgentContentIn, ctx: AuthCtx = Dep
 async def room_agent_republish(room_id: int, version: int, body: RepublishIn,
                                ctx: AuthCtx = Depends(require_session)):
     _check_room(ctx, room_id)
-    out = roomcms.republish(kernel_for(get_db()), room_id, ctx.member_id, version, body.note)
+    out = roomcms.republish(_room_kernel(), room_id, ctx.member_id, version, body.note)
     await hub.publish(room_id, {"type": "agent:changed"})
     return out
