@@ -55,13 +55,16 @@ cd backend
 
 Ship criterion: no case down more than 1/3 on `tool_selection` or `ledger_state`.
 
-> **Read this before trusting a blocker on a `bills` case.** The Phase 11 run tripped the
-> criterion on `B3` (3/3 → 1/3 on both money graders). Re-running `B3` at `--repeat 15`
-> put its natural pass rate at **0.60**, at which three attempts give 3/3 about 22% of the
-> time and 1/3 about 29% — so both samples were noise, and the run is clear. The chance of
-> `--repeat 3` inventing a blocker on a 60% case is 0.076 per case per comparison, and
-> there are 23 cases. **A blocker on a `bills` case means re-run that case at `--repeat 15`;
-> a blocker on a `week` or `meals` case is real.** Detail and the per-case rate:
+Each blocker now reports a Fisher exact p-value and tells you whether it can be
+distinguished from sampling noise at the sample size you ran — with the exact re-run
+command when it cannot. **A blocker marked `WITHIN NOISE` is not a reason to stop; it is a
+reason to re-run that case at `--repeat 15`.** One marked otherwise, or on a `week` or
+`meals` case (close to deterministic), is real.
+
+> Why this exists: the Phase 11 run tripped the criterion on `B3` (3/3 → 1/3). `B3`'s
+> measured pass rate is **0.60**, at which `--repeat 3` gives 3/3 about 22% of the time and
+> 1/3 about 29% — both samples were noise. The chance of `--repeat 3` inventing a blocker
+> on a 60% case is 0.076 per case per comparison, across 23 cases. Detail:
 > `backend/bench/results/agent-os-2026-09-06.md`.
 
 ---

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from math import comb
 from pathlib import Path
 
 from bench.graders import summarize_cost_latency
@@ -167,6 +168,39 @@ def render(results: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: A blocker whose one-sided p-value is above this is reported as within noise: the
+#: criterion still blocks, but the operator is told the samples cannot tell a real
+#: regression from a flaky case, and what to run to find out.
+NOISE_ALPHA = 0.05
+
+
+def p_value_worse(base_passed: int, base_n: int, new_passed: int, new_n: int) -> float:
+    """One-sided Fisher exact p: the chance of seeing the candidate this much worse (or
+    worse still) if both runs were sampling the *same* underlying pass rate.
+
+    Why this exists: the ship criterion is a fixed 1/3 threshold, and at `--repeat 3` a
+    case that genuinely passes ~60% of the time produces 3/3 about 22% of the time and
+    1/3 about 29% — so "3/3 -> 1/3" is two ordinary draws from one distribution far more
+    often than it is a regression. Phase 11 lost an afternoon to exactly that (see
+    `bench/results/agent-os-2026-09-06.md`). The threshold is not wrong, it is
+    *underpowered*; this reports how underpowered, per row.
+
+    Hypergeometric, computed exactly with `math.comb` — no scipy, and no float drift at
+    these sample sizes.
+    """
+    total, passes = base_n + new_n, base_passed + new_passed
+    if not total or not new_n or passes > total:
+        return 1.0
+    denom = comb(total, new_n)
+    if not denom:
+        return 1.0
+    # P(candidate passes <= what we saw), over the tables with these margins
+    tail = sum(comb(passes, k) * comb(total - passes, new_n - k)
+               for k in range(0, new_passed + 1)
+               if 0 <= new_n - k <= total - passes)
+    return min(1.0, tail / denom)
+
+
 def ship_blockers(base: dict, new: dict) -> list[dict]:
     """Everything that fails the ship criterion, as structured rows.
 
@@ -192,8 +226,17 @@ def ship_blockers(base: dict, new: dict) -> list[dict]:
                                  "kind": "BOTH-FAILING",
                                  "detail": "0 on both runs — this case certified nothing"})
             elif before - after > MAX_DROP + 1e-9:
+                (bp, bn), (np_, nn) = base_rates[case_id][grader], new_rates[case_id][grader]
+                p = p_value_worse(bp, bn, np_, nn)
+                significant = p <= NOISE_ALPHA
+                detail = (f"{before:.2f} → {after:.2f} ({after - before:+.2f})"
+                          f" · p={p:.2f} over {bn}+{nn} samples")
+                detail += (" — a drop this size is unlikely to be sampling noise" if significant else
+                           " — WITHIN NOISE at this sample size; re-run this case at a higher"
+                           " --repeat before believing it")
                 blockers.append({"case_id": case_id, "grader": grader, "kind": "DROP",
-                                 "detail": f"{before:.2f} → {after:.2f} ({after - before:+.2f})"})
+                                 "detail": detail, "p_value": round(p, 4),
+                                 "significant": significant})
     return blockers
 
 
@@ -280,10 +323,26 @@ def render_compare(base: dict, new: dict) -> str:
                      "anyway — the criterion covers money, not everything.")
     else:
         lines.append(f"**{len(blockers)} blocker(s):**")
+        noisy = sorted({b["case_id"] for b in blockers if b.get("significant") is False})
         lines.append("")
         for blocker in blockers:
             lines.append(f'- `{blocker["case_id"]}` · {blocker["grader"]} · '
                          f'**{blocker["kind"]}** — {blocker["detail"]}')
+        if noisy:
+            cases = " ".join(f"--case {c}" for c in noisy)
+            lines += ["",
+                      f'**{len(noisy)} of these cannot be distinguished from sampling noise** at '
+                      f'this `--repeat` (p > {NOISE_ALPHA}). The criterion still blocks them, and it '
+                      "should — but before treating one as a regression, measure the case's own pass "
+                      "rate and compare against that:", "",
+                      "```bash",
+                      f"python -m bench.run --corpus {new.get('corpus', 'typical')} --engine "
+                      f"{new_engine} --repeat 15 {cases} --out /tmp/recheck.json",
+                      "python -m bench.report /tmp/recheck.json",
+                      "```", "",
+                      "A vision case (`bills`) that comes back near its historical rate was noise. "
+                      "A `week` or `meals` case is close to deterministic, so a drop there is real "
+                      "however small the sample."]
     return "\n".join(lines) + "\n"
 
 

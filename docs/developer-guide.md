@@ -334,6 +334,15 @@ Needs `OPEN_ROUTER_KEY`. Ship criterion: no case down more than 1/3 on `tool_sel
 `ledger_state`. Run it whenever you change what the model sees — the prompt, the skills, the
 tool manifest — and whenever you touch code a money turn executes.
 
+**Read a blocker before believing it.** `bills` cases go through the vision model and are
+genuinely non-deterministic — `B3`'s measured pass rate is 0.60 — so at `--repeat 3` the
+1/3 threshold is inside the noise. Every `DROP` row therefore carries a one-sided Fisher
+exact p-value (`bench.report.p_value_worse`) and is marked `WITHIN NOISE` when it does not
+clear `NOISE_ALPHA`; the verdict block prints the `--repeat 15 --case X` command to settle
+it. The row still blocks either way — a threshold that lets a real regression through
+would be the worse failure — but you are told how much to trust it. A drop on a `week` or
+`meals` case is close to deterministic and real however small the sample.
+
 ## How work is done here
 
 Every phase in this repository followed the same loop, and it is worth keeping:
