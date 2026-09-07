@@ -358,3 +358,17 @@ async def test_an_edit_reaches_the_next_turn(db, monkeypatch):
         pass
     await chat.run_bot_turn(db, room_id, mm[0], "M1", "@phoenix chào", emit=emit)
     assert "Luôn trả lời thật ngắn." in fake.runs[0]["system"]
+
+
+def test_the_first_version_reports_no_changed_paths(db):
+    """`changed_paths(None, spec)` calls every field changed, so the seeded v1 — the
+    first row every room sees in its history — rendered as a wall of path names. An
+    origin changed nothing."""
+    room_id, mm, k = _room(db)
+    log = roomcms.versions(k, room_id)
+    v1 = next(r for r in log if r["version"] == 1)
+    assert v1["paths"] == [] and v1["actor"] == "boot"
+    assert roomcms.version_detail(k, room_id, 1)["paths"] == []
+    # …and a later version still reports exactly what it touched
+    roomcms.edit(k, room_id, mm[0], {"base_version_id": _base(k, room_id), "prompt_append": ["be brief"]})
+    assert next(r for r in roomcms.versions(k, room_id) if r["version"] == 2)["paths"] == ["prompt.append"]
