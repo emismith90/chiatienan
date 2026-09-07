@@ -26,7 +26,7 @@ person edits/commits the draft.
 | use the bot, and change how it behaves from the **Bot** tab | [User guide](docs/user-guide.md) |
 | run it as an operator — bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
 | understand the architecture, or add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
-| ship it to production | [Deploy runsheet](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
+| deploy it, or turn on room editing / the steward | [Operations](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |
 | know why it is shaped this way | [Design spec](docs/superpowers/specs/2026-09-05-agent-cms-design.md) · [phase plan](docs/superpowers/plans/2026-09-05-agent-os-framework.md) |
 
 > Design: [`docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md`](docs/superpowers/specs/2026-07-20-chiatienan-pwa-design.md)
