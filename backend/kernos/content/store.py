@@ -560,6 +560,17 @@ class ContentStore:
         self._changed()
         return out
 
+    def list_bindings(self) -> list[dict]:
+        """Every bound space, ordered by id.
+
+        `get_binding` needs a space id you already know; an operator's first question is
+        *which* spaces are bound, because that binding — not room membership — is what
+        decides whether a space's members may edit its agent.
+        """
+        with self._session() as s:
+            rows = s.scalars(select(m.SpaceBinding).order_by(m.SpaceBinding.space_id)).all()
+            return [_row(r) for r in rows]
+
     def get_binding(self, space_id: str) -> dict | None:
         with self._session() as s:
             row = s.get(m.SpaceBinding, space_id)

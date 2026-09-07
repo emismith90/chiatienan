@@ -133,6 +133,19 @@ def view(kernel, room_id: int) -> dict:
     }
 
 
+def _changed_since(kernel, previous: dict | None, spec: dict) -> list[str]:
+    """What a version changed against the one before it.
+
+    The first version has nothing before it, and `changed_paths(None, spec)` reports
+    *every* field as changed — so the seeded v1, the first row every room sees, rendered
+    as a wall of paths (`persona, models, caps, builtin_tools, templates…`) that says
+    nothing. An origin changed nothing; it is where the history starts.
+    """
+    if previous is None:
+        return []
+    return changed_paths(kernel.store.get_version(previous["id"])["spec"], spec)
+
+
 def versions(kernel, room_id: int) -> list[dict]:
     """The revision log, newest first, with what each version changed."""
     info = _space(kernel, room_id)
@@ -142,11 +155,10 @@ def versions(kernel, room_id: int) -> list[dict]:
     for row in sorted(rows, key=lambda r: r["version"], reverse=True)[:VERSION_LIMIT]:
         previous = by_version.get(row["version"] - 1)
         spec = kernel.store.get_version(row["id"])["spec"]
-        prev_spec = kernel.store.get_version(previous["id"])["spec"] if previous else None
         out.append({"id": row["id"], "version": row["version"], "status": row["status"],
                     "actor": row["actor"], "note": row["note"], "created_at": row["created_at"],
                     "published_at": row["published_at"],
-                    "paths": changed_paths(prev_spec, spec)})
+                    "paths": _changed_since(kernel, previous, spec)})
     return out
 
 
@@ -162,7 +174,7 @@ def version_detail(kernel, room_id: int, version: int) -> dict:
     return {"version": row["version"], "status": row["status"], "actor": row["actor"],
             "note": row["note"], "created_at": row["created_at"], "published_at": row["published_at"],
             "editable": _editable(spec, protected),
-            "paths": changed_paths(prev_spec, spec),
+            "paths": _changed_since(kernel, previous, spec),
             "diff": _unified(prev_spec or {}, spec, f"v{version}")}
 
 
