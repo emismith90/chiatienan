@@ -70,6 +70,12 @@ def describe(sub: dict) -> str:
 
 class DelegationPack(BasePack):
     id, version, handles_money = "delegation", "1", False
+    #: One `ask_<slug>` per sub the agent delegates to: per turn, and named from the
+    #: database. The kernel adds this pack itself when `delegates_to` is non-empty
+    #: (`kernos.plugins.run.prepare_tool_context`), so a profile that also lists it
+    #: makes `compose_tools` raise "provided by two enabled packs".
+    dynamic = True
+    framework_managed = True
 
     def __init__(self, agents_of: Callable[[dict], list[dict]],
                  run_sub: Callable[..., Awaitable[dict]], *, margin_seconds: int = DEFAULT_MARGIN_SECONDS) -> None:

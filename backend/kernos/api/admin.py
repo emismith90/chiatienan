@@ -568,6 +568,16 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         return row
 
     # ------------------------------------------------------------ catalogue
+    @r.get("/catalogue/components")
+    def components():
+        """What the code offers a profile to be assembled from (plan Phase 13.1).
+
+        The packs with **their tools** — the one thing no route exposed, because
+        ``PackRegistry.describe`` never returned them. Plugins stay at ``/registry``,
+        graders at ``/eval/graders`` and models at ``/catalogue/models``.
+        """
+        return _wrap(get_kernel().catalogue)
+
     @r.get("/catalogue/models")
     def models():
         return get_kernel().store.list_models()

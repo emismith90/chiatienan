@@ -21,7 +21,10 @@ from kernos.adapters import HostAdapters
 from kernos.content import (
     ContentStore, Invalid, NotFound, ProfileSpec, PublishGates, Resolver, Runtime,
 )
+from kernos.content.gates import MONEY_TOOLS
+from kernos.content.store import SOURCE_KINDS
 from kernos.content.traces import StoreTraces
+from kernos.engine.base import BUILTIN_TOOL_NAMES
 from kernos.eval import GraderRegistry, eval_gate
 from kernos.kernel import Body, Pipeline, Stage, TurnContext
 from kernos.kernel.events import SUB_FINISHED, SUB_STARTED, TurnEvent
@@ -156,6 +159,61 @@ class BaseKernel:
             return set(pack.tools(self.null_tool_context()))
         except Exception:  # noqa: BLE001
             return None
+
+    # --------------------------------------------------------------- catalogue
+
+    def catalogue(self) -> dict:
+        """The component catalogue: what the code offers a profile to be assembled from
+        (design §5.0, plan Phase 13.1).
+
+        This is the scanner's output — the step an Optimizely-shaped CMS persists into
+        ``tblContentType`` and this one computes, because the publish gates already refuse
+        a spec naming a pack or plugin that is not registered, and the registry already
+        refuses a changed config schema under a known ``id@version``. Nothing here is
+        stored, and nothing here is content.
+
+        Deliberately narrow: plugins are ``GET /registry``, graders ``GET /eval/graders``
+        and models ``GET /catalogue/models`` already. What no caller could see until now is
+        a pack's **tools** — ``PackRegistry.describe`` never returned them.
+
+        One pack that raises must not cost an operator the whole screen, so each is
+        guarded and degrades to ``tools: []`` with the error, like ``reserved_tool_names``.
+        """
+        money = getattr(self.gates, "_money_tools", None) or MONEY_TOOLS
+        packs, ctx = [], None
+        for pack in self.packs.list():
+            row = {
+                "id": pack.id, "version": pack.version,
+                "handles_money": bool(getattr(pack, "handles_money", False)),
+                "evidence": bool(getattr(pack, "evidence", True)),
+                "dynamic": bool(getattr(pack, "dynamic", False)),
+                "framework_managed": bool(getattr(pack, "framework_managed", False)),
+                "draft_kinds": sorted(pack.draft_kinds()),
+                "tools": [], "tool_names": sorted(getattr(pack, "all_tool_names", None) or ()),
+                "error": None,
+            }
+            money_tools = set(getattr(pack, "money_tools", ()) or ())
+            commit_tools = set(getattr(pack, "commit_tools", ()) or ())
+            cancel_tools = set(getattr(pack, "cancel_tools", ()) or ())
+            try:
+                ctx = ctx if ctx is not None else self.null_tool_context()
+                tools = pack.catalogue_tools(ctx)
+            except Exception as exc:  # noqa: BLE001 — a pack that needs a real turn says so
+                row["error"] = f"{type(exc).__name__}: {exc}"
+                tools = {}
+            row["tools"] = [
+                {**tool.manifest(), "money": name in money_tools, "commit": name in commit_tools,
+                 "cancel": name in cancel_tools}
+                for name, tool in sorted(tools.items())
+            ]
+            row["tool_names"] = sorted(set(row["tool_names"]) | {t["name"] for t in row["tools"]})
+            packs.append(row)
+        return {
+            "packs": packs,
+            "builtin_tools": list(BUILTIN_TOOL_NAMES),
+            "risky_builtin_tools": sorted(money),
+            "source_kinds": list(SOURCE_KINDS),
+        }
 
     def reserved_tool_names(self) -> set[str]:
         """Every registered pack's tool names — a collection may not generate one of them

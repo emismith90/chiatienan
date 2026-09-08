@@ -11,6 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Protocol
 
+#: The builtin tool names a profile may put in ``builtin_tools`` (design §2.3).
+#:
+#: **Declared, not derived** — the one part of the component catalogue that is not read
+#: back out of the code. Nothing in kernos or in the sidecar enumerates them: the sidecar
+#: passes the profile's list straight to the harness as a `tools` allowlist
+#: (`agent_sidecar/session.js:toolOptionsFor`), so an unknown name is simply a name the
+#: harness does not recognise. Keep this in step with the harness the engine talks to.
+BUILTIN_TOOL_NAMES = ("read", "write", "edit", "bash", "grep", "find", "ls")
+
 
 @dataclass
 class ToolInvocation:
