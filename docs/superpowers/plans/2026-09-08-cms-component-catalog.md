@@ -1,7 +1,8 @@
 # Phase 13 — the component catalogue, and assembling an agent from it
 
-> Reviewed before implementation; §"Review" at the end records what the review changed
-> and why. Findings are cited as **R1…R13** where the body acts on them.
+> **Done (2026-09-08).** Reviewed before implementation; §"Review" at the end records what
+> the review changed and why, cited as **R1…R14** where the body acts on them. §"What
+> building it found" records the two things only the implementation could tell us.
 
 ## Why
 
@@ -345,3 +346,26 @@ Corrections to the first draft's own citations: `MONEY_TOOLS` is `gates.py:20`;
 `GateFailure` is `admin-api.ts:66`; `Registry.load_entry_points` exists but this host does
 not call it (plugins register through `register_framework_plugins`), so it is not cited as
 the boot mechanism.
+
+## What building it found
+
+Two things neither the plan nor its review predicted, both caught by a test rather than by
+reading:
+
+**The snapshot and the code spec ordered their lists differently.** Fixing R1
+(`snapshot=False`) turned `test_poker_pack` red: `_snapshot_sources` ordered skills by
+**slug**, a host's code spec carries them in the order it reads its files, and boot's
+snapshot had been laundering one into the other. Lunch's skills are alphabetical by luck,
+poker's are not, so poker's published spec and every later draft disagreed — which broke the
+eval gate's `spec_sha` match and would have shown a reordering as a change in every draft
+diff. A snapshot now keeps the order the spec already had and appends what is new by slug
+(`_keep_order`), which fixes the root cause for any host rather than asking each to sort.
+
+**A per-tool override on a dynamic pack is a live-turn crash, not a gate failure.**
+`apply_tool_overrides` refuses an override naming a tool the pack does not have, computed
+against the tools of *that turn*; gate 1 checks against `all_tool_names`, the full set. So
+an override for `cms_publish` publishes cleanly and then raises on every turn of an agent
+whose capabilities grant only `read`. The assembly form therefore offers per-tool overrides
+for static packs only, and 13.1's `dynamic` flag is what tells it which those are. The
+underlying mismatch is older than this phase and is left as it is — narrowing gate 1 would
+mean deciding what a gate can know about a turn that has not happened.
