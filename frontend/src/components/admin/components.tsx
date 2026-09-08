@@ -8,6 +8,8 @@
  *  2. **Pipeline and plugins** — the stages that run, and what the registry offers.
  *  3. **Prompt** — the system prompt, rules and skills the space actually resolves to,
  *     each traced back to the `kn_sources` row it came from.
+ *  4. **Collections** — the one component a person creates *here* rather than choosing
+ *     from code, because its schema generates tools (plan Phase 13.4).
  *
  * Two honesty rules run through it, both from the review of the plan:
  *
@@ -24,6 +26,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import * as admin from "@/lib/admin-api";
+import { Collections } from "./collections";
 import type { Live } from "./overview";
 import { Badge, Field, Notice, Pre, Section, box, btn, message, when } from "./ui";
 
@@ -236,6 +239,7 @@ export function Components({ live }: { live: Live }) {
   const [space, setSpace] = useState("");
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [sources, setSources] = useState<admin.Source[]>([]);
+  const [businessId, setBusinessId] = useState<number | null>(live.businesses[0]?.id ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -254,8 +258,9 @@ export function Components({ live }: { live: Live }) {
     try {
       const r = await admin.resolved(id);
       setResolved(r as Resolved);
-      const businessId = (r as any).resolution?.agent?.business_id;
-      setSources(businessId ? await admin.sources(businessId) : []);
+      const bid = (r as any).resolution?.agent?.business_id ?? null;
+      if (bid) setBusinessId(bid);
+      setSources(bid ? await admin.sources(bid) : []);
     } catch (e) {
       setResolved(null);
       setSources([]);
@@ -301,6 +306,24 @@ export function Components({ live }: { live: Live }) {
           <Packs cat={cat} resolved={resolved} />
           <Pipeline plugins={plugins} resolved={resolved} />
           <Prompt resolved={resolved} sources={sources} />
+
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Business" hint="Whose collections, below. A space you look up selects its own.">
+              <select
+                className={`${box} max-w-[16rem]`}
+                value={businessId ?? ""}
+                aria-label="collections business"
+                onChange={(e) => setBusinessId(Number(e.target.value))}
+              >
+                {live.businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.slug} — {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Collections businessId={businessId} />
         </>
       )}
     </div>

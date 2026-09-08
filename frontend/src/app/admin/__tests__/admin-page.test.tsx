@@ -446,3 +446,76 @@ it("rejects a slug the store would refuse, before sending it", async () => {
   expect(screen.getByRole("button", { name: "Add source" })).toBeDisabled();
   expect(m.putSource).not.toHaveBeenCalled();
 });
+
+// ----------------------------------------------------- Collections (Phase 13.4)
+
+const ROTA = {
+  id: 1, slug: "rota", name: "Rota", description: "who fetches lunch",
+  schema: { type: "object", properties: { day: { type: "string" } }, required: ["day"] },
+  key: "day", indexed: ["day"], updated_at: "2026-09-08T00:00:00Z",
+};
+
+it("shows the three tools a collection generates", async () => {
+  signedIn();
+  m.collections.mockResolvedValue([ROTA]);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+
+  expect(await screen.findByText("rota_find")).toBeInTheDocument();
+  expect(screen.getByText("rota_upsert")).toBeInTheDocument();
+  expect(screen.getByText("rota_delete")).toBeInTheDocument();
+});
+
+it("says a collection reaches the live bot with no publish, before saving one", async () => {
+  signedIn();
+  m.collections.mockResolvedValue([]);
+  m.putCollection.mockResolvedValue(ROTA);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("collection slug"), { target: { value: "rota" } });
+  fireEvent.change(screen.getByLabelText("collection key"), { target: { value: "day" } });
+  fireEvent.change(screen.getByLabelText("collection schema"), {
+    target: { value: '{"type":"object","properties":{"day":{"type":"string"}},"required":["day"]}' },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+
+  await waitFor(() => expect(m.putCollection).toHaveBeenCalled());
+  expect(confirm.mock.calls.at(-1)?.[0]).toMatch(/no draft and no publish/i);
+  expect(m.putCollection.mock.calls[0][2].key).toBe("day");
+});
+
+it("shows the server's own schema error rather than saving something the sidecar would reject", async () => {
+  signedIn();
+  m.collections.mockResolvedValue([]);
+  const { ApiError } = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  m.putCollection.mockRejectedValue(
+    new ApiError(422, "schema.day: unsupported JSON Schema keyword 'minimum'"),
+  );
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("collection slug"), { target: { value: "rota" } });
+  fireEvent.change(screen.getByLabelText("collection key"), { target: { value: "day" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+
+  expect(await screen.findByText(/unsupported JSON Schema keyword 'minimum'/)).toBeInTheDocument();
+});
+
+it("does not send a schema that is not JSON at all", async () => {
+  signedIn();
+  m.collections.mockResolvedValue([]);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("collection slug"), { target: { value: "rota" } });
+  fireEvent.change(screen.getByLabelText("collection key"), { target: { value: "day" } });
+  fireEvent.change(screen.getByLabelText("collection schema"), { target: { value: "{not json" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+
+  expect(await screen.findByText(/not valid JSON/i)).toBeInTheDocument();
+  expect(m.putCollection).not.toHaveBeenCalled();
+});
