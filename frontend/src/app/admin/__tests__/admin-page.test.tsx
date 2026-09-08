@@ -19,6 +19,18 @@ vi.mock("@/lib/admin-api", async () => {
     unbind: vi.fn(),
     patchAgent: vi.fn(),
     sources: vi.fn(),
+    deleteSource: vi.fn(),
+    catalogue: vi.fn(),
+    registry: vi.fn(),
+    models: vi.fn(),
+    resolved: vi.fn(),
+    collections: vi.fn(),
+    putCollection: vi.fn(),
+    deleteCollection: vi.fn(),
+    patchDraft: vi.fn(),
+    createDraft: vi.fn(),
+    putSource: vi.fn(),
+    retire: vi.fn(),
     versions: vi.fn(),
     version: vi.fn(),
     versionDiff: vi.fn(),
@@ -42,6 +54,48 @@ const STEWARD = {
   profile_id: 3, delegates_to: [], capabilities: { cms: ["read", "draft"] }, description: "reviews",
 };
 
+const CATALOGUE = {
+  packs: [
+    {
+      id: "lunch_ledger", version: "3", handles_money: true, evidence: true, dynamic: false,
+      framework_managed: false, draft_kinds: ["expense_draft"], error: null,
+      tool_names: ["propose_meal", "void_meal"],
+      tools: [
+        { name: "propose_meal", description: "Propose a meal", schema: { type: "object", properties: {} }, money: true, commit: true, cancel: false },
+        { name: "void_meal", description: "Void a meal", schema: { type: "object", properties: {} }, money: true, commit: true, cancel: false },
+      ],
+    },
+    {
+      id: "delegation", version: "1", handles_money: false, evidence: true, dynamic: true,
+      framework_managed: true, draft_kinds: [], tools: [], tool_names: [], error: null,
+    },
+  ],
+  builtin_tools: ["read", "write", "bash"],
+  risky_builtin_tools: ["bash", "write"],
+  source_kinds: ["prompt", "rule", "skill", "template"],
+};
+const PLUGINS = [
+  { id: "kernos.prompt.template", version: "1", stage: "prompt", config_schema: { type: "object" }, schema_hash: "ab", handles_money: false },
+];
+const MODELS = [
+  { model_id: "m/one", provider: "p", name: "One", input: ["text"], context_window: 1, max_tokens: 1, probe: { ok: true, checked_at: "2026-09-01T00:00:00Z" } },
+];
+const RESOLVED = {
+  space_id: "1",
+  resolution: { bound: true, agent: { slug: "phoenix", business_id: 1 }, profile_id: 1, version_id: 9 },
+  spec: {
+    prompt: { body: "You are Phoenix", append: [] },
+    rules: [{ slug: "money-safety", content: "no bash maths", tags: ["money"] }],
+    skills: [{ name: "balances", description: "d", body: "SNAPSHOT BODY", delivery: "inline" }],
+    tool_packs: [{ pack: "lunch_ledger", tools: { void_meal: { enabled: false } } }],
+    builtin_tools: ["read"],
+    models: { text: "m/one", vision: null, thinking: "medium" },
+    caps: { max_tools: 40, max_seconds: 120 },
+    templates: [],
+  },
+  pipeline: [{ stage: "prompt", plugin: "kernos.prompt.template", version: "1", config: {} }],
+};
+
 function signedIn() {
   m.loadCred.mockReturnValue({ password: "pw", actor: "hung" });
   m.businesses.mockResolvedValue([BUSINESS]);
@@ -52,6 +106,10 @@ function signedIn() {
   m.versions.mockResolvedValue([]);
   m.proposals.mockResolvedValue([]);
   m.audit.mockResolvedValue([]);
+  m.catalogue.mockResolvedValue(CATALOGUE);
+  m.registry.mockResolvedValue(PLUGINS);
+  m.models.mockResolvedValue(MODELS);
+  m.collections.mockResolvedValue([]);
 }
 
 beforeEach(() => {
@@ -176,4 +234,64 @@ it("sends you back to the form when the password has stopped working", async () 
 
   expect(await screen.findByLabelText("admin password")).toBeInTheDocument();
   expect(m.clearCred).toHaveBeenCalled();
+});
+
+// ------------------------------------------------------- Components (Phase 13.2)
+
+it("lists a pack's tools with their schemas, which no route exposed before", async () => {
+  signedIn();
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+
+  expect(await screen.findByRole("button", { name: /propose_meal/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /propose_meal/ }));
+  expect(document.querySelector("pre")?.textContent).toContain('"type": "object"');
+});
+
+it("badges a tool the profile turned off, for the space you look up", async () => {
+  signedIn();
+  m.resolved.mockResolvedValue(RESOLVED);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("space id"), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+  const off = await screen.findByRole("button", { name: /void_meal/ });
+  expect(off.textContent).toMatch(/off/);
+  expect(screen.getByRole("button", { name: /propose_meal/ }).textContent).toMatch(/on/);
+});
+
+it("never claims a per-turn pack's tools are on or off", async () => {
+  signedIn();
+  m.resolved.mockResolvedValue(RESOLVED);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("space id"), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+  expect(await screen.findByText(/must not list it/i)).toBeInTheDocument();
+  expect(screen.getByText("delegation")).toBeInTheDocument();
+});
+
+it("traces the prompt back to its source rows, and says when one has moved on", async () => {
+  signedIn();
+  m.resolved.mockResolvedValue(RESOLVED);
+  m.sources.mockResolvedValue([
+    { id: 1, kind: "prompt", slug: "system", title: "system", body: "You are Phoenix", frontmatter: {}, etag: "e1", updated_by: "boot", updated_at: "2026-09-01T00:00:00Z" },
+    { id: 2, kind: "skill", slug: "balances", title: "balances", body: "EDITED SINCE", frontmatter: {}, etag: "e2", updated_by: "hung", updated_at: "2026-09-08T00:00:00Z" },
+  ]);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  fireEvent.change(await screen.findByLabelText("space id"), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+  expect(await screen.findByText(/prompt\/system · boot/)).toBeInTheDocument();
+  // the skill's source was edited after the snapshot: say so rather than show today's body
+  expect(screen.getByText(/source changed since this version/i)).toBeInTheDocument();
+  // a money rule with no source row at all is not silently attributed to one
+  expect(screen.getByText(/no source — spec only/)).toBeInTheDocument();
 });
