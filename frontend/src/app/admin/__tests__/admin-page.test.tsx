@@ -295,3 +295,154 @@ it("traces the prompt back to its source rows, and says when one has moved on", 
   // a money rule with no source row at all is not silently attributed to one
   expect(screen.getByText(/no source — spec only/)).toBeInTheDocument();
 });
+
+// -------------------------------------------------------- Assembly (Phase 13.3)
+
+const DRAFT = {
+  id: 10, version: 3, status: "draft", actor: "hung", note: null,
+  created_at: "2026-09-07T10:00:00Z", published_at: null,
+  spec: {
+    prompt: { body: "x" },
+    tool_packs: [{ pack: "lunch_ledger", tools: {} }],
+    builtin_tools: ["read"],
+    models: { text: "m/one", vision: null, thinking: "medium" },
+    caps: { max_tools: 40, max_seconds: 120 },
+    meta: { handles_money: true },
+  },
+};
+
+function openTheDraft() {
+  m.versions.mockResolvedValue([{ ...DRAFT, spec: null }]);
+  m.versionDiff.mockResolvedValue({ version: 3, against: 2, paths: [], diff: "" });
+  m.version.mockResolvedValue(DRAFT);
+}
+
+it("sends the whole tool_packs array when a pack is unticked, because a merge replaces lists", async () => {
+  signedIn();
+  openTheDraft();
+  m.patchDraft.mockResolvedValue({ ...DRAFT, spec: { ...DRAFT.spec, tool_packs: [] } });
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^v3/ }));
+  fireEvent.click(await screen.findByLabelText("lunch_ledger"));
+
+  await waitFor(() => expect(m.patchDraft).toHaveBeenCalledWith(1, 3, { tool_packs: [] }));
+});
+
+it("turns one tool off without dropping the pack or the others", async () => {
+  signedIn();
+  openTheDraft();
+  m.patchDraft.mockResolvedValue(DRAFT);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^v3/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "2 tools" }));
+  fireEvent.click(await screen.findByLabelText("lunch_ledger.void_meal"));
+
+  await waitFor(() =>
+    expect(m.patchDraft).toHaveBeenCalledWith(1, 3, {
+      tool_packs: [{ pack: "lunch_ledger", tools: { void_meal: { enabled: false } } }],
+    }),
+  );
+});
+
+it("does not offer per-tool overrides for a pack whose tools depend on the turn", async () => {
+  signedIn();
+  openTheDraft();
+  m.catalogue.mockResolvedValue({
+    ...CATALOGUE,
+    packs: [
+      {
+        id: "os_admin", version: "1", handles_money: false, evidence: false, dynamic: true,
+        framework_managed: false, draft_kinds: [], error: null,
+        tool_names: ["cms_get_profile", "cms_publish"],
+        tools: [
+          { name: "cms_get_profile", description: "read", schema: { type: "object" }, money: false, commit: false, cancel: false },
+          { name: "cms_publish", description: "publish", schema: { type: "object" }, money: false, commit: false, cancel: false },
+        ],
+      },
+    ],
+  });
+  m.version.mockResolvedValue({ ...DRAFT, spec: { ...DRAFT.spec, tool_packs: [{ pack: "os_admin", tools: {} }] } });
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^v3/ }));
+
+  expect(await screen.findByText(/cannot be overridden/i)).toBeInTheDocument();
+  expect(screen.queryByLabelText("os_admin.cms_publish")).toBeNull();
+  expect(screen.queryByRole("button", { name: /tools$/ })).toBeNull();
+});
+
+it("warns what gate 2 will ask when a money profile turns on a risky builtin", async () => {
+  signedIn();
+  openTheDraft();
+  m.patchDraft.mockResolvedValue({
+    ...DRAFT,
+    spec: { ...DRAFT.spec, builtin_tools: ["read", "bash"] },
+  });
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^v3/ }));
+  expect(screen.queryByText(/override reason below/i)).toBeNull();
+
+  fireEvent.click(await screen.findByLabelText("builtin bash"));
+
+  await waitFor(() =>
+    expect(m.patchDraft).toHaveBeenCalledWith(1, 3, { builtin_tools: ["read", "bash"] }),
+  );
+  expect(await screen.findByText(/override reason below/i)).toBeInTheDocument();
+});
+
+it("refuses to edit a draft an agent is proposing, and says where to decide it", async () => {
+  signedIn();
+  m.versions.mockResolvedValue([{ ...DRAFT, actor: "agent:steward", spec: null }]);
+  m.versionDiff.mockResolvedValue({ version: 3, against: 2, paths: [], diff: "" });
+  m.version.mockResolvedValue({ ...DRAFT, actor: "agent:steward" });
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^v3/ }));
+
+  expect(await screen.findByText(/Proposals tab/)).toBeInTheDocument();
+  expect(screen.queryByLabelText("lunch_ledger")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Publish v3" })).toBeNull();
+});
+
+it("creates a source, and warns what a delete does and does not change", async () => {
+  signedIn();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  const row = {
+    id: 5, kind: "skill", slug: "new-skill", title: "new-skill", body: "", frontmatter: {},
+    etag: "e5", updated_by: "hung", updated_at: "2026-09-08T00:00:00Z",
+  };
+  m.sources.mockResolvedValue([row]);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.change(await screen.findByLabelText("new source slug"), { target: { value: "new-skill" } });
+  fireEvent.click(screen.getByRole("button", { name: "Add source" }));
+
+  await waitFor(() =>
+    expect(m.putSource).toHaveBeenCalledWith(1, "skill", "new-skill", { title: "new-skill", body: "", frontmatter: {} }),
+  );
+
+  fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  await waitFor(() => expect(m.deleteSource).toHaveBeenCalledWith(1, "skill", "new-skill", "e5"));
+  expect(confirm.mock.calls.at(-1)?.[0]).toMatch(/until the next draft snapshots/i);
+});
+
+it("rejects a slug the store would refuse, before sending it", async () => {
+  signedIn();
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Content" }));
+  fireEvent.change(await screen.findByLabelText("new source slug"), { target: { value: "Ăn trưa" } });
+
+  expect(await screen.findByText(/lowercase letters, digits/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add source" })).toBeDisabled();
+  expect(m.putSource).not.toHaveBeenCalled();
+});

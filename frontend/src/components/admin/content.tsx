@@ -10,15 +10,18 @@
  *     snapshotting draft.
  *  3. **Publish makes it what the bot runs**, through the five gates.
  *
- * Only `prompt.body` is editable as spec here, because it is the one part of the prompt
- * with no source behind it. Models, caps, pipeline, packs and builtin tools are shown
- * read-only: they are not weekly work, and a wrong keystroke there breaks the bot in a
- * way no form can explain.
+ * A draft is editable as spec here — the prompt body, the packs and their tools, the
+ * builtin tools, the model and the caps (plan Phase 13.3). All of it is one PATCH of a
+ * partial spec, so the five publish gates remain the only thing deciding what may go
+ * live; the form adds no authority, it makes the authority reachable. `pipeline` and
+ * `extensions` stay read-only on the Components tab: a stage list is not weekly work and
+ * a wrong entry breaks a turn in a way no form can explain.
  */
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import * as admin from "@/lib/admin-api";
 import type { Live } from "./overview";
+import { Assembly, NewSource } from "./assembly";
 import { Badge, Field, Notice, Pre, Section, box, btn, btnPrimary, message, when } from "./ui";
 
 const tone = (status: string) =>
@@ -36,8 +39,14 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
   const [title, setTitle] = useState("");
   const [frontmatter, setFrontmatter] = useState("{}");
 
+  // the catalogue a draft is assembled from
+  const [cat, setCat] = useState<admin.Catalogue | null>(null);
+  const [models, setModels] = useState<admin.Model[]>([]);
+
   // versions
   const [profileId, setProfileId] = useState<number | null>(null);
+  const [openSpec, setOpenSpec] = useState<any>(null);
+  const [openActor, setOpenActor] = useState<string>("");
   const [versions, setVersions] = useState<admin.Version[]>([]);
   const [openVersion, setOpenVersion] = useState<number | null>(null);
   const [diff, setDiff] = useState<admin.Diff | null>(null);
@@ -50,6 +59,15 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
 
   const loadSources = useCallback(async (id: number) => {
     setSources(await admin.sources(id));
+  }, []);
+
+  useEffect(() => {
+    Promise.all([admin.catalogue(), admin.models()])
+      .then(([c, m]) => {
+        setCat(c);
+        setModels(m);
+      })
+      .catch((e) => setError(message(e)));
   }, []);
 
   const loadVersions = useCallback(async (id: number) => {
@@ -125,6 +143,8 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
       const [d, full] = await Promise.all([admin.versionDiff(profileId, v), admin.version(profileId, v)]);
       setDiff(d);
       setPromptBody(full.spec?.prompt?.body ?? "");
+      setOpenSpec(full.spec ?? null);
+      setOpenActor(full.actor ?? "");
     } catch (e) {
       setError(message(e));
     }
@@ -148,6 +168,48 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
       await loadVersions(profileId);
       setDiff(await admin.versionDiff(profileId, v));
     });
+  }
+
+  /** One assembly control's change. The server is the source of truth for the draft, so
+   * the patched version comes back and replaces what the form is showing — a local
+   * optimistic copy would be a second answer to "what is in this draft". */
+  async function patchSpec(v: number, patch: Record<string, any>) {
+    if (profileId === null) return;
+    await run(async () => {
+      const updated = await admin.patchDraft(profileId, v, patch);
+      setOpenSpec(updated.spec ?? null);
+      setDiff(await admin.versionDiff(profileId, v));
+    });
+  }
+
+  async function createSource(kind: string, slug: string) {
+    if (businessId === null) return;
+    const made = await run(async () => {
+      await admin.putSource(businessId, kind, slug, { title: slug, body: "", frontmatter: {} });
+      await loadSources(businessId);
+    });
+    if (made) {
+      const rows = await admin.sources(businessId);
+      const row = rows.find((r) => r.kind === kind && r.slug === slug);
+      if (row) pickSource(row);
+    }
+  }
+
+  async function removeSource(s: admin.Source) {
+    if (businessId === null) return;
+    if (
+      !window.confirm(
+        `Delete ${s.kind}/${s.slug}?\n\n` +
+          "It stays in what is published until the next draft snapshots the sources and you " +
+          "publish that. A money-tagged rule the bot relies on will be refused.",
+      )
+    )
+      return;
+    const done = await run(async () => {
+      await admin.deleteSource(businessId, s.kind, s.slug, s.etag);
+      await loadSources(businessId);
+    });
+    if (done) setOpenSource(null);
   }
 
   async function publish(v: number) {
@@ -219,6 +281,10 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
           ) : null}
         </ul>
 
+        {cat ? (
+          <NewSource kinds={cat.source_kinds} disabled={busy} onCreate={(k, sl) => void createSource(k, sl)} />
+        ) : null}
+
         {openSource ? (
           <div className="space-y-2 rounded-lg border border-[var(--border)] p-2">
             <p className="text-xs text-[var(--text-secondary)]">
@@ -246,6 +312,9 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
             <div className="flex gap-2">
               <button className={btnPrimary} disabled={busy} onClick={() => void saveSource()}>
                 Save source
+              </button>
+              <button className={btn} disabled={busy} onClick={() => void removeSource(openSource!)}>
+                Delete
               </button>
               <button className={btn} onClick={() => setOpenSource(null)}>
                 Cancel
@@ -318,8 +387,23 @@ export function Content({ live, reload }: { live: Live; reload: () => Promise<vo
                     </>
                   )}
 
-                  {v.status === "draft" ? (
+                  {v.status === "draft" && openActor.startsWith("agent:") ? (
+                    <Notice tone="info">
+                      <strong>{openActor}</strong> drafted this as the content of a proposal. Approve
+                      or reject it on the Proposals tab — editing it here would put your change into
+                      its record, and the store refuses it.
+                    </Notice>
+                  ) : v.status === "draft" ? (
                     <>
+                      {cat ? (
+                        <Assembly
+                          spec={openSpec}
+                          cat={cat}
+                          models={models}
+                          disabled={busy}
+                          onPatch={(patch) => void patchSpec(v.version, patch)}
+                        />
+                      ) : null}
                       <Field label="Prompt body" hint="The one part of the prompt with no source behind it.">
                         <textarea
                           className={`${box} h-32 font-mono`}
