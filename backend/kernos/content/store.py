@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator
@@ -23,10 +24,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from kernos.content import models as m
 from kernos.content.errors import Conflict, GateError, Invalid, NotFound, PreconditionFailed
 from kernos.content.capabilities import normalise_capabilities
+from kernos.content.sources import money_slugs
 from kernos.content.spec import BindingOverrides, ProfileSpec
 
 SOURCE_KINDS = ("prompt", "rule", "skill", "template")
 SYSTEM_PROMPT_SLUG = "system"
+#: A source slug's shape, enforced on write (Phase 13.0). Rule slugs and skill names
+#: become `/virtual/<slug>` context-file paths in the sidecar as well as `kn_sources.slug`
+#: rows, so the constraint belongs to the store rather than to whichever route writes it
+#: — the room editor validated this and the admin API did not.
+SOURCE_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}$")
 
 
 def sessions_for(engine: Engine) -> Callable[[], Any]:
@@ -62,6 +69,27 @@ def deep_merge(base: dict, patch: dict) -> dict:
         else:
             out[key] = copy.deepcopy(value)
     return out
+
+
+def _keep_order(base: list | None, key: str, built: dict[str, dict]) -> list[dict]:
+    """``built`` (the source rows, by identity) in the order ``base`` already had them,
+    with anything new appended by identity (Phase 13.0).
+
+    Replace-per-kind is still the semantics (finding 1); what this adds is that a snapshot
+    does not *reorder* a list the spec already carried. Two producers write these lists —
+    a host's code spec, in the order it reads its files, and this snapshot, which used to
+    impose slug order — and when they disagree everything downstream of the identity of a
+    spec breaks: the eval gate stops matching a run to the content it graded (``spec_sha``),
+    and every ``New draft`` shows a reordering as a change. Ordering by ``base`` makes the
+    snapshot agree with whatever wrote the spec, whichever host that is.
+    """
+    built = dict(built)
+    out: list[dict] = []
+    for item in base or []:
+        row = built.pop(item.get(key), None)
+        if row is not None:
+            out.append(row)
+    return out + [built[k] for k in sorted(built)]
 
 
 def _row(obj) -> dict:
@@ -146,6 +174,9 @@ class ContentStore:
                    title: str = "", frontmatter: dict | None = None, if_match: str | None = None) -> dict:
         if kind not in SOURCE_KINDS:
             raise Invalid(f"unknown source kind {kind!r}; one of {SOURCE_KINDS}")
+        if not SOURCE_SLUG_RE.match(slug or ""):
+            raise Invalid(f"source slug {slug!r} must match {SOURCE_SLUG_RE.pattern} — it becomes a "
+                          "context-file path the engine reads")
         frontmatter = frontmatter or {}
         etag = source_etag(kind, slug, title, body, frontmatter)
         with self._session() as s:
@@ -190,8 +221,30 @@ class ContentStore:
                 q = q.where(m.Source.kind == kind)
             return [_row(r) for r in s.scalars(q.order_by(m.Source.kind, m.Source.slug)).all()]
 
+    def protected_rule_slugs(self, business_id: int) -> frozenset[str]:
+        """The money-tagged rule slugs any published profile of this business relies on.
+
+        The publish gates never check that a money rule survived — gate 5 is agent-only —
+        and ``kn_sources`` is unique on ``(business_id, kind, slug)``, so a deleted money
+        rule is gone from the next snapshotting draft with nothing to say so.
+        """
+        out: set[str] = set()
+        for profile in self.list_profiles(business_id):
+            out |= set(money_slugs(self.published_spec(profile["id"]) or {}))
+        return frozenset(out)
+
     def delete_source(self, business_id: int, kind: str, slug: str, *, actor: str,
                       if_match: str | None = None) -> None:
+        """Delete a source row.
+
+        A money-tagged rule the published spec relies on is refused (Phase 13.0). This is a
+        guard against the accidental delete, not a permission boundary: an operator who
+        means it can still draft the rule away and publish that through the gates, which is
+        at least a versioned, audited change with a diff.
+        """
+        if kind == "rule" and slug in self.protected_rule_slugs(business_id):
+            raise Invalid(f"rule {slug!r} is tagged money and a published profile relies on it; "
+                          "change it in a draft and publish that instead of deleting the source")
         with self._session() as s:
             row = s.scalar(select(m.Source).where(m.Source.business_id == business_id,
                                                   m.Source.kind == kind, m.Source.slug == slug))
@@ -249,14 +302,20 @@ class ContentStore:
         for r in rows:
             by_kind[r.kind].append(r)
         spec = copy.deepcopy(base)
-        spec["rules"] = [{"slug": r.slug, "content": r.body, "tags": list(r.frontmatter.get("tags", []))}
-                         for r in by_kind["rule"]]
-        spec["skills"] = [{"name": r.slug, "description": r.frontmatter.get("description", ""),
-                           "body": r.body, "delivery": r.frontmatter.get("delivery", "inline")}
-                          for r in by_kind["skill"]]
-        spec["templates"] = [{"name": r.slug, "kind": r.frontmatter.get("kind", "template"),
-                              "content": r.body, "description": r.frontmatter.get("description", "")}
-                             for r in by_kind["template"]]
+        spec["rules"] = _keep_order(
+            base.get("rules"), "slug",
+            {r.slug: {"slug": r.slug, "content": r.body, "tags": list(r.frontmatter.get("tags", []))}
+             for r in by_kind["rule"]})
+        spec["skills"] = _keep_order(
+            base.get("skills"), "name",
+            {r.slug: {"name": r.slug, "description": r.frontmatter.get("description", ""),
+                      "body": r.body, "delivery": r.frontmatter.get("delivery", "inline")}
+             for r in by_kind["skill"]})
+        spec["templates"] = _keep_order(
+            base.get("templates"), "name",
+            {r.slug: {"name": r.slug, "kind": r.frontmatter.get("kind", "template"),
+                      "content": r.body, "description": r.frontmatter.get("description", "")}
+             for r in by_kind["template"]})
         system = next((r for r in by_kind["prompt"] if r.slug == SYSTEM_PROMPT_SLUG), None)
         if system is not None:
             spec.setdefault("prompt", {})
@@ -332,6 +391,13 @@ class ContentStore:
             v = self._version(s, version_id)
             if v.status != "draft":
                 raise Conflict(f"version {v.version} is {v.status}; only drafts are editable")
+            # An agent's draft is the exact content of its proposal (Phase 8 review F6) and
+            # a human approving it publishes it under the agent's name. Somebody else
+            # patching it would put their change into that record. The agent keeps editing
+            # its own draft — `osadmin.cms_draft_change` does exactly that (Phase 13.0).
+            if v.actor.startswith("agent:") and v.actor != actor:
+                raise Conflict(f"version {v.version} was drafted by {v.actor}; approve or reject its "
+                               "proposal, or start your own draft from the published version")
             before = v.spec
             v.spec = _validate(deep_merge(v.spec, patch)).stored()
             s.flush()

@@ -6,7 +6,7 @@ from app.default_profile import build_default_spec
 from app.kernel import BUSINESS_SLUG, Kernel, catalogue_rows, default_sources, kernel_for
 import pytest
 
-from kernos.content import GateError, Models, ensure_seeded
+from kernos.content import Caps, GateError, Models, ensure_seeded
 
 
 def test_first_boot_seeds_business_sources_profile_version_agent_and_catalogue(db):
@@ -68,3 +68,46 @@ def test_publishing_through_the_kernel_gates_passes_for_the_seeded_models(db):
     out = k.store.publish(d["id"], actor="admin", gates=k.gates, override_reason="benchmarked with bash on")
     assert out["status"] == "published" and k.resolve("1").caps.max_tools == 12
     assert isinstance(kernel_for(db), Kernel) and kernel_for(db) is k
+
+
+def test_boot_does_not_publish_a_human_source_edit(db):
+    """The Phase 13.0 guard: boot republishes **from code**, never from whatever anyone
+    edited. Before this, `ensure_seeded` drafted with `snapshot=True`, so a source edited
+    in the admin screen and never published went live on the next deploy with the gates
+    bypassed — content reaching a room with no diff, no gate and no human publish.
+    """
+    k = kernel_for(db)
+    store, r = k.store, k.seed_report
+    published_before = store.published_spec(r["profile_id"])
+    assert published_before["skills"][0]["body"] != "HUMAN EDIT"
+
+    store.put_source(r["business_id"], "skill", published_before["skills"][0]["name"],
+                     body="HUMAN EDIT", actor="hung",
+                     frontmatter={"description": "d", "delivery": "inline"})
+    store.put_source(r["business_id"], "skill", "brand-new", body="ADDED", actor="hung",
+                     frontmatter={"description": "d", "delivery": "inline"})
+
+    again = ensure_seeded(store, business_slug=BUSINESS_SLUG, business_name="x",
+                          spec=build_default_spec(settings), agent_slug="phoenix", agent_name="Phoenix",
+                          sources=default_sources(), catalogue_rows=catalogue_rows(settings))
+
+    assert again["actions"] == []                                  # nothing republished
+    assert again["version_id"] == r["version_id"]
+    published_after = store.published_spec(r["profile_id"])
+    assert published_after == published_before
+    assert "brand-new" not in {s["name"] for s in published_after["skills"]}
+    # the edit is not lost — it is waiting for a draft and a publish, like any other content
+    assert store.get_source(r["business_id"], "skill", "brand-new")["body"] == "ADDED"
+    d = store.create_draft(r["profile_id"], actor="admin")
+    assert "brand-new" in {s["name"] for s in store.get_version(d["id"])["spec"]["skills"]}
+
+
+def test_boot_still_republishes_when_the_code_spec_changes(db):
+    k = kernel_for(db)
+    store, r = k.store, k.seed_report
+    changed = build_default_spec(settings).model_copy(update={"caps": Caps(max_tools=7, max_seconds=99)})
+    again = ensure_seeded(store, business_slug=BUSINESS_SLUG, business_name="x", spec=changed,
+                          agent_slug="phoenix", agent_name="Phoenix", sources=default_sources(),
+                          catalogue_rows=catalogue_rows(settings))
+    assert "republished (code or env changed)" in again["actions"]
+    assert store.published_spec(r["profile_id"])["caps"] == {"max_tools": 7, "max_seconds": 99}
