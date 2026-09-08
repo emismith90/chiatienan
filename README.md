@@ -24,7 +24,7 @@ person edits/commits the draft.
 | I want to… | Read |
 |---|---|
 | use the bot, and change how it behaves from the **Bot** tab | [User guide](docs/user-guide.md) |
-| run it as an operator — the `/admin` screen, bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
+| run it as an operator — the `/admin` screen, what a bot is made of, bindings, agents, gates, eval, packages | [User guide, part 2](docs/user-guide.md#part-2-the-operator) |
 | understand how it is put together, and how it sits on `kernos` | [Architecture](docs/architecture.md) |
 | add a pack / plugin / business / agent / host | [Developer guide](docs/developer-guide.md) |
 | deploy it, or turn on room editing / the steward | [Operations](docs/superpowers/plans/2026-09-06-deploy-runbook.md) |

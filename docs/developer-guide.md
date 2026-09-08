@@ -206,6 +206,20 @@ Other hooks worth knowing: `draft_kinds()` (cards the room confirms), `contribut
 (prompt/skills/rules a business can seed from), `bind(engine)` (tables of its own),
 `all_tool_names` (so gate 1 can check names without a live context).
 
+Your pack appears on the operator's **Components** tab automatically, with every tool's
+description and schema, through `GET /api/admin/catalogue/components`. Two class attributes
+decide how it is shown, and both default to the right thing for an ordinary pack:
+
+* `dynamic = True` — `tools(ctx)` depends on the turn (the space, or the agent and its
+  capabilities), so the screen labels it *per turn* instead of claiming its tools are on or
+  off, and the assembly form does not offer per-tool overrides. It must not: a per-tool
+  override naming a tool the pack does not have **on that turn** makes `apply_tool_overrides`
+  raise, and gate 1 checks against `all_tool_names`, which is the larger set. Override
+  `catalogue_tools(ctx)` if your pack can still describe its whole set from a context with
+  no agent (`os_admin` does, by granting itself every verb).
+* `framework_managed = True` — the kernel adds this pack itself when a turn needs it, so a
+  profile must never list it as well. Only `delegation` is, today.
+
 ### If your pack writes money
 
 - Set `handles_money = True`.

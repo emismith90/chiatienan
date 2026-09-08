@@ -26,7 +26,6 @@ under that, not a fix for it.
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from fastapi import HTTPException
@@ -34,6 +33,7 @@ from fastapi import HTTPException
 from kernos.content import Conflict, ContentError, GateError, Invalid, NotFound, PreconditionFailed
 from kernos.content.gates import changed_paths, outside_scope
 from kernos.content.sources import duplicate_keys, protected_changes, source_changes
+from kernos.content.store import SOURCE_SLUG_RE
 from kernos.osadmin import _unified
 
 #: What a room member may change. Everything else — models, caps, pipeline, tool packs,
@@ -42,8 +42,10 @@ ROOM_EDITABLE = ("prompt.body", "prompt.append", "skills", "rules")
 #: A ceiling on what one room can make every turn carry (review F9).
 MAX_CONTENT_BYTES = 32_768
 #: Rule slugs and skill names become `/virtual/<slug>` context-file paths in the sidecar
-#: and `kn_sources.slug` rows (review F14).
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}$")
+#: and `kn_sources.slug` rows (review F14). The store enforces the same shape on every
+#: write since Phase 13.0; validating here too keeps the member's error a 400 that names
+#: the field, rather than a 422 from three calls deeper.
+SLUG_RE = SOURCE_SLUG_RE
 #: The revision list a room reads; older versions stay reachable through the admin API.
 VERSION_LIMIT = 50
 

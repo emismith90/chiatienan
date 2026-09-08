@@ -132,6 +132,26 @@ class BasePack:
     #: The full static set of tool names for a pack whose ``tools(ctx)`` depends on the
     #: agent (gate 1 and the reserved names read this; ``None`` = ask ``tools()``).
     all_tool_names: frozenset[str] | None = None
+    #: ``tools(ctx)`` depends on the turn — the space, or the agent and its capabilities —
+    #: so what a *space* actually gets cannot be read off a profile (Phase 13.1). The
+    #: component catalogue reports it, and the admin screen labels such a pack "per turn"
+    #: rather than badging its tools on or off.
+    dynamic: bool = False
+    #: The kernel adds this pack itself when the turn needs it, so a profile must **not**
+    #: list it: two sources of the same tool name make ``compose_tools`` raise. Excluded
+    #: from the assembly form (Phase 13.1).
+    framework_managed: bool = False
+
+    def catalogue_tools(self, ctx: Any) -> dict[str, PackTool]:
+        """Every tool this pack *could* provide, for the component catalogue.
+
+        Defaults to ``tools(ctx)``, which is right for a pack whose set is static. A
+        ``dynamic`` pack overrides this when it can still describe the whole set from a
+        context with no agent and no space — ``os_admin`` can, because its tools differ
+        only by which capability verbs are granted; ``delegation`` and ``collections``
+        cannot, because the names themselves come from the database.
+        """
+        return self.tools(ctx)
 
     @property
     def commit_tools(self) -> frozenset[str]:

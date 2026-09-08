@@ -145,16 +145,24 @@ export type Source = {
 
 export const sources = (businessId: number): Promise<Source[]> =>
   req(`/businesses/${businessId}/sources`);
+/** `etag` is `If-Match`, so a concurrent edit is a 412 rather than an overwrite. A source
+ * being *created* has none — the store upserts, and there is nothing to race with yet. */
 export const putSource = (
   businessId: number,
   kind: string,
   slug: string,
   body: { title?: string; body: string; frontmatter?: Record<string, any> },
-  etag: string,
+  etag?: string,
 ): Promise<Source> =>
   req(`/businesses/${businessId}/sources/${kind}/${encodeURIComponent(slug)}`, {
     method: "PUT",
     body: JSON.stringify(body),
+    headers: etag ? { "If-Match": etag } : {},
+  });
+
+export const deleteSource = (businessId: number, kind: string, slug: string, etag: string) =>
+  req(`/businesses/${businessId}/sources/${kind}/${encodeURIComponent(slug)}`, {
+    method: "DELETE",
     headers: { "If-Match": etag },
   });
 
@@ -209,3 +217,58 @@ export type AuditRow = {
 };
 
 export const audit = (limit = 100): Promise<AuditRow[]> => req(`/audit?limit=${limit}`);
+
+// ------------------------------------------------------------------ catalogue
+/** What the code offers, as opposed to what content chose (design §2.3 calls this the
+ * catalogue). Computed at request time from the registries — never stored, so it cannot
+ * drift from the packs that are actually loaded. */
+export type CatalogueTool = {
+  name: string; description: string; schema: any;
+  money: boolean; commit: boolean; cancel: boolean;
+};
+export type CataloguePack = {
+  id: string; version: string; handles_money: boolean; evidence: boolean;
+  dynamic: boolean; framework_managed: boolean;
+  draft_kinds: string[]; tools: CatalogueTool[]; tool_names: string[]; error: string | null;
+};
+export type Catalogue = {
+  packs: CataloguePack[];
+  builtin_tools: string[];
+  risky_builtin_tools: string[];
+  source_kinds: string[];
+};
+export type Plugin = {
+  id: string; version: string; stage: string; config_schema: any;
+  schema_hash: string; handles_money: boolean;
+};
+export type Model = {
+  model_id: string; provider: string; name: string; input: string[];
+  context_window: number | null; max_tokens: number | null; probe: Record<string, any>;
+};
+
+export const catalogue = (): Promise<Catalogue> => req("/catalogue/components");
+export const registry = (): Promise<Plugin[]> => req("/registry");
+export const models = (): Promise<Model[]> => req("/catalogue/models");
+
+// ---------------------------------------------------------------- collections
+/** A document type defined *in the CMS*: its schema generates `<slug>_find|_upsert|_delete`
+ * for every profile that enables the `collections` pack. The one place where saving here
+ * changes a live agent's tools with no draft and no publish. */
+export type Collection = {
+  id: number; slug: string; name: string; description: string;
+  schema: any; key: string; indexed: string[]; updated_at: string;
+};
+
+export const collections = (businessId: number): Promise<Collection[]> =>
+  req(`/businesses/${businessId}/collections`);
+export const putCollection = (
+  businessId: number,
+  slug: string,
+  body: { name: string; schema: any; key: string; indexed?: string[]; description?: string; force?: boolean },
+): Promise<Collection> =>
+  req(`/businesses/${businessId}/collections/${encodeURIComponent(slug)}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+export const deleteCollection = (businessId: number, slug: string) =>
+  req(`/businesses/${businessId}/collections/${encodeURIComponent(slug)}`, { method: "DELETE" });

@@ -7,6 +7,15 @@ bypassed — the seeded profile *is* today's behaviour), and the default manager
 agent. Later runs: sources that changed on disk are re-put, and the profile is
 republished only while it is still boot-managed and the stored spec differs. A
 human publish flips ``managed_by`` and boot never touches the profile again.
+
+**Boot republishes from code, and only from code** (Phase 13.0). Both drafts pass
+``snapshot=False``: ``_snapshot_sources`` would pull *every* source row of the business,
+so a source a person edited in the admin screen and never published would go live on the
+next deploy with ``bypass_gates=True`` — content reaching a room without a gate, a diff or
+a human publish. The seeded spec already carries the same skills and rules the seeded
+sources do (both are read from the same files), so a fresh install is unaffected; a human
+source edit now reaches the bot the way every other content change does, through a draft
+and a publish that the gates see.
 """
 from __future__ import annotations
 
@@ -51,11 +60,13 @@ def ensure_seeded(store: ContentStore, *, business_slug: str, business_name: str
 
     published = store.published_spec(pid)
     if published is None:
-        draft = store.create_draft(pid, actor=actor, base_spec=stored, note="boot: seeded from code and env")
+        draft = store.create_draft(pid, actor=actor, base_spec=stored, snapshot=False,
+                                   note="boot: seeded from code and env")
         store.publish(draft["id"], actor=actor, bypass_gates=True)
         out["actions"].append("version 1 published")
     elif profile["managed_by"] == "boot":
-        draft = store.create_draft(pid, actor=actor, base_spec=stored, note="boot: code or env changed")
+        draft = store.create_draft(pid, actor=actor, base_spec=stored, snapshot=False,
+                                   note="boot: code or env changed")
         if store.get_version(draft["id"])["spec"] == published:
             store.retire(draft["id"], actor=actor)            # nothing changed; no churn
         else:

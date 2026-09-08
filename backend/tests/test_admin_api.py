@@ -30,6 +30,18 @@ def test_registry_and_schema(admin):
     assert client.get("/api/admin/registry").status_code == 401                      # guarded
 
 
+def test_catalogue_of_components(admin):
+    """The one thing no route exposed before Phase 13.1: a pack's tools."""
+    client, _, _ = admin
+    cat = client.get("/api/admin/catalogue/components", headers=ADMIN).json()
+    packs = {p["id"]: p for p in cat["packs"]}
+    assert {"lunch_ledger", "os_admin", "delegation"} <= set(packs)
+    assert "propose_meal" in {t["name"] for t in packs["lunch_ledger"]["tools"]}
+    assert packs["delegation"]["framework_managed"] is True
+    assert "bash" in cat["risky_builtin_tools"]
+    assert client.get("/api/admin/catalogue/components").status_code == 401       # guarded
+
+
 def test_sources_etag_flow(admin):
     client, _, k = admin
     bid = k.seed_report["business_id"]

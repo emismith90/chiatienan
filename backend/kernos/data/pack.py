@@ -103,6 +103,9 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
 
 class CollectionsPack(BasePack):
     id, version, handles_money = "collections", "1", False
+    #: The tools are the business's collections, so they are per space and their very
+    #: names come from the database — the catalogue can only say "per turn".
+    dynamic = True
 
     def __init__(self, data: DataStore, business_of: Callable[[Any], int]) -> None:
         self._data, self._business_of = data, business_of

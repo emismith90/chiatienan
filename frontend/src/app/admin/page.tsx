@@ -7,14 +7,16 @@
  * `require_admin` has no rate limiting — that was already true of `curl`, but this page
  * makes the target obvious.
  *
- * Four tabs, in the order an operator needs them: what is live, the CMS, the proposals
- * waiting on a person, the log of what happened.
+ * Five tabs, in the order an operator needs them: what is live, what the code offers to
+ * build an agent from, the CMS, the proposals waiting on a person, the log of what
+ * happened.
  */
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import * as admin from "@/lib/admin-api";
 import { ApiError } from "@/lib/api";
 import { Audit } from "@/components/admin/audit";
+import { Components } from "@/components/admin/components";
 import { Content } from "@/components/admin/content";
 import { Overview, type Live } from "@/components/admin/overview";
 import { Proposals } from "@/components/admin/proposals";
@@ -22,6 +24,7 @@ import { Notice, box, btn, btnPrimary, message } from "@/components/admin/ui";
 
 const TABS = [
   { id: "overview", label: "Live" },
+  { id: "components", label: "Components" },
   { id: "content", label: "Content" },
   { id: "proposals", label: "Proposals" },
   { id: "audit", label: "Audit" },
@@ -166,6 +169,8 @@ export default function AdminPage() {
         <p className="text-sm text-[var(--text-secondary)]">Loading…</p>
       ) : tab === "overview" ? (
         <Overview live={live} reload={reload} />
+      ) : tab === "components" ? (
+        <Components live={live} />
       ) : tab === "content" ? (
         <Content live={live} reload={reload} />
       ) : tab === "proposals" ? (

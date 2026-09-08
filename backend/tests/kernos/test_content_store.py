@@ -162,3 +162,68 @@ def test_catalogue(store):
     assert store.list_models()[0]["probe"]["ok"] is True
     with pytest.raises(NotFound):
         store.set_probe("nope", {})
+
+
+# --------------------------------------------------------------- Phase 13.0 guards
+
+def test_put_source_refuses_a_slug_that_is_not_a_context_file_path(store):
+    """A slug becomes `/virtual/<slug>` in the engine as well as a row key, so the store
+    owns the shape rather than whichever route happens to write it (Phase 13.0)."""
+    b = store.create_business("x", "X")
+    for bad in ("", "Ăn trưa", "has space", "UPPER", "-leading", "a" * 81, "a/b"):
+        with pytest.raises(Invalid):
+            store.put_source(b["id"], "skill", bad, body="x", actor="admin")
+    for good in ("money-safety", "money-safety-core", "system", "record-meal", "a.b_c-9"):
+        assert store.put_source(b["id"], "skill", good, body="x", actor="admin")["slug"] == good
+
+
+def test_delete_source_refuses_a_money_rule_the_published_spec_relies_on(seeded):
+    store, b, p, _v1, _a = seeded
+    assert store.protected_rule_slugs(b["id"]) == frozenset({"money-safety"})
+    etag = store.get_source(b["id"], "rule", "money-safety")["etag"]
+    with pytest.raises(Invalid) as exc:
+        store.delete_source(b["id"], "rule", "money-safety", actor="admin", if_match=etag)
+    assert "money-safety" in str(exc.value)
+    assert store.get_source(b["id"], "rule", "money-safety")["body"] == "R1"
+    # an untagged rule, and a skill of the same slug, are not protected
+    store.put_source(b["id"], "rule", "house", body="no bash", actor="admin")
+    store.delete_source(b["id"], "rule", "house", actor="admin")
+    store.delete_source(b["id"], "skill", "record-meal", actor="admin")
+
+
+def test_update_draft_refuses_a_draft_another_actor_is_proposing(seeded):
+    """An agent's draft is the content of its proposal, so nobody else may patch it — but
+    the agent goes on editing its own (`osadmin.cms_draft_change`)."""
+    store, _b, p, _v1, _a = seeded
+    d = store.create_draft(p["id"], actor="agent:phoenix", snapshot=False)
+    with pytest.raises(Conflict) as exc:
+        store.update_draft(d["id"], {"caps": {"max_tools": 5}}, actor="admin")
+    assert "agent:phoenix" in str(exc.value)
+    with pytest.raises(Conflict):
+        store.update_draft(d["id"], {"caps": {"max_tools": 5}}, actor="agent:steward")
+    own = store.update_draft(d["id"], {"caps": {"max_tools": 5}}, actor="agent:phoenix")
+    assert own["spec"]["caps"]["max_tools"] == 5
+    # a human's own draft is untouched by the guard
+    mine = store.create_draft(p["id"], actor="admin")
+    assert store.update_draft(mine["id"], {"caps": {"max_tools": 7}}, actor="admin")["spec"]["caps"]["max_tools"] == 7
+
+
+def test_a_snapshot_keeps_the_spec_s_order_and_appends_what_is_new(store):
+    """Two producers write `skills`/`rules`: a host's code spec, in the order it reads its
+    files, and this snapshot. When they disagreed, `spec_sha` stopped matching the content
+    an eval run graded and every draft showed a reordering as a change (Phase 13.0)."""
+    b = store.create_business("x", "X")
+    base = ProfileSpec(models=Models(text="m"), skills=[{"name": "record-game", "body": "A"},
+                                                        {"name": "poker-balances", "body": "B"}]).stored()
+    for slug, body in (("record-game", "A"), ("poker-balances", "B"), ("zzz-new", "C"), ("aaa-new", "D")):
+        store.put_source(b["id"], "skill", slug, body=body, actor="boot")
+    p = store.create_profile(b["id"], "default")
+    d = store.create_draft(p["id"], actor="admin", base_spec=base)
+    names = [s["name"] for s in store.get_version(d["id"])["spec"]["skills"]]
+    # the base's order first — not slug order — then what the base did not have, by slug
+    assert names == ["record-game", "poker-balances", "aaa-new", "zzz-new"]
+    # a source dropped from the business drops out of the next snapshot (replace-per-kind)
+    store.delete_source(b["id"], "skill", "record-game", actor="admin")
+    d2 = store.create_draft(p["id"], actor="admin", base_spec=base)
+    assert [s["name"] for s in store.get_version(d2["id"])["spec"]["skills"]] == [
+        "poker-balances", "aaa-new", "zzz-new"]

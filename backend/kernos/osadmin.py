@@ -109,6 +109,9 @@ class OsAdminPack(BasePack):
     id, version, handles_money = "os_admin", "1", False
     evidence = False
     all_tool_names = ALL_TOOLS
+    #: Which tools a turn gets depends on the agent's ``capabilities.cms`` verbs, so a
+    #: profile listing this pack does not say what the model will see (Phase 13.1).
+    dynamic = True
 
     def __init__(self, store, *, gates: Callable[[], Any], describe: Callable[[Any], dict | None] | None,
                  start_run: Callable[..., dict] | None, traces, eval_mode: bool = False,
@@ -145,6 +148,20 @@ class OsAdminPack(BasePack):
             for name in VERB_TOOLS[verb]:
                 out[name] = PackTool(name, *t.spec(name), getattr(t, name))
         return out
+
+    def catalogue_tools(self, ctx: Any) -> dict[str, PackTool]:
+        """The whole set, for the component catalogue (Phase 13.1).
+
+        ``tools`` returns nothing without an agent on the context, and only the tools that
+        agent's verbs grant. The descriptions and schemas are static text
+        (:meth:`_Tools.spec`), so an agent granted every verb describes the pack fully —
+        and going through ``tools`` rather than reading ``spec`` directly means the
+        catalogue cannot drift from what a turn would actually build, ``eval_mode``
+        included.
+        """
+        ctx.agent = {"id": 0, "slug": "catalogue", "name": "catalogue", "profile_id": 0,
+                     "business_id": 0, "capabilities": {"cms": list(VERB_TOOLS)}}
+        return self.tools(ctx)
 
     def render(self, result) -> Body | Draft | None:
         """A proposal this turn opened is the turn's outcome.

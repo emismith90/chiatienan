@@ -145,12 +145,13 @@ failure.
 ## The screen: `/admin`
 
 `https://chiatienan.duckdns.org/admin` — sign in with the admin password and the name you
-want in the audit log. Four tabs:
+want in the audit log. Five tabs:
 
 | Tab | What it is for |
 |---|---|
 | **Live** | businesses, profiles (with `managed_by`), agents, bindings; the two switches below |
-| **Content** | edit a source, take a draft, see the diff, publish |
+| **Components** | what the code offers: every pack with its tools and their schemas, the pipeline and plugins, the prompt traced back to its sources, and the collections |
+| **Content** | add, edit or delete a source; take a draft, assemble it, see the diff, publish |
 | **Proposals** | what the steward has proposed, with the diff — approve or reject |
 | **Audit** | who changed what, when, with the before and after |
 
@@ -159,8 +160,42 @@ the tab closes — a reload keeps it, closing the tab does not. And it is one sh
 with full power over every business and profile, so it is the real credential: the name
 you type is self-declared and only labels the log.
 
-The screen deliberately does **not** offer the model, the caps, the pipeline, the tool
-packs or the builtin tools. They are shown, read-only, and changed through the API below.
+### What is this bot made of?
+
+**Components** answers it. Type a room id and *Look up*, and every pack shows which of its
+tools that room's profile turned on, the prompt shows which `kn_sources` row each rule and
+skill came from, and the pipeline shows the stages the turn runs.
+
+Two labels there mean what they say. A pack marked **per turn** — `os_admin`, `delegation`,
+`collections` — has tools that depend on the agent or the room rather than the profile, so
+the screen will not claim they are on or off. And **source changed since this version**
+means the row has been edited after the snapshot the bot is running: what you see under the
+prompt is what the bot has, not what the source says today.
+
+### Changing what it is made of
+
+**Content** takes a draft and lets you assemble it: which packs, which of their tools (and
+what each is described as to the model), the builtin tools, the model, the caps. It is the
+same five gates as always — the form only makes them reachable, and it tells you what each
+gate will ask before you press Publish.
+
+Three things it will refuse, and they are refusals on the server, not just on the screen:
+
+* **A money-tagged rule cannot be deleted** while a published profile relies on it. Change
+  it in a draft and publish that, so there is a version and a diff.
+* **A draft the steward is proposing cannot be edited.** Approve or reject it on
+  **Proposals** — editing it would put your change into the agent's record.
+* **A slug must be lowercase** letters, digits, `.`, `_` or `-`: it becomes a file the
+  engine reads, not just a row key.
+
+The **pipeline** and **extensions** are still read-only, on Components. A stage list is not
+weekly work and a wrong entry breaks a turn in a way no form can explain; the API below
+still reaches them.
+
+> **A source edit does not reach the bot until you publish it.** Sources are upstream of a
+> draft: editing one changes nothing until a new draft snapshots it and that draft is
+> published. This is true of the seeded profiles too — a deploy republishes them **from
+> code**, never from what you edited here.
 
 ## The API
 
