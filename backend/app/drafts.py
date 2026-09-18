@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import chat, ledger
-from app.models import Meal, RoomMessage
+from app.models import Meal, Member, Payment, RoomMessage
 from kernos.packs import DraftKind
 from ledger_core import drafts as core
 from ledger_core.drafts import DRAFT_KINDS  # noqa: F401  (the lunch kinds, re-exported)
@@ -180,6 +180,47 @@ def commit_draft(session: Session, draft_id: int, room_id: int, logged_by: str |
     return _commit(session, draft_id, room_id, logged_by, expect="expense_draft")
 
 
+def _repoint_or_void_edited_payment(session: Session, room_id: int, pay: Payment, res: dict) -> None:
+    """One payment that was targeted at the meal being edited: it follows the
+    edit only if the debt it was paying is still there to be paid.
+
+    ``res`` is the freshly re-recorded meal's :func:`record_meal` result. A
+    payment's ``(from_member_id, to_member_id)`` still matches an edge on the
+    new meal iff ``to_member_id`` is the new payer and ``from_member_id`` is a
+    participant with a nonzero share who isn't the payer — exactly the
+    condition :func:`build_debt_edges` uses to emit an edge. When that holds we
+    repoint the payment to the new meal id, same as before. When it doesn't
+    (the edit changed the payer, or dropped this debtor from the meal), the
+    money the payment names was handed to someone who is no longer the
+    creditor for anything on this meal. Leaving it targetless would spill it
+    into that pair's pool (``apply_payments_fifo``) as an unexplained credit —
+    which is exactly how a real 60,000đ quick-pay, after its meal's payer was
+    edited, went on to silently cancel a completely different 55,000đ debt
+    between the same two people. So instead we withdraw it visibly: void the
+    payment (it stays in the ledger, just inert) and tell the room, so a human
+    decides whether to re-record it rather than the ledger deciding for them.
+    """
+    still_owed = (
+        pay.to_member_id == res["payer_member_id"]
+        and pay.from_member_id != res["payer_member_id"]
+        and res["shares"].get(pay.from_member_id, 0) != 0
+    )
+    if still_owed:
+        pay.meal_id = res["meal_id"]
+        return
+    pay.voided = True
+    names = {mm.id: mm.display_name for mm in session.scalars(
+        select(Member).where(Member.id.in_({pay.from_member_id, pay.to_member_id}))
+    )}
+    from_name = names.get(pay.from_member_id, "?")
+    to_name = names.get(pay.to_member_id, "?")
+    body = (
+        f"Voided {from_name}'s {pay.amount:,}đ to {to_name} — after this edit that debt "
+        f"is no longer on the meal. Re-record it if the money really did change hands."
+    )
+    chat.post_message(session, room_id, None, body, kind="bot")
+
+
 def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
                     logged_by: str | None) -> RoomMessage:
     """Edit an already-committed draft: void its meal and re-record with the
@@ -202,16 +243,25 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
     for k in _EDITABLE:
         if k in patch:
             att[k] = patch[k]
-    ledger.void_meal(session, meal.id, room_id=room_id, by=logged_by)
+    # Payments quick-paid against this meal (⑦), read BEFORE the void: `void_meal`
+    # with `untarget_payments=False` leaves them stamped with the old meal id, so
+    # this is the only chance to see which ones need a decision below.
+    targeted_payments = session.scalars(
+        select(Payment).where(Payment.room_id == room_id, Payment.meal_id == meal.id,
+                              Payment.voided.is_(False))
+    ).all()
+    # An edit is a void + re-record under a new id. The old `void_meal` call used
+    # to un-target these payments itself (`untarget_payments` defaults True), which
+    # dumped them into the pair pool before the new meal — and the debt it might or
+    # might not still owe — existed. `untarget_payments=False` leaves that decision
+    # to `_repoint_or_void_edited_payment` below, once `res` is known.
+    ledger.void_meal(session, meal.id, room_id=room_id, by=logged_by, untarget_payments=False)
     # The re-record keeps the original meal's date and, as before the extraction,
     # does not carry the card's `place_id` (the recommit route never did).
     res = core.record_meal_payload(session, room_id, {**att, "place_id": None},
                                    logged_by=logged_by, occurred_on=meal.occurred_on)
-    # An edit is a void + re-record under a new id, so anything already paid
-    # against the old meal (⑦ quick-pay) follows it — otherwise the payer's own
-    # statement shows their share as unpaid while the settlement counts it.
-    ledger.repoint_meal_payments(session, room_id=room_id, old_meal_id=meal.id,
-                                 new_meal_id=res["meal_id"])
+    for pay in targeted_payments:
+        _repoint_or_void_edited_payment(session, room_id, pay, res)
     body, card_att = draft_kinds()["expense_draft"].card(session, room_id, att, res)
     meal_msg = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
     att["committed_meal_id"] = res["meal_id"]

@@ -170,8 +170,20 @@ def repoint_meal_payments(session: Session, *, room_id: int, old_meal_id: int,
     return len(payments)
 
 
-def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = None) -> dict:
-    """Soft-delete a meal for a correction (design 6.1: void, then re-record)."""
+def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = None,
+              untarget_payments: bool = True) -> dict:
+    """Soft-delete a meal for a correction (design 6.1: void, then re-record).
+
+    ``untarget_payments=True`` (the default, and what the standalone void tool
+    uses) un-targets the meal's payments immediately: there is no new meal for
+    them to follow, so the pair pool is the only place left for them to keep
+    counting. ``recommit_draft`` (an edit: void, then re-record under a NEW meal
+    id) passes ``untarget_payments=False`` and repoints those payments itself
+    once the new meal exists, because doing it here — before the new meal is
+    known — is what let a quick-paid payment go untargeted, fall into the pair
+    pool, and silently cancel an unrelated debt when the edit changed the payer
+    (see the comment in ``recommit_draft``).
+    """
     meal = session.get(Meal, meal_id)
     if meal is None or meal.room_id != room_id:
         raise LedgerError(f"Meal #{meal_id} not found.")
@@ -180,10 +192,12 @@ def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = 
     meal.voided = True
     meal.voided_by = by
     meal.voided_at = clock.now()
-    # The meal is gone but the money was still handed over: un-target its
-    # payments so they keep counting against what this pair owes.
-    untargeted = repoint_meal_payments(session, room_id=room_id, old_meal_id=meal_id,
-                                      new_meal_id=None)
+    untargeted = 0
+    if untarget_payments:
+        # The meal is gone but the money was still handed over: un-target its
+        # payments so they keep counting against what this pair owes.
+        untargeted = repoint_meal_payments(session, room_id=room_id, old_meal_id=meal_id,
+                                          new_meal_id=None)
     session.flush()
     return {"meal_id": meal_id, "voided": True, "payments_untargeted": untargeted}
 
