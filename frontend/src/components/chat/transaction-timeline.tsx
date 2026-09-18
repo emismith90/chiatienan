@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { fmt } from "@/lib/format";
+import * as api from "@/lib/api";
 import type { TimelineEvent } from "@/lib/api";
 
 /** How many days stay open before the rest collapse behind a toggle. */
@@ -28,7 +29,77 @@ export function groupByDay(events: TimelineEvent[]): Day[] {
   return [...byDay.values()].sort((a, b) => (a.day < b.day ? 1 : -1));
 }
 
-function EventRow({ e }: { e: TimelineEvent }) {
+type PaymentEvent = Extract<TimelineEvent, { kind: "payment" }>;
+
+/** The 💸 row's Undo, party-only and confirm-gated: tap once to arm it, again
+ * to fire. A failure leaves it armed (not reverted to "Undo") so the retry is
+ * one tap, not two — the same "leave the row untouched" shape as
+ * `useMarkPaid` in statement-card.tsx, since undoing shared money deserves the
+ * same care a mistaken tap there does. */
+function PaymentRow({ e, selfId, roomId, onVoided }: {
+  e: PaymentEvent;
+  selfId?: number | null;
+  roomId?: number;
+  onVoided?: () => void;
+}) {
+  const [voided, setVoided] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  const canUndo = roomId != null && selfId != null && (e.from_id === selfId || e.to_id === selfId);
+
+  async function run() {
+    if (busy) return;
+    setBusy(true);
+    setErr(false);
+    try {
+      await api.voidPayment(roomId!, e.payment_id);
+      setVoided(true);
+      onVoided?.();
+    } catch {
+      setErr(true); // stay in "Sure?" so the tap can be retried
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="font-medium text-[var(--text-primary)]">
+      {e.from_name} → {e.to_name}
+      <span className="ml-1 font-semibold text-[var(--accent-text)]">{fmt(e.amount)} đ</span>
+      {voided && <span className="ml-1.5 text-[var(--text-secondary)]">· undone</span>}
+      {canUndo && !voided && (
+        confirming ? (
+          <span className="ml-1.5 inline-flex items-center gap-1.5">
+            <button type="button" disabled={busy} onClick={run}
+                    className="text-[10px] font-semibold text-[var(--danger)]">
+              {busy ? "…" : "Sure?"}
+            </button>
+            <button type="button" disabled={busy}
+                    onClick={() => { setConfirming(false); setErr(false); }}
+                    className="text-[10px] text-[var(--text-secondary)]">
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setConfirming(true)}
+                  aria-label={`Undo ${e.from_name} → ${e.to_name} ${fmt(e.amount)} đ`}
+                  className="ml-1.5 text-[10px] text-[var(--accent-text)] underline">
+            Undo
+          </button>
+        )
+      )}
+      {err && <span className="ml-1.5 text-[10px] font-medium text-[var(--danger)]">Failed — retry</span>}
+    </span>
+  );
+}
+
+function EventRow({ e, selfId, roomId, onVoided }: {
+  e: TimelineEvent;
+  selfId?: number | null;
+  roomId?: number;
+  onVoided?: () => void;
+}) {
   return (
     <li className="grid grid-cols-[16px_1fr] items-baseline gap-2 text-xs">
       <span aria-hidden>{e.kind === "meal" ? "🍜" : "💸"}</span>
@@ -41,17 +112,19 @@ function EventRow({ e }: { e: TimelineEvent }) {
             </span>
           </>
         ) : (
-          <span className="font-medium text-[var(--text-primary)]">
-            {e.from_name} → {e.to_name}
-            <span className="ml-1 font-semibold text-[var(--accent-text)]">{fmt(e.amount)} đ</span>
-          </span>
+          <PaymentRow e={e} selfId={selfId} roomId={roomId} onVoided={onVoided} />
         )}
       </span>
     </li>
   );
 }
 
-function DaySection({ day }: { day: Day }) {
+function DaySection({ day, selfId, roomId, onVoided }: {
+  day: Day;
+  selfId?: number | null;
+  roomId?: number;
+  onVoided?: () => void;
+}) {
   return (
     <section>
       <div className="mb-1 flex items-baseline justify-between border-b border-[var(--border)] pb-0.5">
@@ -64,14 +137,25 @@ function DaySection({ day }: { day: Day }) {
       </div>
       <ul className="space-y-2">
         {day.events.map((e) => (
-          <EventRow key={`${e.kind}-${e.kind === "meal" ? e.meal_id : e.payment_id}`} e={e} />
+          <EventRow key={`${e.kind}-${e.kind === "meal" ? e.meal_id : e.payment_id}`} e={e}
+                    selfId={selfId} roomId={roomId} onVoided={onVoided} />
         ))}
       </ul>
     </section>
   );
 }
 
-export function TransactionTimeline({ events }: { events: TimelineEvent[] }) {
+export function TransactionTimeline({ events, selfId, roomId, onVoided }: {
+  events: TimelineEvent[];
+  /** The signed-in member — gates the 💸 row's Undo to the two people the
+   * money moved between. No Undo at all without it (e.g. before sign-in). */
+  selfId?: number | null;
+  roomId?: number;
+  /** Fired after a successful undo, same role `onPaid` plays in
+   * statement-card.tsx — the panel's own refresh rides the room's
+   * `ledger:changed` stream event, not this callback. */
+  onVoided?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   if (!events || events.length === 0) {
     return <p className="text-xs text-[var(--text-secondary)]">No transactions this period.</p>;
@@ -83,7 +167,7 @@ export function TransactionTimeline({ events }: { events: TimelineEvent[] }) {
   return (
     <div className="flex flex-col gap-3">
       {shown.map((d) => (
-        <DaySection key={d.day} day={d} />
+        <DaySection key={d.day} day={d} selfId={selfId} roomId={roomId} onVoided={onVoided} />
       ))}
       {hidden > 0 && (
         <button type="button" onClick={() => setExpanded(true)}

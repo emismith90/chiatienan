@@ -308,6 +308,13 @@ export const quickPay = (roomId: number, to: number, mealId: number): Promise<Qu
 export const quickReceive = (roomId: number, from: number, mealId: number): Promise<QuickPayResult> =>
   req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ from, meal_id: mealId }) });
 
+/** Undo a payment — ⑦ had no way back, so a wrong tap (or a payment left
+ * pointing nowhere after the meal it covered changed hands) needed a
+ * hand-written UPDATE on the production file to fix. Party-only, like
+ * `quickPay`/`quickReceive`: the server checks the caller is one of the two. */
+export const voidPayment = (roomId: number, paymentId: number): Promise<{ ok: boolean; payment_id: number }> =>
+  req(`/api/rooms/${roomId}/payments/${paymentId}/void`, { method: "POST" });
+
 /** Everything the caller owes one creditor, as one payable VietQR.
  *
  * Deterministic server-side computation, no LLM turn. The caller shows it in a

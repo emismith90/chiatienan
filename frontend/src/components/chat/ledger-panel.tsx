@@ -67,7 +67,8 @@ export function LedgerPanel({
           </section>
           <section>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Transactions</p>
-            <TransactionTimeline events={data?.timeline ?? []} />
+            <TransactionTimeline events={data?.timeline ?? []} selfId={selfId} roomId={roomId}
+                                 onVoided={() => {}} />
           </section>
         </>
       )}
