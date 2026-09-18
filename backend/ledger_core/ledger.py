@@ -202,6 +202,36 @@ def void_meal(session: Session, meal_id: int, *, room_id: int, by: str | None = 
     return {"meal_id": meal_id, "voided": True, "payments_untargeted": untargeted}
 
 
+def void_payment(session: Session, payment_id: int, *, room_id: int, by: str | None = None) -> dict:
+    """Soft-delete a payment for a correction (design 6.1: void, then re-record).
+
+    A payment's docstring calls it append-only — corrections are meant to be a
+    void plus a new payment, never an edit or a delete — but until now nothing
+    actually set ``voided``: every ledger query that filters on it
+    (``debt_breakdown``, ``period_timeline``, ``outstanding_pairs``,
+    ``statement_for``, …) had no way to ever be shown a voided payment, because
+    the button to make one did not exist. The row survives a void because it is
+    still evidence cash changed hands on a given day; deleting it would erase
+    that history along with whatever mistake it is correcting, and would leave
+    no trace of who reversed it or when.
+
+    This closes the gap that let a quick-paid, untargeted payment (``meal_id``
+    None) sit in the pair pool after the meal it was for had its payer changed
+    out from under it, and silently cancel an unrelated debt a week later — with
+    no way back short of a hand-written UPDATE on the production file.
+    """
+    pay = session.get(Payment, payment_id)
+    if pay is None or pay.room_id != room_id:
+        raise LedgerError(f"Payment #{payment_id} not found.")
+    if pay.voided:
+        return {"payment_id": payment_id, "already_voided": True}
+    pay.voided = True
+    pay.voided_by = by
+    pay.voided_at = clock.now()
+    session.flush()
+    return {"payment_id": payment_id, "voided": True}
+
+
 def period_balances(
     session: Session, room_id: int, from_date: date | None, to_date: date
 ) -> dict[int, dict[str, int]]:

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import * as api from "@/lib/api";
 import { TransactionTimeline } from "../transaction-timeline";
 
 const events = [
@@ -60,5 +61,58 @@ describe("grouping by day", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /2 earlier days/ }));
     expect(screen.getByText(/day0/)).toBeInTheDocument();
+  });
+});
+
+describe("Undo on a payment row", () => {
+  it("shows Undo when the viewer is a party to the payment", () => {
+    render(<TransactionTimeline events={events} selfId={9} roomId={3} />);
+    expect(screen.getByRole("button", { name: /Undo/ })).toBeInTheDocument();
+  });
+
+  it("hides Undo when the viewer is not a party", () => {
+    render(<TransactionTimeline events={events} selfId={42} roomId={3} />);
+    expect(screen.queryByRole("button", { name: /Undo/ })).not.toBeInTheDocument();
+  });
+
+  it("hides Undo with no signed-in member at all", () => {
+    render(<TransactionTimeline events={events} roomId={3} />);
+    expect(screen.queryByRole("button", { name: /Undo/ })).not.toBeInTheDocument();
+  });
+
+  it("requires a confirm step before calling the API", async () => {
+    const spy = vi.spyOn(api, "voidPayment").mockResolvedValue({ ok: true, payment_id: 1 });
+    render(<TransactionTimeline events={events} selfId={9} roomId={3} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Sure?" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(3, 1));
+  });
+
+  it("Cancel backs out without calling the API", () => {
+    const spy = vi.spyOn(api, "voidPayment").mockResolvedValue({ ok: true, payment_id: 1 });
+    render(<TransactionTimeline events={events} selfId={9} roomId={3} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Undo/ })).toBeInTheDocument();
+  });
+
+  it("a failed undo leaves the row armed so the tap can be retried", async () => {
+    const spy = vi.spyOn(api, "voidPayment").mockRejectedValue(new Error("nope"));
+    render(<TransactionTimeline events={events} selfId={9} roomId={3} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    await waitFor(() => expect(screen.getByText(/Failed/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Sure?" })).toBeInTheDocument();
+
+    spy.mockResolvedValue({ ok: true, payment_id: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Sure?" }));
+    await waitFor(() => expect(screen.getByText(/undone/)).toBeInTheDocument());
   });
 });

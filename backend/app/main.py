@@ -28,7 +28,7 @@ from app.pi_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member, Place, Room, RoomMessage
+from app.models import Member, Payment, Place, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
 
@@ -591,6 +591,44 @@ async def quick_pay(room_id: int, body: QuickPayIn, ctx: AuthCtx = Depends(requi
     await hub.publish(room_id, {"type": "message", **msg_payload})
     await hub.publish(room_id, {"type": "ledger:changed"})
     return {"ok": True, "payment_id": pay["payment_id"], "amount": outstanding}
+
+
+@app.post("/api/rooms/{room_id}/payments/{payment_id}/void")
+async def void_payment(room_id: int, payment_id: int, ctx: AuthCtx = Depends(require_session)):
+    """Undo a payment. ⑦ "Mark paid" had no way back: production once had a
+    member tap it, then the meal it settled got its payer edited out from under
+    it, and the now-untargeted payment silently cancelled an unrelated 55,000đ
+    debt a week later — fixable only by a hand-written UPDATE on the production
+    file. This is that undo, surfaced as a button instead of a support request.
+
+    Authorisation mirrors `quick_pay`: only the two people money moved between
+    may reverse it — undoing a transfer you were not part of is a settlement
+    decision for the room, not something a bystander taps away.
+    """
+    _check_room(ctx, room_id)
+    db = get_db()
+    async with chat._agent_lock:
+        with db.session() as s:
+            pay = s.get(Payment, payment_id)
+            if pay is None or pay.room_id != room_id:
+                raise HTTPException(404, "payment not found")
+            if ctx.member_id not in (pay.from_member_id, pay.to_member_id):
+                raise HTTPException(403, "you can only undo a payment you are part of")
+            from_id, to_id, amount = pay.from_member_id, pay.to_member_id, pay.amount
+            result = ledger.void_payment(s, payment_id, room_id=room_id, by=str(ctx.member_id))
+            if result.get("already_voided"):
+                return {"ok": True, "payment_id": payment_id, "already_voided": True}
+            names = {mm.id: mm.display_name
+                     for mm in roster.list_members(s, room_id, include_inactive=True)}
+            # Undoing shared money silently would be worse than the bug this
+            # fixes — the room sees who reversed what, same as it sees who paid.
+            body = (f"↩️ {names.get(from_id, '?')} → {names.get(to_id, '?')} "
+                    f"{amount:,}đ undone — that debt is open again.")
+            msg = chat.post_message(s, room_id, None, body, kind="bot")
+            msg_payload = chat.message_to_dict(msg, None)
+    await hub.publish(room_id, {"type": "message", **msg_payload})
+    await hub.publish(room_id, {"type": "ledger:changed"})
+    return {"ok": True, "payment_id": payment_id}
 
 
 @app.post("/api/rooms/{room_id}/qr-requests")
