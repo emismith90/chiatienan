@@ -113,17 +113,33 @@ BUSINESS_SLUG = "lunch"
 #: Probe results the Pi port recorded (plan 2026-08-12, Task 0) for the two models
 #: the env ships with. Seeded only for those ids; any other configured model starts
 #: with no probe and gate 3 asks for one before it can be published as a change.
+#:
+#: Each row carries ``"seed": True``: this probe really was run once, at port time,
+#: against the live tool schemas of that day — it is not fabricated. But it is a
+#: bootstrap fact for a fresh install, not a live health signal, and unlike a probe
+#: a running system records, it has no way to refresh itself. Ageing it out like an
+#: ordinary probe cannot prompt anyone to re-probe (nothing here does that on a
+#: schedule) — it can only break every publish on a clock, on whatever day 30 days
+#: happens to fall after the checked_at we shipped with. Gate 3 reads the marker
+#: and skips its age check for these two rows only; every other check (ok, a
+#: parseable checked_at) still applies. The moment an operator runs
+#: ``POST /catalogue/models/{id}/probe``, ``ContentStore.set_probe`` replaces this
+#: row's ``probe`` dict wholesale with the fresh one (see admin.py's probe route),
+#: which carries no ``seed`` key — so the age check resumes applying to it, as it
+#: should for a probe a running system actually recorded.
 _RECORDED_PROBES = {
     "~deepseek/deepseek-v4-flash-latest": {
         "provider": "openrouter", "name": "DeepSeek V4 Flash Latest", "input": ["text"],
         "context_window": 1_048_576, "reasoning": False,
-        "probe": {"ok": True, "checked_at": "2026-08-12T00:00:00+00:00", "schemas": ["propose_meal", "update_member", "settle_period"],
+        "probe": {"ok": True, "checked_at": "2026-08-12T00:00:00+00:00", "seed": True,
+                  "schemas": ["propose_meal", "update_member", "settle_period"],
                   "source": "bench.probe_models — cursor-to-pi plan Task 0 (3/3)"},
     },
     "qwen/qwen3-vl-30b-a3b-instruct": {
         "provider": "openrouter", "name": "Qwen3 VL 30B A3B Instruct", "input": ["text", "image"],
         "context_window": 262_144, "reasoning": False,
-        "probe": {"ok": True, "checked_at": "2026-08-12T00:00:00+00:00", "schemas": ["propose_meal", "update_member", "settle_period", "bill image"],
+        "probe": {"ok": True, "checked_at": "2026-08-12T00:00:00+00:00", "seed": True,
+                  "schemas": ["propose_meal", "update_member", "settle_period", "bill image"],
                   "source": "bench.probe_models — cursor-to-pi plan Task 0 (4/4)"},
     },
 }
