@@ -258,6 +258,15 @@ class PublishGates:
             return f"probe has no parseable checked_at ({checked_at!r})"
         if when.tzinfo is None:
             when = when.replace(tzinfo=timezone.utc)
+        # A `seed` probe (app.kernel._RECORDED_PROBES) is a bootstrap fact recorded
+        # once at port time, not a live health signal a running system can refresh —
+        # ageing it out would only break publishing on a clock, never prompt a
+        # re-probe. It still has to be a passing, parseable probe (checked above);
+        # only the age comparison is skipped. A probe set through
+        # `POST /catalogue/models/{id}/probe` replaces the row wholesale and carries
+        # no `seed` key, so it ages out normally like any probe the system actually ran.
+        if probe.get("seed"):
+            return None
         if self._clock.now() - when > self._max_age:
             return f"probe from {checked_at} is older than {self._max_age.days} days"
         return None

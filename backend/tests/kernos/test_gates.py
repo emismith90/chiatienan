@@ -33,7 +33,10 @@ PIPE = {"model": [PipelineEntry(id="k.model", version="1")], "run": [PipelineEnt
         "render": [PipelineEntry(id="k.render", version="1")]}
 CAT = Catalogue({"good": {"probe": {"ok": True, "checked_at": "2026-08-20T00:00:00+00:00"}},
                  "stale": {"probe": {"ok": True, "checked_at": "2026-06-01T00:00:00+00:00"}},
-                 "failed": {"probe": {"ok": False, "checked_at": "2026-09-01T00:00:00+00:00"}}})
+                 "failed": {"probe": {"ok": False, "checked_at": "2026-09-01T00:00:00+00:00"}},
+                 "seeded": {"probe": {"ok": True, "seed": True, "checked_at": "2020-01-01T00:00:00+00:00"}},
+                 "seeded-failed": {"probe": {"ok": False, "seed": True, "checked_at": "2020-01-01T00:00:00+00:00"}},
+                 "seeded-bad-date": {"probe": {"ok": True, "seed": True, "checked_at": "not-a-date"}}})
 
 
 def _gates(**kw):
@@ -78,6 +81,26 @@ def test_gate3_probe_only_for_changed_models():
         assert _names(fails) == ["probe"] and word in fails[0].message, (bad, fails)
     assert _gates().check(_spec(models=Models(text="good", vision="good")), previous=None, actor="admin") == []
     assert _gates().check(_spec(models=Models(text="stale")), previous=None, actor="admin", skip_probe=True) == []
+
+
+def test_gate3_seed_probe_is_exempt_from_the_age_check_but_not_other_checks():
+    """A `seed` probe (app.kernel._RECORDED_PROBES) is a bootstrap fact from port
+    time, not a live health signal — it never ages out, however old the clock finds
+    it (fixed far past the 30-day window here, not tied to today's date, so this
+    test cannot rot the way the shipped seed did). But `seed` only excuses the age
+    comparison: a failing or unparseable seed probe still fails gate 3 like any other."""
+    assert _gates().check(_spec(models=Models(text="seeded")), previous=None, actor="admin") == []
+    fails = _gates().check(_spec(models=Models(text="seeded-failed")), previous=None, actor="admin")
+    assert _names(fails) == ["probe"] and "no passing" in fails[0].message
+    fails = _gates().check(_spec(models=Models(text="seeded-bad-date")), previous=None, actor="admin")
+    assert _names(fails) == ["probe"] and "no parseable" in fails[0].message
+
+
+def test_gate3_a_non_seed_probe_older_than_max_age_still_fails():
+    """The regression this fix must not cause: a probe a running system actually
+    recorded (no `seed` marker) still ages out at 30 days, with the same message."""
+    fails = _gates().check(_spec(models=Models(text="stale")), previous=None, actor="admin")
+    assert _names(fails) == ["probe"] and "older than 30 days" in fails[0].message
 
 
 def test_gate5_reflexivity_blocks_agents_on_blacklisted_paths_only():
