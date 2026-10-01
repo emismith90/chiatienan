@@ -256,8 +256,8 @@ Copy `.env.example` → `.env` and fill it in. Key vars:
 | Var | Purpose |
 |-----|---------|
 | `OPEN_ROUTER_KEY` | OpenRouter key for the sidecar (note the name — not `OPENROUTER_API_KEY`) |
-| `PI_MODEL` | default `~deepseek/deepseek-v4-flash-latest` (text-only) |
-| `PI_VISION_MODEL` | default `qwen/qwen3-vl-30b-a3b-instruct`. Mandatory in practice: every bill photo routes here |
+| `PI_MODEL` | default `openai/gpt-6.1-sol-pro` (text + image) |
+| `PI_VISION_MODEL` | default `openai/gpt-6.1-sol-pro` (same model). Every bill photo routes here |
 | `PI_MAX_TOOLS` / `PI_MAX_SECONDS` | per-turn runaway caps (40 / 120 s). A breach is a partial answer, not an error |
 | `BOT_HANDLE` | the `@`-handle the bot answers to in chat (default `bot`) |
 | `DATABASE_URL` | `sqlite:////data/chiatienan.db` (absolute, on the volume) |

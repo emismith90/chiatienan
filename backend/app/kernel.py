@@ -142,6 +142,14 @@ _RECORDED_PROBES = {
                   "schemas": ["propose_meal", "update_member", "settle_period", "bill image"],
                   "source": "bench.probe_models — cursor-to-pi plan Task 0 (4/4)"},
     },
+    "openai/gpt-6.1-sol-pro": {
+        "provider": "openrouter", "name": "GPT-6.1 Sol Pro", "input": ["text", "image"],
+        "context_window": 1_050_000, "reasoning": True,
+        "probe": {"ok": True, "checked_at": "2026-10-01T00:00:00+00:00", "seed": True,
+                  "schemas": ["propose_meal", "update_member", "settle_period", "bill image"],
+                  "source": "bench.probe_models 3/3 (empty replies on some re-runs); "
+                            "bench.run bills 11/12"},
+    },
 }
 
 

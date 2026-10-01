@@ -17,9 +17,9 @@ def test_defaults_when_env_absent(monkeypatch):
     for k in _REQUIRED_UNSET:
         monkeypatch.delenv(k, raising=False)
     s = Settings.from_env()
-    assert s.pi_model == "~deepseek/deepseek-v4-flash-latest"
-    # Mandatory in practice: the primary is text-only, so every bill photo needs it.
-    assert s.pi_vision_model == "qwen/qwen3-vl-30b-a3b-instruct"
+    assert s.pi_model == "openai/gpt-6.1-sol-pro"
+    # Every bill photo routes here; by default the same multimodal model.
+    assert s.pi_vision_model == "openai/gpt-6.1-sol-pro"
     assert s.pi_provider == "openrouter" and s.pi_thinking == "medium"
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 600
     assert s.pi_builtin_tools == ("read", "write", "bash")

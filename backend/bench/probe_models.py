@@ -46,8 +46,8 @@ _HERE = Path(__file__).resolve().parent
 #: The TỔNG CỘNG printed on `bench/corpus/bills/bill-itemized.png`.
 BILL_TOTAL = 154_000
 
-#: The models the design settles on (plan, Task 0).
-DEFAULT_MODELS = ("~deepseek/deepseek-v4-flash-latest", "qwen/qwen3-vl-30b-a3b-instruct")
+#: The configured model (text and vision since 2026-10-01).
+DEFAULT_MODELS = ("openai/gpt-6.1-sol-pro",)
 
 #: Models that failed this probe and must not be configured. Kept by name so a
 #: future reader does not repeat the measurement to learn it.
