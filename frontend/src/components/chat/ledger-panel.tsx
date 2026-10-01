@@ -12,7 +12,7 @@ export function LedgerPanel({
   selfId: number | null;
   version: number;
   /** Explicit date range to show instead of the default window — set when a
-   * history answer in the chat is opened here (the "Mở sổ" chat action). */
+   * history answer in the chat is opened here (the summary card's "Open ledger" action). */
   range?: { from: string; to: string } | null;
   onClearRange?: () => void;
 }) {

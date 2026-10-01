@@ -7,7 +7,7 @@ chat (see "Amendment" below).
 ## Problem
 
 The only way to get a payment QR is asking the bot in chat ("@bot tui nợ bao nhiêu
-xin qr") — an LLM turn for a fully deterministic answer. The ledger panel already
+xin qr" — "how much do I owe, give me the QR") — an LLM turn for a fully deterministic answer. The ledger panel already
 lists exactly what the caller owes per person; each unpaid line should offer the QR
 directly.
 

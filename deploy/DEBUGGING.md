@@ -56,7 +56,7 @@ Key tables (all room-scoped by `room_id`):
 | `room_messages` | **the conversation log** — `kind` (`text`/`bot`/`expense_draft`/…), `body`, `attachments` (JSON), `created_at`, `author_member_id` |
 | `meals` / `meal_shares` | who paid, who ate, per-head shares (`voided` excludes) |
 | `payments` | cash payments `from_member_id → to_member_id`, `amount`, `meal_id?` |
-| `settlements` | committed "chốt" events (closes a period) |
+| `settlements` | committed "chốt" (close-out) events (closes a period) |
 
 **Dump the chatlog for one room, chronological, with author names:**
 

@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
  * diacritic-insensitively (so "bốc thăm" and "boc tham" both hit) against the
  * user's text so the lottery animation can start the instant they send it —
  * before the tool result comes back. A false positive is harmless: the spinner
- * is replaced the moment the bot's real reply lands. */
+ * is replaced the moment the bot's real reply lands.
+ *
+ * The entries are Vietnamese on purpose (folded to ASCII): they match what users
+ * type in the room — "boc tham"/"rut tham" (draw lots), "chon dai" (pick anyone),
+ * "quay so"/"xo so"/"lo to" (lottery/bingo). */
 const TRIGGERS = [
   "random",
   "lottery",

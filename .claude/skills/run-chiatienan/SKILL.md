@@ -57,8 +57,9 @@ drive it with the browser tools. The join → chat flow that works:
    chip, Dark mode / Invite) and the composer bar. The side panel's tabs are
    **Ledger | Memory**, and Memory's sub-tabs are **Places | Notes | Log**.
 
-The UI is English; the data in it (place names, tags, note text) is Vietnamese,
-and so is the bot's own voice. See the i18n boundary note in `backend/app/chat.py`.
+The UI is English, and so are all the bot's labels and messages. The data in it
+(place names, tags, note text) is mostly Vietnamese, and the bot replies in the
+same language the user wrote in. See the i18n boundary note in `backend/app/chat.py`.
 
 To give the knowledge panel something to show, seed the demo room (`room_id=1`):
 
@@ -102,7 +103,7 @@ cd backend && .venv/bin/pytest -q
   writable locally. `run.sh` overrides it to `data/chiatienan.db` under the repo
   (gitignored). Delete `data/` to reset state.
 - **`@phoenix` mentions need `OPEN_ROUTER_KEY`.** Without it the bot turn errors and
-  posts "⚠️ Bot gặp lỗi"; plain messages, drafts, profile, and live updates all
+  posts a "⚠️" error message; plain messages, drafts, profile, and live updates all
   work. To run the bot locally: `OPEN_ROUTER_KEY=… bash .claude/skills/run-chiatienan/run.sh`.
 - **Only the demo room is auto-created.** `run.sh` creates one room ("Lunch
   (local)") via the admin endpoint (password `devpass`) and prints its invite.

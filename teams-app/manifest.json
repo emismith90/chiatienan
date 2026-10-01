@@ -12,11 +12,11 @@
   },
   "name": {
     "short": "chiatienan",
-    "full": "chiatienan — chia tiền ăn trưa"
+    "full": "chiatienan — lunch bill splitter"
   },
   "description": {
-    "short": "Bot chia tiền ăn trưa cho nhóm.",
-    "full": "Tag @chiatienan khi bạn trả tiền bữa trưa; bot ghi sổ, chia phần, và tạo mã VietQR khi chốt tiền. Số tiền và mã QR đều do máy chủ tính toán (không do AI tự gõ lại)."
+    "short": "Splits your team's lunch bill.",
+    "full": "Tag @chiatienan when you pay for lunch; the bot records it in the ledger, splits the shares, and generates VietQR codes when you settle up. All amounts and QR codes are computed by the server (never retyped by the AI)."
   },
   "icons": {
     "color": "color.png",

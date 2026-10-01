@@ -38,7 +38,8 @@
  *
  * A bank scheme takes no payload, and the one scheme that documents a payload is
  * unhandled. The transfer details only ever travel inside the **QR payload** —
- * NAPAS "Quy định Định dạng mã VietQR" v1.0, ID 54 for the amount, ID 62-08 for
+ * NAPAS "Quy định Định dạng mã VietQR" (the VietQR code format spec; title kept as
+ * published) v1.0, ID 54 for the amount, ID 62-08 for
  * the description — which reaches the app by being *read*, not by being linked
  * to. Hence the copy chips beside the button: they are the fastest path that
  * actually exists today.

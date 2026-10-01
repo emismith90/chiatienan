@@ -22,7 +22,7 @@ export function perHead(
 }
 
 /** Provisional itemized shares — mirrors `money.prorate_items`. "proportional"
- * scales each item by total/Σitems, then hands the leftover đồng to the largest
+ * scales each item by total/Σitems, then hands the leftover dong to the largest
  * remainders (ties by member id); "equal" takes the same amount off everyone,
  * remainder to the lowest member ids. Either way the shares sum to `total`
  * exactly. Display only; the server recomputes authoritatively on patch and on

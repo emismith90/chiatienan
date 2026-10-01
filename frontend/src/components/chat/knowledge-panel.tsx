@@ -141,7 +141,7 @@ export function KnowledgePanel({
                 <p className="text-xs text-[var(--text-secondary)]">
                   {q
                     ? "No places match."
-                    : "No places yet. Add one here, or tell @phoenix «thêm quán Cơm gà Thịnh Lơ»."}
+                    : "No places yet. Add one here, or tell @phoenix «add Cơm gà Thịnh Lơ to places»."}
                 </p>
               ) : (
                 places.map((p) => (
@@ -162,7 +162,7 @@ export function KnowledgePanel({
                 <p className="text-xs text-[var(--text-secondary)]">
                   {q
                     ? "No notes match."
-                    : "No notes yet. Try telling @phoenix «quán Bé Bự phải gọi trước 11h30»."}
+                    : "No notes yet. Try telling @phoenix «order ahead at Bé Bự, before 11:30»."}
                 </p>
               ) : (
                 groups.map((g) => (

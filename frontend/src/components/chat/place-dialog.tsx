@@ -23,8 +23,8 @@ import {
  *   (design D1) and appear as a sentence.
  *
  * Hiding and temporary closure are separate controls because they mean different
- * things: `closed_until` self-expires (D11) and is the right answer for "đang sửa
- * quán, tuần sau mở lại"; `active=false` is the permanent one, and it is how you
+ * things: `closed_until` self-expires (D11) and is the right answer for "under
+ * renovation, reopening next week"; `active=false` is the permanent one, and it is how you
  * delete a place at all — meals reference the row.
  */
 /** "3 notes and 1 pending card", or "Nothing" — what a rename will carry.
@@ -236,7 +236,7 @@ export function PlaceDialog({
         </Field>
         <Field label="Tags">
           <input className={fieldClass} value={f.tags} onChange={(e) => set("tags", e.target.value)}
-                 placeholder="cơm, gần, nhanh" />
+                 placeholder="rice, nearby, quick" />
         </Field>
         <Field label="Delivery apps">
           <input className={fieldClass} value={f.delivery}

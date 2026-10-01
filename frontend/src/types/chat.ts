@@ -11,7 +11,7 @@ export interface ChatImage {
  * carrying message's `id`. `per_head_preview` (like the client-side
  * `perHead` calc in expense-draft-card.tsx) is a PROVISIONAL estimate — the
  * server recomputes the authoritative split on commit. */
-/** One person's dish on an itemized ("ai ăn nấy trả") draft. `amount` is the
+/** One person's dish on an itemized ("each pays for what they ate") draft. `amount` is the
  * LIST price off the bill — the server prorates any discount or fee so the
  * shares add up to `bill_total`, so this is NOT what they end up owing. */
 export interface DraftItem {
@@ -47,7 +47,7 @@ export interface ExpenseDraft {
 }
 
 /** A single money movement inside a `payment_draft`. One draft can hold
- * multiple transfers (multi-payer, e.g. "Dũng và Giang đã trả Linh"). */
+ * multiple transfers (multi-payer, e.g. "Dũng and Giang paid Linh"). */
 export interface PaymentTransfer {
   from_member_id: number;
   to_member_id: number;

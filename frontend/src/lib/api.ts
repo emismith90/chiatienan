@@ -295,7 +295,7 @@ export const deleteMemorySection = (roomId: number, index: number, etag: string)
 
 export type QuickPayResult = { ok: boolean; payment_id: number; amount: number };
 
-/** ⑦ one-tap "Đã trả": records the caller's outstanding for one meal (server
+/** ⑦ one-tap "Paid": records the caller's outstanding for one meal (server
  * computes the amount from {to, meal_id}; client sends no money value). */
 export const quickPay = (roomId: number, to: number, mealId: number): Promise<QuickPayResult> =>
   req(`/api/rooms/${roomId}/payments/quick`, { method: "POST", body: JSON.stringify({ to, meal_id: mealId }) });
