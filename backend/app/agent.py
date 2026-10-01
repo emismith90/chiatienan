@@ -30,6 +30,7 @@ from pathlib import Path
 from app.config import settings
 from app.prompt import build_system_prompt
 from app.tools import ToolContext, build_tools, tool_manifest
+from kernos.content import Retry
 from kernos.engine import EngineSpec, ToolInvocation, TurnResult  # noqa: F401  (re-exported)
 from kernos.engine.base import merge_sub_invocations
 
@@ -97,6 +98,7 @@ def default_engine_spec() -> EngineSpec:
         agent_dir=str(Path(settings.data_dir) / "pi-agent"),
         skills=_read_skills(),
         context_files=_read_context_files(),
+        settings={"retry": Retry().model_dump()},
     )
 
 

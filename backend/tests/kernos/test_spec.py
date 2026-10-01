@@ -21,7 +21,18 @@ def test_to_engine_spec_uses_todays_wire_shapes_and_only_inline_skills():
     assert es.context_files == [{"path": "money-safety", "content": "R"}]
     assert es.cwd == "/c" and es.agent_dir == "/a" and es.system == "S"
     assert es.builtin_tools == ["read"] and es.max_tools == 40 and es.max_seconds == 120
-    assert es.settings == {} and es.extensions == []
+    assert es.settings == {"retry": {"enabled": True, "maxRetries": 5, "baseDelayMs": 2000}}
+    assert es.extensions == []
+
+
+def test_retry_reaches_pi_settings_and_an_explicit_settings_block_wins():
+    # The profile's `retry` used to be stored and never sent, so pi always ran its
+    # own 3 x 2/4/8s and a CMS edit to it changed nothing.
+    from kernos.content import Retry
+    es = _spec(retry=Retry(maxRetries=7, baseDelayMs=1000)).to_engine_spec()
+    assert es.settings["retry"] == {"enabled": True, "maxRetries": 7, "baseDelayMs": 1000}
+    es = _spec(settings={"retry": {"enabled": False}, "other": 1}).to_engine_spec()
+    assert es.settings == {"retry": {"enabled": False}, "other": 1}
 
 
 def test_unknown_fields_are_rejected_everywhere():
