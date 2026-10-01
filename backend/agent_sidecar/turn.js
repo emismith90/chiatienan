@@ -117,6 +117,11 @@ export async function runTurn(session, req, emit) {
   let capped = false;
   let error = null;
   let deadline = null;
+  // pi does not throw on a provider failure: once its own retries run out it ends
+  // the turn with `stopReason: "error"` on the last assistant message, and
+  // `prompt()` resolves as if all went well. Track the latest outcome so a turn
+  // that failed upstream reports why instead of coming back empty.
+  let providerError = null;
 
   const cap = (reason) => {
     if (capped) return;
@@ -141,6 +146,14 @@ export async function runTurn(session, req, emit) {
           }
           break;
         }
+
+        case "message_end":
+          if (event.message && event.message.role === "assistant") {
+            providerError = event.message.stopReason === "error"
+              ? event.message.errorMessage || "provider error"
+              : null;
+          }
+          break;
 
         case "tool_execution_start":
           emit({
@@ -207,6 +220,7 @@ export async function runTurn(session, req, emit) {
     if (deadline) clearTimeout(deadline);
     unsubscribe();
   }
+  if (!error && !capped && providerError) error = formatError(providerError);
 
   if (error) emit({ type: "agent.run.error", turn_id: turnId, message: error });
   else emit({ type: "agent.run.finished", turn_id: turnId });
@@ -253,6 +267,9 @@ export function formatError(err) {
   const text = raw.replace(/\s+/g, " ").trim();
   if (/model.*(blocked|not permitted|unavailable)/i.test(text)) {
     return "Model không dùng được (bị chặn hoặc hết quyền). Thử lại sau nhé.";
+  }
+  if (/\b402\b|requires more credits|insufficient credits/i.test(text)) {
+    return "Model hết credit — báo admin nạp thêm nhé.";
   }
   if (/rate.?limit|429|too many requests/i.test(text)) {
     return "Model đang quá tải (rate limit). Thử lại sau một chút nhé.";

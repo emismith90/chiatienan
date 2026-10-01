@@ -280,3 +280,48 @@ test("the deadline bounds the turn even when prompt never settles", async () => 
   assert.equal(r.final_text, "Đang tính…");
   assert.ok(aborted, "and it must still cancel the provider request");
 });
+
+/** A session whose prompt resolves normally while pi reports the failure on the
+ * last assistant message — how pi ends a turn once its own retries run out. */
+function endsWith(messages) {
+  const listeners = [];
+  return {
+    subscribe(l) { listeners.push(l); return () => {}; },
+    abort() { return Promise.resolve(); },
+    async prompt() {
+      const fire = (e) => listeners.forEach((l) => l(e));
+      fire({ type: "agent_start" });
+      for (const message of messages) fire({ type: "message_end", message });
+    },
+  };
+}
+
+test("a turn pi ends with stopReason error reports the error, not an empty answer", async () => {
+  // Bench 2026-10-01: gpt-6.1-sol-pro rate-limited upstream; prompt() resolved,
+  // the turn came back empty with error=null, and the room got nothing useful.
+  const session = endsWith([{
+    role: "assistant", stopReason: "error", content: [],
+    errorMessage: '429: {"error":{"message":"openai/gpt-6.1-sol-pro is temporarily rate-limited upstream."}}',
+  }]);
+  const seen = [];
+  const r = await runTurn(session, { turn_id: "t", message: "x" }, (e) => seen.push(e));
+  assert.equal(r.error, "Model đang quá tải (rate limit). Thử lại sau một chút nhé.");
+  assert.ok(seen.some((e) => e.type === "agent.run.error"));
+});
+
+test("an error that a later assistant message recovers from is not an error", async () => {
+  // pi retries a transient error itself; only the final outcome counts.
+  const session = endsWith([
+    { role: "assistant", stopReason: "error", content: [], errorMessage: "429 rate limit" },
+    { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "ok" }] },
+  ]);
+  const r = await runTurn(session, { turn_id: "t", message: "x" }, () => {});
+  assert.equal(r.error, null);
+});
+
+test("running out of provider credit reads as ours, not the vendor's JSON", () => {
+  assert.equal(
+    formatError(new Error('402: {"message":"This request requires more credits, or fewer max_tokens."}')),
+    "Model hết credit — báo admin nạp thêm nhé.",
+  );
+});
