@@ -143,7 +143,7 @@ def test_items_with_guests_is_refused_with_a_way_forward(db):
         "guests": ["Khách"],
     })
     assert out["ok"] is False
-    assert "khách" in out["error"].lower()
+    assert "guest" in out["error"].lower()
 
 
 def test_missing_price_is_a_clarifying_question_not_a_crash(db):
@@ -152,7 +152,7 @@ def test_missing_price_is_a_clarifying_question_not_a_crash(db):
         "payer": ids[0], "participants": ids, "total": PAID, "items": items[:4],
     })
     assert out["ok"] is False
-    assert "thiếu" in out["error"]
+    assert "missing" in out["error"]
 
 
 def test_items_summing_over_the_total_no_longer_blocks_the_record(db):

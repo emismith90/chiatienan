@@ -28,10 +28,10 @@ name: Deploy
 #   .env.example default when unset):
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
 #     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
-#     PI_MODEL                 – default "~deepseek/deepseek-v4-flash-latest"
-#     PI_VISION_MODEL          – default "qwen/qwen3-vl-30b-a3b-instruct". Mandatory
-#                                in practice: PI_MODEL is text-only, so every bill
-#                                photo routes here.
+#     PI_MODEL                 – default "openai/gpt-6.1-sol-pro"
+#     PI_VISION_MODEL          – default "openai/gpt-6.1-sol-pro" (the same multimodal model).
+#                                Every bill photo routes here; kept separate so a
+#                                photo model can differ from the text one.
 #     PI_PROVIDER              – default "openrouter"
 #     PI_THINKING              – default "medium"
 #     DATA_DIR                 – default "/data". MUST stay under the mounted
@@ -163,8 +163,8 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
-          PI_MODEL: ${{ vars.PI_MODEL || '~deepseek/deepseek-v4-flash-latest' }}
-          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL || 'qwen/qwen3-vl-30b-a3b-instruct' }}
+          PI_MODEL: ${{ vars.PI_MODEL || 'openai/gpt-6.1-sol-pro' }}
+          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL || 'openai/gpt-6.1-sol-pro' }}
           PI_PROVIDER: ${{ vars.PI_PROVIDER || 'openrouter' }}
           PI_THINKING: ${{ vars.PI_THINKING || 'medium' }}
           PI_MAX_TOOLS: ${{ vars.PI_MAX_TOOLS || '40' }}

@@ -101,7 +101,7 @@ def test_normalize_items_orders_by_participant_and_keeps_labels():
 def test_a_participant_with_no_item_is_rejected_not_billed_zero():
     """A misread bill line must surface, not silently move someone's food onto
     everyone else."""
-    with pytest.raises(MoneyError, match="thiếu"):
+    with pytest.raises(MoneyError, match="missing"):
         normalize_items([{"member": 1, "amount": 10}], [1, 2])
 
 
@@ -111,7 +111,7 @@ def test_item_for_a_non_participant_is_rejected():
 
 
 def test_duplicate_item_rows_are_rejected():
-    with pytest.raises(MoneyError, match="nhiều hơn một"):
+    with pytest.raises(MoneyError, match="more than one item line"):
         normalize_items([{"member": 1, "amount": 10}, {"member": 1, "amount": 20}], [1])
 
 

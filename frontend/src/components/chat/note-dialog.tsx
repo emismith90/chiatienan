@@ -24,8 +24,8 @@ const today = () => new Date().toISOString().slice(0, 10);
  * Add, edit or delete one remembered fact.
  *
  * The `standing` toggle is the load-bearing control: it decides whether the line
- * decays. A dated observation is weak evidence after six months; "phải gọi trước
- * 11h30" is as true next year as today, and design D4 separates the two with this
+ * decays. A dated observation is weak evidence after six months; "order ahead,
+ * before 11:30" is as true next year as today, and design D4 separates the two with this
  * one field. So it is a visible choice with its consequence spelled out, not a
  * checkbox called "always".
  *
@@ -155,7 +155,7 @@ export function NoteDialog({
 
         <Field label="Note">
           <input className={fieldClass} value={text} onChange={(e) => setText(e.target.value)}
-                 placeholder="Phải gọi trước — quán làm chậm." />
+                 placeholder="Order ahead — the kitchen is slow." />
         </Field>
 
         <div>

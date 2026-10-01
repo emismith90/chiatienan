@@ -1,14 +1,14 @@
 ---
 name: record-game
-description: Ghi một ván / một tối chơi bài — "tối qua chơi", "ghi ván", "kết bàn": mỗi người mua bao nhiêu, đổi ra bao nhiêu.
+description: Record a game / a card night — "tối qua chơi", "ghi ván", "kết bàn": how much each person bought in, how much they cashed out.
 ---
-# Ghi ván bài
+# Record a card game
 
-Dùng `propose_game` (chỉ ĐỀ XUẤT — bàn xác nhận trên thẻ). Một lần gọi cho cả ván.
+Use `propose_game` (it only PROPOSES — the table confirms on the card). One call for the whole game.
 
-- Mỗi người chơi MỘT dòng trong `entries`: `member` (id từ `find_members`), `buy_in` (tổng chip đã mua), `cash_out` (chip đổi ra lúc kết). Số nguyên VND ('500k' → 500000).
-- Rake / tip cho bàn → `house`. Không có thì bỏ trống.
-- Bàn phải cân: Σ buy_in = Σ cash_out + house. Công cụ báo lệch (`error` kèm số lệch) → HỎI lại: ai ghi thiếu/dư, hay phần lệch là tiền bàn. KHÔNG tự sửa một con số cho cân, KHÔNG tự tính lời lỗ.
-- Ngày ('tối qua', 'thứ 6') → `day_word`, để công cụ tính ngày.
-- Ai thắng ai thua, ai trả ai bao nhiêu: công cụ tính và thẻ hiện; bạn không nhắc lại số.
-- Ghi sai ván đã xác nhận → `void_game` với `game_id`, rồi đề xuất lại.
+- Each player gets ONE line in `entries`: `member` (id from `find_members`), `buy_in` (total chips bought), `cash_out` (chips exchanged at the end). Integer VND ('500k' → 500000).
+- Rake / tip for the table → `house`. If none, leave it empty.
+- The table must balance: Σ buy_in = Σ cash_out + house. If the tool reports a mismatch (`error` with the difference) → ASK again: who recorded too little/too much, or whether the difference is the table's money. DO NOT adjust a number yourself to make it balance, DO NOT calculate profit/loss yourself.
+- Day ('tối qua', 'thứ 6') → `day_word`, let the tool work out the date.
+- Who won, who lost, who pays whom how much: the tool calculates and the card shows it; you don't repeat the numbers.
+- A confirmed game recorded wrongly → `void_game` with `game_id`, then propose again.

@@ -262,7 +262,7 @@ class ToolSelection:
                         continue
                     if self._args_differ(key, want, _recorded(call, key)) is None:
                         # **The tool worked it out, which is the preferred path.**
-                        # `p129` "tôi đã trả tiền A1" (expecting 27,000đ) called
+                        # `p129` "tôi đã trả tiền A1" ("I paid A1", expecting 27,000đ) called
                         # `propose_payment(to=A1)` with no `amount`, exactly as
                         # `record-payment` says to — the tool then reads the debt off the
                         # ledger and the model transcribes nothing (design D3). An absent
@@ -330,7 +330,7 @@ class Prose:
 
         stray = self._unbacked(
             # The turn's history backs an amount as much as its message does: the room
-            # said "tổng 324k" a message ago, the model was handed it, and repeating it
+            # said "tổng 324k" ("324k total") a message ago, the model was handed it, and repeating it
             # is not invented money. `chat.py` passes the history for the same reason.
             body, f"{case.message}\n{case.history or ''}",
             [_Invocation(c) for c in record.get("tools") or []])

@@ -46,6 +46,7 @@ export function PlaceCard({
         {!place.walkable && <Chip>not walkable</Chip>}
         {place.delivery.length > 0 && <Chip>delivery: {place.delivery.join(", ")}</Chip>}
         {place.tags
+          // "chưa-thử" ("untried") is the backend's UNTRIED_TAG, shown as the chip above.
           .filter((t) => t !== "chưa-thử")
           .map((t) => (
             <Chip key={t}>{t}</Chip>

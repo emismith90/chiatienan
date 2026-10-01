@@ -131,7 +131,7 @@
         "type": "string"
       },
       "text": {
-        "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn.",
+        "description": "The text of the note to delete, verbatim.",
         "type": "string"
       }
     },
@@ -324,19 +324,19 @@
   "remember": {
     "properties": {
       "about": {
-        "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím').",
+        "description": "The place or person this note is about ('Bé Bự', 'Nhím').",
         "type": "string"
       },
       "gate": {
-        "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM.",
+        "description": "A clock rule: busy@HH:MM, order-by@HH:MM, closes@HH:MM.",
         "type": "string"
       },
       "standing": {
-        "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay.",
+        "description": "true = a standing rule ('phải đặt trước' / 'must order ahead'), false = just about today.",
         "type": "boolean"
       },
       "text": {
-        "description": "Nội dung, tiếng Việt, một câu.",
+        "description": "The note itself: one sentence, in Vietnamese (the room's language).",
         "type": "string"
       }
     },

@@ -1,0 +1,19 @@
+{
+  "providers": {
+    "openrouter": {
+      "models": [
+        {
+          "id": "openai/gpt-6.1-sol-pro",
+          "name": "OpenAI: GPT-6.1 Sol Pro",
+          "api": "openai-completions",
+          "reasoning": true,
+          "input": ["text", "image"],
+          "cost": {"input": 2, "output": 10, "cacheRead": 0, "cacheWrite": 0},
+          "contextWindow": 1050000,
+          "maxTokens": 8192,
+          "compat": {"supportsDeveloperRole": false, "thinkingFormat": "openrouter"}
+        }
+      ]
+    }
+  }
+}

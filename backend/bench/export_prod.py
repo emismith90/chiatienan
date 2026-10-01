@@ -122,7 +122,8 @@ def collect_person_names(rows: list[dict]) -> list[str]:
     """Non-member humans the log names itself: meal `initiator`s and `guests`.
 
     The member table cannot supply these, and they are real people's names sitting
-    in message bodies ("thứ 3 ăn bún bò huế, <name> rủ"). Reading the sanitized
+    in message bodies ("thứ 3 ăn bún bò huế, <name> rủ" — "Tuesday, bún bò huế,
+    <name>'s idea"). Reading the sanitized
     output is what surfaced them; this is the fix.
     """
     found: set[str] = set()
@@ -141,7 +142,8 @@ def collect_person_names(rows: list[dict]) -> list[str]:
 
 #: Vietnamese kinship pronouns and particles that turn up *inside* display names
 #: ("chị Linh"). Never mapped on their own — substituting a pseudonym for "anh"
-#: would corrupt most messages in the room.
+#: would corrupt most messages in the room. The Vietnamese words stay: they are
+#: matched against real message text.
 _NOT_A_NAME = frozenset(("anh", "chi", "chị", "em", "ban", "bạn", "ong", "ông",
                          "ba", "bà", "co", "cô", "chu", "chú", "bac", "bác",
                          "me", "mẹ", "bot"))
@@ -180,7 +182,7 @@ def _name_forms(form: str) -> set[str]:
 #: This exists because human review found two given names the map could not know:
 #: the room calls one member "anh <given name>" and another by a lowercase
 #: nickname, and neither form is in `display_name`, `nickname` or `aliases`. The
-#: same gap failed benchmark case `p148` ("@bot đã trả anh <name>") — the bench room
+#: same gap failed benchmark case `p148` ("@bot đã trả anh <name>" — "paid <name>") — the bench room
 #: has no member by that name, so the turn could not resolve who was paid.
 EXTRA_ALIASES_PATH = Path(__file__).resolve().parent / "corpus" / "extra_aliases.txt"
 
@@ -315,7 +317,7 @@ def sanitize(rows: list[dict], name_map: dict[str, str] | None = None,
 #: Word tokens, for the residual-name skim. Capitalization is decided with
 #: `str.isupper()` rather than a character class: the obvious `[A-ZĐÀ-Ỹ]` range
 #: spans U+00C0–U+1EF9 and so matches *lowercase* diacritics too, which buried the
-#: review list under "được", "ăn" and "đã".
+#: review list under "được", "ăn" and "đã" (common words, not names).
 _WORD = re.compile(r"(?<![\w@])([^\W\d_][\w]*)")
 
 #: `anh|chị|em|… <word>` — a kinship pronoun followed by what is almost always a
@@ -389,7 +391,7 @@ def _turns(rows: list[dict]) -> list[tuple[dict, list[dict]]]:
         # `meal`/`payment` row with no user message in between is that commit's
         # fallout, not an answer to the text further up.
         #
-        # This is how `p266` — "@bot cho tôi 1 số để đánh lô", answered in prose
+        # This is how `p266` — "@bot cho tôi 1 số để đánh lô" ("give me a lottery number"), answered in prose
         # with a lottery number — ended up expecting `settle_period`: three rows
         # later a human pressed Confirm on a payment, and the QR card that came
         # with it (`type: "settlement"`) walked back past the commit to the lottery
@@ -415,8 +417,8 @@ def _turns(rows: list[dict]) -> list[tuple[dict, list[dict]]]:
 #: memory watermark, and **the watermark is unrecoverable from the log** — the
 #: summarizer's position was never written to `room_messages`. So this is a
 #: reconstruction, not the exact window prod used: bounded at 30 because that is
-#: enough for the references these messages actually make ("log", "còn nợ ai",
-#: "viết lại cho gọn") while keeping a 107-case replay affordable.
+#: enough for the references these messages actually make ("log", "còn nợ ai" / "who
+#: still owes", "viết lại cho gọn" / "rewrite it shorter") while keeping a 107-case replay affordable.
 HISTORY_WINDOW = 30
 
 #: `kind`s production feeds the model as history. `chat.build_history` filters
@@ -430,7 +432,7 @@ def ledger_steps(ledger: dict, before: str, to_key) -> list[dict]:
 
     **A prod case replayed without these runs against an empty ledger**, and that
     silently broke most of the corpus: `p20` ("@bot paid my part") answered *"bạn
-    không nợ ai"* — correctly, for a room where nothing had ever happened — and was
+    không nợ ai"* ("you owe nobody") — correctly, for a room where nothing had ever happened — and was
     graded as failing to call `propose_payment`. The conversation was in the
     history; the money was nowhere.
 
@@ -518,12 +520,12 @@ def render_history(rows: list[dict], index: int, to_key, *,
     """The rows before `index`, rendered the way production renders history.
 
     Mirrors `chat._render_messages` exactly — `«Name»: body` for a member,
-    `phoenix: body` for the bot, `[ảnh: N]` for an image, oldest→newest, each
+    `phoenix: body` for the bot, `[image: N]` for an image, oldest→newest, each
     body clamped — because a replay fed a *different* history is not a replay.
 
     **Without this the prod corpus was unanswerable in places, and graded the
     engine for it.** `p120`'s whole message is "@bot log"; `p129` is "tôi đã trả
-    tiền A1" against an expectation of 27,000đ that appears nowhere in it; `p156`
+    tiền A1" ("I paid A1") against an expectation of 27,000đ that appears nowhere in it; `p156`
     asks to reformat an answer given one turn earlier. Production had the
     conversation in front of it for all three. Replaying the message alone asks
     the model to guess, then records the guess as a tool-selection failure.
@@ -536,7 +538,7 @@ def render_history(rows: list[dict], index: int, to_key, *,
             body = body[:clamp] + "…"
         count = int(row.get("had_images") or 0)
         if count:
-            body = (f"{body} " if body else "") + f"[ảnh: {count}]"
+            body = (f"{body} " if body else "") + f"[image: {count}]"
         author_id = row.get("author_member_id")
         if author_id in (None, "", 0):
             lines.append(f"phoenix: {body}")
@@ -586,7 +588,8 @@ def members_at(members: list[dict], key_by_member_id: dict, before: str) -> list
 
     `default_participant` is deliberately **not** carried. It is current state, not
     history: two members are flagged out of group activities today, while the log
-    shows both inside "cả nhóm" meals and a `pick_random` drawing "trong 7 người"
+    shows both inside "cả nhóm" ("whole group") meals and a `pick_random` drawing "trong 7 người"
+    ("among 7 people")
     at the time. Copying today's flags would model a room that never existed.
     """
     roster = []
@@ -849,7 +852,7 @@ def verify(path: Path, secrets: list[str], names: list[str] = ()) -> list[str]:
 
     `names` are matched on **word boundaries, case-insensitively, over NFC-normalized
     text** — the three things that each let a real name through once: a substring
-    match would flag "nhưng" for containing a name, a case-sensitive one misses a
+    match would flag "nhưng" ("but") for containing a name, a case-sensitive one misses a
     lowercase given name, and an unnormalized one misses a decomposed vowel.
 
     This runs over the corpus *and* the committed baseline. It is the check that

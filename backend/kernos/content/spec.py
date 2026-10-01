@@ -65,8 +65,15 @@ class Models(_Strict):
 
 
 class Retry(_Strict):
+    """pi's agent-level retry on transient provider errors (rate limits, 5xx).
+
+    pi's own default is 3 retries at 2/4/8s, about 14s of waiting. Bench
+    2026-10-01 on openai/gpt-6.1-sol-pro: 9-11 of 72 turns still failed with
+    "rate-limited upstream" after those three, so the default is 5 (2/4/8/16/32s,
+    about 62s), well inside the turn cap.
+    """
     enabled: bool = True
-    maxRetries: int = 3
+    maxRetries: int = 5
     baseDelayMs: int = 2000
 
 
@@ -155,7 +162,9 @@ class ProfileSpec(_Strict):
             skills=[{"name": s.name, "description": s.description, "body": s.body}
                     for s in self.skills if s.delivery == "inline"],
             context_files=[{"path": r.slug, "content": r.content} for r in self.rules],
-            settings=dict(self.settings),
+            # `retry` is sent as pi's own `retry` settings block; an explicit
+            # `settings.retry` (set by hand in the CMS) still wins.
+            settings={"retry": self.retry.model_dump(), **self.settings},
             extensions=list(self.extensions),
         )
 

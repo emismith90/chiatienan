@@ -5,14 +5,14 @@ from kernos.kernel.context import Stage, TurnContext
 from kernos.kernel.plugin import BasePlugin
 
 DEFAULT_HEADERS = {
-    "memory": "# Bộ nhớ dài hạn",
-    "history": "# Lịch sử hội thoại (gần đây)",
-    "images": "# Ảnh kèm theo",
-    "user": "# Tin nhắn người dùng",
+    "memory": "# Long-term memory",
+    "history": "# Conversation history (recent)",
+    "images": "# Attached images",
+    "user": "# User message",
 }
 DEFAULT_IMAGES_NOTE = (
-    "Lượt này có {n} ảnh (thường là hoá đơn) — "
-    "ĐỌC ảnh trước khi trả lời. Đừng hỏi lại tổng tiền / giá từng món nếu ảnh đã có."
+    "This turn has {n} image(s) (usually a bill) — "
+    "READ the images before replying. Don't ask again for the total / per-item prices if the image already shows them."
 )
 
 
@@ -24,7 +24,7 @@ def render_sections(user_text: str, *, memory: str | None = None, history: str |
     ``image_count`` is announced in the text because the images themselves ride on
     the message, invisible to the prompt: in production the bill was attached and
     the model still asked for the total that was in it, then read that same total
-    off the image one turn later. The history renders past images as ``[ảnh: N]``
+    off the image one turn later. The history renders past images as ``[image: N]``
     for the same reason — this covers the current turn.
     """
     h = {**DEFAULT_HEADERS, **(headers or {})}

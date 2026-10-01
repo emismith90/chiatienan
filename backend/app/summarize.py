@@ -14,12 +14,12 @@ from app.config import settings
 logger = logging.getLogger("chiatienan")
 
 _SUMMARY_PROMPT = (
-    "Bạn đang tóm tắt lịch sử một nhóm chat chia tiền ăn trưa để làm bộ nhớ dài hạn.\n"
-    "Tóm tắt NGẮN GỌN bằng tiếng Việt, 5–10 gạch đầu dòng: các bữa ăn đã ghi, ai trả, "
-    "ai nợ ai, các quyết định và ngữ cảnh đáng nhớ.\n"
-    "TUYỆT ĐỐI KHÔNG bịa hay tự tính số tiền — chỉ ghi lại con số đã xuất hiện rõ trong "
-    "hội thoại. Đây chỉ là bộ nhớ tham khảo, không phải sổ cái.\n\n"
-    "# Hội thoại cần tóm tắt\n"
+    "You are summarising the history of a lunch bill-splitting group chat into long-term memory.\n"
+    "Keep it SHORT, 5–10 bullet points, in English: "
+    "meals recorded, who paid, who owes whom, decisions and context worth remembering.\n"
+    "NEVER invent or compute any amount yourself — only copy figures that appear plainly in "
+    "the conversation. This is reference memory only, not the ledger.\n\n"
+    "# Conversation to summarise\n"
 )
 
 

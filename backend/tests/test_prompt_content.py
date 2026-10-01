@@ -1,7 +1,8 @@
 """The prompt is content now (plan Task 2.7): the template in ``app.prompt`` renders
 exactly what the pre-Phase-2 code produced, for every sender case, from code and
 through the ``kernos.prompt.template`` plugin alike. ``tests/legacy_prompt.py`` is
-the pre-change module, kept verbatim as the oracle."""
+the pre-change module's structure (same sender conditionals), with its text kept in
+step with the English prompt, as the oracle."""
 from datetime import date, datetime, timezone
 
 import pytest

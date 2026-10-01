@@ -80,8 +80,8 @@ def test_sections_renderer_equals_todays_render_prompt():
 async def test_sections_plugin_and_model_passthrough():
     ctx = _ctx(memory="M", history="H", images=[{"data": "x"}])
     await SectionsMessage().run(ctx, {"headers": {"user": "# User"}})
-    assert ctx.message.startswith("# Bộ nhớ dài hạn\nM") and ctx.message.endswith("# User\n@bot hi")
-    assert "Lượt này có 1 ảnh" in ctx.message
+    assert ctx.message.startswith("# Long-term memory\nM") and ctx.message.endswith("# User\n@bot hi")
+    assert "This turn has 1 image(s)" in ctx.message
     ctx.profile = ProfileSpec(models=Models(text="t", vision="v", thinking="high"), caps=Caps(max_tools=5))
     await ModelPassthrough().run(ctx, {})
     assert (ctx.model, ctx.vision_model, ctx.thinking, ctx.caps) == ("t", "v", "high", {"max_tools": 5, "max_seconds": 120})

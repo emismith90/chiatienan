@@ -80,6 +80,24 @@
         "tracked": 154000,
         "balances": {"m1": 104144, "m2": -60935, "m3": -43209}
       }
+    },
+    {
+      "id": "B4",
+      "day": "2026-09-15",
+      "actor": "m1",
+      "message": "@bot thanh toán cơm sườn, tôi với Bình và Cường ăn",
+      "images": ["transfer-shop.png"],
+      "expect": {
+        "tools": ["propose_meal"],
+        "args": {"propose_meal": {
+          "total": 276000,
+          "payer": "m1",
+          "participants": ["m1", "m2", "m3"]
+        }},
+        "shares": {"m1": 92000, "m2": 92000, "m3": 92000},
+        "tracked": 276000,
+        "balances": {"m1": 184000, "m2": -92000, "m3": -92000}
+      }
     }
   ]
 }

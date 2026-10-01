@@ -128,9 +128,11 @@ export function rhythmLabel(stats: PlaceStats): string | null {
 /** The price band, in English.
  *
  * `places._BANDS` stays Vietnamese in the backend on purpose: `suggest_lunch`
- * takes a `budget` argument in the room's own words ("rẻ thôi") and compares it
- * to the band it computed, so translating it there would break the model-facing
- * contract. Translation belongs at the display edge, which is here. */
+ * takes a `budget` argument in the room's own words ("rẻ thôi", i.e. "cheap
+ * please") and compares it to the band it computed, so translating it there
+ * would break the model-facing contract. Translation belongs at the display
+ * edge, which is here. The keys below are those backend values, so they stay
+ * Vietnamese. */
 const BANDS: Record<string, string> = { "rẻ": "cheap", "vừa": "mid", "đắt": "pricey" };
 
 export function bandLabel(band: string | null): string | null {

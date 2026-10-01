@@ -57,7 +57,8 @@ def _supersede_duplicates(session: Session, room_id: int, new_att: dict) -> list
     WHY — a pending draft blocks ``settle_period``, and nothing used to retire
     one. In production a 324,000đ proposal was refined into a 324,200đ proposal
     twenty messages later; confirming the new card left the old one pending, so
-    every "chốt kỳ" for the next four hours answered "#101 chưa xác nhận" while
+    every "chốt kỳ" ("close the period") for the next four hours answered
+    "#101 chưa xác nhận" ("#101 not confirmed") while
     the stale card sat far above the fold. Four people asked the bot to close it
     and it had no way to.
 
@@ -262,7 +263,8 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
                                    logged_by=logged_by, occurred_on=meal.occurred_on)
     for pay in targeted_payments:
         _repoint_or_void_edited_payment(session, room_id, pay, res)
-    body, card_att = draft_kinds()["expense_draft"].card(session, room_id, att, res)
+    body, card_att = draft_kinds()["expense_draft"].card(
+        session, room_id, att, {**res, "replaces_meal_id": meal.id})
     meal_msg = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
     att["committed_meal_id"] = res["meal_id"]
     m.attachments = att
@@ -273,7 +275,7 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
 def create_payment_draft(session: Session, room_id: int,
                          payload: dict) -> tuple[RoomMessage, list[RoomMessage]]:
     """A pending ``payment_draft`` (see :func:`create_card`): "tôi đã trả tiền Emi"
-    asked twice in a row leaves one live card, not two, and neither can go on
+    ("I paid Emi") asked twice in a row leaves one live card, not two, and neither can go on
     blocking a settle."""
     return create_card(session, room_id, "payment_draft", payload)
 

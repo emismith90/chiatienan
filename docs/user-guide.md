@@ -28,6 +28,10 @@ it, and it only counts once somebody presses **Confirm**.
 @phoenix roll xem ai rót trà
 ```
 
+(In order: "today we had bún riêu, 245k — emi, nhím, me, giang"; "I've paid Linh back";
+"who owes who"; "roll to see who pours the tea". Write in English if you prefer — the bot
+replies in the language you wrote in.)
+
 If a card shows the wrong numbers, press **Cancel** and say it again. A card that is never
 confirmed changes nothing, but it does block "who owes who" until you decide, so clear it.
 
@@ -71,7 +75,7 @@ things that keep it honest should not be one careless edit away.
 > refuses the change. A rule written in prose is *advice* — the bot usually follows it, but
 > an instruction that contradicts it can win. So a skill saying "work the split out
 > yourself" may actually get obeyed, even though a money rule says not to. Nothing can be
-> written to the ledger without a card somebody confirmed, and a reply claiming "Đã ghi #14"
+> written to the ledger without a card somebody confirmed, and a reply claiming "Recorded #14"
 > when nothing was recorded is caught and replaced. But a *number in a sentence* is not
 > guaranteed to have come from a tool. Treat the cards as the truth and the prose as
 > commentary.
@@ -129,6 +133,8 @@ recent mistakes:
 ```
 @phoenix nhờ steward xem lại
 ```
+
+("ask the steward to take a look")
 
 It counts what actually went wrong — forged confirmations, money it could not account for,
 tool calls a rule refused, turns that timed out — and if there is a clear pattern, it drafts

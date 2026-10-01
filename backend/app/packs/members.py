@@ -98,15 +98,21 @@ def build(ctx) -> dict[str, PackTool]:
             m = accounts.find_member(s, ctx.space_id, target)
             if m is None:
                 return _err(f"No member found for '{target}'.")
+            # Some models fill every optional field with "" / [] even for a plain
+            # rename; `accounts.update_member` writes anything non-None, so a blank
+            # here would wipe bank details. From the model, blank means "not given".
+            def given(key):
+                val = args.get(key)
+                return None if val in ("", []) else val
             try:
                 accounts.update_member(
                     s, m,
-                    display_name=args.get("display_name"),
-                    nickname=args.get("nickname"),
-                    bank_code=args.get("bank_code"),
-                    account_number=args.get("account_number"),
-                    account_holder=args.get("account_holder"),
-                    aliases=args.get("aliases"),
+                    display_name=given("display_name"),
+                    nickname=given("nickname"),
+                    bank_code=given("bank_code"),
+                    account_number=given("account_number"),
+                    account_holder=given("account_holder"),
+                    aliases=given("aliases"),
                     active=args.get("active"),
                     default_participant=args.get("default_participant"),
                 )

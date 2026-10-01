@@ -101,6 +101,17 @@ def test_the_production_forgery_is_caught():
     assert stray == [132_293, 793_760]
 
 
+def test_english_and_edit_wordings_are_checked_against_the_ledger():
+    """The room's confirmations have been English ("Recorded #N") since mid-August,
+    and an edit now says "Updated #N (replaces #M)". A repeat of either, with its
+    amounts already in the history, only the meal-id test can condemn."""
+    history = "Recorded #45 — sushi: Emi paid 586,000đ total • Emi 146,500đ"
+    for body in ("Recorded #99 — sushi: Emi paid 586,000đ total • Emi 146,500đ",
+                 "Updated #99 (replaces #45) — sushi: Emi paid 586,000đ total • Emi 146,500đ"):
+        assert fabricated_commit(body, f"@phoenix log\n{history}", [],
+                                 meal_exists=lambda _id: False) is not None, body
+
+
 def test_a_forgery_survives_the_tools_that_did_not_write():
     """The turn read the room and then lied about the outcome. Lookups and
     read-only queries are not a licence to claim a write."""

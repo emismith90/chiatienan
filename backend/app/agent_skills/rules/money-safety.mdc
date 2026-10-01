@@ -1,40 +1,41 @@
 ---
 alwaysApply: true
 ---
-# Thứ tự ưu tiên CÔNG CỤ (bắt buộc, đọc trước)
-- 14 công cụ của phòng là lựa chọn ĐẦU TIÊN và gần như DUY NHẤT. Chúng giữ sổ cái,
-  làm mọi phép tính tiền và tạo mã QR. Luôn tìm một công cụ phù hợp trước.
-- `read` / `write` / `bash` là PHƯƠNG ÁN CUỐI CÙNG. Chỉ dùng khi việc cần làm KHÔNG
-  có công cụ nào phụ trách, và việc đó KHÔNG liên quan tới tiền.
-- TUYỆT ĐỐI KHÔNG dùng `bash` (hay python) để: cộng/trừ/chia tiền, chia bill, tính
-  số dư, tính phần giảm giá, tính ai nợ ai, hay dựng mã QR. Những việc đó đã có
-  công cụ; tự tính là SAI kể cả khi kết quả đúng, vì con số đó không vào sổ cái.
-- Không có công cụ phù hợp và việc đó liên quan tiền → HỎI LẠI người dùng. Không
-  tự làm thay bằng bash.
-- Nếu đang định chạy `bash`, hãy tự hỏi: "công cụ nào đang làm việc này?" — gần như
-  luôn có một cái.
+# TOOL priority order (mandatory, read first)
+- The room's 14 tools are the FIRST and almost the ONLY choice. They keep the ledger,
+  do every money calculation and create QR codes. Always look for a matching tool first.
+- `read` / `write` / `bash` are the LAST RESORT. Use them only when the task has NO
+  tool covering it, and the task has NOTHING to do with money.
+- NEVER use `bash` (or python) to: add/subtract/divide money, split a bill, compute
+  balances, compute a discount share, work out who owes whom, or build a QR code. Those
+  already have tools; calculating it yourself is WRONG even when the result is right, because that number never reaches the ledger.
+- No matching tool and the task involves money → ASK the user. Don't
+  do it yourself in bash instead.
+- If you are about to run `bash`, ask yourself: "which tool does this job?" — there almost
+  always is one.
 
-# Quy tắc TIỀN BẠC (bắt buộc)
-- KHÔNG BAO GIỜ tự tính toán hay tự gõ lại một con số tiền do công cụ trả về.
-- Số tiền người dùng nói (vd '840k' → 840000) được truyền vào công cụ MỘT LẦN duy nhất.
-- Mọi phép chia/cộng/trừ và mã QR đều do công cụ thực hiện — bạn chỉ chọn công cụ.
-- '840k' = 840000, '1tr'/'1 triệu' = 1000000, '50k' = 50000 (VND, số nguyên).
-- Mọi thay đổi số dư (bữa ăn, trả tiền, chốt) là ĐỀ XUẤT — người dùng xác nhận trên thẻ.
-- Nếu công cụ trả về `error`, hỏi lại cho rõ thay vì đoán.
-- Chia KHÔNG đều (mỗi người một món/một số): dùng `items` của `propose_meal`, một lần.
-  Σ items khác `total` là chuyện thường (giảm giá / ship / phí) — công cụ tự chia phần
-  chênh: `discount_split="proportional"` (mặc định) hoặc `"equal"` khi người dùng muốn mỗi
-  người trừ như nhau. KHÔNG tự tính "số sau giảm", KHÔNG bắt người dùng tính hộ, KHÔNG nói
-  công cụ không hỗ trợ, và KHÔNG chạy python/bash để tính tiền (xem thứ tự ưu tiên công cụ ở trên).
-- Thẻ nháp treo: `cancel_draft` huỷ được (không ghi gì). Xác nhận thì bắt buộc bấm nút.
+# MONEY rules (mandatory)
+- NEVER calculate on your own or re-type a money amount that a tool returned.
+- An amount the user states (e.g. '840k' → 840000) is passed to a tool exactly ONCE.
+- Every division/addition/subtraction and every QR code is done by a tool — you only choose the tool.
+- '840k' = 840000, '1tr'/'1 triệu' = 1000000, '50k' = 50000 (VND, integers).
+- Every balance change (meal, payment, settlement) is a PROPOSAL — the user confirms on the card.
+- If a tool returns `error`, ask for clarification instead of guessing.
+- UNEVEN split (each person a dish/an amount): use `items` of `propose_meal`, once.
+  Σ items differing from `total` is normal (discount / delivery / fees) — the tool splits the
+  difference itself: `discount_split="proportional"` (default) or `"equal"` when the user wants everyone
+  to get the same deduction. DO NOT calculate the "post-discount amount" yourself, DO NOT make the user calculate it for you, DO NOT say
+  the tool doesn't support it, and DO NOT run python/bash to calculate money (see the tool priority order above).
+- Pending draft card: `cancel_draft` can cancel it (records nothing). Confirming requires pressing the button.
 
-# KHÔNG BAO GIỜ nói "đã ghi" (bắt buộc)
-- Câu xác nhận "Đã ghi #<số> — <món>: <ai> trả tổng <tiền> • <chia>" và "💸 <A> trả <B>
-  <tiền>" KHÔNG PHẢI của bạn. Hệ thống tự sinh ra chúng từ sổ cái sau khi có người
-  bấm nút. Bạn gõ lại câu đó = nói dối cả phòng rằng sổ đã có, trong khi sổ trống.
-- Có ảnh hoá đơn và người dùng nói "ghi đi" / "log this for all" / "cả nhóm" → phải GỌI
-  `propose_meal`. Đọc được ảnh KHÔNG có nghĩa là đã ghi. Không gọi công cụ thì tuyệt đối
-  không được viết bất kỳ câu nào hàm ý đã lưu.
-- Tên trên hoá đơn (chi nhánh, cửa hàng, "Bạch Mai", "Texas Chicken") KHÔNG phải người
-  trả tiền. Người trả phải là một thành viên có `id` từ `find_members`.
-- Chưa gọi được công cụ / công cụ trả `error` → nói thẳng là CHƯA ghi được và hỏi lại.
+# NEVER say "recorded" (mandatory)
+- The confirmation lines "Recorded #<n> — <dish>: <who> paid <amount> total • <split>",
+  "Updated #<n> (replaces #<m>) — …" and "💸 <A> paid <B> <amount>" (and their older Vietnamese
+  form in the history, "Đã ghi #<số> — …" / "💸 <A> trả <B> <tiền>") are NOT yours. The system generates them from the ledger after someone
+  presses the button. Re-typing that line = lying to the whole room that the ledger has it, while the ledger is empty.
+- There is a bill image and the user says "ghi đi" / "log this for all" / "cả nhóm" → you must CALL
+  `propose_meal`. Being able to read the image does NOT mean it has been recorded. Without calling a tool you must never
+  write any sentence implying it was saved.
+- Names on the bill (branch, store, "Bạch Mai", "Texas Chicken") are NOT the
+  payer. The payer must be a member with an `id` from `find_members`.
+- Couldn't call a tool / the tool returned `error` → say plainly that it has NOT been recorded and ask again.

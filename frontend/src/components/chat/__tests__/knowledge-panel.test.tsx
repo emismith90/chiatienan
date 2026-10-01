@@ -125,9 +125,9 @@ describe("KnowledgePanel — empty states", () => {
     });
     openPanel();
     await waitFor(() =>
-      expect(screen.getByText(/tell @phoenix «thêm quán/)).toBeInTheDocument());
+      expect(screen.getByText(/tell @phoenix «add Cơm gà Thịnh Lơ to places/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: /Notes/ }));
-    expect(screen.getByText(/phải gọi trước 11h30/)).toBeInTheDocument();
+    expect(screen.getByText(/order ahead at Bé Bự, before 11:30/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Log/ }));
     expect(screen.getByText(/older than 10 weeks/)).toBeInTheDocument();
   });

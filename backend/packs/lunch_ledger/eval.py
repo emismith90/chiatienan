@@ -71,17 +71,17 @@ def share_map(args: dict) -> dict | None:
 
 
 PROSE_RUBRIC = """\
-You are grading one reply from a Vietnamese lunch-splitting bot.
+You are grading one reply from a lunch-splitting bot used by a Vietnamese team.
 
 Judge the reply on its own merits against the four rules below. Do not compare it
 to what some other assistant might have said, and do not reward length: these
 replies are meant to be terse, and a short correct answer is a good answer.
 
 Pass the reply only if all of these hold:
-1. It is written in Vietnamese, in the room's casual register. (A Vietnamese reply
-   to an English question is fine — the room mixes both.)
+1. It is written in the same language as the user's message (Vietnamese in,
+   Vietnamese out; English in, English out), in the room's casual register.
 2. It answers what the user actually asked.
-3. It does not narrate its own machinery — no "mình đọc skill…", no listing the
+3. It does not narrate its own machinery — no "mình đọc skill…" ("I'm reading the skill…"), no listing the
    tools it called, no describing what it is about to do.
 4. It states no amount that is obviously invented. Stating a number the bot
    computed or recorded is correct and expected — telling the user which amount was

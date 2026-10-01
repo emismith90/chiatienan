@@ -14,15 +14,15 @@ def test_prompt_announces_attached_images():
     from app.agent import _render_prompt
 
     out = _render_prompt("@phoenix log đi", sender_name="Emi", image_count=1)
-    assert "Ảnh kèm theo" in out
-    assert "1 ảnh" in out
-    assert "Đừng hỏi lại tổng tiền" in out
+    assert "Attached images" in out
+    assert "1 image(s)" in out
+    assert "Don't ask again for the total" in out
 
 
 def test_prompt_is_unchanged_when_no_image_is_attached():
     from app.agent import _render_prompt
 
-    assert "Ảnh kèm theo" not in _render_prompt("@phoenix số dư", sender_name="Emi")
+    assert "Attached images" not in _render_prompt("@phoenix số dư", sender_name="Emi")
 
 
 def test_the_system_prompt_puts_the_room_tools_first_and_bash_last():
@@ -34,11 +34,11 @@ def test_the_system_prompt_puts_the_room_tools_first_and_bash_last():
     """
     from app.prompt import build_system_prompt
     prompt = build_system_prompt()
-    assert "Dùng công cụ của phòng trước tiên" in prompt
-    assert "phương án cuối" in prompt
-    assert "không dùng chúng để tính tiền" in prompt
+    assert "Use the room's tools first" in prompt
+    assert "last resort" in prompt
+    assert "never use them to calculate money" in prompt
     # and it must say what to do instead when no tool fits a money task
-    assert "hỏi lại người dùng" in prompt
+    assert "If no tool fits a money task, ask the user" in prompt
 
 
 def test_the_money_safety_rules_rank_the_tools_explicitly():
@@ -48,13 +48,13 @@ def test_the_money_safety_rules_rank_the_tools_explicitly():
     # Collapse wrapping: where a phrase breaks across lines is cosmetic, and
     # asserting on the wrapped form would make reflowing the file fail the test.
     rules = re.sub(r"\s+", " ", raw)
-    assert "Thứ tự ưu tiên CÔNG CỤ" in rules
-    assert "PHƯƠNG ÁN CUỐI CÙNG" in rules
+    assert "TOOL priority order" in rules
+    assert "LAST RESORT" in rules
     # the priority block must come before the money rules it justifies
-    assert rules.index("Thứ tự ưu tiên") < rules.index("Quy tắc TIỀN BẠC")
-    assert "PHƯƠNG ÁN CUỐI CÙNG" in rules
+    assert rules.index("TOOL priority order") < rules.index("MONEY rules")
+    assert "LAST RESORT" in rules
     # naming the forbidden operations beats a general prohibition
-    for operation in ("chia bill", "tính số dư", "mã QR"):
+    for operation in ("split a bill", "compute balances", "build a QR code"):
         assert operation in rules
 
 
@@ -71,7 +71,7 @@ def test_the_prompt_names_the_sender_and_their_member_id():
     prompt = build_system_prompt(sender_name="An", sender_id=7, today=date(2026, 7, 22))
     assert "«An»" in prompt
     assert "member_id=7" in prompt
-    assert "ĐỪNG hỏi lại họ là ai" in prompt
+    assert "DON'T ask them who they are" in prompt
 
 
 def test_the_sender_line_survives_a_missing_id():
@@ -85,18 +85,18 @@ def test_the_sender_line_survives_a_missing_id():
 
 def test_no_sender_means_no_sender_line_at_all():
     prompt = build_system_prompt(today=date(2026, 7, 22))
-    assert "Người đang nhắn" not in prompt
+    assert "The person messaging you" not in prompt
 
 
 def test_the_meal_skill_forbids_asking_who_the_sender_is():
-    """The skill used to *license* the question: "Chỉ hỏi khi thiếu … ai trả"."""
+    """The skill used to *license* the question: "only ask when … who paid is missing"."""
     from pathlib import Path
     body = (Path(__file__).resolve().parent.parent / "app" / "agent_skills" / "skills"
             / "record-meal" / "SKILL.md").read_text(encoding="utf-8")
-    assert 'TUYỆT ĐỐI không hỏi "bạn là ai"' in body
+    assert 'NEVER ask "who are you"' in body
     # and the sender is an eater like anyone else — one run charged a two-person
     # bill to one person by leaving them out of `participants`
-    assert "Người nhắn cũng là một người ăn" in body
+    assert "The sender is also an eater" in body
 
 
 def test_propose_meal_says_the_sender_counts_as_a_participant():
@@ -114,8 +114,8 @@ def test_items_are_forbidden_when_nobody_said_who_ate_what():
     a way that reads as precision.
     """
     prompt = build_system_prompt(today=date(2026, 7, 22))
-    assert "CHỈ dùng `items` khi biết chắc ai ăn món nào" in prompt
-    assert "CHIA ĐỀU" in prompt
+    assert "ONLY use `items` when you know for sure who ate which dish" in prompt
+    assert "SPLIT EVENLY" in prompt
 
     from app.tools import tool_manifest
     items = {t["name"]: t for t in tool_manifest()}["propose_meal"]["schema"]["properties"]["items"]

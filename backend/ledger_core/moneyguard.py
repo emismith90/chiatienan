@@ -21,7 +21,7 @@ are unattributable by construction — correct, but untraceable.
 fires only on the one class that is wrong no matter where the numbers came from:
 a reply that *claims the ledger was written* when no tool wrote it. That claim is
 never the model's to make — the room's confirmations ("Đã ghi #14 — …", "💸 A trả
-B 50,000đ") are rendered server-side by :mod:`app.chat` from a commit's own
+B 50,000đ" — "Recorded #14", "A paid B", in their pre-English form) are rendered server-side by :mod:`app.chat` from a commit's own
 result dict, and only on the commit routes, never on the fallback path that
 posts model prose.
 """
@@ -33,14 +33,15 @@ import re
 #: ISO dates first — "2026-07-27" would otherwise donate a bare 2026.
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
-#: A number with optional thousands separators and an optional VND unit.
+#: A number with optional thousands separators and an optional VND unit
+#: ("triệu" = million, "tr" its short form, "đ" = dong — as people write them).
 _AMOUNT = re.compile(
     r"(?<![\w.,])(\d[\d.,]*)\s*(k|tr|triệu|đ|vnd|d)?\b",
     re.IGNORECASE,
 )
 
 #: Below this, a bare number is far more likely to be a count, an id or a
-#: weekday ("6 người", "#101", "T5") than an amount of money.
+#: weekday ("6 người" / "6 people", "#101", "T5" / Thursday) than an amount of money.
 _BARE_MIN = 1000
 
 
@@ -114,17 +115,22 @@ def unbacked_amounts(body: str, user_text: str, tools) -> list[int]:
 
 #: Wording that tells the room a ledger entry now exists. Deliberately only the
 #: *past-tense* forms: "chưa ghi được" (couldn't record) and "mình sẽ ghi" (I'll
-#: record) are the honest replies this guard must never touch.
+#: record) are the honest replies this guard must never touch. The Vietnamese
+#: alternatives stay: the bot mirrors the user's language, so its replies (and any
+#: forged claim) are often Vietnamese ("đã ghi" = "recorded", "đã lưu" = "saved",
+#: "đã vào sổ" = "entered in the ledger").
 _COMMIT_CLAIM = re.compile(
     r"đã\s+ghi\b|đã\s+lưu\b|đã\s+ghi\s+sổ|đã\s+cập\s+nhật\s+sổ|đã\s+vào\s+sổ"
-    r"|\brecorded\b|\blogged\s+(?:it|this|that)\b",
+    r"|\brecorded\b|\bupdated\s*#\s*\d+|\blogged\s+(?:it|this|that)\b",
     re.IGNORECASE,
 )
 
-#: ``Đã ghi #14`` — the meal-id form of ``chat._meal_body``. A claim that names a
+#: ``Đã ghi #14`` / ``Recorded #14`` / ``Updated #14`` — the meal-id forms of
+#: ``chat._meal_body`` (Vietnamese before mid-August, English since). A claim that names a
 #: number is checkable against the ledger itself, which is the only test a
-#: forgery cannot launder its way past (see :func:`fabricated_commit`).
-_CLAIMED_MEAL_ID = re.compile(r"đã\s+ghi\s*#\s*(\d+)", re.IGNORECASE)
+#: forgery cannot launder its way past (see :func:`fabricated_commit`). "đã ghi"
+#: stays for Vietnamese replies and for history posted before the switch.
+_CLAIMED_MEAL_ID = re.compile(r"(?:đã\s+ghi|\brecorded|\bupdated)\s*#\s*(\d+)", re.IGNORECASE)
 
 
 def claimed_meal_ids(body: str) -> list[int]:
@@ -176,7 +182,7 @@ def fabricated_commit(body: str, user_text: str, tools, *, meal_exists=None,
 
     Test 2 still earns its place — it catches a claim that names no id — and it
     is still what keeps honest recall working: "bữa qua mình đã ghi rồi,
-    175,000đ" quotes a total from the handed-in history, names no meal id, and
+    175,000đ" ("I already recorded last meal, 175,000đ") quotes a total from the handed-in history, names no meal id, and
     passes.
     """
     if not body or not _COMMIT_CLAIM.search(body):

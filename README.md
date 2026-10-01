@@ -3,13 +3,14 @@
 [![CI](https://github.com/emismith90/chiatienan/actions/workflows/ci.yml/badge.svg)](https://github.com/emismith90/chiatienan/actions/workflows/ci.yml)
 
 A self-hosted chat app (installable PWA) for a group of ~6–7 colleagues who eat
-lunch together. Everyone joins a shared **room** and chats in Vietnamese. When
+lunch together. Everyone joins a shared **room** and chats (mostly in Vietnamese;
+the bot replies in whatever language the user wrote in). When
 someone pays, they `@mention` the bot — named **Phoenix**, because it was
 reborn on a new LLM engine (`@bot` still works as a legacy alias) — with a
 short natural-language message
 (optionally a bill photo). The bot interprets it with an LLM and posts an
 **editable expense-draft card**; a human confirms it, and only then is the meal
-written to an append-only ledger. On demand (*"@phoenix ai trả tuần này"*) it nets
+written to an append-only ledger. On demand (*"@phoenix ai trả tuần này"* — "who pays this week") it nets
 everyone's balances over the requested period, produces the minimal set of
 transfers, and returns a **VietQR** code per transfer so people pay by scanning.
 
@@ -91,7 +92,7 @@ Caddy (auto-TLS)
 | `drafts.py` | Draft-card lifecycle, generic over the packs' `DraftKind`s: persist, edit, commit, supersede, cancel |
 | `tools.py` | The host's tool composition point: `ToolContext`, `CustomTool`, `build_tools` (the enabled packs' tools in the legacy order), `tool_manifest` |
 | `packs/` | this host's packs: the registration of the framework's `lunch_ledger` (QR builder + place resolver injected), `lunch_places` (restaurants, memos), `room_members` (member CRUD) |
-| `prompt.py` | Vietnamese-aware system prompt + tool guidance |
+| `prompt.py` | System prompt + tool guidance (the bot replies in the user's language) |
 | `images.py` | Inline-image sanitize (vision) |
 | `qr.py` | VietQR image URL builder (pure, no network) |
 | `kernel.py` | kernos composition root: registry of plugins, host adapters, resolver → the pipeline `chat.run_bot_turn` runs |
@@ -186,15 +187,16 @@ What that buys, in one line each:
 
 ## Usage (in the room chat, mention `@phoenix`)
 
-- Log a meal: `@phoenix 840k cả nhóm trừ An, Bình +50k` (± a pasted bill photo) →
+- Log a meal: `@phoenix 840k cả nhóm trừ An, Bình +50k` ("840k, whole group except An, Bình +50k"; ± a pasted bill photo) →
   posts an **editable draft card**; tap to adjust payer/participants/total, then **Confirm**.
-- Payer didn't eat: `@phoenix An trả 200k nhưng không ăn, chia Bình và Cường`
-- Correct a recorded meal: `@phoenix xoá 42`
-- Preview who-owes-whom: `@phoenix ai trả tuần này`
-- Lock it in (the only thing that closes a period): `@phoenix chốt tuần này`
-- Display-only spend: `@phoenix tháng này tôi tiêu bao nhiêu`
-- Manage members: `@phoenix thêm thành viên Dũng`, `@phoenix đổi tên An thành Anh`,
-  `@phoenix xoá thành viên Cường` (soft-delete), `@phoenix khôi phục Cường`.
+- Payer didn't eat: `@phoenix An trả 200k nhưng không ăn, chia Bình và Cường` ("An paid 200k but didn't eat, split between Bình and Cường")
+- Correct a recorded meal: `@phoenix xoá 42` ("delete 42")
+- Preview who-owes-whom: `@phoenix ai trả tuần này` ("who pays this week")
+- Lock it in (the only thing that closes a period): `@phoenix chốt tuần này` ("close out this week")
+- Display-only spend: `@phoenix tháng này tôi tiêu bao nhiêu` ("how much did I spend this month")
+- Manage members: `@phoenix thêm thành viên Dũng` ("add member Dũng"), `@phoenix đổi tên An thành Anh`
+  ("rename An to Anh"), `@phoenix xoá thành viên Cường` ("remove member Cường"; soft-delete),
+  `@phoenix khôi phục Cường` ("restore Cường").
 - Reset the bot's conversation memory: `/clear` — summarizes the recent chat into
   the room's long-term memory and starts a fresh context window (the chat history
   stays visible; the ledger is untouched).
@@ -256,8 +258,8 @@ Copy `.env.example` → `.env` and fill it in. Key vars:
 | Var | Purpose |
 |-----|---------|
 | `OPEN_ROUTER_KEY` | OpenRouter key for the sidecar (note the name — not `OPENROUTER_API_KEY`) |
-| `PI_MODEL` | default `~deepseek/deepseek-v4-flash-latest` (text-only) |
-| `PI_VISION_MODEL` | default `qwen/qwen3-vl-30b-a3b-instruct`. Mandatory in practice: every bill photo routes here |
+| `PI_MODEL` | default `openai/gpt-6.1-sol-pro` (text + image) |
+| `PI_VISION_MODEL` | default `openai/gpt-6.1-sol-pro` (same model). Every bill photo routes here |
 | `PI_MAX_TOOLS` / `PI_MAX_SECONDS` | per-turn runaway caps (40 / 120 s). A breach is a partial answer, not an error |
 | `BOT_HANDLE` | the `@`-handle the bot answers to in chat (default `bot`) |
 | `DATABASE_URL` | `sqlite:////data/chiatienan.db` (absolute, on the volume) |
@@ -286,7 +288,7 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
    `curl -X POST https://<CADDY_DOMAIN>/api/rooms -H "X-Admin-Password: <ADMIN_PASSWORD>" -H "content-type: application/json" -d '{"name":"Lunch"}'`.
 6. Members open `/join/<invite_token>`, set a nickname + PIN, and fill in their
    bank details on the profile screen. Add placeholders ahead of time with
-   `@phoenix thêm thành viên …`; they claim them on first sign-in.
+   `@phoenix thêm thành viên …` ("add member …"); they claim them on first sign-in.
 7. Nightly backups: schedule `deploy/backup.sh` from cron (see the script header).
 
 ## Testing
@@ -300,7 +302,7 @@ Full runbook: [`deploy/README.md`](deploy/README.md). In short:
 - **Frontend** (`vitest`): SSE parsing, message merge/dedupe, agent-timeline,
   balance-table, expense-draft-card, and mention rendering.
 - **E2E** (manual): deploy, join two devices to a room, run a meal log (inline
-  photo) → edit/confirm the draft → a preview → a `chốt`; verify the QR images
+  photo) → edit/confirm the draft → a preview → a `chốt` (close-out); verify the QR images
   render in the card and the ledger persists across a container restart.
 
 **CI/CD** (GitHub Actions, `.github/workflows/`): `ci.yml` runs on every push

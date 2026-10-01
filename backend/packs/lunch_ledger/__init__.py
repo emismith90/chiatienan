@@ -47,12 +47,14 @@ def meal_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
         "shares": [{"id": mid, "name": names.get(mid, "?"), "amount": amt}
                    for mid, amt in res["shares"].items()],
     }
+    if res.get("replaces_meal_id"):
+        meal_att["replaces_meal_id"] = res["replaces_meal_id"]
     return render._meal_body(meal_att), meal_att
 
 
 def meal_exists(session, space_id, meal_id) -> bool:
     """Is ``meal_id`` a live (non-voided) meal of this space? Room-scoped and void-aware
-    on purpose: "Đã ghi #14" is a claim about *this* room's ledger."""
+    on purpose: "Đã ghi #14" ("Recorded #14") is a claim about *this* room's ledger."""
     from ledger_core.models import Meal
     meal = session.get(Meal, int(meal_id))
     return meal is not None and meal.room_id == int(space_id) and not meal.voided

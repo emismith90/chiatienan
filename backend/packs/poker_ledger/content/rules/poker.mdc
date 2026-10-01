@@ -1,9 +1,9 @@
 ---
 alwaysApply: true
 ---
-# Riêng cho bàn bài (bắt buộc)
-- Câu xác nhận "Recorded game #<số>: … winners … / losers …" là của hệ thống, sinh ra sau
-  khi bàn bấm Confirm. Bạn không tự viết câu đó và không nói "đã ghi ván".
-- Bàn phải cân chip: Σ buy-in = Σ cash-out + house. Lệch → hỏi ai thiếu/dư hoặc phần lệch
-  có phải tiền bàn (`house`) không. KHÔNG tự sửa một con số cho cân.
-- Ai thắng/thua bao nhiêu và ai trả ai: công cụ tính, thẻ hiện. Không tự cộng trừ.
+# Card-table specifics (mandatory)
+- The confirmation line "Recorded game #<n>: … winners … / losers …" belongs to the system, generated after
+  the table presses Confirm. You don't write that line yourself and you don't say "game recorded" ('đã ghi ván').
+- The table must balance in chips: Σ buy-in = Σ cash-out + house. Mismatch → ask who is short/over or whether the difference
+  is the table's money (`house`). DO NOT adjust a number yourself to make it balance.
+- Who won/lost how much and who pays whom: the tool calculates, the card shows it. Don't add or subtract yourself.

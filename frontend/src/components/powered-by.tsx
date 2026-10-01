@@ -1,16 +1,16 @@
-import { DeepSeekMark } from "./deepseek-mark";
+import { SolMark } from "./sol-mark";
 
 /** The engine the room is actually talking to.
  *
  * Kept as a constant rather than fetched: this renders on the boot splash,
  * before there is a session or a reachable API. It must track `pi_model` in
- * `backend/app/config.py` (`PI_MODEL`, default `~deepseek/deepseek-v4-flash-latest`)
+ * `backend/app/config.py` (`PI_MODEL`, default `openai/gpt-6.1-sol-pro`)
  * — if that default moves, move this with it.
  */
-export const ENGINE_NAME = "DeepSeek V4 Flash";
+export const ENGINE_NAME = "GPT-6.1 Sol Pro";
 
-/** chiatienan × DeepSeek, as a lockup: the app's own icon, a multiplication
- * sign, the whale. The `?v=2` matches the cache-busting suffix `layout.tsx`
+/** chiatienan × Sol, as a lockup: the app's own icon, a multiplication
+ * sign, the sun. The `?v=2` matches the cache-busting suffix `layout.tsx`
  * uses on the same file — without it this would be a second URL for the same
  * bytes, and the service worker would cache the icon twice.
  */
@@ -22,7 +22,7 @@ function Lockup({ px }: { px: number }) {
       <span className="text-[var(--text-secondary)]" style={{ fontSize: px * 0.5 }}>
         ×
       </span>
-      <DeepSeekMark className="shrink-0" fill="#4D6BFE" width={px} height={px} />
+      <SolMark className="shrink-0" width={px} height={px} />
     </span>
   );
 }

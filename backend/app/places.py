@@ -343,6 +343,8 @@ def backfill_links(session: Session, room_id: int) -> dict:
 #: short enough that a place the room dropped six months ago stops competing.
 _STATS_WINDOW_DAYS = 120
 
+#: Price bands: cheap / mid / pricey. The Vietnamese words are the enum values
+#: the `suggest_lunch` schema and stored stats use, so they stay.
 _BANDS = ("rẻ", "vừa", "đắt")
 
 
@@ -438,7 +440,8 @@ def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DA
 
 
 #: Tag a place carries when it came from a directory import rather than from
-#: anyone actually going there (design D14).
+#: anyone actually going there (design D14). "chưa-thử" = "not tried yet"; it is a
+#: stored tag value, so it stays in Vietnamese.
 UNTRIED_TAG = "chưa-thử"
 
 

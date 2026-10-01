@@ -34,7 +34,7 @@ def _evidence(ctx: TurnContext, packs) -> list:
 def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
     """Is ``meal_id`` a live (non-voided) meal of ``room_id``?
 
-    Room-scoped and void-aware on purpose: "Đã ghi #14" is a claim about *this*
+    Room-scoped and void-aware on purpose: "Đã ghi #14" ("Recorded #14") is a claim about *this*
     room's ledger, and a voided meal is one the room decided never happened.
     """
     with db.session() as s:
@@ -59,7 +59,7 @@ class FabricatedCommit(BasePlugin):
     text that says the ledger was written when no tool wrote it.
 
     2026-08-14, room 3 — a bill photo and "log this for all" came back in 6.1s with
-    `tools=0` as a word-perfect forgery of `_meal_body`: "Đã ghi #14 — Texas
+    `tools=0` as a word-perfect forgery of `_meal_body` (quoted from prod as posted): "Đã ghi #14 — Texas
     Chicken: Bạch Mai trả tổng 793,760đ • …". There was no meal #14, "Bạch Mai" is
     the branch on the receipt rather than anyone in the room, and the split listed
     six of seven members. Nothing distinguished it from a real confirmation, so the
@@ -132,7 +132,7 @@ class UnbackedAmounts(BasePlugin):
     """Report money in the reply that no tool produced (see ``app.moneyguard``).
 
     The history counts as the user having said it. A number the room stated two
-    messages ago and the bot repeats back ("bạn nói tổng 324k") is not invented
+    messages ago and the bot repeats back ("bạn nói tổng 324k" — "you said 324k total") is not invented
     money, and flagging it buries the alerts that matter. `images=N` matters for
     triage: of the alerts that survive a tool-output allow-set, all but one were
     prices the model read off a bill photo — correct, but unattributable by

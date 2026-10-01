@@ -220,7 +220,7 @@ def test_conversation_txt_is_a_readable_transcript(client):
     lines = body.strip().split("\n")
     assert "[text]  Linh:  cơm tấm 120k" in lines[0]
     assert "[bot]  BOT:  đã ghi nhé" in lines[1]
-    assert "[ảnh: 1]" in lines[2]        # a pasted bill is visible, not silently absent
+    assert "[image: 1]" in lines[2]        # a pasted bill is visible, not silently absent
 
 
 def test_since_id_makes_polling_incremental(client):

@@ -42,7 +42,7 @@ class Settings:
     memory_window_weeks: int
     history_max_messages: int
     # How far back to look for a bill image when the @phoenix message itself has
-    # none (people paste the bill, then say "@phoenix log đi" in a second message).
+    # none (people paste the bill, then say "@phoenix log đi" ("log it") in a second message).
     image_lookback_messages: int
     image_lookback_minutes: int
     # Bot
@@ -78,12 +78,12 @@ class Settings:
             # Probed against the real tool schemas, not taken from a catalogue's
             # `supported_parameters` — see bench/probe_models.py.
             pi_model=(os.environ.get("PI_MODEL") or "").strip()
-            or "~deepseek/deepseek-v4-flash-latest",
-            # Mandatory in practice: the primary is text-only, so every bill photo
-            # routes here. An image turn with this unset fails loudly rather than
+            or "openai/gpt-6.1-sol-pro",
+            # Every bill photo routes here. The default is the same multimodal model
+            # as the primary; an image turn with this unset fails loudly rather than
             # dropping the photo.
             pi_vision_model=(os.environ.get("PI_VISION_MODEL") or "").strip()
-            or "qwen/qwen3-vl-30b-a3b-instruct",
+            or "openai/gpt-6.1-sol-pro",
             pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "openrouter",
             pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
             pi_max_tools=_int_env("PI_MAX_TOOLS", 40),

@@ -11,6 +11,7 @@ import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, Se
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { resolveExtensions } from "./extensions.js";
 import { toTypeBox } from "./schema.js";
@@ -84,8 +85,18 @@ export function buildAgentsFiles(req) {
  * plus `memory.md` injected as text, and a persistent pi session would double it.
  * The *process* is long-lived, so the spawn cost is paid once.
  */
+/**
+ * Models newer than the pinned pi catalogue (`openai/gpt-6.1-sol-pro` is not in
+ * 0.84's), registered the way pi documents: a `models.json` merged over the
+ * built-in providers. Shipped beside this file so every host gets the same list.
+ */
+export const MODELS_PATH = fileURLToPath(new URL("./models.json", import.meta.url));
+
 export async function buildSession(req, { callTool, modelRuntime } = {}) {
-  const runtime = modelRuntime || (await ModelRuntime.create());
+  const runtime = modelRuntime || (await ModelRuntime.create({
+    modelsPath: MODELS_PATH,
+    modelsStorePath: join(tmpdir(), "kernos-pi-models-store.json"),
+  }));
   const model = resolveModel(runtime, req);
 
   // Both paths are required and must exist: `DefaultResourceLoader` resolves them
@@ -132,7 +143,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
  * Pick the model for this turn: the vision model when images are attached.
  *
  * A turn carrying images **must not** fall back to the text model. The primary is
- * text-only (`~deepseek/deepseek-v4-flash-latest`), so a dropped photo means the
+ * often text-only (it was `~deepseek/deepseek-v4-flash-latest`), and a dropped photo means the
  * model invents the total — which is worse than an error, because it is wrong
  * money that looks right. Design §12: fail loudly, never silently drop the photo.
  */
@@ -140,7 +151,8 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
  * Turn a builtin-tool list into pi's tool options.
  *
  * **Empty means money-safety is structural.** `money-safety.mdc` only *asks* the
- * model not to compute money ("KHÔNG chạy python/bash để tính tiền"); without
+ * model not to compute money ("do NOT run python/bash to compute
+ * money"); without
  * `bash` it cannot. Enabling the builtins trades that guarantee for the model being
  * able to work things out itself, and restores the mechanism behind a known
  * production defect — `moneyguard`'s field note records the one non-image unbacked

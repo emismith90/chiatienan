@@ -32,8 +32,9 @@ Two consequences, both deliberate:
 
   1. There is no URL that pre-fills a transfer. The only channel that carries
      the amount and description is the QR payload itself (NAPAS "Quy định
-     Định dạng mã VietQR" v1.0 §5.2.6 ID 54, §5.2.14 ID 62-08), which reaches
-     the app by being scanned — not by being linked to.
+     Định dạng mã VietQR" — the VietQR code format spec, title kept as
+     published — v1.0 §5.2.6 ID 54, §5.2.14 ID 62-08), which reaches the app
+     by being scanned — not by being linked to.
   2. Since the redirector adds nothing, we skip it and navigate to the target
      directly. That removes the visible interstitial, and a third party from
      the tap path.

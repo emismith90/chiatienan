@@ -131,7 +131,7 @@ def test_an_unknown_corpus_name_raises():
 def test_the_synthetic_bill_cases_load_with_their_images():
     from bench.corpus import load
     cases = load("bills")
-    assert [c.id for c in cases] == ["B1", "B2", "B3"]
+    assert [c.id for c in cases] == ["B1", "B2", "B3", "B4"]
     for c in cases:
         assert c.had_images and len(c.images) == 1
         assert c.images[0]["mimeType"] == "image/png"

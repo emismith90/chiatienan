@@ -7,7 +7,7 @@ Run once per room after deploy::
 Idempotent by ``(room_id, slug)``: re-running refreshes the curated fields and
 never duplicates a row, so the seed files stay the editable source of truth.
 Finishes by backfilling ``meals.place_id`` over the room's history — without
-that, "tuần này ăn bún mấy lần rồi" has nothing to count until months of new
+that, "tuần này ăn bún mấy lần rồi" ("how many times did we have bún this week") has nothing to count until months of new
 meals accumulate.
 """
 from __future__ import annotations

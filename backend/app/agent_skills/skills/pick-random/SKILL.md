@@ -1,21 +1,21 @@
 ---
 name: pick-random
-description: Chọn ngẫu nhiên một người trong nhóm — "bốc thăm ai trả", "random một người", "chọn đại ai đi mua đồ ăn".
+description: Randomly pick one person in the group — "bốc thăm ai trả", "random một người", "chọn đại ai đi mua đồ ăn".
 ---
-# Bốc thăm một người
+# Draw one person
 
-- `pick_random` để CÔNG CỤ tự bốc ngẫu nhiên một thành viên. TUYỆT ĐỐI không tự chọn người — bạn không thể random thật, và kết quả phải do công cụ quyết định.
-- Bốc trong các thành viên "default_participant" (thành viên thường xuyên tham gia) của nhóm — không nhận danh sách giới hạn/loại trừ theo từng lần bốc. Nếu người dùng đòi 'trừ ai đó' hay 'chỉ trong A, B, C' cho MỘT lần bốc, giải thích rằng việc đó không làm theo từng lần được — muốn loại ai vĩnh viễn khỏi các LƯỢT BỐC thì dùng `update_member` với `default_participant:false`.
-- `default_participant:false` **chỉ ảnh hưởng tới `pick_random`**. Nó KHÔNG loại ai khỏi
-  "cả nhóm" khi chia tiền: `find_members all_active:true` luôn trả về toàn bộ phòng. Muốn
-  ai đó không phải trả một bữa thì bỏ họ khỏi `participants` của bữa đó.
-- "Tôi ngồi ngoài" / "lượt này không tính tôi" / "bốc lại" = BỐC LẠI (`pick_random`) —
-  đó là chuyện của MỘT lượt. TUYỆT ĐỐI không gọi `update_member` để đổi
-  `default_participant`: đó là thay đổi lâu dài cho MỌI lượt bốc sau này, và người dùng
-  không yêu cầu điều đó. Chỉ đổi khi họ nói rõ là muốn *từ nay* không bốc nữa.
-- Chỉ bốc khi người dùng NÓI RÕ là muốn bốc: 'bốc thăm', 'random', 'roll', 'chọn đại',
-  'ai rót trà'. "Hôm nay ai trả tiền?" / "ai trả tuần này?" là câu HỎI VỀ SỔ (ai đã trả)
-  → dùng `get_period_summary`/`settle_period`, TUYỆT ĐỐI không bốc thăm. Bốc thăm khi
-  người ta chỉ hỏi thông tin là tự dựng ra một nghĩa vụ trả tiền.
-- Bốc để làm gì ('trả tiền', 'đi mua đồ ăn') → truyền nguyên văn vào `label`.
-- Thẻ kết quả đã hiện tên người được chọn; trả lời ngắn gọn, ĐỪNG gõ lại tên (gõ lại là cách duy nhất làm sai một kết quả đúng).
+- `pick_random` lets the TOOL draw a member at random. NEVER pick the person yourself — you cannot be truly random, and the result must be decided by the tool.
+- The draw is among the group's "default_participant" members (regular participants) — it takes no per-draw include/exclude list. If the user asks to 'leave someone out' ('trừ ai đó') or 'only among A, B, C' ('chỉ trong A, B, C') for ONE draw, explain that this can't be done per draw — to permanently exclude someone from DRAWS, use `update_member` with `default_participant:false`.
+- `default_participant:false` **only affects `pick_random`**. It does NOT exclude anyone from
+  "the whole group" ('cả nhóm') when splitting money: `find_members all_active:true` always returns the whole room. If you want
+  someone not to pay for a meal, leave them out of that meal's `participants`.
+- "Tôi ngồi ngoài" / "lượt này không tính tôi" / "bốc lại" (I'm sitting out / don't count me this round / draw again) = DRAW AGAIN (`pick_random`) —
+  that concerns ONE round. NEVER call `update_member` to change
+  `default_participant`: that is a lasting change for EVERY future draw, and the user
+  didn't ask for it. Only change it when they say clearly that *from now on* they don't want to be drawn.
+- Only draw when the user SAYS CLEARLY they want a draw: 'bốc thăm', 'random', 'roll', 'chọn đại',
+  'ai rót trà'. "Hôm nay ai trả tiền?" / "ai trả tuần này?" (who paid today / this week?) are QUESTIONS ABOUT THE LEDGER (who has paid)
+  → use `get_period_summary`/`settle_period`, NEVER draw. Drawing when
+  people are only asking for information invents a payment obligation.
+- What the draw is for ('trả tiền', 'đi mua đồ ăn') → pass it verbatim into `label`.
+- The result card already shows the chosen person's name; reply briefly, DON'T re-type the name (re-typing is the only way to get a correct result wrong).

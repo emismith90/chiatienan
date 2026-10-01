@@ -62,7 +62,7 @@ async def test_a_spec_without_overrides_still_renders_system_and_message_per_tur
     await agent.run_turn("xin chào", ctx)
     assert fake.command["model"] == "pinned/model"
     assert fake.command["system"] == build_system_prompt(sender_name="Bình", sender_id=2)
-    assert fake.command["message"].endswith("# Tin nhắn người dùng\nxin chào")
+    assert fake.command["message"].endswith("# User message\nxin chào")
 
 
 async def test_the_context_defaults_leave_the_seam_closed(db):

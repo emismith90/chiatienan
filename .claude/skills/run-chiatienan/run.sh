@@ -102,7 +102,7 @@ TOKEN="$(printf '%s' "$ROOM_JSON" | python3 -c 'import sys,json;print(json.load(
 
 # Don't echo a real secret from .env; only show the dev default in the clear.
 ADMIN_SHOWN=$([ "$ADMIN_PASSWORD" = "devpass" ] && echo "devpass (dev default)" || echo "(from .env)")
-MODEL_SHOWN="${PI_MODEL:-~deepseek/deepseek-v4-flash-latest (default)}"
+MODEL_SHOWN="${PI_MODEL:-openai/gpt-6.1-sol-pro (default)}"
 
 cat <<EOF
 

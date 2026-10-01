@@ -66,12 +66,12 @@ _REMEMBER_SCHEMA = {
     "type": "object",
     "properties": {
         "about": {"type": "string",
-                  "description": "Quán hoặc người mà ghi nhớ này nói về ('Bé Bự', 'Nhím')."},
-        "text": {"type": "string", "description": "Nội dung, tiếng Việt, một câu."},
+                  "description": "The place or person this note is about ('Bé Bự', 'Nhím')."},
+        "text": {"type": "string", "description": "The note itself: one sentence, in Vietnamese (the room's language)."},
         "standing": {"type": "boolean",
-                     "description": "true = luật lâu dài ('phải đặt trước'), false = chuyện hôm nay."},
+                     "description": "true = a standing rule ('phải đặt trước' / 'must order ahead'), false = just about today."},
         "gate": {"type": "string",
-                 "description": "Luật theo giờ: busy@HH:MM, order-by@HH:MM, closes@HH:MM."},
+                 "description": "A clock rule: busy@HH:MM, order-by@HH:MM, closes@HH:MM."},
     },
     "required": ["about", "text"],
 }
@@ -80,7 +80,7 @@ _FORGET_SCHEMA = {
     "type": "object",
     "properties": {
         "about": {"type": "string"},
-        "text": {"type": "string", "description": "Nội dung ghi nhớ cần xoá, đúng nguyên văn."},
+        "text": {"type": "string", "description": "The text of the note to delete, verbatim."},
     },
     "required": ["about", "text"],
 }
@@ -218,7 +218,8 @@ def build(ctx) -> dict[str, PackTool]:
                     "minutes_left": minutes_left,
                     # The note the gate came from, so an explanation quotes the
                     # actual reason rather than whichever note happened to be
-                    # first ("ăn được, mới sửa quán" is not why it is too late).
+                    # first ("ăn được, mới sửa quán" — "decent, just renovated" — is not why
+                    # it is too late).
                     "gate_note": gate_note,
                     "notes": [o.text for o in mine],
                 })
@@ -267,15 +268,15 @@ def build(ctx) -> dict[str, PackTool]:
         raw = (args.get("about") or "").strip()
         text = (args.get("text") or "").strip()
         if not raw or not text:
-            return _err("Cần biết ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
+            return _err("Need to know WHO/WHICH PLACE the note is about and WHAT it says.")
         gate = (args.get("gate") or "").strip() or None
         when = None if args.get("standing") else ctx.today()
         with db.session() as s:
             found = _memo_subject(s, raw)
             if found is None:
                 return _err(
-                    f"Không rõ «{raw}» là quán nào hay ai. Gọi `find_places` hoặc "
-                    "`find_members` để xác định trước, hoặc `add_place` nếu là quán mới."
+                    f"Not sure which place or person «{raw}» is. Call `find_places` or "
+                    "`find_members` to pin it down first, or `add_place` if it is a new place."
                 )
             subject, label = found
             try:
@@ -294,17 +295,17 @@ def build(ctx) -> dict[str, PackTool]:
         raw = (args.get("about") or "").strip()
         text = (args.get("text") or "").strip()
         if not raw or not text:
-            return _err("Cần biết xoá ghi nhớ VỀ AI/QUÁN NÀO và NỘI DUNG gì.")
+            return _err("Need to know WHO/WHICH PLACE the note to delete is about and WHAT it says.")
         with db.session() as s:
             found = _memo_subject(s, raw)
             if found is None:
-                return _err(f"Không rõ «{raw}» là quán nào hay ai.")
+                return _err(f"Not sure which place or person «{raw}» is.")
             subject, label = found
             existing = [o for o in obs_mod.load(ctx.space_id) if o.subject == subject]
             if not any(o.text == text for o in existing):
                 return _err(
-                    f"Không có ghi nhớ nào của «{label}» khớp đúng nội dung đó. "
-                    f"Hiện có: {[o.text for o in existing] or 'chưa có gì'}."
+                    f"No note for «{label}» matches that text exactly. "
+                    f"Current notes: {[o.text for o in existing] or 'none yet'}."
                 )
             m = memos.create(s, ctx.space_id, action="remove", subject=subject,
                              subject_label=label, text=text)
@@ -368,17 +369,17 @@ def build(ctx) -> dict[str, PackTool]:
         "remember": dict(
             execute=remember,
             description=(
-                "Đề xuất ghi nhớ một điều về quán hoặc về một người ('quán này hay hết gà', "
-                "'Giang thích bún riêu', 'phải gọi trước 11h30'). Tạo THẺ để người dùng xác "
-                "nhận — không ghi thẳng. Dùng standing:true cho luật lâu dài."
+                "Propose remembering something about a place or a person ('quán này hay hết gà', "
+                "'Giang thích bún riêu', 'phải gọi trước 11h30'). Creates a CARD for the user to "
+                "confirm — never writes directly. Use standing:true for a standing rule."
             ),
             input_schema=_REMEMBER_SCHEMA,
         ),
         "forget": dict(
             execute=forget,
             description=(
-                "Đề xuất xoá một ghi nhớ đã có ('quán đó cải thiện rồi, bỏ ghi chú kia đi'). "
-                "Cũng cần xác nhận trên thẻ."
+                "Propose deleting an existing note ('quán đó cải thiện rồi, bỏ ghi chú kia đi'). "
+                "Also confirmed on a card."
             ),
             input_schema=_FORGET_SCHEMA,
         ),
