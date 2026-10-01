@@ -262,7 +262,8 @@ def recommit_draft(session: Session, draft_id: int, room_id: int, patch: dict,
                                    logged_by=logged_by, occurred_on=meal.occurred_on)
     for pay in targeted_payments:
         _repoint_or_void_edited_payment(session, room_id, pay, res)
-    body, card_att = draft_kinds()["expense_draft"].card(session, room_id, att, res)
+    body, card_att = draft_kinds()["expense_draft"].card(
+        session, room_id, att, {**res, "replaces_meal_id": meal.id})
     meal_msg = chat.post_message(session, room_id, None, body, attachments=card_att, kind="bot")
     att["committed_meal_id"] = res["meal_id"]
     m.attachments = att

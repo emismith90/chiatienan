@@ -19,8 +19,13 @@ def _meal_body(attachments: dict) -> str:
                  if guests else "")
     dish = attachments.get("dish")
     dish_str = f" — {dish}" if dish else ""
+    # An edit is a void + re-record under a new id; say so, or the room reads the
+    # second "Recorded #N" as a duplicate meal.
+    replaces = attachments.get("replaces_meal_id")
+    head = (f"Updated #{attachments.get('meal_id')} (replaces #{replaces})" if replaces
+            else f"Recorded #{attachments.get('meal_id')}")
     return (
-        f"Recorded #{attachments.get('meal_id')}{dish_str}: {payer.get('name', '?')} paid "
+        f"{head}{dish_str}: {payer.get('name', '?')} paid "
         f"{bill:,}đ total{guest_str} • {shares_str}"
     )
 

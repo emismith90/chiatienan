@@ -47,6 +47,8 @@ def meal_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
         "shares": [{"id": mid, "name": names.get(mid, "?"), "amount": amt}
                    for mid, amt in res["shares"].items()],
     }
+    if res.get("replaces_meal_id"):
+        meal_att["replaces_meal_id"] = res["replaces_meal_id"]
     return render._meal_body(meal_att), meal_att
 
 

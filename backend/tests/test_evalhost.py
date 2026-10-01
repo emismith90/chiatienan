@@ -26,7 +26,7 @@ def _import(db):
 def test_import_is_the_typical_corpus_with_ids_and_images_preserved_and_idempotent(db):
     k, bid, report = _import(db)
     expected = corpus.load("typical")
-    assert report["cases"] == len(expected) and report["cases"] in (23, 37)
+    assert report["cases"] == len(expected) and report["cases"] in (24, 38)
     rows = k.store.list_cases(bid, source="imported")
     assert [r["slug"] for r in rows] == [c.id for c in expected] and all(r["review"] is False for r in rows)
     bills = [c for c in expected if c.source == "bills"]

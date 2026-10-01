@@ -1,4 +1,4 @@
-"""Render the three synthetic bill photos beside this file.
+"""Render the synthetic bill photos (and one bank-transfer screenshot) beside this file.
 
 Committed so the PNGs are reproducible and their ground truth is auditable: the
 printed TỔNG CỘNG is what `cases.json` grades against, and a rendered bill is
@@ -28,6 +28,16 @@ BILLS = {
         ("Trân châu đường đen (An)", 1, 45000),
         ("Matcha latte (Bình)", 1, 55000),
         ("Hồng trà sữa (Cường)", 1, 39000)], [("Phí giao hàng", 15000)], 154000),
+}
+
+# A bank-app transfer to the shop itself (prod 2026-09-15): the sender paid for the
+# meal, so this must become a `propose_meal`, never a payment from them to themselves.
+# The shop name ends in the sender's own name, as it did in prod: that overlap is
+# what made `find_members` resolve the receiver to the sender.
+TRANSFERS = {
+    # id -> (sender, receiver, account, amount, memo)
+    "transfer-shop": ("AN NGUYEN", "HO KINH DOANH COM TAM UT AN", "0912 345 678",
+                      276000, "thanh toan com suon"),
 }
 
 CSS = """
@@ -62,6 +72,18 @@ def html(title, lines, extras, total):
 </body></html>"""
 
 
+def transfer_html(sender, receiver, account, amount, memo):
+    return f"""<html><head><meta charset="utf-8"><style>{CSS}</style></head><body>
+<div class="bill"><h1>✔ CHUYỂN TIỀN THÀNH CÔNG</h1><div class="sub">15/09/2026 12:26</div>
+<div class="tot"><span>Số tiền</span><span>{amount:,} VND</span></div><div class="rule"></div>
+<table><tr><td>Từ tài khoản</td><td class="p">{sender}</td></tr>
+<tr><td>Người nhận</td><td class="p">{receiver}</td></tr>
+<tr><td>Số tài khoản</td><td class="p">{account}</td></tr>
+<tr><td>Nội dung</td><td class="p">{memo}</td></tr></table>
+<div class="foot">Giao dịch đã được xử lý</div></div>
+</body></html>"""
+
+
 with sync_playwright() as pw:
     # PLAYWRIGHT_BROWSERS_PATH is preset on the dev image; pass
     # executable_path=... if your Chromium lives elsewhere.
@@ -73,4 +95,9 @@ with sync_playwright() as pw:
         path = OUT / f"{name}.png"
         page.locator(".bill").screenshot(path=str(path))
         print(name, total, path.stat().st_size, "bytes")
+    for name, fields in TRANSFERS.items():
+        page.set_content(transfer_html(*fields))
+        path = OUT / f"{name}.png"
+        page.locator(".bill").screenshot(path=str(path))
+        print(name, fields[3], path.stat().st_size, "bytes")
     browser.close()

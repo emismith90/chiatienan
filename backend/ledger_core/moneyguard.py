@@ -117,14 +117,15 @@ def unbacked_amounts(body: str, user_text: str, tools) -> list[int]:
 #: record) are the honest replies this guard must never touch.
 _COMMIT_CLAIM = re.compile(
     r"đã\s+ghi\b|đã\s+lưu\b|đã\s+ghi\s+sổ|đã\s+cập\s+nhật\s+sổ|đã\s+vào\s+sổ"
-    r"|\brecorded\b|\blogged\s+(?:it|this|that)\b",
+    r"|\brecorded\b|\bupdated\s*#\s*\d+|\blogged\s+(?:it|this|that)\b",
     re.IGNORECASE,
 )
 
-#: ``Đã ghi #14`` — the meal-id form of ``chat._meal_body``. A claim that names a
+#: ``Đã ghi #14`` / ``Recorded #14`` / ``Updated #14`` — the meal-id forms of
+#: ``chat._meal_body`` (Vietnamese before mid-August, English since). A claim that names a
 #: number is checkable against the ledger itself, which is the only test a
 #: forgery cannot launder its way past (see :func:`fabricated_commit`).
-_CLAIMED_MEAL_ID = re.compile(r"đã\s+ghi\s*#\s*(\d+)", re.IGNORECASE)
+_CLAIMED_MEAL_ID = re.compile(r"(?:đã\s+ghi|\brecorded|\bupdated)\s*#\s*(\d+)", re.IGNORECASE)
 
 
 def claimed_meal_ids(body: str) -> list[int]:

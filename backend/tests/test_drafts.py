@@ -150,6 +150,25 @@ def test_recommit_draft_edits_committed_meal(db):
         assert s.get(Meal, att["committed_meal_id"]).total_amount == 600
 
 
+def test_recommit_message_says_updated_and_names_the_replaced_meal(db):
+    # Prod 2026-09 (#29→#30, #36→#37, #41→#42): an edit posted a second
+    # "Recorded #N" and the room read it as a duplicate meal.
+    from app.models import RoomMessage
+    from app import drafts
+    from tests.test_ledger import _seed_room
+    room_id, ids = _seed_room(db, 3)
+    with db.session() as s:
+        d, _ = drafts.create_draft(s, room_id, {
+            "payer_member_id": ids[0], "member_participants": ids, "guests": [],
+            "bill_total": 300, "adjustments": [], "per_head_preview": 100, "raw_input": "x"})
+        first = drafts.commit_draft(s, d.id, room_id, logged_by="1")
+        assert first.body.startswith("Recorded #")
+        old_meal_id = s.get(RoomMessage, d.id).attachments["committed_meal_id"]
+        msg = drafts.recommit_draft(s, d.id, room_id, {"bill_total": 600}, logged_by="1")
+        new_meal_id = s.get(RoomMessage, d.id).attachments["committed_meal_id"]
+        assert msg.body.startswith(f"Updated #{new_meal_id} (replaces #{old_meal_id})")
+
+
 def test_recommit_blocked_when_meal_is_settled(db):
     from datetime import date
     from app.models import RoomMessage

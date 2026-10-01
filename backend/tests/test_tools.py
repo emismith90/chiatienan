@@ -256,6 +256,30 @@ def test_update_member_tool_edits_renames_and_handles_errors(db):
     assert missing["ok"] is False and "error" in missing
 
 
+def test_update_member_tool_treats_blank_optional_fields_as_unchanged(db):
+    # Some models fill every optional field with "" / [] — the exact args
+    # openai/gpt-6.1-sol-pro sent for "rename binh to Bình Nguyễn". Those
+    # blanks must not wipe bank details, aliases or the nickname.
+    room_id, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        m = s.get(Member, b)
+        m.bank_code, m.account_number, m.account_holder = "VCB", "0123456789", "NGUYEN BINH"
+        m.aliases = ["Bin"]
+    tools = build_tools(ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1"))
+
+    ok = tools["update_member"].execute({
+        "target": "m2", "display_name": "Bình Nguyễn", "nickname": "",
+        "bank_code": "", "account_number": "", "account_holder": "", "aliases": [],
+    })
+    assert ok["ok"] is True
+    with db.session() as s:
+        m = s.get(Member, b)
+        assert m.display_name == "Bình Nguyễn"
+        assert m.nickname == "m2"
+        assert (m.bank_code, m.account_number, m.account_holder) == ("VCB", "0123456789", "NGUYEN BINH")
+        assert m.aliases == ["Bin"]
+
+
 def test_update_member_tool_sets_default_participant_flag(db):
     room_id, (a, b) = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id, sender_member_id=a, sender_name="M1")
