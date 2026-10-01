@@ -87,7 +87,7 @@ def build(ctx) -> dict[str, PackTool]:
             try:
                 _parse_iso(played_on)
             except ValueError:
-                return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
+                return _err("Invalid date (expected YYYY-MM-DD).")
         else:
             played_on = ctx.today().isoformat()
         try:
@@ -96,7 +96,7 @@ def build(ctx) -> dict[str, PackTool]:
                 names = _names_for(s, ctx.space_id, ids)
             missing = [m for m in ids if m not in names]
             if missing:
-                return _err(f"Không tìm thấy thành viên {missing} trong nhóm — dùng find_members để lấy id.")
+                return _err(f"Members {missing} not found in the group — use find_members to get their ids.")
             payload = game_payload(entries, house, played_on, args.get("note"), names)
         except (PokerError, TypeError, ValueError) as exc:
             return _err(str(exc))

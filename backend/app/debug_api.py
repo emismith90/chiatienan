@@ -261,8 +261,9 @@ async def conversation_txt(
     """Same log as a flat transcript — the readable form for spotting frictions.
 
     Mirrors the ``sqlite3`` dump in DEBUGGING.md §2:
-    ``<ts>  [kind]  Name:  body``, with an ``[ảnh: N]`` marker so a pasted bill
-    is visible instead of silently absent.
+    ``<ts>  [kind]  Name:  body``, with an ``[image: N]`` marker so a pasted bill
+    is visible instead of silently absent. The marker matches the one
+    ``chat._render_messages`` feeds the model, so it stays in that form.
     """
     require_key(_)
     out: list[str] = []
@@ -271,7 +272,7 @@ async def conversation_txt(
             body = (r.body or "").replace("\n", " ")
             n_img = len((att or {}).get("images") or [])
             if n_img:
-                body = f"{body} [ảnh: {n_img}]".strip()
+                body = f"{body} [image: {n_img}]".strip()
             if r.kind not in ("text", "bot") and att:
                 body = f"{body} {json.dumps(att, ensure_ascii=False)}".strip()
             out.append(f"{r.created_at}  [{r.kind}]  {author}:  {body}")

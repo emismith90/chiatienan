@@ -641,7 +641,7 @@ def test_settle_says_balanced_based_on_transfers_not_stale_balances(db):
                                           "from": "2026-07-20", "to": "2026-07-26"})
     assert out["ok"]
     assert out["transfers"] == []
-    assert "cân bằng" in out["message"]
+    assert "square" in out["message"]
 
 
 def test_settle_honours_from_to_without_the_explicit_keyword(db):

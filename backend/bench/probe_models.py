@@ -43,7 +43,7 @@ from bench.judge import KEY_ENV, OPENROUTER_URL
 
 _HERE = Path(__file__).resolve().parent
 
-#: The TỔNG CỘNG printed on `bench/corpus/bills/bill-itemized.png`.
+#: The TỔNG CỘNG (grand total) printed on `bench/corpus/bills/bill-itemized.png`.
 BILL_TOTAL = 154_000
 
 #: The configured model (text and vision since 2026-10-01).
@@ -63,7 +63,7 @@ KNOWN_BAD = ("meta/muse-glimmer-30b", "google/gemini-2.5-flash-lite",
              "meta/muse-spark-1.2")
 
 #: `(tool, message, [required properties to check])` per probe. The messages are
-#: Vietnamese because every real turn is.
+#: Vietnamese because every real turn is — they simulate a user, so they stay.
 PROBES = (
     ("propose_meal",
      "Tôi trả 154k, ai ăn nấy trả: An cơm tấm 45k, Bình matcha 55k, Cường hồng trà 39k. "
@@ -196,6 +196,8 @@ def _bill_message() -> list[dict] | None:
     data = base64.b64encode(path.read_bytes()).decode()
     return [
         {"type": "text",
+         # Simulated Vietnamese user message ("Here is the bill. Log this meal: each pays
+         # for their own, names are on each item. ... I (An) paid."), so it stays.
          "text": "Đây là bill. Ghi bữa này: ai ăn nấy trả, tên ghi trên từng món. "
                  "An là member 1, Bình 2, Cường 3. Tôi (An) trả."},
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{data}"}},
@@ -205,7 +207,7 @@ def _bill_message() -> list[dict] | None:
 def probe_vision(model: str, key: str, schemas: dict[str, dict]) -> dict:
     """Read a real bill image and end in a well-formed `propose_meal` call.
 
-    `bill-itemized.png` prints TỔNG CỘNG 154,000đ over three named items, so the
+    `bill-itemized.png` prints TỔNG CỘNG (grand total) 154,000đ over three named items, so the
     total is checkable rather than a judgement call.
     """
     from app.db import Database
@@ -221,7 +223,7 @@ def probe_vision(model: str, key: str, schemas: dict[str, dict]) -> dict:
     payload = {
         "model": model, "temperature": 0, "max_tokens": 900,
         "messages": [
-            {"role": "system", "content": "Bạn là bot chia tiền ăn trưa. Luôn dùng tool để ghi số."},
+            {"role": "system", "content": "You are a lunch bill-splitting bot. Always use the tools to record numbers."},
             {"role": "user", "content": content},
         ],
         "tools": [_as_openai_tool("propose_meal", schemas["propose_meal"],
@@ -267,8 +269,8 @@ def probe(model: str, key: str, schemas: dict[str, dict]) -> list[dict]:
             "model": model, "temperature": 0, "max_tokens": 800,
             "messages": [
                 {"role": "system",
-                 "content": "Bạn là bot chia tiền ăn trưa. Luôn dùng tool để ghi số. "
-                            "Thành viên: An id 1, Bình id 2, Cường id 3."},
+                 "content": "You are a lunch bill-splitting bot. Always use the tools to record numbers. "
+                            "Members: An id 1, Bình id 2, Cường id 3."},
                 {"role": "user", "content": message},
             ],
             "tools": [_as_openai_tool(name, schema, tools[name].description)],

@@ -142,7 +142,7 @@ def test_payment_body_renders_multiple_transfers():
 
 def test_settle_blocked_body_lists_pending():
     body = chat._settle_blocked_body({
-        "message": "Có 1 đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi chốt.",
+        "message": "1 draft(s) not confirmed yet — confirm or cancel them before settling.",
         "pending": [{"draft_id": 7, "payer_name": "An", "bill_total": 400000, "participant_count": 4}],
     })
     assert "#7" in body and "An" in body and "400,000" in body
@@ -198,7 +198,7 @@ def test_settle_blocked_body_says_how_to_clear_it():
                      "participant_count": 6}],
     })
     assert "Confirm" in body and "Cancel" in body
-    assert "huỷ đề xuất" in body
+    assert "cancel draft #" in body
 
 
 def test_settle_blocked_body_omits_the_hint_when_nothing_is_pending():

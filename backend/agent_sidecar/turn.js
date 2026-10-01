@@ -12,7 +12,11 @@
  * them untouched. `app/agui.py` existed only to do this translation and is deleted.
  */
 
-/** Words that mark a fragment as the model narrating itself rather than answering. */
+/**
+ * Words that mark a fragment as the model narrating itself rather than answering.
+ * The Vietnamese entries stay: they match the model's own output, which mirrors
+ * the user's language and is usually Vietnamese.
+ */
 const NARRATION_MARKERS = [
   "mình đọc skill",
   "minh doc skill",
@@ -74,7 +78,8 @@ export function stripNarration(text) {
  *
  * `fragments` are joined with the **empty string**, never a separator. Joining
  * with one put a blank line between every token and shredded Vietnamese
- * diacritics into "V ẫn không được đâu Kun" in production — a string still visible
+ * diacritics into "V ẫn không được đâu Kun" ("Still not working, Kun", with the
+ * diacritic split off) in production — a string still visible
  * in the recorded prod corpus (`p142`, `p144`), so this is a live bug, not a
  * historical one.
  *
@@ -266,13 +271,13 @@ export function formatError(err) {
   const raw = (err && (err.message || String(err))) || "unknown error";
   const text = raw.replace(/\s+/g, " ").trim();
   if (/model.*(blocked|not permitted|unavailable)/i.test(text)) {
-    return "Model không dùng được (bị chặn hoặc hết quyền). Thử lại sau nhé.";
+    return "The model is unavailable (blocked or not permitted). Please try again later.";
   }
   if (/\b402\b|requires more credits|insufficient credits/i.test(text)) {
-    return "Model hết credit — báo admin nạp thêm nhé.";
+    return "The model is out of credit — ask an admin to top it up.";
   }
   if (/rate.?limit|429|too many requests/i.test(text)) {
-    return "Model đang quá tải (rate limit). Thử lại sau một chút nhé.";
+    return "The model is overloaded (rate limit). Please try again in a moment.";
   }
   return text.slice(0, 300);
 }

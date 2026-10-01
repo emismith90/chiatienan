@@ -667,6 +667,8 @@ async def qr_request(room_id: int, body: QrRequestIn, ctx: AuthCtx = Depends(req
         if payee is None:
             raise HTTPException(404, "member not found")
 
+        # The fallback is the bank transfer note (VietQR addInfo) the payer's bank
+        # shows, so it stays ASCII-folded Vietnamese: "Chia tien an" = "lunch split".
         note = build_qr_note(
             payer.display_name if payer else "",
             [{"date": e.occurred_on, "dish": e.dish} for e in edges],
@@ -712,7 +714,7 @@ async def post_message(room_id: int, body: MessageIn, ctx: AuthCtx = Depends(req
         m = chat.post_message(s, room_id, ctx.member_id, body.body, attachments=attachments)
         payload = chat.message_to_dict(m, s.get(Member, ctx.member_id))
         # An answer to the bot's own question counts as addressed to it, mention
-        # or not — "1" / "2" / "tôi đã trả tiền Emi" were all dropped in
+        # or not — "1" / "2" / "tôi đã trả tiền Emi" ("I paid Emi") were all dropped in
         # production and retyped with @phoenix seconds later.
         answers_bot = not chat.mentions_bot(body.body) and chat.replies_to_bot_question(
             s, room_id, ctx.member_id, before_id=m.id,
@@ -867,7 +869,7 @@ def _knowledge_trail(session, room_id: int, ctx: AuthCtx, text: str) -> dict:
     """Post the room-visible record of a knowledge edit.
 
     Memory steers ``suggest_lunch``, so one member quietly deleting "phải gọi trước
-    11h30" changes everyone's lunch. ``observations.remove`` refuses to keep history
+    11h30" ("must order before 11:30") changes everyone's lunch. ``observations.remove`` refuses to keep history
     inside the file — rightly, it is a lunch note and not the ledger — so the trail
     goes where the room already looks. Never carries a money figure (D3).
     """

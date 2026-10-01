@@ -42,7 +42,7 @@ class Settings:
     memory_window_weeks: int
     history_max_messages: int
     # How far back to look for a bill image when the @phoenix message itself has
-    # none (people paste the bill, then say "@phoenix log đi" in a second message).
+    # none (people paste the bill, then say "@phoenix log đi" ("log it") in a second message).
     image_lookback_messages: int
     image_lookback_minutes: int
     # Bot

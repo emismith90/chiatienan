@@ -55,7 +55,7 @@ def test_boot_seeds_the_poker_business_next_to_lunch(db):
     assert [t.pack for t in spec.tool_packs] == ["poker_ledger", "ledger_tools", "room_members"]
     assert [r.id for r in spec.validation] == ["chips-conserved", "no-negative-chips", "one-entry-per-player"]
     assert {r.slug for r in spec.rules} == {"money-safety-core", "poker"} and {s.name for s in spec.skills} == {"record-game", "poker-balances"}
-    assert "bàn poker" in spec.prompt.body and spec.persona.handle == k.default_spec.persona.handle
+    assert "the group's poker / card table" in spec.prompt.body and spec.persona.handle == k.default_spec.persona.handle
     assert {s["slug"] for s in k.store.list_sources(k.poker_report["business_id"])} == {"record-game", "poker-balances", "money-safety-core", "poker"}
     # the lunch room is untouched
     room_id, m = _seed_room(db, 2)

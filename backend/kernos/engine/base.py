@@ -41,7 +41,7 @@ class TurnResult:
     #: the caller has to know, because a cap that lands before the model has
     #: written anything leaves ``final_text`` empty and is indistinguishable from a
     #: provider returning nothing. Production, 2026-08-14 room 3: "ăn gì ngon ngon
-    #: đi mày" ran `suggest_lunch` and was cut at 120.6s with 0 characters, and the
+    #: đi mày" ("what's good to eat, mate") ran `suggest_lunch` and was cut at 120.6s with 0 characters, and the
     #: room got the same bare "(no response)" as a genuinely empty completion 100
     #: minutes earlier. The same question answered in 69.0s / 344ch just before and
     #: 79.5s / 602ch just after, so it was a timeout, not a failure — and the room

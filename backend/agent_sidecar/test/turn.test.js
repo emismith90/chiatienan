@@ -227,11 +227,11 @@ test("a blocked model does not reach the room as the vendor's own text", () => {
   // in English as the bot's reply, twice.
   const message = formatError(new Error("Model Blocked This model has been blocked by your team admin settings."));
   assert.ok(!/team admin/i.test(message));
-  assert.match(message, /Model không dùng được/);
+  assert.match(message, /The model is unavailable/);
 });
 
-test("a rate limit gets its own Vietnamese message", () => {
-  assert.match(formatError(new Error("429 Too Many Requests")), /quá tải/);
+test("a rate limit gets its own message", () => {
+  assert.match(formatError(new Error("429 Too Many Requests")), /overloaded \(rate limit\)/);
 });
 
 test("images take pi's OWN ImageContent shape, flat — not Anthropic's nesting", () => {
@@ -305,7 +305,7 @@ test("a turn pi ends with stopReason error reports the error, not an empty answe
   }]);
   const seen = [];
   const r = await runTurn(session, { turn_id: "t", message: "x" }, (e) => seen.push(e));
-  assert.equal(r.error, "Model đang quá tải (rate limit). Thử lại sau một chút nhé.");
+  assert.equal(r.error, "The model is overloaded (rate limit). Please try again in a moment.");
   assert.ok(seen.some((e) => e.type === "agent.run.error"));
 });
 
@@ -322,6 +322,6 @@ test("an error that a later assistant message recovers from is not an error", as
 test("running out of provider credit reads as ours, not the vendor's JSON", () => {
   assert.equal(
     formatError(new Error('402: {"message":"This request requires more credits, or fewer max_tokens."}')),
-    "Model hết credit — báo admin nạp thêm nhé.",
+    "The model is out of credit — ask an admin to top it up.",
   );
 });

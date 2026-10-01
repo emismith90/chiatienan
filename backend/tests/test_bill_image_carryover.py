@@ -93,7 +93,7 @@ async def test_run_bot_turn_feeds_the_previous_message_s_bill_to_the_agent(monke
 
     assert seen["images"] == [IMG]
     # …and the text history says an image was there, so the model knows to look.
-    assert "[ảnh: 1]" in seen["history"]
+    assert "[image: 1]" in seen["history"]
 
 
 async def test_images_on_the_mentioning_message_still_win(monkeypatch, db):
@@ -119,7 +119,7 @@ def test_history_marks_images_without_dumping_base64(db):
     _post(db, room_id, member_id, "hoá đơn đây", images=[IMG, IMG])
     with db.session() as s:
         history = chat.build_history(s, room_id, watermark=memory.read_watermark(room_id))
-    assert "[ảnh: 2]" in history
+    assert "[image: 2]" in history
     assert IMG["data"] not in history
 
 

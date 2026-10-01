@@ -405,7 +405,7 @@ def debt_breakdown(
     ledger and only the resulting edges are filtered by ``occurred_on``, because
     a debt is not outstanding again just because it was repaid after the window
     closed. Windowing the payments too — which this used to do, in step with
-    :func:`period_balances` — meant that asking "chốt tuần trước" on a Monday
+    :func:`period_balances` — meant that asking "chốt tuần trước" ("close last week") on a Monday
     reported the 107,000đ Giang had paid that same morning as still owing, and
     printed a live VietQR for it. In a room that habitually pays the next day,
     every week-scoped question had that property.
@@ -442,8 +442,8 @@ def statement_for(
 ) -> dict:
     """The caller's own owe/owed edges (outstanding > 0). Ids only.
 
-    Deliberately returns no net figure. "Ròng: -54.500đ" answered a question
-    nobody asked — the group's questions are "tôi nợ ai" and "ai nợ tôi", and a
+    Deliberately returns no net figure. "Ròng: -54.500đ" ("Net: -54,500đ") answered a question
+    nobody asked — the group's questions are "tôi nợ ai" ("who do I owe") and "ai nợ tôi" ("who owes me"), and a
     single signed scalar answers neither while quietly implying the debts had
     been offset against each other. They are not: each edge is owed to a
     specific person for a specific meal, and that is all any surface reports.

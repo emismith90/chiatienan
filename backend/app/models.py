@@ -68,7 +68,7 @@ class Place(Base):
     """A restaurant the room can eat at or order from.
 
     Identity for the free text in ``meals.dish``: "bún chả rửa xe", "Bún chả"
-    and "bun cha" are three strings for one business, and nothing can be counted
+    and "bun cha" (dish/place names as users type them) are three strings for one business, and nothing can be counted
     until they point at one row. ``slug`` is that identity — stable, ASCII, and
     used verbatim as the ``place:`` subject in the observations file.
 

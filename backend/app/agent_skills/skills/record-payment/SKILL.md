@@ -1,22 +1,22 @@
 ---
 name: record-payment
-description: Ghi khi một người trả tiền mặt cho người khác — "A trả B", "A đã trả", "trả hết rồi".
+description: Record one person paying another in cash — "A trả B", "A đã trả", "trả hết rồi".
 ---
-# Ghi trả tiền mặt
+# Record a cash payment
 
-Dùng `propose_payment` (KHÔNG dùng `propose_meal`). Nó chỉ ĐỀ XUẤT — người dùng xác nhận trên thẻ.
+Use `propose_payment` (DO NOT use `propose_meal`). It only PROPOSES — the user confirms on the card.
 
-- `from` = người trả (bỏ trống = người đang nhắn), `to` = người nhận.
-- Câu KHÔNG có chủ ngữ ("đã trả rồi", "just paid 53k to A1", "trả xong") → người trả là
-  NGƯỜI ĐANG NHẮN. Bỏ trống `from`. TUYỆT ĐỐI không suy ra một người khác từ sổ nợ —
-  ghi sai người trả là ghi sai nợ của hai người một lúc.
-- Có số tiền cụ thể ('A trả B 100k') → truyền `amount` (VND).
-- KHÔNG có số tiền ('A đã trả B', 'trả hết rồi') → BỎ TRỐNG `amount`; công cụ tính đúng số A đang nợ B (gộp theo từng bữa). ĐỪNG tự đoán số.
-- Nếu công cụ trả về `payment_ambiguous` (hai người nợ nhau CẢ HAI CHIỀU): HỎI lại người dùng — trả trọn số `gross` hay chỉ cấn trừ phần chênh `offset` — rồi gọi lại `propose_payment` với `mode:"gross"` hoặc `mode:"offset"` (đừng tự gõ số).
-- `payment_settled` = thật sự không còn nợ → báo lại, không tạo thẻ.
-- `nothing_owed` = người trả không nợ người kia (mà ngược lại) → giải thích, không tạo thẻ.
-- Nhiều người trả trong một câu → gọi `propose_payment` MỘT LẦN CHO MỖI người.
-- "Tôi trả phần của tôi rồi" / "paid my part" / "đã trả hết" mà KHÔNG nói trả cho ai:
-  người nhắn đang nợ những ai thì gọi `propose_payment` một lần cho MỖI người đó
-  (bỏ trống `amount`). ĐỪNG hỏi "trả cho ai" — thẻ nháp sửa và huỷ được, nên đề xuất
-  đủ các khoản tốt hơn là bắt người dùng liệt kê lại.
+- `from` = the payer (empty = the sender), `to` = the recipient.
+- A sentence with NO subject ("đã trả rồi", "just paid 53k to A1", "trả xong") → the payer is
+  THE SENDER. Leave `from` empty. NEVER infer someone else from the debt ledger —
+  recording the wrong payer gets two people's debts wrong at once.
+- A specific amount ('A trả B 100k') → pass `amount` (VND).
+- NO amount ('A đã trả B', 'trả hết rồi') → LEAVE `amount` EMPTY; the tool computes exactly what A owes B (summed per meal). DON'T guess the amount yourself.
+- If the tool returns `payment_ambiguous` (two people owe each other in BOTH DIRECTIONS): ASK the user — pay the full `gross` amount or only offset the difference `offset` — then call `propose_payment` again with `mode:"gross"` or `mode:"offset"` (don't type the amount yourself).
+- `payment_settled` = really nothing owed any more → report that, create no card.
+- `nothing_owed` = the payer doesn't owe the other person (it's the other way round) → explain, create no card.
+- Several people paying in one sentence → call `propose_payment` ONCE FOR EACH person.
+- "Tôi trả phần của tôi rồi" / "paid my part" / "đã trả hết" WITHOUT saying whom they paid:
+  for everyone the sender currently owes, call `propose_payment` once for EACH of them
+  (leave `amount` empty). DON'T ask "paid whom?" — draft cards can be edited and cancelled, so proposing
+  all the items beats making the user list them again.

@@ -62,7 +62,7 @@ def build_prompt(case, record: dict, rubric: str) -> str:
     correctness it is not being asked about.
     """
     return (f"{rubric}\n"
-            f"--- Người dùng ---\n{case.message}\n"
+            f"--- User ---\n{case.message}\n"
             f"--- Bot ---\n{record.get('final_text') or ''}\n")
 
 
@@ -132,7 +132,7 @@ def prepare_batch(results: dict, corpus: dict | None = None) -> list[dict]:
     recorded baseline, whose bodies were stripped before it was committed — but its
     `reply` field is *production's* text, and preferring it meant a Pi run was
     handed prod's replies to grade. Twenty of them, verbatim, with narration prod
-    was being replaced for ("mình đọc skill phù hợp rồi xử lý"). The corpus is now
+    was being replaced for ("I'll read the matching skill and handle it", in Vietnamese). The corpus is now
     the fallback, never the override.
     """
     bodies = {}

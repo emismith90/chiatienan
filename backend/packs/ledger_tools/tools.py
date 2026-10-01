@@ -194,7 +194,7 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
         # = false) is skipped here.
         pool_ids = list(members)
         if not pool_ids:
-            return _err("Không có ai trong nhóm để bốc.")
+            return _err("There is nobody in the group to draw from.")
         chosen_id = ctx.choice(pool_ids)
         label = (args.get("label") or "").strip() or None
         return {
@@ -230,11 +230,11 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
         args = args or {}
         member = args.get("member") or ctx.sender_member_id
         if not member:
-            return _err("Không xác định được thành viên.")
+            return _err("Could not identify the member.")
         try:
             member = int(member)
         except (TypeError, ValueError):
-            return _err("Không xác định được thành viên.")
+            return _err("Could not identify the member.")
         with db.session() as s:
             last = ledger.last_settlement(s, ctx.space_id)
             period = resolve_period(
@@ -302,25 +302,25 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
         to = args.get("to")
         frm = args.get("from") or ctx.sender_member_id
         if not frm:
-            return _err("Không xác định được người trả.")
+            return _err("Could not identify who paid.")
         if not to:
-            return _err("Thiếu người nhận.")
+            return _err("The recipient is missing.")
         try:
             frm_id, to_id = int(frm), int(to)
         except (TypeError, ValueError):
-            return _err("from/to không hợp lệ.")
+            return _err("Invalid from/to.")
         if frm_id == to_id:
-            return _err("Người trả và người nhận phải khác nhau.")
+            return _err("The payer and the recipient must be different people.")
         amount = args.get("amount")
         if amount is not None and not isinstance(amount, int):
-            return _err("amount phải là số nguyên VND.")
+            return _err("amount must be a whole number of VND.")
         with db.session() as s:
             names = _names_for(s, ctx.space_id, [frm_id, to_id])
             # _names_for returns only the ids that are real room members, so a
             # hallucinated from/to would be missing here — reject it before the
             # pay-off path can falsely report payment_settled.
             if frm_id not in names or to_id not in names:
-                return _err("Không tìm thấy thành viên trong nhóm.")
+                return _err("Member not found in the group.")
             if amount is None:
                 # Gross directional pay-off over the open (since_last) period. We
                 # do NOT net A<->B: a real cash payment settles what `from` owes
@@ -374,7 +374,7 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
                         ),
                     }
             if amount <= 0:
-                return _err("Số tiền phải lớn hơn 0.")
+                return _err("The amount must be greater than 0.")
         return {
             "ok": True,
             "type": "payment_draft",
@@ -412,7 +412,7 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
                     "ok": True,
                     "type": "settle_blocked",
                     "pending": summaries,
-                    "message": f"Có {len(summaries)} đề xuất chưa xác nhận — xác nhận hoặc huỷ trước khi tính.",
+                    "message": f"{len(summaries)} draft(s) not confirmed yet — confirm or cancel them before settling.",
                 }
 
             last = ledger.last_settlement(s, ctx.space_id)
@@ -429,7 +429,7 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
 
             from_date, to_date = period["from"], period["to"]
             # One computation behind the amounts, the per-meal QR notes and the
-            # "đã cân bằng" verdict. These edges carry FIFO-attributed payments,
+            # "all square" verdict. These edges carry FIFO-attributed payments,
             # so `outstanding > 0` is exactly "still being repaid" — which is
             # also why the note never names a meal that is already settled.
             open_edges = [e for e in ledger.debt_breakdown(s, ctx.space_id, from_date, to_date)
@@ -438,14 +438,14 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
 
             # Gated on the transfers themselves, not on period_balances: that
             # number used to disagree with this one on a bounded window, so the
-            # room could be told "mọi người đã cân bằng" with transfers pending,
+            # room could be told "everyone is square" with transfers pending,
             # or handed an empty transfer list with no explanation at all.
             if not transfers:
                 return {
                     "ok": True,
                     "period": {"from": from_date.isoformat() if from_date else None, "to": to_date.isoformat()},
                     "transfers": [],
-                    "message": "Mọi người đã cân bằng — không ai nợ ai trong kỳ này.",
+                    "message": "Everyone is square — nobody owes anybody this period.",
                 }
 
             # include_inactive: a transfer may involve a since-removed member.

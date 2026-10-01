@@ -4,7 +4,7 @@ Pure functions, no I/O, no SDK imports:
 
 * :func:`split_shares` — turn a meal (total, participants, per-person
   adjustments) into an exact per-person share map whose values sum to ``total``.
-* :func:`prorate_items` — itemized ("ai ăn nấy trả") mode: scale each person's
+* :func:`prorate_items` — itemized ("ai ăn nấy trả", "each pays for their own") mode: scale each person's
   own dish price so the shares sum to what was actually paid, spreading any
   discount or delivery fee proportionally.
 * :func:`per_payer_transfers` — settle a set of meals by repaying whoever
@@ -113,7 +113,7 @@ def normalize_items(items, participants: list[int]) -> list[dict]:
             raise MoneyError("Every item line needs {member, amount} as numbers.") from None
         if member in by_member:
             raise MoneyError(
-                f"Thành viên {member} có nhiều hơn một dòng món — gộp lại thành một dòng."
+                f"Member {member} has more than one item line — merge them into one."
             )
         label = raw.get("label") if isinstance(raw, dict) else None
         by_member[member] = {
@@ -129,7 +129,7 @@ def normalize_items(items, participants: list[int]) -> list[dict]:
     missing = [m for m in participants if m not in by_member]
     if missing:
         raise MoneyError(
-            f"Ghi theo món cần đủ giá của MỌI người trong bữa — còn thiếu: {missing}."
+            f"An itemized meal needs a price for EVERY participant — missing: {missing}."
         )
     return [by_member[m] for m in participants]
 
@@ -143,7 +143,8 @@ def _equal_delta_shares(total: int, items: dict[int, int]) -> dict[int, int]:
 
     The other house rule for "ai ăn nấy trả": a 90,000đ promo off six dishes is
     15,000đ off each person, whatever they ordered. It is what the room asked for
-    by hand ("chia đều cho 6 người (delta), rồi trừ giá trên ảnh đi giá delta"),
+    by hand ("chia đều cho 6 người (delta), rồi trừ giá trên ảnh đi giá delta" —
+    "split it equally across 6 people (delta), then take delta off each price on the photo"),
     and it is a different answer from :func:`prorate_items` — on a 42,000đ dish,
     equal takes 27,000đ where proportional takes ~32,900đ.
 
@@ -163,8 +164,8 @@ def _equal_delta_shares(total: int, items: dict[int, int]) -> dict[int, int]:
     short = sorted(m for m, v in shares.items() if v < 0)
     if short:
         raise MoneyError(
-            "Chia đều phần giảm sẽ làm phần của một người âm — "
-            f"món quá nhỏ so với mức giảm: {short}. Dùng chia theo tỉ lệ."
+            "Splitting the discount equally would make someone's share negative — "
+            f"their item is too small for the discount: {short}. Use the proportional split."
         )
 
     assert sum(shares.values()) == total, "itemized split must sum to total"
@@ -200,7 +201,7 @@ def prorate_items(total: int, items: dict[int, int], *,
         raise MoneyError(f"Item prices must not be negative: {negative}.")
     if discount_split not in DISCOUNT_SPLITS:
         raise MoneyError(
-            f"discount_split phải là một trong {list(DISCOUNT_SPLITS)} (nhận: {discount_split!r})."
+            f"discount_split must be one of {list(DISCOUNT_SPLITS)} (got: {discount_split!r})."
         )
 
     gross = sum(items.values())
@@ -212,7 +213,7 @@ def prorate_items(total: int, items: dict[int, int], *,
 
     shares = {m: (v * total) // gross for m, v in items.items()}
     leftover = total - sum(shares.values())
-    # Hand the (< |items|) leftover đồng to the largest fractional remainders.
+    # Hand the (< |items|) leftover dong to the largest fractional remainders.
     by_remainder = sorted(items, key=lambda m: (-(items[m] * total % gross), m))
     for m in by_remainder[:leftover]:
         shares[m] += 1

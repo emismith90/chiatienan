@@ -15,12 +15,15 @@ import unicodedata
 from datetime import date
 
 # Vietnamese weekday labels: Monday=thứ 2 ... Saturday=thứ 7, Sunday=Chủ Nhật.
+# They are the room's own day abbreviations (shown in notes), so they stay.
 _VN_WEEKDAYS = {0: "T2", 1: "T3", 2: "T4", 3: "T5", 4: "T6", 5: "T7", 6: "CN"}
 
 _DEFAULT_BUDGET = 50
 
 #: Stand-in dish for a meal logged without one, so a note chunk is never a bare
 #: weekday. ASCII, like everything else that reaches the bank's addInfo field.
+#: "bua trua" = "lunch"; it is transfer-note text read by Vietnamese banks and
+#: payees, so it stays Vietnamese.
 _UNNAMED_MEAL = "bua trua"
 
 

@@ -49,7 +49,7 @@ def _dropped_names(ctx, db, participants: list[int],
     """Names the turn looked up, never pinned down, and never accounted for.
 
     WHY — production, 2026-08-13: *"nay ăn bún cá với anh Hưng chị Nhím hết
-    175k"*. ``find_members`` matched Nhím and missed Hưng, the model called him a
+    175k"* ("bún cá today with Hưng and Nhím, 175k all in"). ``find_members`` matched Nhím and missed Hưng, the model called him a
     guest **in its prose** and then proposed the meal without a ``guests``
     entry. Two heads instead of three: every share on that card was 50% too big,
     and nothing on it said a person had gone missing. A name is "accounted for"
@@ -90,10 +90,10 @@ _PROPOSE_SCHEMA = {
     "properties": {
         "payer": {"type": "integer", "description": "member id of the payer; blank = the sender."},
         "participants": {"type": "array", "items": {"type": "integer"},
-                         # "tôi với Bình ăn" listed only Bình on one run, which
+                         # "tôi với Bình ăn" ("Bình and I ate") listed only Bình on one run, which
                          # charges a two-person bill to one person. The sender is
                          # a participant like anyone else — being the payer does
-                         # not put them in, and saying "tôi" does not leave them out.
+                         # not put them in, and saying "tôi" ("I") does not leave them out.
                          "description": "member ids of EVERYONE who ate, the sender included"
                                         " when they ate ('tôi với Bình ăn' = both ids)."},
         "total": {"type": "integer", "description": "Bill total, integer VND (840k → 840000)."},
@@ -188,18 +188,18 @@ def build(ctx, *, place_resolver=None) -> dict[str, PackTool]:
             names = ", ".join(f"«{n}»" for n in dropped)
             if any(ctx.unknown_names.get(n) == "ambiguous" for n in dropped):
                 return _err(
-                    f"{names} khớp với hơn một người, và bữa này không có ai trong số họ. "
-                    "HỎI người dùng là ai (kèm tên các ứng viên `find_members` trả về) "
-                    "rồi mới đề xuất — đoán bừa là ghi nợ nhầm người."
+                    f"{names} matches more than one person, and none of them is on this meal. "
+                    "ASK the user who it is (listing the candidates `find_members` returned) "
+                    "before proposing — guessing puts the debt on the wrong person."
                 )
             return _err(
-                f"{names} đã được tra trong lượt này nhưng không khớp thành viên nào, "
-                "và cũng không có trong participants hay guests — chia như vậy là bỏ sót "
-                "người ăn và mọi người phải trả nhiều hơn thực tế. Chọn MỘT cách rồi gọi lại: "
-                "(1) người ngoài nhóm ăn cùng → thêm tên vào `guests`; "
-                "(2) là thành viên nhưng viết khác → `find_members` lại bằng tên khác "
-                "(tên thật, tên ngân hàng, biệt danh); "
-                "(3) là người mới → `add_member` rồi cho id vào `participants`."
+                f"{names} was looked up this turn but matched no member, "
+                "and is not in participants or guests either — splitting like this leaves "
+                "someone out and everyone pays more than they should. Pick ONE and call again: "
+                "(1) someone outside the group ate too → add the name to `guests`; "
+                "(2) a member written differently → `find_members` again with another name "
+                "(real name, bank name, nickname); "
+                "(3) a new person → `add_member`, then put the id in `participants`."
             )
         # Date resolution is authoritative here (like money-safety for amounts):
         # the model passes the user's day *word* and the tool computes the date,
@@ -215,20 +215,20 @@ def build(ctx, *, place_resolver=None) -> dict[str, PackTool]:
             try:
                 _parse_iso(occurred_on)
             except ValueError:
-                return _err("Ngày không hợp lệ (cần dạng YYYY-MM-DD).")
+                return _err("Invalid date (expected YYYY-MM-DD).")
 
         items = args.get("items") or []
         discount_split = (args.get("discount_split") or "proportional").strip().lower()
         if items:
             if adjustments:
                 return _err(
-                    "Dùng `items` HOẶC `adjustments`, không dùng cả hai — "
-                    "`items` đã là số tiền của từng người rồi."
+                    "Use `items` OR `adjustments`, not both — "
+                    "`items` already holds each person's amount."
                 )
             if guests:
                 return _err(
-                    "Ghi theo món chưa hỗ trợ khách lẻ. Bỏ khách ra (chia đều), "
-                    "hoặc ghi khách như một dòng món của người trả hộ."
+                    "Itemized meals do not support guests yet. Leave the guests out (split equally), "
+                    "or record a guest as an item line of the person paying for them."
                 )
             try:
                 items = normalize_items(items, participants)

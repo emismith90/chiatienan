@@ -44,7 +44,7 @@ def _settlement_body(attachments: dict) -> str:
     lines = [header]
     if transfers:
         # The memo rides along the QR as the bank's addInfo, and it is the part
-        # people dispute ("sai nội dung chuyển khoản r"). It was only ever in the
+        # people dispute ("sai nội dung chuyển khoản r" — "the transfer note is wrong"). It was only ever in the
         # attachment, so nobody could see what it said without opening the card.
         lines.extend(
             f"{t['from_name']} → {t['to_name']}: {t['amount']:,}đ"
@@ -85,7 +85,7 @@ def _settle_blocked_body(attachments: dict) -> str:
         # instruction that names a control the room cannot find is worse than none.
         lines.append(
             "Open the draft card above (by its # number) and press **Confirm** or "
-            '**Cancel** — or say "huỷ đề xuất #<số>" and I will cancel it for you.'
+            '**Cancel** — or say "cancel draft #<number>" and I will cancel it for you.'
         )
     return "\n".join(lines)
 
@@ -93,7 +93,7 @@ def _settle_blocked_body(attachments: dict) -> str:
 def _statement_body(att: dict) -> str:
     """Deterministic text for a personal statement — numbers from the tool dict.
 
-    Two sections and no total. The old closing line, "Ròng: -54.500đ", was the
+    Two sections and no total. The old closing line, "Ròng: -54.500đ" ("Net: -54,500đ"), was the
     one number in the reply nobody could act on: it is not what you send anyone,
     it is not what anyone sends you, and when the two sections disagreed with it
     (a debt in each direction) it read as though they had been cancelled out.

@@ -151,7 +151,8 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
  * Turn a builtin-tool list into pi's tool options.
  *
  * **Empty means money-safety is structural.** `money-safety.mdc` only *asks* the
- * model not to compute money ("KHÔNG chạy python/bash để tính tiền"); without
+ * model not to compute money ("do NOT run python/bash to compute
+ * money"); without
  * `bash` it cannot. Enabling the builtins trades that guarantee for the model being
  * able to work things out itself, and restores the mechanism behind a known
  * production defect — `moneyguard`'s field note records the one non-image unbacked

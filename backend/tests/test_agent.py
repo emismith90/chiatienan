@@ -155,9 +155,9 @@ async def test_the_prompt_keeps_its_section_order(db, bridge):
     await agent.run_turn("cho tôi xem số dư", _ctx(db),
                          memory="- An trả 300k", history="An: chào", images=[{"data": "x"}])
     message = fake.command["message"]
-    assert message.index("# Bộ nhớ dài hạn") < message.index("# Lịch sử hội thoại (gần đây)")
-    assert message.index("# Lịch sử hội thoại (gần đây)") < message.index("# Ảnh kèm theo")
-    assert message.index("# Ảnh kèm theo") < message.index("# Tin nhắn người dùng")
+    assert message.index("# Long-term memory") < message.index("# Conversation history (recent)")
+    assert message.index("# Conversation history (recent)") < message.index("# Attached images")
+    assert message.index("# Attached images") < message.index("# User message")
 
 
 async def test_the_system_prompt_is_no_longer_prepended_to_the_message(db, bridge):
@@ -166,14 +166,14 @@ async def test_the_system_prompt_is_no_longer_prepended_to_the_message(db, bridg
     await agent.run_turn("xin chào", _ctx(db))
     assert fake.command["system"]
     assert fake.command["system"] not in fake.command["message"]
-    assert fake.command["message"].startswith("# Tin nhắn người dùng")
+    assert fake.command["message"].startswith("# User message")
 
 
 async def test_the_image_count_is_announced_in_the_text(db, bridge):
     # Production attached the bill and the model still asked for the total in it.
     fake = bridge([{"type": "turn_done", "final_text": "", "error": None}])
     await agent.run_turn("ghi đi", _ctx(db), images=[{"data": "a"}, {"data": "b"}])
-    assert "2 ảnh" in fake.command["message"]
+    assert "2 image(s)" in fake.command["message"]
     assert len(fake.command["images"]) == 2
 
 

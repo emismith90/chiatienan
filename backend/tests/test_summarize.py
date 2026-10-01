@@ -35,7 +35,7 @@ async def test_it_returns_the_text_the_sidecar_sent(bridge):
 async def test_the_summary_prompt_wraps_the_history(bridge):
     fake = bridge([{"type": "summarize_done", "text": "x"}])
     await summarize_messages("An: chào")
-    assert "tóm tắt" in fake.command["text"].lower()
+    assert "summarising" in fake.command["text"].lower()
     assert fake.command["text"].endswith("An: chào")
     assert fake.command["type"] == "summarize"
 

@@ -70,7 +70,7 @@ def is_clear_command(text: str) -> bool:
 _REPLY_WINDOW_MINUTES = 10
 
 #: A bot message that is waiting on an answer: it asked something, or offered a
-#: numbered choice ("1. Trả trọn … 2. Cấn trừ …").
+#: numbered choice ("1. Pay in full … 2. Net it off …").
 _CHOICE_RE = re.compile(r"(?:^|\n)\s*(?:\*\*)?[1-9][.)]\s", re.MULTILINE)
 
 
@@ -84,7 +84,7 @@ def replies_to_bot_question(session: Session, room_id: int, member_id: int,
     """True when a message with no ``@phoenix`` is plainly answering the bot.
 
     People answer a question the way they would answer a person — "1", "2", "b",
-    "tôi đã trả tiền Emi" — and every one of those was dropped in production for
+    "tôi đã trả tiền Emi" ("I paid Emi") — and every one of those was dropped in production for
     lacking a mention, then retyped with one seconds later (four times in one
     conversation).
 
@@ -242,7 +242,9 @@ def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) 
     """Render chat rows as ``«Name»: body`` / ``phoenix: body`` lines,
     oldest→newest, each body clamped. Empty rows → ``""``.
 
-    An image attachment is rendered as a ``[ảnh: N]`` marker. The bytes cannot
+    An image attachment is rendered as a ``[image: N]`` marker. The
+    marker text is a contract shared with the record-meal skill, ``kernos/plugins/prompt.py``
+    and the bench replay history (``bench/export_prod.py``), so it stays as is. The bytes cannot
     go into the text history, but without the marker a bill someone pasted a
     message ago is completely invisible to the model — which is how it ends up
     asking for a total that is sitting right there in the room.
@@ -257,7 +259,7 @@ def _render_messages(session: Session, room_id: int, rows, *, clamp: int = 500) 
             body = body[:clamp] + "…"
         n_images = len(((r.attachments or {}).get("images")) or [])
         if n_images:
-            body = (f"{body} " if body else "") + f"[ảnh: {n_images}]"
+            body = (f"{body} " if body else "") + f"[image: {n_images}]"
         if r.author_member_id is None:
             # The label must match the persona name in prompt.py so the model
             # recognises its own past replies in the history it is handed.
@@ -287,7 +289,7 @@ def recent_images(session: Session, room_id: int, *, before_id: int | None = Non
                   max_messages: int | None = None, max_minutes: int | None = None) -> list[dict]:
     """Images from the most recent image-bearing message in the room's live window.
 
-    People paste the bill and *then* say "@phoenix log đi" — two messages. The turn's
+    People paste the bill and *then* say "@phoenix log đi" ("log it") — two messages. The turn's
     own attachments are empty, so without this the bot never sees the bill and
     asks for a total that is already on screen. Only the newest image-bearing
     message is carried forward (one bill, not a scrollback of them), and only
@@ -326,7 +328,7 @@ def _empty_turn_body(result) -> str:
                 model wrote anything. A cap is deliberately not an error (it
                 usually keeps a partial answer), but with nothing accumulated it
                 arrives here looking exactly like a dead turn. Production,
-                2026-08-14: "ăn gì ngon ngon đi mày" was cut at 120.6s having
+                2026-08-14: "ăn gì ngon ngon đi mày" ("what's good to eat, mate") was cut at 120.6s having
                 called ``suggest_lunch`` and written nothing, and the room was told
                 the same "(no response)" it had been told for a genuinely empty
                 completion — so nobody could tell that simply asking again would

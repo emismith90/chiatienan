@@ -196,7 +196,7 @@ def test_equal_split_refuses_to_invent_a_negative_share():
 
     from app.money import MoneyError, prorate_items
 
-    with pytest.raises(MoneyError, match="âm"):
+    with pytest.raises(MoneyError, match="negative"):
         prorate_items(100_000, {1: 195_000, 2: 5_000}, discount_split="equal")
 
 

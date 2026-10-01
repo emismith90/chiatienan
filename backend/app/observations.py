@@ -4,21 +4,22 @@ One file, ``{DATA_DIR}/rooms/{room_id}/observations.md``, sibling to
 ``memory.md`` and reached through :func:`app.memory.room_memory_dir`. One line
 per fact, four pipe-separated fields::
 
-    - 2026-03-03 | place:com-ga-thinh-lo | -              | Làm quá chậm, 1 tiếng mới có món.
-    - always     | place:com-ga-thinh-lo | order-by@11:30 | Phải đặt trước — gọi điện thoại.
-    - always     | member:nhim           | -              | Đề xuất quán rồi lại đổi ý.
+    - 2026-03-03 | place:com-ga-thinh-lo | -              | Very slow, an hour before the food came.
+    - always     | place:com-ga-thinh-lo | order-by@11:30 | Must order ahead — call by phone.
+    - always     | member:nhim           | -              | Suggests a place, then changes their mind.
 
 Why these four and not a table (design D4):
 
 ``when``    a date, or ``always``. Dated lines are *observations* and decay — a
             complaint from eight months ago is weak evidence. ``always`` lines
-            are *standing rules* and never age out: "phải gọi trước 11h30" is as
+            are *standing rules* and never age out: "must order before 11:30" is as
             true next year as today. One field separates two lifetimes.
 ``subject`` ``place:<slug>`` joins :mod:`app.places`; ``member:<nickname>`` joins
             :mod:`app.roster`. This is what makes the numbers and the prose
             describe the same thing.
 ``gate``    ``-``, or a clock rule Python evaluates (:func:`gate_status`).
-``text``    free Vietnamese prose, untouched. "Nhím đề xuất rồi lại đổi ý" is not
+``text``    free prose as the room wrote it (usually Vietnamese), untouched.
+            "Nhím suggested a place, then changed her mind" is not
             table-shaped and schematising it would destroy the meaning.
 
 The file is editable two ways — the knowledge panel (:mod:`app.knowledge`) and a
@@ -293,7 +294,7 @@ def for_subjects(room_id: int, subjects: list[str], *,
 def count_since(room_id: int, subject: str, *, since: date) -> int:
     """How many dated observations about ``subject`` since ``since``.
 
-    This is what lets Phoenix say "lần thứ 3 tháng này" without counting: Python
+    This is what lets Phoenix say "the 3rd time this month" without counting: Python
     counts the lines and hands over the number. A model that tallies by eye gets
     it wrong eventually, and a confidently wrong count poisons trust in
     everything else it says — the same rule as money, applied to social facts.
@@ -368,7 +369,7 @@ def gate_status(obs: Observation, *, now, walk_minutes: int | None = None
     you phone ahead, so the walk is irrelevant.
 
     The two travel-aware verbs share their arithmetic but not their meaning:
-    "sẽ đông, ra sớm đi" is advice and "đóng cửa rồi" is a refusal, and a room
+    "it'll be busy, leave early" is advice and "it's closed" is a refusal, and a room
     told the wrong one wastes a walk. Callers read :func:`gate_kind`.
     """
     m = _GATE_RE.match(obs.gate or "")

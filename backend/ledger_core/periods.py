@@ -82,7 +82,7 @@ def resolve_period(
         # It used to raise, and the raise reached the model as
         # `ValueError: explicit period requires explicit_from and/or explicit_to`
         # — three times in one benchmark run, from `get_period_summary` on messages
-        # that named no date ("viết cụ thể từng ngày"). Each cost a wasted round
+        # that named no date ("viết cụ thể từng ngày" — "write out each day"). Each cost a wasted round
         # trip on a turn that then took 59–120s. The returned `keyword` says
         # `since_last`, so the reply still reports the window it actually used.
         return resolve_period("since_last", today=today,
@@ -128,4 +128,4 @@ def resolve_date(word: str, *, today: date) -> date:
         day, month, year = int(md[1]), int(md[2]), md[3]
         y = today.year if year is None else (2000 + int(year) if len(year) == 2 else int(year))
         return date(y, month, day)
-    raise ValueError(f"Không hiểu ngày: {word!r}")
+    raise ValueError(f"Could not understand the date: {word!r}")

@@ -25,7 +25,7 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
     s = settings or _settings
     e = PipelineEntry
     return ProfileSpec(
-        persona=Persona(handle=s.bot_handle, aliases=["bot"], name="Phoenix", language="vi"),
+        persona=Persona(handle=s.bot_handle, aliases=["bot"], name="Phoenix", language="en"),
         # The system prompt is content (plan Task 2.7): the same template `app.prompt`
         # renders from code, rendered per turn by `kernos.prompt.template` with the
         # closed variable set. `test_prompt_content.py` pins the two paths equal.

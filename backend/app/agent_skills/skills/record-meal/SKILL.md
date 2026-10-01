@@ -1,108 +1,108 @@
 ---
 name: record-meal
-description: Ghi một bữa ăn nhóm — "840k cả nhóm trừ An", "bún bò 300k 5 người", ai ăn nấy trả theo hoá đơn, có khách, có điều chỉnh.
+description: Record a group meal — "840k cả nhóm trừ An", "bún bò 300k 5 người", everyone-pays-for-what-they-ate ('ai ăn nấy trả') from a bill, with guests, with adjustments.
 ---
-# Ghi một bữa ăn
+# Record a meal
 
-1. `find_members` để xác định người trả + người tham gia (`all_active:true` cho 'cả nhóm').
-   - `all_active:true` trả về **TOÀN BỘ** thành viên đang hoạt động của phòng, không lọc ai.
-     Dùng cho cả tiếng Việt ('cả nhóm', 'cả team', 'mọi người') lẫn tiếng Anh
-     ('everyone', 'all', 'for all', 'the whole group').
-   - Muốn bỏ ai ra khỏi bữa này thì bỏ id của họ khỏi `participants` — chỉ khi người dùng
-     NÓI RÕ. Không có ai bị loại "mặc định": số người trong `participants` phải khớp với
-     những gì người dùng thấy trên thanh thành viên.
-   - Truyền tên Y NGUYÊN như người dùng viết ("anh Hưng", "chị Nhím"). Công cụ tự bỏ
-     "anh/chị/em", tự bỏ dấu, và tra cả tên thật lẫn **tên chủ tài khoản ngân hàng** —
-     nhiều người trong nhóm chỉ có tên thật ở đó ("Hưng" = chủ TK "Le Hoang Hung").
-   - **Kết quả `unresolved` / `ambiguous` KHÔNG được bỏ qua** (xem mục dưới).
-   - «tôi»/«mình»/«tớ» = NGƯỜI ĐANG NHẮN. `member_id` của họ đã ghi trong prompt hệ thống,
-     nên không cần tìm và **TUYỆT ĐỐI không hỏi "bạn là ai"**. "Tôi trả" → để trống `payer`
-     (công cụ tự lấy người nhắn) hoặc truyền đúng id đó.
-   - "Tôi với Bình ăn" = `participants` có CẢ HAI id. Người nhắn cũng là một người ăn —
-     đừng bỏ họ ra khỏi `participants` chỉ vì họ là người trả.
-2. `propose_meal` với payer, participants (id), total (tổng hoá đơn), và `items` HOẶC `adjustments`,
-   cùng guests/dish/initiator/note nếu có.
-   - 'trừ An' = An KHÔNG nằm trong participants.
-   - Chỉ nói "trừ An" / "An không ăn" mà không kể ai ăn → mặc định là **CẢ NHÓM trừ An**
-     (`find_members all_active:true` rồi bỏ An ra). ĐỪNG hỏi "vậy những ai ăn".
-   - KHÔNG nói ai ăn cả ("I paid 1107k chả cá ông già") → mặc định **CẢ NHÓM**
-     (`all_active:true`), đề xuất luôn, và nói rõ trong câu trả lời là đã giả định cả
-     nhóm để họ sửa trên thẻ nếu sai. Thẻ nháp sửa được; hỏi lại thì lượt nào cũng phải
-     hỏi hai lần.
-   - 'An trả nhưng không ăn' = An là payer nhưng không nằm trong participants.
-   - 'Bình +50k' = adjustment {member: <id Bình>, amount: 50000}.
-   - "X rủ đi" / "X rủ" = `initiator` (người khởi xướng), KHÔNG phải người ăn: chỉ thêm X
-     vào `participants` khi người dùng nói X cũng ăn.
-   - Có người ngoài nhóm ăn cùng ("+ 1 khách", "2 đứa bạn nữa", "có khách") → truyền
-     `guests` (tên nếu biết, không thì "khách 1", "khách 2"). Khách làm giảm suất mỗi người
-     nhưng KHÔNG bị ghi nợ; bỏ `guests` là chia sai cho tất cả mọi người.
-   - `propose_meal` CHỈ ĐỀ XUẤT — người dùng xác nhận trên thẻ nháp.
+1. `find_members` to identify the payer + participants (`all_active:true` for 'cả nhóm').
+   - `all_active:true` returns **ALL** active members of the room, filtering no one.
+     Use it for Vietnamese ('cả nhóm', 'cả team', 'mọi người') and English
+     ('everyone', 'all', 'for all', 'the whole group') alike.
+   - To leave someone out of this meal, drop their id from `participants` — only when the user
+     SAYS SO CLEARLY. Nobody is excluded "by default": the number of people in `participants` must match
+     what the user sees on the member bar.
+   - Pass names EXACTLY as the user wrote them ("anh Hưng", "chị Nhím"). The tool strips
+     "anh/chị/em" itself, strips diacritics, and looks up both real names and **bank account holder names** —
+     many people in the group only have their real name there ("Hưng" = account holder "Le Hoang Hung").
+   - **An `unresolved` / `ambiguous` result MUST NOT be ignored** (see the section below).
+   - «tôi»/«mình»/«tớ» (I/me) = THE SENDER. Their `member_id` is already in the system prompt,
+     so there's no need to look it up and **NEVER ask "who are you" ('bạn là ai')**. "Tôi trả" (I paid) → leave `payer` empty
+     (the tool takes the sender) or pass exactly that id.
+   - "Tôi với Bình ăn" (Bình and I ate) = `participants` contains BOTH ids. The sender is also an eater —
+     don't drop them from `participants` just because they are the payer.
+2. `propose_meal` with payer, participants (ids), total (bill total), and `items` OR `adjustments`,
+   plus guests/dish/initiator/note if any.
+   - 'trừ An' (except An) = An is NOT in participants.
+   - Only saying "trừ An" / "An không ăn" (An didn't eat) without saying who ate → default to **THE WHOLE GROUP except An**
+     (`find_members all_active:true` then drop An). DON'T ask "so who ate?".
+   - Not saying who ate at all ("I paid 1107k chả cá ông già") → default to **THE WHOLE GROUP**
+     (`all_active:true`), propose right away, and say clearly in the reply that you assumed the whole
+     group so they can fix it on the card if wrong. Draft cards are editable; asking means every turn has to
+     ask twice.
+   - 'An trả nhưng không ăn' (An paid but didn't eat) = An is the payer but not in participants.
+   - 'Bình +50k' = adjustment {member: <Bình's id>, amount: 50000}.
+   - "X rủ đi" / "X rủ" (X invited us) = `initiator` (the organiser), NOT an eater: only add X
+     to `participants` when the user says X also ate.
+   - Someone from outside the group ate too ("+ 1 khách", "2 đứa bạn nữa", "có khách") → pass
+     `guests` (names if known, otherwise "guest 1", "guest 2" — 'khách 1', 'khách 2' in Vietnamese). Guests reduce each person's share
+     but are NOT charged; leaving out `guests` splits wrongly for everyone.
+   - `propose_meal` ONLY PROPOSES — the user confirms on the draft card.
 
-## Người ăn mà `find_members` không tra ra
+## Eaters that `find_members` can't find
 
-Nói trong câu trả lời rằng "coi X là khách" là CHƯA GHI GÌ CẢ — thẻ nháp chỉ có cái bạn
-truyền vào `propose_meal`. Bỏ sót một cái đầu là mọi người còn lại phải trả nhiều hơn thực tế,
-và trên thẻ không có gì cho thấy đã thiếu người. Với mỗi tên `unresolved`, chọn MỘT:
+Saying in your reply that you "treat X as a guest" RECORDS NOTHING — the draft card only has what you
+pass to `propose_meal`. Missing one head means everyone else pays more than they really should,
+and nothing on the card shows that someone is missing. For each `unresolved` name, choose ONE:
 
-- Người ngoài nhóm → tên đó vào `guests` (khách chia đầu người nhưng không bị ghi nợ).
-- Nghi là thành viên viết khác tên → `find_members` lại bằng tên khác (tên thật, tên
-  ngân hàng, biệt danh) trước khi kết luận là khách.
-- Thành viên mới → `add_member` rồi cho id vào `participants`.
+- Someone outside the group → put that name in `guests` (guests count as a head but are not charged).
+- Suspect it's a member written under a different name → `find_members` again with another name (real name,
+  bank name, nickname) before concluding it's a guest.
+- A new member → `add_member` then put the id in `participants`.
 
-Tên `ambiguous` (hai người cùng khớp, vd "Trang") → HỎI người dùng là ai, đừng chọn bừa.
-`propose_meal` sẽ báo lỗi nếu một tên đã tra hụt mà không nằm trong `participants` lẫn `guests`.
-- Sửa/xoá: `void_meal` để xoá; sửa thì void rồi `propose_meal` lại.
-- Ngày: nếu người dùng nói rõ một ngày ('thứ 2', 'hôm qua', '20/7'), truyền nguyên văn vào `day_word` của `propose_meal` — công cụ tự tính ngày (giờ VN), TUYỆT ĐỐI không tự suy ra ngày. Không nói ngày → bỏ trống (mặc định hôm nay).
+An `ambiguous` name (two people match, e.g. "Trang") → ASK the user which one, don't pick at random.
+`propose_meal` will return an error if a name that failed lookup is in neither `participants` nor `guests`.
+- Edit/delete: `void_meal` to delete; to edit, void then `propose_meal` again.
+- Date: if the user names a day explicitly ('thứ 2', 'hôm qua', '20/7'), pass it verbatim into `day_word` of `propose_meal` — the tool works out the date (VN time), NEVER infer the date yourself. No day mentioned → leave it empty (defaults to today).
 
-## Ai ăn nấy trả (ghi theo món) — dùng `items`
+## Everyone pays for what they ate ('ai ăn nấy trả', recorded per dish) — use `items`
 
-Khi người dùng nói ai ăn món gì ("emi ăn bò, nhím gà, linh với kun cơm tấm"), hoặc hỏi
-"ghi theo từng người được không" → **dùng `items`**, KHÔNG chia đều và KHÔNG nhét thông tin
-đó vào `note`.
+When the user says who ate what ("emi ăn bò, nhím gà, linh với kun cơm tấm"), or asks
+"ghi theo từng người được không" (can you record it per person?) → **use `items`**, DO NOT split evenly and DO NOT stuff that information
+into `note`.
 
-**Chỉ dùng `items` khi BIẾT ai ăn món nào** — người dùng nói ra, hoặc trên hoá đơn có ghi tên
-cạnh từng món. Hoá đơn liệt kê nhiều món nhưng KHÔNG ghi tên, và người dùng chỉ nói ai cùng ăn
-("tôi với Bình và Cường ăn") → **CHIA ĐỀU**, bỏ `items`. Tự gán món cho người là bịa: nó đổi
-số tiền từng người phải trả, và không ai phát hiện được vì con số trông vẫn hợp lý.
+**Only use `items` when you KNOW who ate which dish** — the user said it, or the bill has a name
+next to each dish. If the bill lists many dishes but has NO names, and the user only says who ate together
+("tôi với Bình và Cường ăn") → **SPLIT EVENLY**, drop `items`. Assigning dishes to people yourself is making things up: it changes
+what each person has to pay, and nobody can spot it because the numbers still look plausible.
 
-- Mỗi participant đúng MỘT dòng `{member, amount, label}`; `amount` là **giá trên hoá đơn**.
-- `member` là **id của người ăn món đó**. Tên viết trên hoá đơn (hoặc trong tin nhắn) phải
-  đi qua `find_members` để lấy id trước — đọc được tên trên ảnh KHÔNG có nghĩa là biết id.
-  TUYỆT ĐỐI không dồn mọi món cho một người rồi để tên trong `label`: làm vậy là cả bill
-  ghi nợ cho một người. `participants` cũng phải gồm đủ những người đó.
-- Một dòng "2x cơm tấm 138.000đ" cho Linh và Kun → mỗi người 69.000đ.
-- **Σ items không cần bằng `total`.** Giảm giá / phí ship / phí dịch vụ là chuyện bình thường —
-  công cụ tự chia phần chênh lệch. ĐỪNG tự tính "số sau giảm", đừng bắt người
-  dùng tính hộ, và đừng bỏ cuộc vì Σ items > total.
-- Phần chênh chia thế nào: `discount_split="proportional"` (mặc định, theo tỉ lệ giá món) hoặc
-  `discount_split="equal"` (mỗi người trừ/cộng như nhau). Người dùng nói "chia đều phần giảm",
-  "mỗi người trừ như nhau", "chia đều delta" → dùng `equal`. Công cụ tính, không phải bạn.
-- `total` luôn là số tiền **thực trả** (người dùng nói, hoặc dòng tổng cuối hoá đơn).
-- Chưa hỗ trợ ghi theo món khi có khách lẻ (guests) — khi đó chia đều.
+- Each participant gets exactly ONE line `{member, amount, label}`; `amount` is **the price on the bill**.
+- `member` is **the id of the person who ate that dish**. A name written on the bill (or in the message) must
+  go through `find_members` to get the id first — being able to read a name on the image does NOT mean you know the id.
+  NEVER pile every dish onto one person and leave the names in `label`: that charges the whole bill
+  to one person. `participants` must also include all of those people.
+- One line "2x cơm tấm 138.000đ" for Linh and Kun → 69.000đ each.
+- **Σ items need not equal `total`.** Discounts / delivery fees / service fees are normal —
+  the tool splits the difference itself. DON'T calculate the "post-discount amount" yourself, don't make the
+  user calculate it for you, and don't give up because Σ items > total.
+- How the difference is split: `discount_split="proportional"` (default, proportional to dish prices) or
+  `discount_split="equal"` (everyone gets the same deduction/surcharge). The user says "chia đều phần giảm",
+  "mỗi người trừ như nhau", "chia đều delta" (split the discount evenly) → use `equal`. The tool calculates, not you.
+- `total` is always the amount **actually paid** (stated by the user, or the final total line on the bill).
+- Per-dish recording with individual guests (guests) is not supported yet — in that case split evenly.
 
-## Hoá đơn bằng ảnh
+## Bill images
 
-- Ảnh hoá đơn trong ngữ cảnh lượt này (kể cả người dùng dán ở tin nhắn ngay trước rồi mới
-  `@phoenix`) là dùng được — **đọc luôn**, đừng hỏi lại thứ đã có trong ảnh.
-- Đọc được ảnh KHÔNG thay thế bước xác định người ăn: vẫn phải `find_members`
-  (`all_active:true` khi người dùng nói "cả nhóm"/"cả team"/"mọi người"/"everyone"/"all") rồi mới
-  `propose_meal`. Bỏ bước đó thì `participants` chỉ còn mình người nhắn — cả cái bill
-  ghi nợ cho một người, và con số nhìn vẫn "đúng" nên không ai thấy sai.
-- Đọc từ ảnh: tổng thực trả → `total`; giá từng dòng → `items` (nhớ nhân số lượng, và giá
-  đã gạch ngang là giá gốc — lấy giá đang áp dụng).
-- Trong lịch sử hội thoại, `[ảnh: N]` nghĩa là tin nhắn đó có ảnh. Nếu cần ảnh mà lượt này
-  không thấy, hỏi người dùng gửi lại **một lần** — đừng hỏi lại nữa.
+- A bill image in this turn's context (including one the user pasted in the message right before
+  `@phoenix`) is usable — **read it straight away**, don't ask again for what the image already shows.
+- Reading the image does NOT replace identifying the eaters: you still have to `find_members`
+  (`all_active:true` when the user says "cả nhóm"/"cả team"/"mọi người"/"everyone"/"all") before
+  `propose_meal`. Skip that step and `participants` is just the sender — the whole bill
+  is charged to one person, and the number still looks "right" so nobody notices.
+- From the image: the total actually paid → `total`; each line's price → `items` (remember to multiply by quantity, and a
+  struck-through price is the original price — take the price that applies).
+- In the conversation history, `[image: N]` means that message had images. If you need an image that this turn
+  can't see, ask the user to resend it **once** — don't ask again after that.
 
-## Hỏi lại — tối đa một lần
+## Asking back — at most once
 
-Chỉ hỏi khi thiếu thứ KHÔNG thể suy ra: người trả là một người thứ ba không tra được
-tên, hoặc tổng tiền khi không có hoá đơn.
+Only ask when something that CANNOT be inferred is missing: the payer is a third person whose name can't be
+looked up, or the total when there is no bill.
 
-- «tôi trả» KHÔNG BAO GIỜ là thiếu thông tin: người nhắn là ai đã nằm trong prompt.
-  Hỏi lại "bạn là ai trong nhóm" là lỗi — cứ đề xuất với người nhắn là payer.
+- «tôi trả» (I paid) is NEVER missing information: who the sender is is already in the prompt.
+  Asking back "who are you in the group" ('bạn là ai trong nhóm') is a bug — just propose with the sender as the payer.
 
-- Đã có đủ để đề xuất → gọi `propose_meal` ngay. Thẻ nháp sửa được, nên đề xuất tốt hơn hỏi.
-- KHÔNG hỏi lại thông tin người dùng đã nói ở tin nhắn trước trong lượt/lịch sử này.
-- KHÔNG hỏi giá từng món khi có hoá đơn — đọc từ hoá đơn.
-- KHÔNG hỏi cùng một câu hai lần. Nếu lần trước đã hỏi mà vẫn thiếu, chọn cách hợp lý nhất,
-  đề xuất, và nói rõ mình đã giả định gì.
+- Enough to propose → call `propose_meal` right away. Draft cards are editable, so proposing beats asking.
+- DO NOT ask again for information the user already gave in an earlier message in this turn/history.
+- DO NOT ask for per-dish prices when there is a bill — read them from the bill.
+- DO NOT ask the same question twice. If you asked last time and something is still missing, choose the most reasonable option,
+  propose, and say clearly what you assumed.

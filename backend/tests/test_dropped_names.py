@@ -106,7 +106,7 @@ def test_an_ambiguous_name_also_blocks_until_it_is_settled():
 
     blocked = tools["propose_meal"].execute({"participants": [giang, emi], "total": 175000})
     assert blocked["ok"] is False
-    assert "HỎI" in blocked["error"]  # ask which one, don't pick
+    assert "ASK" in blocked["error"]  # ask which one, don't pick
 
     # Once the right Trang is in the split, the proposal goes through.
     ok = tools["propose_meal"].execute(

@@ -106,7 +106,7 @@ async def _run_one(case, rep: int, run_turn, judge=None) -> dict:
             # `chat.py:489` passes `sender_name=member_name`, and
             # `build_system_prompt` turns it into 'The person messaging you now is
             # "…"'. Leaving it out looked harmless and was not: on `G4` the model
-            # called `find_members` twice, then asked *"bạn là ai trong nhóm nhỉ?"*
+            # called `find_members` twice, then asked *"bạn là ai trong nhóm nhỉ?"* ("which one of the group are you?")
             # and never proposed anything — a turn failed by the harness, not by
             # the engine, since production never asks that question.
             ctx = tools.ToolContext(db=db, room_id=room_id,
