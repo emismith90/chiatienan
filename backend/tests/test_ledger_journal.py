@@ -107,3 +107,29 @@ def test_a_settlement_is_an_event(db):
     [ev] = _events(db, room)
     assert ev["event"] == "settlement" and ev["period_to"] == "2026-09-30" and ev["period_from"] is None
     assert ev["transfers"] == [{"from": b, "to": a, "amount": 50_000}]
+
+
+def test_a_poker_game_and_its_void_go_to_the_packs_own_journal(db):
+    from packs.poker_ledger.models import Game, GameEntry
+    room, (a, b) = _seed_room(db, 2)
+    with db.session() as s:
+        g = Game(room_id=room, played_on=date(2026, 9, 5), house=10_000)
+        g.entries = [GameEntry(member_id=a, buy_in=200_000, cash_out=350_000),
+                     GameEntry(member_id=b, buy_in=200_000, cash_out=40_000)]
+        s.add(g)
+        s.flush()
+        gid = g.id
+    with db.session() as s:
+        game = s.get(Game, gid)
+        game.voided, game.voided_by = True, "1"
+    with pytest.raises(LedgerImmutable, match="house cannot change"):
+        with db.session() as s:
+            s.get(Game, gid).house = 0
+    with db.engine.connect() as c:
+        evs = [json.loads(r[0]) for r in c.execute(text(
+            "SELECT d.data FROM kn_documents d JOIN kn_collections c ON c.id = d.collection_id "
+            "WHERE c.slug = 'games' AND d.space_id = :s ORDER BY d.doc_id"), {"s": str(room)})]
+    assert [e["event"] for e in evs] == ["game", "game_void"]
+    assert [(x["member_id"], x["buy_in"], x["cash_out"]) for x in evs[0]["entries"]] == \
+        [(a, 200_000, 350_000), (b, 200_000, 40_000)]
+    assert _events(db, room) == []                      # nothing poker in the ledger journal
