@@ -93,7 +93,13 @@ test("every skill and context file is present, none dropped", () => {
 // model routing
 // --------------------------------------------------------------------------- //
 
-const RUNTIME = { getModel: (id) => ({ id }) };
+// The real `ModelRuntime` surface: the catalogue, and a `resolveModel` that is NOT a
+// lookup (pi 1.0's virtual-model router) — the stub throws so a lookup that reaches
+// for it by name fails here instead of in production.
+const RUNTIME = {
+  getModels: () => [{ id: "a/text" }, { id: "q/vl" }],
+  resolveModel: () => { throw new Error("resolveModel routes virtual models; it is not a lookup"); },
+};
 
 test("a text turn uses PI_MODEL", () => {
   assert.deepEqual(resolveModel(RUNTIME, { model: "a/text" }), { id: "a/text" });
@@ -117,7 +123,7 @@ test("an image turn with no vision model FAILS LOUDLY rather than dropping the p
 
 test("an unavailable vision model does not silently fall back to text", () => {
   assert.throws(
-    () => resolveModel({ getModel: () => null, getModels: () => [] },
+    () => resolveModel({ getModels: () => [{ id: "a/text" }] },
       { model: "a/text", vision_model: "q/gone", images: [{ data: "x" }] }),
     /vision turn — not falling back/,
   );
