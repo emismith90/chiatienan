@@ -49,12 +49,19 @@ class CollectionIn(BaseModel):
     indexed: list[str] = []
     description: str = ""
     force: bool = False
+    mode: str = "table"
+    searchable: list[str] | None = None
 
     model_config = {"populate_by_name": True}
 
 
 class DocumentIn(BaseModel):
     data: dict
+
+
+class EntryIn(BaseModel):
+    data: dict
+    corrects: str | None = None
 
 
 class BusinessIn(BaseModel):
@@ -397,7 +404,8 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         reserved = k.reserved_tool_names() if hasattr(k, "reserved_tool_names") else ()
         return _wrap(lambda: _data(k).put_collection(
             business_id, slug, name=body.name, schema=body.schema_, key=body.key, indexed=body.indexed,
-            description=body.description, actor=_actor(x_actor), reserved=reserved, force=body.force))
+            description=body.description, actor=_actor(x_actor), reserved=reserved, force=body.force,
+            mode=body.mode, searchable=body.searchable))
 
     @r.delete("/businesses/{business_id}/collections/{slug}", status_code=204)
     def delete_collection(business_id: int, slug: str, x_actor: str | None = Header(default=None)):
@@ -428,10 +436,21 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
 
         def go():
             col = _space_collection(k, space_id, slug)
-            if str(body.data.get(col["key"])) != doc_id:
+            if col["mode"] != "journal" and str(body.data.get(col["key"])) != doc_id:   # a journal: the store refuses
                 raise HTTPException(422, f"data.{col['key']} must equal the path's doc_id {doc_id!r}")
             return _data(k).upsert_document(col, space_id, body.data, actor=_actor(x_actor))
         return _wrap(go)
+
+    @r.post("/spaces/{space_id}/collections/{slug}/entries")
+    def append_entry(space_id: str, slug: str, body: EntryIn, x_actor: str | None = Header(default=None)):
+        k = get_kernel()
+        return _wrap(lambda: _data(k).append_entry(_space_collection(k, space_id, slug), space_id, body.data,
+                                                   actor=_actor(x_actor), corrects=body.corrects))
+
+    @r.get("/spaces/{space_id}/collections/{slug}/search")
+    def search_documents(space_id: str, slug: str, q: str, limit: int = Query(default=20, le=20)):
+        k = get_kernel()
+        return _wrap(lambda: _data(k).search_documents(_space_collection(k, space_id, slug), space_id, q, limit=limit))
 
     @r.delete("/spaces/{space_id}/collections/{slug}/documents/{doc_id}")
     def delete_document(space_id: str, slug: str, doc_id: str, x_actor: str | None = Header(default=None)):

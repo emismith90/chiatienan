@@ -113,3 +113,25 @@ def test_builtin_tools_can_be_turned_off_entirely(monkeypatch):
 def test_builtin_tools_ignore_whitespace_and_empties(monkeypatch):
     monkeypatch.setenv("PI_BUILTIN_TOOLS", " read , bash ,,")
     assert Settings.from_env().pi_builtin_tools == ("read", "bash")
+
+
+def test_embedding_settings(monkeypatch):
+    from app.kernel import build_embedder
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("EMBEDDING_MIN_SIMILARITY", raising=False)
+    s = Settings.from_env()
+    assert s.embedding_model == "google/gemini-embedding-001" and s.embedding_min_similarity == 0.65
+    emb = build_embedder(s)
+    assert emb.model == "google/gemini-embedding-001" and emb.min_similarity == 0.65
+    monkeypatch.setenv("EMBEDDING_MODEL", " baai/bge-m3 ")
+    monkeypatch.setenv("EMBEDDING_MIN_SIMILARITY", "0.45")
+    s = Settings.from_env()
+    assert (s.embedding_model, s.embedding_min_similarity) == ("baai/bge-m3", 0.45)
+    monkeypatch.setenv("EMBEDDING_MIN_SIMILARITY", "high")
+    assert Settings.from_env().embedding_min_similarity == 0.65
+    # explicitly empty = words only; so is a missing key
+    monkeypatch.setenv("EMBEDDING_MODEL", "")
+    assert Settings.from_env().embedding_model == "" and build_embedder(Settings.from_env()) is None
+    monkeypatch.delenv("EMBEDDING_MODEL")
+    monkeypatch.setenv("OPEN_ROUTER_KEY", "")
+    assert build_embedder(Settings.from_env()) is None

@@ -11,6 +11,7 @@ production has one, the test suite has one per test.
 from __future__ import annotations
 
 import logging
+import os
 import weakref
 
 from app.config import settings
@@ -23,10 +24,18 @@ from app.plugins.validate import FabricatedCommit, UnbackedAmounts
 from kernos.content import (  # noqa: F401
     ContentStore, DbResolver, ProfileSpec, Resolver, StaticResolver, ensure_seeded, ensure_sub_agent,
 )
-from kernos.data import DataStore
+from kernos.data import DataStore, OpenRouterEmbedder
 from kernos.host import BaseKernel
 
 log = logging.getLogger("chiatienan")
+
+
+def build_embedder(cfg) -> OpenRouterEmbedder | None:
+    """The collections' semantic search, or ``None`` (words only) without a model or key."""
+    key = (os.environ.get("OPEN_ROUTER_KEY") or "").strip()
+    if not (cfg.embedding_model and key):
+        return None
+    return OpenRouterEmbedder(key, cfg.embedding_model, min_similarity=cfg.embedding_min_similarity)
 
 
 class Kernel(BaseKernel):
@@ -37,7 +46,8 @@ class Kernel(BaseKernel):
         self.db = db
         self.default_spec = build_default_spec(settings)
         store = ContentStore(db.session)
-        super().__init__(store, DataStore(db.session, audit=store.log), build_adapters(db),
+        super().__init__(store, DataStore(db.session, audit=store.log, embedder=build_embedder(settings)),
+                         build_adapters(db),
                          runtime=self.default_spec.runtime, eval_mode=eval_mode)
         from app.packs import host_packs
         self.register_packs(*host_packs())

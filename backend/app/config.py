@@ -18,6 +18,14 @@ def _csv_env(name: str, default: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
+def _float_env(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or "").strip()
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        return default
+
+
 def _int_env(name: str, default: int) -> int:
     raw = (os.environ.get(name) or "").strip()
     if raw == "":
@@ -70,6 +78,11 @@ class Settings:
     caddy_domain: str
     # Eval: the LLM judge for prose grading (`bench.judge`); unset = prose not graded.
     bench_judge_model: str | None = None
+    # Collections' semantic search (`kernos.data.embed`), over OpenRouter with OPEN_ROUTER_KEY.
+    # Empty model = search by words only. The threshold is tuned per model: cosine scores
+    # sit on a different scale for each one, so change both together.
+    embedding_model: str = ""
+    embedding_min_similarity: float = 0.65
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -106,6 +119,11 @@ class Settings:
             timezone=(os.environ.get("TZ") or "").strip() or "Asia/Ho_Chi_Minh",
             admin_password=(os.environ.get("ADMIN_PASSWORD") or "").strip(),
             bench_judge_model=(os.environ.get("BENCH_JUDGE_MODEL") or "").strip() or None,
+            # `is None` rather than `or`: an explicitly empty EMBEDDING_MODEL turns semantic
+            # search off, it must not fall back to the default.
+            embedding_model=("google/gemini-embedding-001" if os.environ.get("EMBEDDING_MODEL") is None
+                             else os.environ["EMBEDDING_MODEL"].strip()),
+            embedding_min_similarity=_float_env("EMBEDDING_MIN_SIMILARITY", 0.65),
             debug_api_key=(os.environ.get("DEBUG_API_KEY") or "").strip(),
             log_file=(os.environ.get("LOG_FILE") or "").strip() or "/data/logs/app.log",
             log_max_bytes=_int_env("LOG_MAX_BYTES", 5_000_000),

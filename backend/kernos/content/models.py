@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -253,6 +253,12 @@ class Collection(Base):
     schema: Mapped[dict] = mapped_column(JSON, nullable=False)
     key: Mapped[str] = mapped_column(String(80), nullable=False)
     indexed: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    #: ``table`` (upsert/delete by ``key``) or ``journal`` (append-only; the server numbers
+    #: the entries, a fix is a new entry that ``corrects`` an old one). Fixed once documents exist.
+    mode: Mapped[str] = mapped_column(String(16), default="table", nullable=False)
+    #: The fields ``search`` reads. ``None`` (a row from before the column) means the default:
+    #: every top-level string or string-array property.
+    searchable: Mapped[list | None] = mapped_column(JSON)
     updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
 
 
@@ -272,3 +278,19 @@ class Document(Base):
     created_by: Mapped[str] = mapped_column(String(120), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
     updated_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: The folded text of the searchable fields, which ``kn_documents_fts`` indexes (kept in
+    #: sync by triggers). ``None`` = not computed yet; ``search`` fills it before it queries.
+    search_text: Mapped[str | None] = mapped_column(Text)
+    #: Journal only: the ``doc_id`` of the earlier entry this one corrects.
+    corrects: Mapped[str | None] = mapped_column(String(80))
+
+
+class DocumentVector(Base):
+    """A document's embedding, cached for semantic search. ``content_hash`` covers the model
+    and the embedded text, so an edit, a ``searchable`` change or a new model makes it stale
+    and the next search re-embeds it. The vector is unit length, as float32."""
+
+    __tablename__ = "kn_document_vectors"
+    document_id: Mapped[int] = mapped_column(ForeignKey("kn_documents.id"), primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    vector: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

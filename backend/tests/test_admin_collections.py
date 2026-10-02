@@ -38,3 +38,26 @@ def test_collection_and_document_routes(api_client_room):
     assert r.status_code == 200 and r.json()["data"]["who"] == "An"
     assert client.delete(f"/api/admin/businesses/{bid}/collections/rota", headers=ADMIN).status_code == 204
     assert client.get(f"/api/admin/businesses/{bid}/collections/rota", headers=ADMIN).status_code == 404
+
+
+def test_journal_and_search_routes(api_client_room):
+    client, _headers, room_id, _m = api_client_room
+    from app.db import get_db
+    k = kernel_for(get_db())
+    bid = k.seed_report["business_id"]
+    log = {"type": "object", "required": ["text"], "properties": {"text": {"type": "string"}}}
+    r = client.put(f"/api/admin/businesses/{bid}/collections/log", headers=ADMIN,
+                   json={"name": "Log", "schema": log, "key": "", "mode": "journal"})
+    assert r.status_code == 200 and r.json()["mode"] == "journal" and r.json()["searchable"] == ["text"]
+    base = f"/api/admin/spaces/{room_id}/collections/log"
+    r = client.post(f"{base}/entries", json={"data": {"text": "Phở Hà đóng cửa thứ Hai"}}, headers=ADMIN)
+    assert r.status_code == 200 and r.json()["doc_id"] == "000001" and "search_text" not in r.json()
+    fix = client.post(f"{base}/entries", json={"data": {"text": "mở cửa lại"}, "corrects": "000001"}, headers=ADMIN)
+    assert fix.status_code == 200 and fix.json()["corrects"] == "000001"
+    assert client.post(f"{base}/entries", json={"data": {"text": "x"}, "corrects": "nope"}, headers=ADMIN).status_code == 422
+    assert client.put(f"{base}/documents/000001", json={"data": {"text": "rewritten"}}, headers=ADMIN).status_code == 422
+    assert client.delete(f"{base}/documents/000001", headers=ADMIN).status_code == 422
+    hits = client.get(f"{base}/search", params={"q": "pho ha"}, headers=ADMIN).json()
+    assert [d["doc_id"] for d in hits["documents"]] == ["000001"] and hits["semantic"] == "off"
+    assert client.get(f"{base}/search", params={"q": " "}, headers=ADMIN).status_code == 422
+    assert client.post(f"/api/admin/spaces/{room_id}/collections/log/entries", json={"data": {"text": "x"}}).status_code == 401

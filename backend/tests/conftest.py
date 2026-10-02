@@ -18,6 +18,9 @@ os.environ["DATA_DIR"] = f"{_TMP}/ws"
 # The sidecar credential. Assigned, like the rest: a real key here would have
 # the suite talking to a live provider.
 os.environ["OPEN_ROUTER_KEY"] = "test-openrouter-key"
+# No embedding model: collection search runs on words only and never calls the
+# provider. Tests of semantic search hand a DataStore a fake embedder.
+os.environ["EMBEDDING_MODEL"] = ""
 
 from app.db import Database  # noqa: E402
 
