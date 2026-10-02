@@ -119,7 +119,11 @@ def test_invite_token_pin_and_bank_account_are_redacted(client):
     assert "[redacted]" in rooms
 
     members = c.get("/internal/debug/tables/members.csv", headers=h).text
-    assert "1234" not in members and "9999" not in members
+    # Field values, not a substring of the whole text: a created_at's microseconds
+    # ("…:48.999957") would otherwise contain a PIN's digits now and then.
+    import csv, io
+    values = {v for row in csv.reader(io.StringIO(members)) for v in row}
+    assert not values & {"1234", "9999", "0123456789"}
     assert "0123456789" not in members
     # Non-secret columns still come through — the dump must stay useful.
     assert "Linh" in members and "VCB" in members
