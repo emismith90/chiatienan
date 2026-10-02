@@ -92,6 +92,16 @@ export function buildAgentsFiles(req) {
  */
 export const MODELS_PATH = fileURLToPath(new URL("./models.json", import.meta.url));
 
+/**
+ * The session id every turn runs under. pi 1.0 sends it to OpenRouter as
+ * `x-session-id`, which routes requests that share it to the same upstream so the
+ * prompt cache (system prompt, skills, tools — the same for every turn) is hit. A
+ * session is built per turn, so pi's default — a fresh random id each time — routed
+ * every turn cold: the 1.0 benchmark cost about twice 0.84's on the same cases,
+ * whose repeats got cheaper as the cache warmed. One constant id restores that.
+ */
+export const CACHE_AFFINITY_ID = "kernos-sidecar";
+
 export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const runtime = modelRuntime || (await ModelRuntime.create({
     modelsPath: MODELS_PATH,
@@ -132,7 +142,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     thinkingLevel: req.thinking || "medium",
     customTools,
     ...toolOptionsFor(req.builtin_tools, customTools.map((tool) => tool.name)),
-    sessionManager: SessionManager.inMemory(cwd),
+    sessionManager: SessionManager.inMemory(cwd, { id: CACHE_AFFINITY_ID }),
     ...(settingsManager ? { settingsManager } : {}),
   });
 
