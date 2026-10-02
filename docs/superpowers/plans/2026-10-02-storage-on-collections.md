@@ -427,3 +427,57 @@ window equal in content and order.
 | B7 | `doc_id = count+1` would collide under concurrent appends on Postgres. | **Accepted** (SQLite: the flush holds the write lock first — probed with 4 threads × 15 meals, 0 errors). Note for any Postgres move: use `kn_sequences`. |
 
 Re-verified on the production clone after the fixes: `--apply` imports 182 events (room 3: 181, room 1: 1), `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows is IDENTICAL to the old code's. Suite: 1425 passed, 1 skipped.
+
+## 9. Release C — the journal alone (draft plan, 2026-10-03; **starts only after B has baked**)
+
+Gate: B in production for at least a week or two, with the startup parity clean on every boot and no
+`reconciled` deploy that was not a planned rollback. Re-review this section then; nothing is built yet.
+
+**Is C worth it?** B already gives everything users see: an append-only history, enforced
+immutability, reads from the journal, and a free rollback. C removes the duplicate copy (the tables)
+and makes the journal the only store. The cost: rollback stops being free (C5). **Shipping C is
+optional.** Leaving B as the end state (dual-write forever) is a legitimate choice. Decide at the gate.
+
+**C1 — Writes append events directly.** `record_meal`, `record_payment`, `repoint_meal_payments`,
+`void_meal`, `void_payment` and `record_settlement` (`ledger_core/ledger.py`), the draft commit paths
+(`ledger_core/drafts.py`) and poker's record/void build the event themselves (the same shapes the
+mirror writes today) and append it. Ids come from `DataStore.next_id("meal" | "payment" |
+"settlement" | "game", floor=max(table id))`. Validation that reads state (does the meal exist? is it
+already voided?) reads `LedgerView`. The `after_flush` mirror and its guard are removed: nothing
+mutable is left to guard.
+
+**C2 — Port the last ORM readers** (inventory as of B):
+- `ledger.py:165`, `ledger.py:188`, `ledger.py:224`
+- `app/main.py:619` (the void-payment route)
+- `app/drafts.py:236`, `app/drafts.py:251`
+- `app/places.py:444` (`backfill_links`; it becomes `meal_place` events)
+- `packs/poker_ledger/tools.py:110`
+
+Then the R2 test: no `select(Meal|Payment|Settlement|Game…)` and no `get(Meal…)` outside
+`ledger_core/legacy.py`.
+
+**C3 — Journal doc ids under concurrency.** Today `count+1` is safe because the ORM flush takes
+SQLite's write lock before the count (review B7). Without a flush in front, two requests can both
+read count N under WAL and collide. So every append takes its doc id from `next_id` (one atomic
+`INSERT … RETURNING`, which takes the write lock first). Alternatively, `BEGIN IMMEDIATE` around the
+append.
+
+**C4 — Retire the tables.** The migration step does a final reconcile, requires exact parity, then
+renames `meals`, `meal_shares`, `payments`, `settlements`, `games` and `game_entries` to `legacy_*`.
+Debug CSVs are served from the view.
+
+**C5 — Rollback is no longer free.** B's code writes the tables and refuses to boot when they
+disagree with the journal. After C, the tables are stale and renamed. So C ships `--undo-c`: rebuild
+the six tables from the journal (records → rows, ids kept), rename them back, and verify parity; then
+deploy B. The pre-deploy backup is the last resort. The rehearsal on the clone must include
+apply → writes → undo-c → B boots with parity clean.
+
+**C6 — Per-session view cache** (review B6): one `LedgerView` per (session, room), dropped on every
+append. This brings `meal_exists` back to O(1).
+
+Dry run, on top of B's (every read identical, old vs new): the same random write sequence is
+driven through B's code and C's code on two copies of the clone, and their journals and every read
+must match. Then rehearse undo-c.
+
+Tasks: C-S1 write paths → events + ids; C-S2 port readers + R2 test; C-S3 doc ids via sequence;
+C-S4 retire tables + `--undo-c`; C-S5 dry run + undo rehearsal on the production clone; C-S6 docs.
