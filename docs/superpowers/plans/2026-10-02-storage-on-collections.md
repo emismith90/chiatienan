@@ -397,3 +397,19 @@ restore or replay.
 Tasks: B-S1 hook + guard + journals; B-S2 view + port reads (lunch, then poker); B-S3 migration
 import + parity CLI; B-S4 dry run on the production clone (old code on tables vs new code on journal,
 every read function, every room, several windows — must be IDENTICAL); B-S5 docs.
+
+### 8.1 Release B — dry run on the production clone (2026-10-03)
+
+Same clone as §7. First release A's migration **with A's code** (`feat/storage-on-collections` @
+89a626b, its own worktree): the state B deploys onto. Then two copies:
+
+1. **Old code (A)** on one copy, money from the tables.
+2. **New code (B)** on the other: `migrate_storage --apply` → storage-a `already applied`, ledger-b
+   `applied` (room 3: 181 events = 46 meals + 135 payments; room 1: 1), `problems: []`;
+   `--parity` → `identical`.
+
+Compared, for every room, over every window (all time, each month with a meal, each day with a meal —
+45 in all): `debt_breakdown`, `period_transfers`, `outstanding_pairs`, `statement_for` for every
+member, `period_timeline`, `period_balances`, `period_meal_details`, plus `last_settlement` and
+`places.stats`. **IDENTICAL** — room 3: 141 debt edges and 173 timeline events over all time, every
+window equal in content and order.

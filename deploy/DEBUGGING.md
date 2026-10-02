@@ -124,6 +124,22 @@ it: stop the backend, copy `data/backups/<time>-pre-<sha>/chiatienan.db` over
 `data/chiatienan.db` (and delete any `-wal`/`-shm` beside it), copy the backup's `rooms/` back,
 deploy the previous commit.
 
+### The ledger journal (release B)
+
+Every meal, payment and settlement is also an event in the room's `ledger` journal (poker: the
+`games` journal), written in the same transaction as the row by a flush hook, and **every balance,
+statement and timeline is read from the journal**. The tables stay current (every write still lands
+in them), so:
+
+- **Check they agree:** `docker compose exec backend python -m app.migrate_storage --parity` →
+  `identical`, or every field that differs. The app refuses to start if they ever disagree.
+- **Roll back release B:** deploy the previous commit. It reads the tables, which hold every write —
+  nothing to restore, nothing to replay.
+- **A money row cannot be edited or deleted** any more, even by hand through the ORM: only a void,
+  a payment re-pointed or a place link is allowed, and anything else raises `LedgerImmutable`. A
+  hand-written SQL `UPDATE` would bypass the hook and make `--parity` (and the next start) fail —
+  don't.
+
 Reading places and notes from now on: `/internal/debug/tables/places.csv` is the **frozen
 legacy table**. The live data is in `kn_documents` (collection `places` / `notes` of the
 `_system` business): `/internal/debug/tables/kn_documents.csv`.

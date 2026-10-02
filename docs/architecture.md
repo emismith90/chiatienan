@@ -334,6 +334,13 @@ whatever triggered it. Two stores live there today:
   `meals.place_id` points at; the slug is a database-enforced `unique_key`. A `Place` is a
   frozen record: every write goes through the module.
 
+- `ledger` (owned by `ledger_core`) and `games` (owned by the poker pack) are **journals**:
+  every money-row insert or allowed change (a void, a payment re-pointed, a place link) becomes an
+  event, appended by an `after_flush` hook in the same transaction (`ledger_core/journal.py`), and
+  any other change or delete raises `LedgerImmutable`. Reads fold the journal into frozen records
+  (`ledger_core/view.py`, `packs/poker_ledger/view.py`); the money code downstream is unchanged.
+  The tables are still written, so they are a current rollback copy (release B of the plan).
+
 The legacy table and files were imported once by `python -m app.migrate_storage`, a
 deploy step that runs with the backend stopped after `python -m app.backup`, verifies
 its own copy field by field and refuses on any difference (`deploy/DEBUGGING.md` §3).
