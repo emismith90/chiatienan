@@ -82,32 +82,44 @@ def _ledger_parity(session: Session) -> list[str]:
     from packs.poker_ledger import importer as poker_import
 
     out = []
-    for room in ledger_import.ledger_rooms(session):
-        out += ledger_import.differences(session, room)
-    for room in poker_import.game_rooms(session):
-        out += poker_import.differences(session, room)
+    for kind, mod, rooms in (("ledger", ledger_import, ledger_import.ledger_rooms(session)),
+                             ("games", poker_import, poker_import.game_rooms(session))):
+        for room in rooms:
+            try:
+                out += mod.differences(session, room)
+            except ValueError as exc:           # a journal that cannot be read back
+                out.append(f"room {room} {kind} journal: {exc}")
     return out
 
 
 def migrate_ledger(session: Session) -> dict:
-    """Import every room's ledger and games into their journals, then require exact
-    parity. Raises :class:`MigrationRefused`; the caller rolls back."""
+    """Bring every room's ledger and games journals level with the tables, then require
+    exact parity. Raises :class:`MigrationRefused`; the caller rolls back.
+
+    Runs on every deploy, not once (review B#1): a room with no journal is imported; a
+    room whose journal the tables moved ahead of — the previous commit, which writes the
+    tables only, served for a while — is reconciled by appending the tables' state of
+    every row that differs. ``report["appended"]`` is 0 when everything was level."""
     from ledger_core import importer as ledger_import
     from packs.poker_ledger import importer as poker_import
     from packs.poker_ledger.view import games
 
-    report = {"ledger": {}, "games": {}, "problems": []}
-    for room in ledger_import.ledger_rooms(session):
-        if ledger_import.journal_size(session, room):
-            # Mirrored all along (a database the journal has always covered): nothing to
-            # import, and the parity check below decides whether that is really so.
+    report = {"ledger": {}, "games": {}, "reconciled": {}, "appended": 0, "problems": []}
+    steps = [("ledger", room, lambda r: ledger_import.journal_size(session, r) == 0,
+              ledger_import.import_room, ledger_import.reconcile) for room in ledger_import.ledger_rooms(session)]
+    steps += [("games", room, lambda r: not games(session, r, voided=None),
+               poker_import.import_room, poker_import.reconcile) for room in poker_import.game_rooms(session)]
+    for kind, room, empty, import_room, reconcile in steps:
+        try:
+            if empty(room):
+                report[kind][str(room)] = n = import_room(session, room)
+            elif n := reconcile(session, room):
+                report["reconciled"][f"{kind}:{room}"] = n
+        except ValueError as exc:               # a journal that cannot be read back
+            report["problems"].append(f"room {room} {kind} journal: {exc}")
             continue
-        report["ledger"][str(room)] = ledger_import.import_room(session, room)
-    for room in poker_import.game_rooms(session):
-        if games(session, room, voided=None):
-            continue
-        report["games"][str(room)] = poker_import.import_room(session, room)
-    report["problems"] = _ledger_parity(session)
+        report["appended"] += n
+    report["problems"] += _ledger_parity(session)
     if report["problems"]:
         raise MigrationRefused(report)
     return report
@@ -198,8 +210,8 @@ def pending(db) -> str | None:
             if _done(s, LEDGER_NAME) is None:
                 return f"the ledger has not been imported into its journal: {run_it}"
             return (f"the ledger journal and tables disagree ({len(problems)} difference(s), first: "
-                    f"{problems[0]}); run `python -m app.migrate_storage --parity`, and deploy the previous "
-                    "commit to serve from the tables meanwhile")
+                    f"{problems[0]}): {run_it} — it appends the tables' state of every row that differs, "
+                    "or refuses and names why (`--parity` lists every difference)")
     return None
 
 
@@ -267,23 +279,33 @@ def run(db, *, apply: bool) -> tuple[int, dict]:
         _retire_files(report)
     if status != 0:
         return status, report
-    status_b, report_b = _run_step(db, LEDGER_NAME, migrate_ledger, apply=apply)
+    status_b, report_b = _run_step(db, LEDGER_NAME, migrate_ledger, apply=apply, every_time=True)
     if report["status"] == "already applied" and report_b["status"] == "already applied":
         return 0, {"status": "already applied"}
     return status_b, {**report, "ledger_step": report_b}
 
 
-def _run_step(db, name: str, step, *, apply: bool) -> tuple[int, dict]:
+def _run_step(db, name: str, step, *, apply: bool, every_time: bool = False) -> tuple[int, dict]:
+    """One step in its own transaction. A step done before is skipped — unless
+    ``every_time``: then it runs again, and is "already applied" only when it found
+    nothing to append; whatever it did append is "reconciled"."""
     s = db._sessionmaker()
     try:
-        if _done(s, name) is not None:
+        done = _done(s, name) is not None
+        if done and not every_time:
             return 0, {"status": "already applied"}
         report = step(s)
+        if done and not report.get("appended"):
+            s.rollback()
+            return 0, {"status": "already applied"}
         if not apply:
             s.rollback()
             return 0, {"status": "check passed (rolled back)", **report}
-        _mark(s, name, report)
+        if not done:
+            _mark(s, name, report)
         s.commit()
+        if done:
+            return 0, {"status": "reconciled", **report}
     except MigrationRefused as exc:
         s.rollback()
         return 1, {"status": "refused: nothing was written", **exc.report}

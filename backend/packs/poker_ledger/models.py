@@ -66,15 +66,14 @@ def _game_inserted(game) -> list[dict]:
     from ledger_core.journal import columns
 
     return [{"event": "game", "_order": game.id, **columns(game, GAME_COLUMNS),
-             "entries": [{"member_id": e.member_id, "buy_in": e.buy_in, "cash_out": e.cash_out}
+             "entries": [columns(e, ("member_id", "buy_in", "cash_out"))
                          for e in sorted(game.entries, key=lambda e: e.id or 0)]}]
 
 
 def _game_updated(game, kind: str) -> dict:
-    from ledger_core.journal import dump_value
+    from ledger_core.journal import columns
 
-    return {"event": kind, "game_id": game.id, "voided": bool(game.voided),
-            "voided_by": game.voided_by, "voided_at": dump_value(game.voided_at)}
+    return {"event": kind, "game_id": game.id, **columns(game, ("voided", "voided_by", "voided_at"))}
 
 
 def _entry_inserted(entry) -> list[dict]:

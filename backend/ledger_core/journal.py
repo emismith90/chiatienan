@@ -55,8 +55,27 @@ def load_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+def _as_stored(column, value: Any) -> Any:
+    """``value`` as a fresh read of ``column`` returns it. SQLite coerces by column
+    affinity (``place_id="7"`` reads back ``7``, ``note=5`` reads back ``"5"``), and the
+    event must say what the table says, or parity breaks on the next boot (review B#2)."""
+    if value is None:
+        return None
+    try:
+        kind = column.type.python_type
+    except NotImplementedError:
+        return value
+    if kind in (int, str, bool) and type(value) is not kind:
+        try:
+            return kind(value)
+        except (TypeError, ValueError):
+            return value                    # stored as given: SQLite keeps what it cannot convert
+    return value
+
+
 def columns(obj, names: tuple[str, ...]) -> dict:
-    return {n: dump_value(getattr(obj, n)) for n in names}
+    table = obj.__table__.columns
+    return {n: dump_value(_as_stored(table[n], getattr(obj, n))) for n in names}
 
 
 # --------------------------------------------------------------------- registry
@@ -181,8 +200,10 @@ LEDGER = {
     "slug": "ledger", "name": "Ledger", "mode": "journal", "key": "", "searchable": [],
     "description": "Every money event of a room, append-only (plan 2026-10-02, release B).",
     "schema": {"type": "object", "required": ["event"],
+               # no ``meal_id``: a payment's is null when untargeted, and the schema
+               # language has no nullable type (review B#5)
                "properties": {"event": {"type": "string", "enum": LEDGER_EVENTS},
-                              "meal_id": {"type": "integer"}, "payment_id": {"type": "integer"},
+                              "payment_id": {"type": "integer"},
                               "settlement_id": {"type": "integer"}}},
 }
 
@@ -196,15 +217,14 @@ SETTLEMENT_COLUMNS = ("id", "room_id", "period_from", "period_to", "created_at",
 
 def _meal_inserted(meal) -> list[dict]:
     return [{"event": "meal", "_order": meal.id, **columns(meal, MEAL_COLUMNS),
-             "shares": [{"member_id": s.member_id, "share_amount": s.share_amount}
+             "shares": [columns(s, ("member_id", "share_amount"))
                         for s in sorted(meal.shares, key=lambda s: s.id or 0)]}]
 
 
 def _meal_updated(meal, kind: str) -> dict:
     if kind == "meal_void":
-        return {"event": kind, "meal_id": meal.id, "voided": bool(meal.voided),
-                "voided_by": meal.voided_by, "voided_at": dump_value(meal.voided_at)}
-    return {"event": kind, "meal_id": meal.id, "place_id": meal.place_id}
+        return {"event": kind, "meal_id": meal.id, **columns(meal, ("voided", "voided_by", "voided_at"))}
+    return {"event": kind, "meal_id": meal.id, **columns(meal, ("place_id",))}
 
 
 def _share_inserted(share) -> list[dict]:
@@ -223,9 +243,8 @@ def _payment_inserted(pay) -> list[dict]:
 
 def _payment_updated(pay, kind: str) -> dict:
     if kind == "payment_void":
-        return {"event": kind, "payment_id": pay.id, "voided": bool(pay.voided),
-                "voided_by": pay.voided_by, "voided_at": dump_value(pay.voided_at)}
-    return {"event": kind, "payment_id": pay.id, "meal_id": pay.meal_id}
+        return {"event": kind, "payment_id": pay.id, **columns(pay, ("voided", "voided_by", "voided_at"))}
+    return {"event": kind, "payment_id": pay.id, **columns(pay, ("meal_id",))}
 
 
 def _settlement_inserted(st) -> list[dict]:

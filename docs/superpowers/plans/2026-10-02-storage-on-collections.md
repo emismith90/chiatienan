@@ -413,3 +413,17 @@ Compared, for every room, over every window (all time, each month with a meal, e
 member, `period_timeline`, `period_balances`, `period_meal_details`, plus `last_settlement` and
 `places.stats`. **IDENTICAL** — room 3: 141 debt edges and 173 timeline events over all time, every
 window equal in content and order.
+
+### 8.2 Code review of release B (2026-10-03) — findings and dispositions
+
+| # | Finding | Disposition |
+|---|---------|-------------|
+| B1 | Roll back (previous commit writes tables only), roll forward: `--apply` said "already applied", `up -d` ran, and the new backend refused to boot — site down, no repair path (rooms with a journal were never re-imported). | **Fixed.** The ledger step runs on every deploy: empty journal → import; otherwise `reconcile` appends the tables' full state of every row that differs (a full-state event replaces the id's record in the fold), then exact parity or refuse (deploy fails, old container keeps serving). Test: `test_ledger_reconcile.py`. |
+| B2 | The journal stored the Python value at flush time; SQLite stores it coerced by affinity (`place_id="7"` → `7`). One such write → parity fails → next boot refused; the view handed back `"7"`. | **Fixed.** Every event value goes through its column's type (`_as_stored`), shares and entries included. |
+| B3 | A modifier event for a row the journal lacks crashed `fold` with `KeyError` — in `pending()` and every balance read. | **Fixed.** `fold` raises a `ValueError` naming it; parity and the migration report it as a problem and refuse. |
+| B4 | `pending()` said "not imported" for a journal that only disagreed. | **Fixed.** It now says to run `--apply`, which reconciles or names why it cannot. |
+| B5 | Declared `meal_id: integer`, but untargeted payments carry `null`. | **Fixed.** Not declared (the schema language has no nullable type). |
+| B6 | Each request folds the room's journal several times; `meal_exists` folds instead of a PK lookup. | **Accepted for now** (~200 events per room). Revisit with a per-session view cache in release C if it shows in latency. |
+| B7 | `doc_id = count+1` would collide under concurrent appends on Postgres. | **Accepted** (SQLite: the flush holds the write lock first — probed with 4 threads × 15 meals, 0 errors). Note for any Postgres move: use `kn_sequences`. |
+
+Re-verified on the production clone after the fixes: `--apply` imports 182 events (room 3: 181, room 1: 1), `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows is IDENTICAL to the old code's. Suite: 1425 passed, 1 skipped.

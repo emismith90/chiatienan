@@ -134,7 +134,12 @@ in them), so:
 - **Check they agree:** `docker compose exec backend python -m app.migrate_storage --parity` →
   `identical`, or every field that differs. The app refuses to start if they ever disagree.
 - **Roll back release B:** deploy the previous commit. It reads the tables, which hold every write —
-  nothing to restore, nothing to replay.
+  nothing to restore, nothing to replay. It writes the tables *only*, so the journal falls behind
+  while it serves; **rolling forward again needs nothing by hand**: the deploy's `migrate_storage
+  --apply` runs the ledger step on every deploy and appends the tables' current state of every row
+  that differs (`"status": "reconciled"`), then requires exact parity. If it cannot (a row only the
+  journal holds, a journal that does not start at the beginning) it refuses, the deploy fails, and
+  the previous container keeps serving — `--parity` names the rows.
 - **A money row cannot be edited or deleted** any more, even by hand through the ORM: only a void,
   a payment re-pointed or a place link is allowed, and anything else raises `LedgerImmutable`. A
   hand-written SQL `UPDATE` would bypass the hook and make `--parity` (and the next start) fail —

@@ -115,28 +115,36 @@ def fold(events: list[dict]) -> tuple[dict[int, MealRecord], dict[int, PaymentRe
     payments: dict[int, PaymentRecord] = {}
     settlements: dict[int, SettlementRecord] = {}
     for ev in events:
-        kind = ev["event"]
-        if kind == "meal":
-            meals[ev["id"]] = _meal(ev)
-        elif kind == "meal_void":
-            meals[ev["meal_id"]] = replace(meals[ev["meal_id"]], voided=bool(ev["voided"]),
-                                           voided_by=ev.get("voided_by"),
-                                           voided_at=load_datetime(ev.get("voided_at")))
-        elif kind == "meal_place":
-            meals[ev["meal_id"]] = replace(meals[ev["meal_id"]], place_id=ev.get("place_id"))
-        elif kind == "payment":
-            payments[ev["id"]] = _payment(ev)
-        elif kind == "payment_void":
-            payments[ev["payment_id"]] = replace(payments[ev["payment_id"]], voided=bool(ev["voided"]),
-                                                 voided_by=ev.get("voided_by"),
-                                                 voided_at=load_datetime(ev.get("voided_at")))
-        elif kind == "payment_retarget":
-            payments[ev["payment_id"]] = replace(payments[ev["payment_id"]], meal_id=ev.get("meal_id"))
-        elif kind == "settlement":
-            settlements[ev["id"]] = _settlement(ev)
-        else:
-            raise ValueError(f"unknown ledger event {kind!r}")
+        try:
+            _apply(ev, meals, payments, settlements)
+        except KeyError as exc:
+            raise ValueError(f"ledger event {ev.get('event')!r} is about {exc} before the journal "
+                             "records it: the journal does not start at the beginning") from None
     return meals, payments, settlements
+
+
+def _apply(ev: dict, meals: dict, payments: dict, settlements: dict) -> None:
+    kind = ev["event"]
+    if kind == "meal":
+        meals[ev["id"]] = _meal(ev)
+    elif kind == "meal_void":
+        meals[ev["meal_id"]] = replace(meals[ev["meal_id"]], voided=bool(ev["voided"]),
+                                       voided_by=ev.get("voided_by"),
+                                       voided_at=load_datetime(ev.get("voided_at")))
+    elif kind == "meal_place":
+        meals[ev["meal_id"]] = replace(meals[ev["meal_id"]], place_id=ev.get("place_id"))
+    elif kind == "payment":
+        payments[ev["id"]] = _payment(ev)
+    elif kind == "payment_void":
+        payments[ev["payment_id"]] = replace(payments[ev["payment_id"]], voided=bool(ev["voided"]),
+                                             voided_by=ev.get("voided_by"),
+                                             voided_at=load_datetime(ev.get("voided_at")))
+    elif kind == "payment_retarget":
+        payments[ev["payment_id"]] = replace(payments[ev["payment_id"]], meal_id=ev.get("meal_id"))
+    elif kind == "settlement":
+        settlements[ev["id"]] = _settlement(ev)
+    else:
+        raise ValueError(f"unknown ledger event {kind!r}")
 
 
 def journal_events(session: Session, slug: str, room_id: Any) -> list[dict]:

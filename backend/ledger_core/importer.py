@@ -8,7 +8,8 @@ links included — through the same serializers the live mirror uses.
 :func:`differences` is the parity check, and it reads the tables by a **separate**
 path: ORM rows straight into the view's records, never through JSON. A serialization
 bug therefore cannot cancel itself out between the two sides. Run by the migration
-before it commits, by ``migrate_storage --parity``, and at startup (a warning).
+before it commits, by ``migrate_storage --parity``, and at startup (which refuses to
+boot on any difference). :func:`reconcile` repairs a journal the tables moved ahead of.
 """
 from __future__ import annotations
 
@@ -83,9 +84,34 @@ def _naive(value):
 def differences(session: Session, room_id: int) -> list[str]:
     """Every way the journal's view of ``room_id`` differs from its tables, field by
     field — empty when they agree."""
+    return _compare(session, room_id)[0]
+
+
+_ROWS = {"meal": (Meal, journal._meal_inserted), "payment": (Payment, journal._payment_inserted),
+         "settlement": (Settlement, journal._settlement_inserted)}
+
+
+def reconcile(session: Session, room_id: int) -> int:
+    """Append the tables' current state of every row the journal lacks or holds
+    differently; returns how many. The way forward again after the previous commit —
+    which writes the tables only — served for a while (review B#1): a full-state event
+    replaces whatever the journal held for that id. A row only the journal holds is
+    left for the parity check to refuse: the tables never lose a row."""
+    _, stale = _compare(session, room_id)
+    for label, rid in sorted(stale):
+        model, build = _ROWS[label]
+        ev = build(session.get(model, rid))[0]
+        ev.pop("_order", None)
+        journal.append_raw(session, "ledger", room_id, {**ev, "reconciled": True})
+    return len(stale)
+
+
+def _compare(session: Session, room_id: int) -> tuple[list[str], set[tuple[str, int]]]:
+    """``(differences, stale)``: the messages, and the ``(kind, id)`` of every row the
+    tables hold that the journal lacks or holds differently."""
     t_meals, t_payments, t_settlements = table_records(session, room_id)
     view = LedgerView(session, room_id)
-    out = []
+    out, stale = [], set()
     for label, table, journal_side in (("meal", t_meals, view.meals(voided=None)),
                                        ("payment", t_payments, view.payments(voided=None)),
                                        ("settlement", t_settlements, view.settlements())):
@@ -94,9 +120,12 @@ def differences(session: Session, room_id: int) -> list[str]:
             a, b = t_by.get(rid), j_by.get(rid)
             if a is None or b is None:
                 out.append(f"room {room_id} {label} #{rid}: only in the {'journal' if a is None else 'tables'}")
+                if b is None:
+                    stale.add((label, rid))
                 continue
             for f in fields(a):
                 if getattr(a, f.name) != getattr(b, f.name):
                     out.append(f"room {room_id} {label} #{rid}.{f.name}: tables {getattr(a, f.name)!r} "
                                f"!= journal {getattr(b, f.name)!r}")
-    return out
+                    stale.add((label, rid))
+    return out, stale

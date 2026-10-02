@@ -27,6 +27,20 @@ def import_room(session: Session, room_id: int) -> int:
 
 
 def differences(session: Session, room_id: int) -> list[str]:
+    return _compare(session, room_id)[0]
+
+
+def reconcile(session: Session, room_id: int) -> int:
+    """:func:`ledger_core.importer.reconcile`, for games."""
+    _, stale = _compare(session, room_id)
+    for gid in sorted(stale):
+        ev = _game_inserted(session.get(Game, gid))[0]
+        ev.pop("_order", None)
+        journal.append_raw(session, "games", room_id, {**ev, "reconciled": True})
+    return len(stale)
+
+
+def _compare(session: Session, room_id: int) -> tuple[list[str], set[int]]:
     table = {g.id: GameRecord(
         id=g.id, room_id=g.room_id, played_on=g.played_on, house=g.house, note=g.note, raw_input=g.raw_input,
         source=g.source, logged_by=g.logged_by, voided=bool(g.voided), voided_by=g.voided_by,
@@ -35,14 +49,17 @@ def differences(session: Session, room_id: int) -> list[str]:
         entries=tuple(EntryRecord(g.id, e.member_id, e.buy_in, e.cash_out) for e in sorted(g.entries, key=lambda e: e.id)))
         for g in session.scalars(select(Game).where(Game.room_id == room_id))}
     jour = {g.id: g for g in games(session, room_id, voided=None)}
-    out = []
+    out, stale = [], set()
     for gid in sorted(set(table) | set(jour)):
         a, b = table.get(gid), jour.get(gid)
         if a is None or b is None:
             out.append(f"room {room_id} game #{gid}: only in the {'journal' if a is None else 'tables'}")
+            if b is None:
+                stale.add(gid)
             continue
         for f in fields(a):
             if getattr(a, f.name) != getattr(b, f.name):
                 out.append(f"room {room_id} game #{gid}.{f.name}: tables {getattr(a, f.name)!r} "
                            f"!= journal {getattr(b, f.name)!r}")
-    return out
+                stale.add(gid)
+    return out, stale

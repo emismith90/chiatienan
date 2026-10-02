@@ -51,6 +51,9 @@ def games(session, space_id, *, voided: bool | None = False, from_date: date | N
                 entries=tuple(EntryRecord(ev["id"], e["member_id"], e["buy_in"], e["cash_out"])
                               for e in ev.get("entries") or []))
         elif ev["event"] == "game_void":
+            if ev["game_id"] not in held:
+                raise ValueError(f"games event 'game_void' is about game #{ev['game_id']} before the journal "
+                                 "records it: the journal does not start at the beginning")
             held[ev["game_id"]] = replace(held[ev["game_id"]], voided=bool(ev["voided"]),
                                           voided_by=ev.get("voided_by"), voided_at=load_datetime(ev.get("voided_at")))
         else:
