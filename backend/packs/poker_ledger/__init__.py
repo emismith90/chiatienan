@@ -8,7 +8,6 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import select
 
 from kernos.packs import BasePack, DraftKind, PackTool
 from ledger_core import clock, roster
@@ -76,8 +75,8 @@ def summary(session, space_id, att: dict) -> dict:
 
 
 def exists(session, space_id, game_id) -> bool:
-    game = session.get(Game, int(game_id))
-    return game is not None and game.room_id == int(space_id) and not game.voided
+    from packs.poker_ledger.view import games
+    return any(g.id == int(game_id) for g in games(session, space_id))
 
 
 def _read(rel: str) -> str:
@@ -112,20 +111,21 @@ class PokerLedgerPack(BasePack):
 
     def contributions(self, session, space_id) -> list:
         """Every non-voided game's edges, losers → winners, unwindowed (review F4)."""
+        from packs.poker_ledger.view import games
+
         out = []
-        for game in session.scalars(select(Game).where(Game.room_id == int(space_id), Game.voided.is_(False))).all():
+        for game in games(session, space_id):
             nets = {e.member_id: e.cash_out - e.buy_in for e in game.entries}
             out.extend(game_edges(game.id, game.played_on, nets, house=game.house))
         return out
 
     def timeline(self, session, space_id, from_date, to_date) -> list[dict]:
-        conds = [Game.room_id == int(space_id), Game.voided.is_(False), Game.played_on <= to_date]
-        if from_date is not None:
-            conds.append(Game.played_on >= from_date)
+        from packs.poker_ledger.view import games
+
         return [{"kind": "game", "game_id": g.id, "occurred_on": g.played_on.isoformat(),
                  "created_at": g.created_at.isoformat() if g.created_at else "", "pot": sum(e.buy_in for e in g.entries),
                  "players": len(g.entries), "house": g.house}
-                for g in session.scalars(select(Game).where(*conds)).all()]
+                for g in games(session, space_id, from_date=from_date, to_date=to_date)]
 
     def fixtures(self):
         return dict(fixtures.FIXTURES)

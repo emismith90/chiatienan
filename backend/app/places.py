@@ -505,7 +505,7 @@ def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DA
     from datetime import timedelta
 
     from app.clock import today_ict
-    from app.models import Meal, MealShare
+    from ledger_core.view import LedgerView
 
     today = today or today_ict()
     cutoff = today - timedelta(days=window_days)
@@ -519,14 +519,7 @@ def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DA
     }
     totals: dict[int, list[int]] = {p.id: [] for p in rows}
 
-    meals = session.scalars(
-        select(Meal).where(
-            Meal.room_id == room_id,
-            Meal.place_id.isnot(None),
-            Meal.voided.is_(False),
-            Meal.occurred_on >= cutoff,
-        )
-    ).all()
+    meals = [m for m in LedgerView(session, room_id).meals(from_date=cutoff) if m.place_id is not None]
 
     for meal in meals:
         entry = out.get(meal.place_id)
@@ -536,9 +529,7 @@ def stats(session: Session, room_id: int, *, window_days: int = _STATS_WINDOW_DA
         if entry["last_on"] is None or meal.occurred_on > entry["last_on"]:
             entry["last_on"] = meal.occurred_on
         entry["weekday_counts"][meal.occurred_on.weekday()] += 1
-        heads = session.scalar(
-            select(func.count()).select_from(MealShare).where(MealShare.meal_id == meal.id)
-        ) or 0
+        heads = len(meal.shares)
         if heads:
             totals[meal.place_id].append(meal.total_amount // heads)
 

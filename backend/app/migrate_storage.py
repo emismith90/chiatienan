@@ -3,6 +3,7 @@
     python -m app.migrate_storage --check  [--db URL]   # dry run: import, verify, roll back
     python -m app.migrate_storage --apply  [--db URL]   # import, verify, commit (once)
     python -m app.migrate_storage --undo   [--db URL]   # write the stores back, then remove them
+    python -m app.migrate_storage --parity [--db URL]   # journal vs tables, every room
 
 An explicit step, run by the deploy with the backend stopped — never at startup (review
 R1): if it fails, the deploy stops and the previous image keeps running on untouched
@@ -24,6 +25,16 @@ back into the legacy table (edits and new places included) and every room's note
 into ``observations.md``, then deletes the imported documents and the marker — so the
 previous image can be deployed on the same database, with no restore. The app refuses to
 start while legacy data exists and the import has not run (:func:`pending`).
+
+**Release B** adds a second step, ``ledger-b`` (its own marker, its own transaction):
+the ledger's and the poker pack's tables are imported into their journals
+(:mod:`ledger_core.importer`), and every room's journal must then equal its tables
+field by field, or nothing is written. From release B on, reads come from the journal
+while every write still lands in both (the mirror), so the tables remain a current
+rollback copy and ``--undo`` has nothing to do for the ledger: deploying the previous
+commit is the rollback. The app refuses to start while the import is pending, and —
+because the journal is what every balance is read from — whenever the journal and the
+tables disagree (``--parity`` lists how).
 """
 from __future__ import annotations
 
@@ -40,6 +51,7 @@ from app.clock import now_ict
 from kernos.content.errors import ContentError
 
 NAME = "storage-a"
+LEDGER_NAME = "ledger-b"
 
 
 def _legacy_place(row) -> places.Place:
@@ -52,8 +64,53 @@ def _legacy_place(row) -> places.Place:
         created_at=row.created_at)
 
 
-def _done(session: Session) -> dict | None:
-    return store.DATA.get_document(store.collection(session, "migrations"), "_", NAME, session=session)
+def _done(session: Session, name: str = NAME) -> dict | None:
+    return store.DATA.get_document(store.collection(session, "migrations"), "_", name, session=session)
+
+
+def _mark(session: Session, name: str, report: dict) -> None:
+    store.DATA.upsert_document(store.collection(session, "migrations"), "_",
+                               {"id": name, "done_at": now_ict().isoformat(),
+                                "report": json.dumps(report, ensure_ascii=False, default=str)},
+                               actor="migrate_storage", session=session)
+
+
+# ------------------------------------------------------------------ release B: the ledger
+
+def _ledger_parity(session: Session) -> list[str]:
+    from ledger_core import importer as ledger_import
+    from packs.poker_ledger import importer as poker_import
+
+    out = []
+    for room in ledger_import.ledger_rooms(session):
+        out += ledger_import.differences(session, room)
+    for room in poker_import.game_rooms(session):
+        out += poker_import.differences(session, room)
+    return out
+
+
+def migrate_ledger(session: Session) -> dict:
+    """Import every room's ledger and games into their journals, then require exact
+    parity. Raises :class:`MigrationRefused`; the caller rolls back."""
+    from ledger_core import importer as ledger_import
+    from packs.poker_ledger import importer as poker_import
+    from packs.poker_ledger.view import games
+
+    report = {"ledger": {}, "games": {}, "problems": []}
+    for room in ledger_import.ledger_rooms(session):
+        if ledger_import.journal_size(session, room):
+            # Mirrored all along (a database the journal has always covered): nothing to
+            # import, and the parity check below decides whether that is really so.
+            continue
+        report["ledger"][str(room)] = ledger_import.import_room(session, room)
+    for room in poker_import.game_rooms(session):
+        if games(session, room, voided=None):
+            continue
+        report["games"][str(room)] = poker_import.import_room(session, room)
+    report["problems"] = _ledger_parity(session)
+    if report["problems"]:
+        raise MigrationRefused(report)
+    return report
 
 
 def migrate(session: Session) -> dict:
@@ -121,18 +178,29 @@ def _rooms_with_a_file() -> list[int]:
 
 
 def pending(db) -> str | None:
-    """Why the app must not start yet, or ``None``: legacy places or notes exist and the
-    import has not run. Serving then would show rooms with no places and no notes, and
-    the bot would re-create places the import later collides with (review of release A)."""
+    """Why the app must not start yet, or ``None``.
+
+    * Legacy places or notes exist and the import has not run: the rooms would show no
+      places and no notes, and the bot would re-create places the import then collides
+      with (review of release A).
+    * The ledger journals differ from the tables — before the ledger import, or ever
+      after it: every balance is read from the journal, and a wrong balance is worse
+      than no bot. The previous commit reads the tables, which every write keeps current.
+    """
     from app.models import LegacyPlace
 
+    run_it = "run `python -m app.migrate_storage --apply` (the deploy does this; see deploy/DEBUGGING.md §3)"
     with db.session() as s:
-        if _done(s) is not None:
-            return None
-        if s.scalar(select(LegacyPlace.id).limit(1)) is None and not _rooms_with_a_file():
-            return None
-    return ("legacy places/notes have not been imported: run `python -m app.migrate_storage --apply` "
-            "(the deploy does this; see deploy/DEBUGGING.md §3)")
+        if _done(s) is None and (s.scalar(select(LegacyPlace.id).limit(1)) is not None or _rooms_with_a_file()):
+            return f"legacy places/notes have not been imported: {run_it}"
+        problems = _ledger_parity(s)
+        if problems:
+            if _done(s, LEDGER_NAME) is None:
+                return f"the ledger has not been imported into its journal: {run_it}"
+            return (f"the ledger journal and tables disagree ({len(problems)} difference(s), first: "
+                    f"{problems[0]}); run `python -m app.migrate_storage --parity`, and deploy the previous "
+                    "commit to serve from the tables meanwhile")
+    return None
 
 
 def undo(db) -> tuple[int, dict]:
@@ -192,19 +260,29 @@ class MigrationRefused(Exception):
 
 
 def run(db, *, apply: bool) -> tuple[int, dict]:
-    """``(exit status, report)``. ``--check`` never commits."""
+    """Every pending step in order, each in its own transaction — ``(exit status,
+    report)``. ``--check`` never commits."""
+    status, report = _run_step(db, NAME, migrate, apply=apply)
+    if status == 0 and report["status"] == "applied":
+        _retire_files(report)
+    if status != 0:
+        return status, report
+    status_b, report_b = _run_step(db, LEDGER_NAME, migrate_ledger, apply=apply)
+    if report["status"] == "already applied" and report_b["status"] == "already applied":
+        return 0, {"status": "already applied"}
+    return status_b, {**report, "ledger_step": report_b}
+
+
+def _run_step(db, name: str, step, *, apply: bool) -> tuple[int, dict]:
     s = db._sessionmaker()
     try:
-        if _done(s) is not None:
+        if _done(s, name) is not None:
             return 0, {"status": "already applied"}
-        report = migrate(s)
+        report = step(s)
         if not apply:
             s.rollback()
             return 0, {"status": "check passed (rolled back)", **report}
-        store.DATA.upsert_document(store.collection(s, "migrations"), "_",
-                                   {"id": NAME, "done_at": now_ict().isoformat(),
-                                    "report": json.dumps(report, ensure_ascii=False)},
-                                   actor="migrate_storage", session=s)
+        _mark(s, name, report)
         s.commit()
     except MigrationRefused as exc:
         s.rollback()
@@ -214,8 +292,14 @@ def run(db, *, apply: bool) -> tuple[int, dict]:
         raise
     finally:
         s.close()
-    _retire_files(report)
     return 0, {"status": "applied", **report}
+
+
+def parity(db) -> tuple[int, dict]:
+    """``--parity``: every difference between the journals and the tables."""
+    with db.session() as s:
+        problems = _ledger_parity(s)
+    return (1 if problems else 0), {"status": "differences" if problems else "identical", "problems": problems}
 
 
 def _retire_files(report: dict) -> None:
@@ -237,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--check", action="store_true", help="import and verify, then roll back")
     mode.add_argument("--apply", action="store_true", help="import, verify and commit (once)")
     mode.add_argument("--undo", action="store_true", help="write the stores back to the legacy table and files")
+    mode.add_argument("--parity", action="store_true", help="compare the ledger journals with the tables")
     ap.add_argument("--db", help="database URL (default: DATABASE_URL)")
     args = ap.parse_args(argv)
 
@@ -245,7 +330,12 @@ def main(argv: list[str] | None = None) -> int:
 
     db = Database(args.db or settings.database_url)
     db.create_all()                       # the stores exist before anything is imported
-    status, report = undo(db) if args.undo else run(db, apply=args.apply)
+    if args.parity:
+        status, report = parity(db)
+    elif args.undo:
+        status, report = undo(db)
+    else:
+        status, report = run(db, apply=args.apply)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
     return status
 
