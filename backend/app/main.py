@@ -104,9 +104,16 @@ app.include_router(debug_api.router)
 @app.on_event("startup")
 async def _boot_kernel() -> None:
     """Build the kernos kernel at boot (plan Task 2.4): seeds or re-syncs the default
-    profile and surfaces a bad plugin config at deploy rather than on the first turn."""
-    from app.kernel import kernel_for
+    profile and surfaces a bad plugin config at deploy rather than on the first turn.
 
+    First, refuse to serve a database whose places and notes have not been imported
+    into the stores (plan 2026-10-02): the rooms would show no places and no notes, and
+    the bot would re-create places the import then collides with."""
+    from app.kernel import kernel_for
+    from app.migrate_storage import pending
+
+    if reason := pending(get_db()):
+        raise RuntimeError(reason)
     report = kernel_for(get_db()).seed_report
     if report.get("actions"):
         log.info("[kernos] boot: %s", "; ".join(report["actions"]))

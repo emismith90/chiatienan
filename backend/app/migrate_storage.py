@@ -2,6 +2,7 @@
 
     python -m app.migrate_storage --check  [--db URL]   # dry run: import, verify, roll back
     python -m app.migrate_storage --apply  [--db URL]   # import, verify, commit (once)
+    python -m app.migrate_storage --undo   [--db URL]   # write the stores back, then remove them
 
 An explicit step, run by the deploy with the backend stopped — never at startup (review
 R1): if it fails, the deploy stops and the previous image keeps running on untouched
@@ -17,6 +18,12 @@ and exact duplicates are reported, never dropped silently.
 
 Idempotent: a finished run leaves a ``migrations`` document (``storage-a``) and a second
 ``--apply`` is a no-op. Exit status: 0 done or already done, 1 refused, 2 usage.
+
+``--undo`` is the rollback, and it loses nothing: it writes every place in the store
+back into the legacy table (edits and new places included) and every room's notes back
+into ``observations.md``, then deletes the imported documents and the marker — so the
+previous image can be deployed on the same database, with no restore. The app refuses to
+start while legacy data exists and the import has not run (:func:`pending`).
 """
 from __future__ import annotations
 
@@ -28,8 +35,9 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import observations, places, store
+from app import memory, observations, places, store
 from app.clock import now_ict
+from kernos.content.errors import ContentError
 
 NAME = "storage-a"
 
@@ -59,13 +67,19 @@ def migrate(session: Session) -> dict:
     legacy = session.scalars(select(LegacyPlace).order_by(LegacyPlace.id)).all()
     for row in legacy:
         p = _legacy_place(row)
-        if places.get_place(session, p.room_id, p.id) is None:
-            places._save(session, p, create=True)
+        try:
+            if places.get_place(session, p.room_id, p.id) is None:
+                places._save(session, p, create=True)
+        except (places.PlaceError, ContentError) as exc:
+            report["problems"].append(f"place {row.id}: {exc}")
+            continue
         report["places"][str(p.room_id)] = report["places"].get(str(p.room_id), 0) + 1
     # No counter to seed: every new place's id is floored above the legacy table's max.
 
     # ---- notes: every room's file, in file order
-    rooms = session.scalars(select(Room.id).order_by(Room.id)).all()
+    # Every room the table knows, plus any room whose file is on disk without a row:
+    # a file nobody imports would be lost silently.
+    rooms = sorted(set(session.scalars(select(Room.id)).all()) | set(_rooms_with_a_file()))
     expected_notes: dict[int, list] = {}
     for room_id in rooms:
         facts, parsed = observations.parse_file(observations.legacy_path(room_id))
@@ -73,8 +87,11 @@ def migrate(session: Session) -> dict:
         expected_notes[room_id] = unique
         if not facts and not parsed["comments"] and not parsed["dropped"]:
             continue
-        for o in unique:
-            observations.append(session, room_id, o)
+        try:
+            for o in unique:
+                observations.append(session, room_id, o)
+        except ContentError as exc:
+            report["problems"].append(f"room {room_id} notes: {exc}")
         report["notes"][str(room_id)] = {
             "imported": len(unique), "duplicates": len(facts) - len(unique),
             "comments": parsed["comments"], "blank": parsed["blank"],
@@ -94,6 +111,78 @@ def migrate(session: Session) -> dict:
     if report["problems"]:
         raise MigrationRefused(report)
     return report
+
+
+def _rooms_with_a_file() -> list[int]:
+    root = memory._base_dir() / "rooms"
+    if not root.is_dir():
+        return []
+    return [int(p.parent.name) for p in root.glob("*/observations.md") if p.parent.name.isdigit()]
+
+
+def pending(db) -> str | None:
+    """Why the app must not start yet, or ``None``: legacy places or notes exist and the
+    import has not run. Serving then would show rooms with no places and no notes, and
+    the bot would re-create places the import later collides with (review of release A)."""
+    from app.models import LegacyPlace
+
+    with db.session() as s:
+        if _done(s) is not None:
+            return None
+        if s.scalar(select(LegacyPlace.id).limit(1)) is None and not _rooms_with_a_file():
+            return None
+    return ("legacy places/notes have not been imported: run `python -m app.migrate_storage --apply` "
+            "(the deploy does this; see deploy/DEBUGGING.md §3)")
+
+
+def undo(db) -> tuple[int, dict]:
+    """Write the stores back to the legacy table and files, then delete them."""
+    from sqlalchemy import delete
+
+    from app.models import LegacyPlace
+    from kernos.content import models as km
+
+    s = db._sessionmaker()
+    try:
+        if _done(s) is None:
+            return 0, {"status": "nothing to undo"}
+        cols = {slug: store.collection(s, slug) for slug in ("places", "notes", "migrations")}
+        spaces = lambda cid: s.scalars(select(km.Document.space_id).where(  # noqa: E731
+            km.Document.collection_id == cid).distinct()).all()
+
+        # 1. notes back to their files first: if the commit below fails, the store is intact
+        #    and a second --undo rewrites them.
+        written = {}
+        for space in spaces(cols["notes"]["id"]):
+            facts = observations.load(s, int(space))
+            observations.legacy_path(int(space)).write_text(
+                "".join(o.to_line() + "\n" for o in facts), encoding="utf-8")
+            written[space] = len(facts)
+
+        # 2. places back into the legacy table, edits and new places included
+        restored = 0
+        for space in spaces(cols["places"]["id"]):
+            for p in places.list_places(s, int(space), include_inactive=True):
+                s.merge(LegacyPlace(
+                    id=p.id, room_id=p.room_id, slug=p.slug, former_slugs=list(p.former_slugs), name=p.name,
+                    aliases=list(p.aliases), tags=list(p.tags), delivery=list(p.delivery), address=p.address,
+                    walkable=p.walkable, walk_minutes=p.walk_minutes, phone=p.phone, price_hint=p.price_hint,
+                    closed_until=p.closed_until, active=p.active, created_at=p.created_at))
+                restored += 1
+        s.flush()
+
+        # 3. the imported documents and the marker
+        ids = [c["id"] for c in cols.values()]
+        doc_ids = select(km.Document.id).where(km.Document.collection_id.in_(ids))
+        s.execute(delete(km.DocumentVector).where(km.DocumentVector.document_id.in_(doc_ids)))
+        s.execute(delete(km.Document).where(km.Document.collection_id.in_(ids)))
+        s.commit()
+    except Exception:
+        s.rollback()
+        raise
+    finally:
+        s.close()
+    return 0, {"status": "undone", "places_restored": restored, "notes_written": written}
 
 
 class MigrationRefused(Exception):
@@ -147,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="import and verify, then roll back")
     mode.add_argument("--apply", action="store_true", help="import, verify and commit (once)")
+    mode.add_argument("--undo", action="store_true", help="write the stores back to the legacy table and files")
     ap.add_argument("--db", help="database URL (default: DATABASE_URL)")
     args = ap.parse_args(argv)
 
@@ -155,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
 
     db = Database(args.db or settings.database_url)
     db.create_all()                       # the stores exist before anything is imported
-    status, report = run(db, apply=args.apply)
+    status, report = undo(db) if args.undo else run(db, apply=args.apply)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
     return status
 

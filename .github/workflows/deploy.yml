@@ -270,7 +270,9 @@ jobs:
           # `app.migrate_storage --apply` (the NEW image's code) imports, verifies
           # and commits — a no-op once applied. Either failing restarts the SAME
           # stopped container (`start` never recreates it), so the previous code
-          # keeps serving untouched data, and the deploy fails loudly.
+          # keeps serving untouched data, and the deploy fails loudly. A trap restarts
+          # the stopped backend if the script dies in between (ssh drop, cancel):
+          # `restart: unless-stopped` never revives a container that was stopped.
           echo "${GHCR_TOKEN}" | ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -e; cd '${DEPLOY_PATH}'; git pull --ff-only; \
@@ -281,9 +283,11 @@ jobs:
              df -h /var/lib/docker; \
              docker compose pull; \
              docker compose stop backend; \
+             trap 'docker compose start backend >/dev/null 2>&1 || true' EXIT; \
              if docker compose run --rm --no-deps -T backend python -m app.backup --label 'pre-${IMAGE_TAG}' \
                 && docker compose run --rm --no-deps -T backend python -m app.migrate_storage --apply; then \
                docker compose up -d; \
+               trap - EXIT; \
              else \
                docker compose start backend; \
                echo '::error::backup or storage migration failed; the previous backend was restarted on untouched data'; \

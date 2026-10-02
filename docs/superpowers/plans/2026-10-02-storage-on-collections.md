@@ -341,6 +341,22 @@ Clone: `/internal/debug/db` of 2026-10-02 (sanitised; 4 rooms, 101 places, 47 me
 on `sys.path`, so `import app` found the editable install of the new code. Fixed by `PYTHONPATH`;
 the run above prints the old code's path.)
 
+### 7.1 Code review of release A (2026-10-03) — findings and dispositions
+
+| # | sev | finding | disposition |
+|---|---|---|---|
+| 1 | major | The rollback runbook restored the whole DB, losing money recorded after the deploy, though release A never touches the ledger; a bare image rollback showed no notes. | **Fixed.** `migrate_storage --undo` writes the stores back into the legacy table and files (edits included), then removes them. Runbook rewritten; full restore is last resort only. |
+| 2 | major | Nothing stopped the new image serving unimported data (manual `up -d --build`): empty rooms, then slug clashes on the next import. | **Fixed.** Startup refuses while legacy data exists and the import has not run (`migrate_storage.pending`); manual-deploy docs run backup + migration. |
+| 3 | minor | Memo cards' model-written gate/text were stored verbatim; the file used to normalise them. | **Fixed.** `observations._normalized` on every write. |
+| 4 | minor | A notes file for a room missing from `rooms` was skipped silently. | **Fixed.** Imported (rooms from the table ∪ files on disk). |
+| 5 | minor | A bad legacy row raised a traceback instead of a refusal report. | **Fixed.** Caught per row into `problems`. |
+| 6 | minor | Prod left down if the deploy script dies between stop and start. | **Fixed.** `trap … start backend … EXIT`, cleared after `up -d`. |
+| 7 | minor | Ten full backups could fill the shared disk. | **Fixed.** Free space ≥ 2× the copy, or refuse; rotate first; keep 5. |
+
+Re-run on the production clone after the fixes: `--apply` → `applied` (101 places, 42 notes, no
+problems); `--undo` → `undone`; the legacy `places` table is **identical** to the snapshot's (all
+101 rows, every column) and `observations.md` is **identical** to the original file.
+
 ## 8. Release B — the ledger journal (planned 2026-10-03, while A awaits review)
 
 Built on a branch stacked on A; **not merged until A has baked in production**.

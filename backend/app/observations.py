@@ -148,6 +148,15 @@ def _drop(session: Session, room_id: int, line_id: str) -> None:
                                actor="notes", session=session)
 
 
+def _normalized(obs: Observation) -> Observation:
+    """What the old file format did to every fact on its way in, done explicitly: one line
+    of text (a newline used to split a fact and drop its tail), and a gate the clock rules
+    understand or none (an unreadable gate was demoted to prose). The panel's routes
+    already validate both; a memo card's model-written fields are why this exists."""
+    gate = obs.gate if obs.gate and _GATE_RE.match(obs.gate) else None
+    return replace(obs, text=" ".join((obs.text or "").split()), gate=gate)
+
+
 def load(session: Session, room_id: int) -> list[Observation]:
     return [o for _d, o in _docs(session, room_id)]
 
@@ -166,6 +175,7 @@ def etag(session: Session, room_id: int) -> str:
 def append(session: Session, room_id: int, obs: Observation) -> bool:
     """Add a fact at the end. False — and nothing written — when an identical fact
     is already there (same ``line_id``: they are the same fact)."""
+    obs = _normalized(obs)
     docs = _docs(session, room_id)
     if any(d["id"] == obs.line_id for d, _o in docs):
         return False
@@ -177,6 +187,7 @@ def replace_line(session: Session, room_id: int, line_id: str, obs: Observation)
     """Rewrite one fact in place (it keeps its position). False when ``line_id`` is no
     longer present. Rewriting it into an exact copy of another fact keeps that other
     one — two identical facts cannot both exist."""
+    obs = _normalized(obs)
     docs = _docs(session, room_id)
     current = next((d for d, _o in docs if d["id"] == line_id), None)
     if current is None:

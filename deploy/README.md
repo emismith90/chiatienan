@@ -134,8 +134,16 @@ the masked exit status reported success):
 ### Manual (fallback)
 
 ```bash
-cd /opt/chiatienan && git pull && docker compose up -d --build
+cd /opt/chiatienan && git pull && docker compose build \
+  && docker compose stop backend \
+  && docker compose run --rm --no-deps backend python -m app.backup --label manual \
+  && docker compose run --rm --no-deps backend python -m app.migrate_storage --apply \
+  && docker compose up -d
 ```
+
+The backup and the storage migration are what CI's deploy runs too (`DEBUGGING.md` §3); the
+migration is a no-op once applied. **Skipping it is refused, not silent:** the backend will not
+start on a database whose places and notes have not been imported.
 
 Backend-only or Caddy-only changes: the command above is fine as-is. If the change touches
 `frontend/`, do **not** run a blanket `--build` on the droplet — see the M8 note in
