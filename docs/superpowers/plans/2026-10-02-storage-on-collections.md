@@ -278,3 +278,49 @@ Each task lists its proof. Work in this order; every task ends green.
 4. D12.2: is replaying journal-only writes to tables on rollback realistic, or should the
    rollback window simply be "before anyone records money after the deploy"?
 5. Anything in §1.6 this plan does not preserve.
+
+---
+
+## 5. Review gate (2026-10-02) — findings and dispositions
+
+| id | sev | finding (short) | disposition |
+|---|---|---|---|
+| R1 | blocker | Boot migration in `Kernel.__init__` + a process-global `storage_mode` is wrong: tests and eval worlds build ledgers with no Kernel, one bad DB would flip every DB in the process, and "stay on old" keeps two live code paths forever. | **Accepted.** `_system` + internal collections are seeded in `Database.create_all()`. Migration is an explicit step (`python -m app.migrate_storage --apply`) run by deploy.yml with the backend stopped; failure aborts the deploy and the old image keeps running on untouched tables. Per-DB marker row, no global mode, no runtime switch. |
+| R2 | blocker | Stale old tables are read silently by every reader the plan missed (moneyguard `exists`, void route, drafts, places stats/backfill, poker, debug CSV, bench export); attribute writes on projection objects do nothing. | **Accepted.** Records are frozen dataclasses (a missed write raises). Reader list extended (§6 F4). A test forbids `select(Meal\|Payment\|Game…)` / `get(Meal…)` outside `ledger_core/legacy.py`. Debug `/tables/{meals,…}.csv` served from the projection. Old tables renamed `legacy_*` in release C. |
+| R3 | blocker | Rollback isn't real: an untested replay script, a backup taken while the old app still writes, and notes/place edits after migration lost too. | **Accepted.** Release B **dual-writes**: every ledger write appends the journal *and* writes the old tables in the same transaction with the same ids; reads come from the journal; a parity check runs at boot and nightly. Rollback = deploy the previous SHA, zero replay. The migration step takes its own `backup()` with the backend stopped. Release A states plainly: rolling back notes/places loses edits made since. |
+| R4 | major | ID race: `seed_places` is a separate process without `_agent_lock`; read-then-insert sequences can duplicate, and a place `upsert` would silently overwrite another place. | **Accepted.** `next_id` is one atomic statement (`INSERT … ON CONFLICT DO UPDATE … RETURNING`). Place create is insert-only (fails if the doc exists). Internal writes `BEGIN IMMEDIATE`. The seed CLI goes through the same path. |
+| R5 | major | Self-check too narrow. | **Accepted.** Field-by-field comparison of every projected row against its table row (meals+shares, payments, games, settlements, incl. voided_by/at, created_at, raw_input, guests), then every reader in §1.4+R2 over windows (None→far future, since-last, each distinct `occurred_on`). |
+| R6 | major | Fold truncated by `find`/`list` caps; JSON types (dates, int dict keys, tz on `created_at`) change ordering and edit logic. | **Accepted.** `read_journal(session)` uncapped, doc_id order, asserts row count. Typed round-trip (date, int keys, naive ICT `datetime` exactly as legacy reads it). Round-trip tests. |
+| R7 | major | DB FK `payments.meal_id→meals.id` and `UNIQUE(room_id, slug)` disappear; migrating old rows through new validators can block forever on one historic anomaly. | **Accepted.** Replacement checks listed in §6 F6, enforced under the lock. Migration imports raw and *reports* invariant violations, never rejects. |
+| R8 | major | Notes migration not lossless: comments, malformed lines, file order dropped; `remove()` "first match" undefined; a dead file still looks editable; a marker file shared across DBs via `DATA_DIR`. | **Accepted, D13 corrected.** `seq` field preserves order; file renamed `observations.md.imported-<date>`; dropped lines reported by the migration; state only in the migrated DB. |
+| R9 | major | Poker in a `ledger_core` enum is a layering inversion; game and meal ids share no sequence today. | **Accepted.** Poker gets its own pack-owned `games` journal; one sequence per name; the `ref_kind`-blind repoint replicated exactly for parity, fixed separately later. |
+| R10 | major | A DataStore call without `session=` inside a commit opens a second connection: stale snapshot or a 5 s busy timeout. | **Accepted.** Internal collections *require* `session`; definitions cached; a test asserts one connection per commit. |
+| R11 | major | Mutating a returned `data` dict and upserting it is a no-op (no JSON mutation tracking). | **Accepted.** `save()` deep-copies; the fold treats data as read-only. |
+| R12 | minor | Edit-path void has no `by`/`at`; standalone `void_meal` untargets already-voided payments too. | **Accepted.** `by`/`at` optional, never defaulted; `meal_void` never implies a retarget — explicit `payment_retarget` events. |
+| R13 | minor | Place order and types: `"100" < "57"`, `closed_until` as string. | **Accepted.** Sort (name, int id); parse dates. |
+| R14 | minor | Ledger `raw_input` would be FTS-indexed/embedded by default. | **Accepted.** `searchable=[]` on ledger, games, sequences. |
+| R15 | minor | `internal` partly redundant (pack is business-scoped). | **Accepted** as defence in depth; document routes refuse internal collections too. |
+
+Open questions, as answered: one `ledger` journal (+ poker's own); a self-check mismatch is stop-ship; `seed_places` is the writer outside the lock (R4); replay-to-tables replaced by dual-write (R3); §1.6.3 also covers `quick_pay`, the void route and `recommit` (main.py:557-585, 610-627, 1171-1180).
+
+## 6. Decisions and tasks as amended
+
+**Three releases instead of one.**
+
+| release | ships | rollback |
+|---|---|---|
+| **A** | S1 data-plane prerequisites + S2 notes + S3 places, migrated by the deploy step; search on places/notes | previous SHA + restore the step's backup (loses notes/place edits since, stated) |
+| **B** | ledger journal (lunch + poker), **dual-write**, reads from the journal, boot + nightly parity | previous SHA, nothing to restore — the old tables stayed current |
+| **C** | stop mirror writes; rename old tables `legacy_*`; delete `ledger_core/legacy.py` read path | from here on: backup restore only |
+
+Each release ships only after its dry run on a production clone shows 0 differences, and bakes in production before the next starts.
+
+- **F1** (D11 replaced) — explicit migration step in deploy.yml: stop backend → `backup()` → `migrate_storage --apply` (verifies, commits or aborts) → start new image. Abort leaves the previous image running.
+- **F2** (D3 hardened) — internal collections require `session`, `BEGIN IMMEDIATE`, cached definitions.
+- **F3** (D5 hardened) — atomic `next_id`, one sequence per name, floors from each old table's `MAX(id)`.
+- **F4** (D6 extended) — readers to port, in addition to §1.4: `validate._meal_exists`, `lunch_ledger.meal_exists`, void route (main.py:612), drafts.py:236/251, places `stats`/`backfill_links`, poker `exists`/`contributions`/`timeline`/`game_history`, `period_balances`, `period_timeline`, `last_settlement`, debug CSV export, `bench/export_prod.py`.
+- **F5** (D7 extended) — every write path also covers `quick_pay`, the void route and `recommit`, each in one transaction with its bot message.
+- **F6** (R7) — replacement constraints under the lock: a payment's/retarget's `meal_id` names an existing record of its `ref_kind` in the room; a place slug is unique in the room (live and former).
+- **F7** (D9 corrected) — notes carry `seq`; the file is renamed after import; dropped lines are reported.
+
+**Next:** release A only (S1–S3 + migration step + backup + dry run). Release B gets its own plan update after A has baked.
