@@ -25,12 +25,14 @@ def prod_shaped(tmp_path):
     url = f"sqlite:///{tmp_path}/prod.db"
     engine = create_engine(url, future=True)
     Base.metadata.create_all(engine)
-    from ledger_core import bind as bind_ledger
-    bind_ledger(engine)
+    # The ledger's tables as `main` had them: no journal, no content plane.
+    from ledger_core.models import Base as LedgerBase
+    LedgerBase.metadata.create_all(engine)
     assert not [t for t in inspect(engine).get_table_names() if t.startswith("kn_")]
 
+    from ledger_core.journal import unmirrored
     db = Database(url)
-    with db.session() as s:
+    with unmirrored(), db.session() as s:
         room = Room(name="Lunch", invite_token="tok")
         s.add(room)
         s.flush()
