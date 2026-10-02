@@ -4,8 +4,9 @@ import pytest
 
 from app import places
 from app.db import Database
-from app.models import Meal, MealShare, Member, Place, Room
+from app.models import Meal, MealShare, Member, Room
 from app.tools import ToolContext, build_tools
+from tests.places_util import add_place
 
 TODAY = date(2026, 8, 14)
 
@@ -20,7 +21,7 @@ def _mk(db_rows):
             s.add(Member(id=i, room_id=1, display_name=f"M{i}", nickname=f"m{i}"))
         s.flush()
         for row in db_rows:
-            s.add(Place(room_id=1, **row))
+            add_place(s, room_id=1, **row)
     return db
 
 

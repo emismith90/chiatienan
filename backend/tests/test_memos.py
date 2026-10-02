@@ -4,9 +4,10 @@ import pytest
 
 from app import memos, observations as obs
 from app.db import Database
-from app.models import Member, Place, Room, RoomMessage
+from app.models import Member, Room, RoomMessage
 from app.tools import ToolContext, build_tools
 from tests.notes_util import notes
+from tests.places_util import add_place
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +25,7 @@ def env():
         s.add(Room(id=1, name="t", invite_token="t"))
         s.flush()
         s.add(Member(id=1, room_id=1, display_name="Giang Hoàng", nickname="Giang"))
-        s.add(Place(room_id=1, slug="be-bu", name="Quán Bé Bự", aliases=["bé bự"]))
+        add_place(s, room_id=1, slug="be-bu", name="Quán Bé Bự", aliases=["bé bự"])
     return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=1))
 
 
@@ -159,8 +160,8 @@ def two_trangs():
         s.add(Member(id=5, room_id=1, display_name="Tabu", nickname="Tabu",
                      account_holder="BUI THU TRANG", aliases=["Bùi Trang"]))
         s.add(Member(id=9, room_id=1, display_name="Giang Hoàng", nickname="Giang"))
-        s.add(Place(room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
-                    aliases=["bún riêu cô trang", "bun rieu co trang"]))
+        add_place(s, room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
+                    aliases=["bún riêu cô trang", "bun rieu co trang"])
     return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=9))
 
 
@@ -260,7 +261,7 @@ async def test_a_memo_card_is_published_to_open_clients_before_the_reply(db, mon
 
     room_id, m = _seed_room(db, 2)
     with db.session() as s:
-        s.add(Place(room_id=room_id, slug="bun-bo-1992", name="Bún bò Huế 1992", aliases=["1992"]))
+        add_place(s, room_id=room_id, slug="bun-bo-1992", name="Bún bò Huế 1992", aliases=["1992"])
 
     async def fake(user_text, ctx, images=None, emit=None, memory=None, history=None):
         args = {"about": "1992", "text": "Quán đã đóng cửa", "standing": True}

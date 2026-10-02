@@ -13,9 +13,10 @@ import pytest
 
 from app import places, roster
 from app.db import Database
-from app.models import Member, Place, Room
+from app.models import Member, Room
 from app.seed_places import lint
 from app.tools import ToolContext, build_tools
+from tests.places_util import add_place
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 ROOM_NAMES = ["Giang", "Linh", "Nhím",
@@ -38,10 +39,10 @@ def env():
         # behaviour production never had.
         s.add(Member(id=3, room_id=1, display_name="Tabu", nickname="Tabu",
                      account_holder="BUI THU TRANG", aliases=["Bùi Trang"]))
-        s.add(Place(room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
-                    aliases=["cô trang", "co trang"]))
-        s.add(Place(room_id=1, slug="bun-dau-met-tran-huu-tuoc",
-                    name="Bún đậu mẹt Trần Hữu Tước", aliases=["bún đậu mẹt", "bún đậu"]))
+        add_place(s, room_id=1, slug="bun-rieu-co-trang", name="Bún riêu cô Trang",
+                    aliases=["cô trang", "co trang"])
+        add_place(s, room_id=1, slug="bun-dau-met-tran-huu-tuoc",
+                    name="Bún đậu mẹt Trần Hữu Tước", aliases=["bún đậu mẹt", "bún đậu"])
     return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=1))
 
 

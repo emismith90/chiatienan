@@ -11,7 +11,6 @@ import random
 from sqlalchemy import select
 
 from app import roster
-from app.models import Place
 from kernos.packs import BasePack, PackTool, err as _err
 from packs.lunch_ledger.tools import _parse_iso
 
@@ -326,9 +325,8 @@ def build(ctx) -> dict[str, PackTool]:
             return _err("Missing place name.")
         slug = places_mod.slugify(name)
         with db.session() as s:
-            existing = s.scalars(
-                select(Place).where(Place.room_id == ctx.space_id, Place.slug == slug)
-            ).first()
+            existing = next((p for p in places_mod.list_places(s, ctx.space_id, include_inactive=True)
+                             if p.slug == slug), None)
             if existing is not None:
                 return {"ok": True, "place_id": existing.id, "slug": existing.slug,
                         "name": existing.name, "already_existed": True}

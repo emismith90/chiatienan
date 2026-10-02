@@ -6,13 +6,16 @@ and the two seed files — so a rename is a small migration, not a field edit. T
 refusals are pinned as hard as the successes: renaming onto a taken slug must not
 quietly merge two restaurants' history.
 """
+from dataclasses import replace
+
 import pytest
 
 from tests.notes_util import notes
 
 from app import observations as obs, places
 from app.db import Database
-from app.models import Member, Place, Room
+from app.models import Member, Room
+from tests.places_util import add_place, place_by_id
 
 
 @pytest.fixture(autouse=True)
@@ -37,8 +40,7 @@ def _place(db, name, slug=None, **kw):
     with db.session() as s:
         p = places.create_place(s, 1, name=name, **kw)
         if slug:                      # a curated slug, as the seed files carry
-            p.slug = slug
-            s.flush()
+            p = places.save_place(s, replace(p, slug=slug))
         return p.id
 
 
@@ -65,7 +67,7 @@ def test_an_empty_or_punctuation_only_slug_is_refused(db):
         with pytest.raises(places.PlaceError, match="Cannot build an identifier"):
             _rename(db, pid, bad)
     with db.session() as s:
-        assert s.get(Place, pid).slug == "quan-be-bu"
+        assert place_by_id(s, pid).slug == "quan-be-bu"
 
 
 def test_renaming_onto_a_taken_slug_is_refused_naming_the_holder(db):
@@ -78,7 +80,7 @@ def test_renaming_onto_a_taken_slug_is_refused_naming_the_holder(db):
         _rename(db, pid, "bun-cha-huong-lien")
 
     with db.session() as s:
-        assert s.get(Place, pid).slug == "bun-cha-rua-xe"
+        assert place_by_id(s, pid).slug == "bun-cha-rua-xe"
 
 
 def test_renaming_onto_another_places_former_slug_is_refused(db):
@@ -96,10 +98,7 @@ def test_a_place_from_another_room_is_not_found(db):
     with db.session() as s:
         s.add(Room(id=2, name="other", invite_token="o"))
         s.flush()
-        p = Place(room_id=2, slug="x", name="X")
-        s.add(p)
-        s.flush()
-        other_id = p.id
+        other_id = add_place(s, room_id=2, slug="x", name="X").id
     with pytest.raises(places.PlaceError, match="No such place"):
         _rename(db, other_id, "y")
 
@@ -118,7 +117,7 @@ def test_a_rename_to_the_same_slug_changes_nothing_at_all(db):
     assert out["changed"] is False
     assert _read_obs(db) == before
     with db.session() as s:
-        assert s.get(Place, pid).former_slugs == []
+        assert place_by_id(s, pid).former_slugs == []
 
 
 # --------------------------------------------------------------------- the move
@@ -137,7 +136,7 @@ def test_a_rename_moves_the_notes_and_remembers_the_old_slug(db):
                                                  "bun-cha-rua-xe-nam-dong")
     assert out["notes_moved"] == 2
     with db.session() as s:
-        p = s.get(Place, pid)
+        p = place_by_id(s, pid)
         assert p.slug == "bun-cha-huong-lien"
         assert p.former_slugs == ["bun-cha-rua-xe-nam-dong"]
 
@@ -163,7 +162,7 @@ def test_renaming_back_retires_the_slug_from_the_former_list(db):
     _rename(db, pid, "quan-be-bu")
 
     with db.session() as s:
-        p = s.get(Place, pid)
+        p = place_by_id(s, pid)
         assert p.slug == "quan-be-bu"
         assert p.former_slugs == ["be-bu"]
 

@@ -6,6 +6,7 @@ import pytest
 from app import places, seed_places
 from app.db import Database
 from app.models import Room
+from tests.places_util import place_by_id, set_place
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 SEED_FILES = ("places-local.json", "places-nearby.json", "places-online.json")
@@ -190,16 +191,13 @@ def test_a_live_slug_beats_another_places_former_one(db, tmp_path):
         first = places.list_places(s, 1)[0].id
         places.rename_slug(s, 1, first, "first-moved")
         second = places.create_place(s, 1, name="Second")
-        second.slug = "shared"
-        s.flush()
-        second_id = second.id
+        second_id = set_place(s, second.id, slug="shared").id
 
     with db.session() as s:
         seed_places.load_file(s, 1, f)
     with db.session() as s:
         assert len(places.list_places(s, 1)) == 2
-        from app.models import Place
-        assert s.get(Place, second_id).name == "First"   # the live holder was updated
+        assert place_by_id(s, second_id).name == "First"   # the live holder was updated
 
 
 def test_install_observations_does_not_re_add_a_note_under_a_renamed_slug(db, tmp_path):

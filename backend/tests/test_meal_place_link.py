@@ -2,8 +2,9 @@ import pytest
 
 from app import drafts, ledger
 from app.db import Database
-from app.models import Meal, Member, Place, Room
+from app.models import Meal, Member, Room
 from app.tools import ToolContext, build_tools
+from tests.places_util import add_place, place_by_slug
 
 
 @pytest.fixture()
@@ -15,10 +16,10 @@ def env():
         s.flush()
         s.add(Member(id=1, room_id=1, display_name="An", nickname="an"))
         s.add(Member(id=2, room_id=1, display_name="Bình", nickname="binh"))
-        s.add(Place(room_id=1, slug="bun-cha-rua-xe", name="Bún chả rửa xe Nam Đồng",
-                    aliases=["bún chả rửa xe", "rửa xe"]))
-        s.add(Place(room_id=1, slug="banh-cuon-ba-hoanh", name="Bánh cuốn Bà Hoành"))
-        s.add(Place(room_id=1, slug="banh-cuon-ba-xuan", name="Bánh cuốn Bà Xuân"))
+        add_place(s, room_id=1, slug="bun-cha-rua-xe", name="Bún chả rửa xe Nam Đồng",
+                    aliases=["bún chả rửa xe", "rửa xe"])
+        add_place(s, room_id=1, slug="banh-cuon-ba-hoanh", name="Bánh cuốn Bà Hoành")
+        add_place(s, room_id=1, slug="banh-cuon-ba-xuan", name="Bánh cuốn Bà Xuân")
     return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=1))
 
 
@@ -66,7 +67,7 @@ def test_token_tier_offers_a_guess_but_does_not_link(env):
 def test_record_meal_persists_place_id(env):
     db, _tools = env
     with db.session() as s:
-        place = s.query(Place).filter_by(slug="bun-cha-rua-xe").one()
+        place = place_by_slug(s, 1, "bun-cha-rua-xe")
         res = ledger.record_meal(
             s, room_id=1, payer_member_id=1, participants=[1, 2],
             total_amount=100000, dish="bún chả rửa xe", place_id=place.id)

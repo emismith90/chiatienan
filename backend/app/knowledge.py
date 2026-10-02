@@ -3,7 +3,7 @@
 Three stores back the panel, and they are deliberately not one store (design D4,
 D6, D7):
 
-- **Places** — :class:`app.models.Place` rows, plus the counts
+- **Places** — :class:`app.places.Place` records, plus the counts
   :func:`app.places.stats` derives from the ledger.
 - **Observations & standing rules** — the ``notes`` store, one document per fact.
 - **Conversation memory** — ``memory.md``, LLM roll-ups in dated sections.
@@ -25,7 +25,8 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app import memory, observations as obs_mod, places as places_mod, roster
-from app.models import Member, Place
+from app.models import Member
+from app.places import Place
 
 
 def _member_key(raw: str) -> str:

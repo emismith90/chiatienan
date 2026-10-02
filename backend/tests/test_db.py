@@ -216,7 +216,7 @@ def test_former_slugs_is_added_to_an_existing_places_table(tmp_path):
     db = Database(url)
     db.create_all()
 
-    from app.models import Place
+    from app.models import LegacyPlace
     with db.session() as s:
-        p = s.scalars(sa.select(Place)).one()
+        p = s.scalars(sa.select(LegacyPlace)).one()
         assert p.former_slugs == []

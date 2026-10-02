@@ -28,7 +28,7 @@ from app.pi_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member, Payment, Place, Room, RoomMessage
+from app.models import Member, Payment, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
 
@@ -923,14 +923,13 @@ async def patch_place_route(room_id: int, place_id: int, body: PlacePatchIn,
     db = get_db()
     async with chat._agent_lock:
         with db.session() as s:
-            p = s.get(Place, place_id)
-            if p is None or p.room_id != room_id:
+            p = places.get_place(s, room_id, place_id)
+            if p is None:
                 raise HTTPException(404, "No such place.")
             try:
-                changed = places.apply_edits(p, body.model_dump(exclude_unset=True))
+                p, changed = places.edit_place(s, p, body.model_dump(exclude_unset=True))
             except places.PlaceError as exc:
                 raise HTTPException(422, str(exc))
-            s.flush()
             # A save that changed nothing announces nothing.
             trail = (_knowledge_trail(s, room_id, ctx, f"edited place «{p.name}».")
                      if changed else None)
@@ -947,13 +946,12 @@ async def delete_place_route(room_id: int, place_id: int,
     db = get_db()
     async with chat._agent_lock:
         with db.session() as s:
-            p = s.get(Place, place_id)
-            if p is None or p.room_id != room_id:
+            p = places.get_place(s, room_id, place_id)
+            if p is None:
                 raise HTTPException(404, "No such place.")
             trail = None
             if p.active:
-                p.active = False
-                s.flush()
+                places.edit_place(s, p, {"active": False})
                 trail = _knowledge_trail(s, room_id, ctx, f"hid place «{p.name}».")
     await _publish_knowledge(room_id, trail)
     return {"ok": True}
@@ -990,7 +988,7 @@ async def rename_place_slug_route(room_id: int, place_id: int, body: PlaceSlugIn
                                     else 422, text)
             trail = None
             if out["changed"]:
-                p = s.get(Place, place_id)
+                p = places.get_place(s, room_id, place_id)
                 moved = []
                 if out["notes_moved"]:
                     moved.append(f"{out['notes_moved']} note"

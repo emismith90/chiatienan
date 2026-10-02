@@ -64,8 +64,13 @@ class Member(Base):
         return bool(self.bank_code and self.account_number and self.account_holder)
 
 
-class Place(Base):
-    """A restaurant the room can eat at or order from.
+class LegacyPlace(Base):
+    """**Legacy.** The ``places`` table as it was before places moved to the ``places``
+    internal collection (:mod:`app.places`, plan 2026-10-02). Kept as the rollback
+    copy and read only by the one-time import (:mod:`app.migrate_storage`) and by
+    ``places._next_id`` (ids stay above every id it used). Nothing writes it.
+
+    A restaurant the room can eat at or order from.
 
     Identity for the free text in ``meals.dish``: "bún chả rửa xe", "Bún chả"
     and "bun cha" (dish/place names as users type them) are three strings for one business, and nothing can be counted
