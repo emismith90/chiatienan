@@ -324,3 +324,19 @@ Each release ships only after its dry run on a production clone shows 0 differen
 - **F7** (D9 corrected) — notes carry `seq`; the file is renamed after import; dropped lines are reported.
 
 **Next:** release A only (S1–S3 + migration step + backup + dry run). Release B gets its own plan update after A has baked.
+
+## 7. Release A — dry run on the production clone (2026-10-03)
+
+Clone: `/internal/debug/db` of 2026-10-02 (sanitised; 4 rooms, 101 places, 47 meals). Notes:
+`seeds/observations-local.md` as room 3's file (production's file is not exportable, §1.1.5).
+
+1. `python -m app.migrate_storage --apply` on a copy → `applied`: places `{"3": 101}`, notes room 3
+   `{"imported": 42, "duplicates": 0, "comments": 0, "blank": 0, "dropped": []}`, `problems: []`.
+2. Old code (`main` @ cb7deea, its own worktree, `PYTHONPATH` pinned to it) on an untouched copy vs new
+   code on the migrated copy, same `today`: `knowledge.snapshot(room 3)` minus `etags`, `resolve_one`
+   and `resolve_best` for every distinct `meals.dish` (34), and `places.stats` (101 places):
+   **IDENTICAL** — 101 place rows with every field and stat, 42 notes, 34 resolutions.
+
+(The first attempt compared new code with itself: `python3 script.py` puts the *script's* directory
+on `sys.path`, so `import app` found the editable install of the new code. Fixed by `PYTHONPATH`;
+the run above prints the old code's path.)

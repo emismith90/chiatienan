@@ -263,6 +263,14 @@ jobs:
           #     status is the FIRST failure. The old form ended
           #     `… || true; docker compose ps`, which made `ps` the exit status
           #     and masked "no space left on device" from `pull` as a success.
+          #
+          # Backup and storage migration (plan 2026-10-02): with the new images
+          # pulled, the backend is stopped so nothing writes, `app.backup` copies
+          # the database (WAL-safe) and the room files to /data/backups, and
+          # `app.migrate_storage --apply` (the NEW image's code) imports, verifies
+          # and commits — a no-op once applied. Either failing restarts the SAME
+          # stopped container (`start` never recreates it), so the previous code
+          # keeps serving untouched data, and the deploy fails loudly.
           echo "${GHCR_TOKEN}" | ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -e; cd '${DEPLOY_PATH}'; git pull --ff-only; \
@@ -271,7 +279,16 @@ jobs:
              df -h /var/lib/docker; \
              docker image prune -af; docker builder prune -af; \
              df -h /var/lib/docker; \
-             docker compose pull; docker compose up -d; \
+             docker compose pull; \
+             docker compose stop backend; \
+             if docker compose run --rm --no-deps -T backend python -m app.backup --label 'pre-${IMAGE_TAG}' \
+                && docker compose run --rm --no-deps -T backend python -m app.migrate_storage --apply; then \
+               docker compose up -d; \
+             else \
+               docker compose start backend; \
+               echo '::error::backup or storage migration failed; the previous backend was restarted on untouched data'; \
+               exit 1; \
+             fi; \
              { docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo '::warning::caddy reload failed; previous config still active'; }; \
              { docker logout ghcr.io >/dev/null 2>&1 || true; }; \
              docker compose ps --format '{{.Service}} {{.Image}}'"

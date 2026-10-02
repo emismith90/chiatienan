@@ -216,7 +216,7 @@ kn_businesses ─┬─ kn_sources              prompt / rule / skill / template
 kn_space_bindings ─────┘   space (room) → agent, with per-binding overrides
 kn_model_catalogue · kn_audit_log · kn_turn_traces · kn_change_proposals
 kn_eval_cases · kn_eval_suites · kn_rubrics · kn_eval_runs
-kn_collections · kn_documents · kn_documents_fts · kn_document_vectors   (the data plane, §6)
+kn_collections · kn_documents · kn_documents_fts · kn_document_vectors · kn_sequences   (the data plane, §6)
 ```
 
 **`ProfileSpec`** (`kernos/content/spec.py`) is the whole configuration of one agent:
@@ -320,6 +320,23 @@ Every collection is **searchable** (`{slug}_search`) by words and by meaning:
 
 Search is for discovery. It always finds *something* similar, so it never decides which
 exact record a money action refers to — the places resolver stays exact.
+
+**Internal collections** are stores the host builds on the same engine (plan
+2026-10-02). They belong to a reserved `_system` business — never the room's, so
+re-binding a room cannot hide its data — generate no agent tools, refuse admin writes,
+and are declared in code (`app/store.py`) and created by `Database.create_all()`. Their
+reads and writes take the caller's session, so a store write commits or rolls back with
+whatever triggered it. Two stores live there today:
+
+- `notes` — the room's lunch memory, formerly `observations.md` (`app/observations.py`).
+  A note's id is still its content hash (`line_id`); `seq` keeps the room's order.
+- `places` — formerly the `places` table (`app/places.py`). The id is the integer
+  `meals.place_id` points at; the slug is a database-enforced `unique_key`. A `Place` is a
+  frozen record: every write goes through the module.
+
+The legacy table and files were imported once by `python -m app.migrate_storage`, a
+deploy step that runs with the backend stopped after `python -m app.backup`, verifies
+its own copy field by field and refuses on any difference (`deploy/DEBUGGING.md` §3).
 
 ## 7. Money safety across the boundaries
 

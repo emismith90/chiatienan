@@ -90,6 +90,37 @@ PY
 
 (`.backup` is WAL-safe — it captures committed + WAL state consistently. See also `deploy/backup.sh`.)
 
+**Every deploy now backs up by itself** (plan 2026-10-02): with the new images pulled,
+the deploy stops the backend, runs `python -m app.backup --label pre-<sha>` and then the
+storage migration, and only then starts the new backend. A backup is a directory
+`/data/backups/<UTC time>-pre-<sha>/` holding `chiatienan.db` (one self-contained file,
+no `-wal`) and a copy of `rooms/` (each room's `memory.md`, and `observations.md` before
+the notes import). The newest 10 are kept.
+
+### Rolling back the storage migration (release A: places + notes)
+
+The migration copies; it never changes the legacy `places` table, and it renames each
+imported `observations.md` to `observations.md.imported-<date>` instead of deleting it.
+If the migration *refuses* (its self-check found a difference), the deploy has already
+restarted the previous backend on untouched data — nothing to do but read the job log.
+
+To undo an applied migration:
+
+1. Stop the backend: `docker compose stop backend`.
+2. Restore from the backup taken just before it:
+   `cp /opt/chiatienan/data/backups/<time>-pre-<sha>/chiatienan.db /opt/chiatienan/data/chiatienan.db`
+   and remove any `chiatienan.db-wal` / `-shm` beside it; copy the backup's `rooms/` back over
+   `data/rooms/`.
+3. Redeploy the previous commit (Actions → Deploy → Run workflow on that SHA).
+
+**What a rollback loses:** place and note edits made after the migration (they exist only in
+the new store), and **any money recorded after the backup**, because step 2 restores the whole
+database. Decide quickly, or replay those meals by hand from the chat log.
+
+Reading places and notes from now on: `/internal/debug/tables/places.csv` is the **frozen
+legacy table**. The live data is in `kn_documents` (collection `places` / `notes` of the
+`_system` business): `/internal/debug/tables/kn_documents.csv`.
+
 ## 4. Schema changes / deploy
 
 **Additive columns apply themselves on startup.** `app.db.create_all()` runs
