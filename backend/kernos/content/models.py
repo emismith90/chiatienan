@@ -259,6 +259,10 @@ class Collection(Base):
     #: The fields ``search`` reads. ``None`` (a row from before the column) means the default:
     #: every top-level string or string-array property.
     searchable: Mapped[list | None] = mapped_column(JSON)
+    #: Defined in code and owned by the system (notes, places, the ledger): generates no
+    #: agent tools, refuses admin writes, and its documents are read and written only
+    #: inside the caller's transaction. See :mod:`kernos.data.system`.
+    internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
 
 
@@ -283,6 +287,20 @@ class Document(Base):
     search_text: Mapped[str | None] = mapped_column(Text)
     #: Journal only: the ``doc_id`` of the earlier entry this one corrects.
     corrects: Mapped[str | None] = mapped_column(String(80))
+    #: A second identity the database keeps unique per (collection, space) — a place's
+    #: slug. Enforced by a unique index (``kernos.content.schema``), not by a read-then-
+    #: write check, so a writer outside the app's lock cannot slip a duplicate in.
+    unique_key: Mapped[str | None] = mapped_column(String(120))
+
+
+class Sequence(Base):
+    """A named counter for ids that must stay integers (a place's id, which
+    ``meals.place_id`` points at). Advanced by one atomic statement
+    (:meth:`kernos.data.DataStore.next_id`)."""
+
+    __tablename__ = "kn_sequences"
+    name: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class DocumentVector(Base):

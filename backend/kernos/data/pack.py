@@ -177,6 +177,8 @@ class CollectionsPack(BasePack):
             return {}
         out: dict[str, PackTool] = {}
         for col in collections:
+            if col.get("internal"):       # defined in code; never agent tools (D2)
+                continue
             try:
                 out.update(tools_for(col, self._data, space_id, getattr(ctx, "sender_member_id", None)))
             except Exception as exc:  # noqa: BLE001 — one bad definition must not take the others down

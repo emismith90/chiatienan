@@ -614,6 +614,9 @@ class ContentStore:
                 raise NotFound(f"no agent {agent_id}")
             if a.role != "manager":
                 raise Invalid(f"agent {a.slug!r} is a {a.role}; a space binds to a manager")
+            b = s.get(m.Business, a.business_id)
+            if b is not None and b.slug == "_system":
+                raise Invalid("the _system business holds internal stores; no space binds to it")
             row = s.get(m.SpaceBinding, space_id)
             before = _row(row) if row else None
             if row is None:
