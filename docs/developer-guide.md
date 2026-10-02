@@ -304,8 +304,19 @@ curl -X PUT $B/businesses/1/collections/places -H "$A" \
 ```
 
 A profile that enables the `collections` pack gets `places_find` / `places_upsert` /
-`places_delete` generated from it. The schema must stay in the sidecar-safe JSON Schema
-subset (`kernos/data/`).
+`places_delete` / `places_search` generated from it. The schema must stay in the
+sidecar-safe JSON Schema subset (`kernos/data/`). The key's values are document ids, so
+they must be URL-safe ASCII (`^[A-Za-z0-9_.:@-]{1,80}$`) — a slug, not a Vietnamese name.
+
+Two optional fields:
+
+- `"mode": "journal"` (with `"key": ""`) makes it append-only: the tools are
+  `{slug}_find` (newest first), `{slug}_append` (with an optional `corrects`) and
+  `{slug}_search`. The admin API appends with `POST /spaces/{id}/collections/{slug}/entries`.
+  The mode cannot change once documents exist.
+- `"searchable": [...]` picks the string fields search reads; the default is every
+  top-level string or string-array field. `GET /spaces/{id}/collections/{slug}/search?q=`
+  runs the same search as the tool.
 
 ## Add an engine
 

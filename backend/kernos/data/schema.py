@@ -65,19 +65,36 @@ def check_schema(node, path: str = "schema") -> None:
         raise SchemaError(f"{path}: unsupported type {declared!r}")
 
 
-def check_collection_schema(schema, *, key: str, indexed: list[str]) -> None:
-    """A collection's schema: an object in the safe subset whose ``key`` is a required
-    string property and whose ``indexed`` fields are properties."""
+MODES = ("table", "journal")
+
+
+def check_collection_schema(schema, *, key: str, indexed: list[str], mode: str = "table",
+                            searchable: list[str] | None = None) -> None:
+    """A collection's schema: an object in the safe subset whose ``indexed`` and
+    ``searchable`` fields are properties. A ``table``'s ``key`` is a required string
+    property; a ``journal`` has no key (``""``) — the server numbers its entries."""
     check_schema(schema)
     if schema.get("type") != "object":
         raise SchemaError("schema: a collection schema must be an object")
+    if mode not in MODES:
+        raise SchemaError(f"mode {mode!r} must be one of {list(MODES)}")
     props = schema["properties"]
-    if key not in props:
+    if mode == "journal":
+        if key:
+            raise SchemaError("a journal has no key (pass \"\"): the server numbers its entries")
+    elif key not in props:
         raise SchemaError(f"key {key!r} is not a property of the schema")
-    if props[key].get("type") != "string":
+    elif props[key].get("type") != "string":
         raise SchemaError(f"key {key!r} must be a string property")
-    if key not in (schema.get("required") or []):
+    elif key not in (schema.get("required") or []):
         raise SchemaError(f"key {key!r} must be required")
     for field in indexed:
         if field not in props:
             raise SchemaError(f"indexed field {field!r} is not a property of the schema")
+    for field in searchable or []:
+        prop = props.get(field)
+        if prop is None:
+            raise SchemaError(f"searchable field {field!r} is not a property of the schema")
+        if not (prop.get("type") == "string"
+                or (prop.get("type") == "array" and (prop.get("items") or {}).get("type") == "string")):
+            raise SchemaError(f"searchable field {field!r} must be a string or an array of strings")

@@ -216,7 +216,7 @@ kn_businesses ─┬─ kn_sources              prompt / rule / skill / template
 kn_space_bindings ─────┘   space (room) → agent, with per-binding overrides
 kn_model_catalogue · kn_audit_log · kn_turn_traces · kn_change_proposals
 kn_eval_cases · kn_eval_suites · kn_rubrics · kn_eval_runs
-kn_collections · kn_documents                     (the data plane, §6)
+kn_collections · kn_documents · kn_documents_fts · kn_document_vectors   (the data plane, §6)
 ```
 
 **`ProfileSpec`** (`kernos/content/spec.py`) is the whole configuration of one agent:
@@ -284,7 +284,7 @@ packs/lunch_ledger    meals, drafts, the outcome decision and reply bodies   ─
 packs/ledger_tools    statements, settlement, payments, the random draw      ─┼─ over ledger_core
 packs/poker_ledger    game nights: buy-ins, cash-outs, house, debt edges    ─┘
 app/packs/            lunch_places (restaurants, memos), room_members (member CRUD)
-kernos/data           collections: {slug}_find / _upsert / _delete generated from a JSON schema
+kernos/data           collections: {slug}_find / _upsert / _delete / _search (a journal: _find / _append / _search)
 kernos/agents         delegation: ask_<sub_slug> for every sub in the agent's delegates_to
 kernos/osadmin        os_admin: the CMS as tools (§5)
 ```
@@ -296,9 +296,30 @@ agent gets a dealer that records game nights, settled with the same VietQR flow,
 frontend renders its `game_draft` through the generic `DraftCard`.
 
 A **collection** is a schema-validated document type defined through the admin API. A
-profile that enables the `collections` pack gets three tools per collection generated from
-the definition; the schema stays in the sidecar-safe JSON Schema subset. Writes are
-immediate because these are facts the room asked the agent to remember, not money.
+profile that enables the `collections` pack gets tools per collection generated from the
+definition; the schema stays in the sidecar-safe JSON Schema subset. Writes are immediate
+because these are facts the room asked the agent to remember, not money.
+
+A collection has a **mode**. A `table` is upserted and deleted by its `key` (places, notes).
+A `journal` is append-only: the server numbers the entries (`000001`, …), nothing replaces
+or deletes one, and a fix is a new entry whose `corrects` names the wrong one — the storage
+shape a log needs, and the one a ledger would build on.
+
+Every collection is **searchable** (`{slug}_search`) by words and by meaning:
+
+- *Words*: SQLite FTS5 over `kn_documents.search_text`, the `searchable` fields folded
+  (lowercase, no marks, `đ` → `d`), kept in sync by triggers. Rows holding more of the
+  query's words rank first, then BM25.
+- *Meaning*: embeddings from OpenRouter (`EMBEDDING_MODEL`, default
+  `google/gemini-embedding-001`), cached in `kn_document_vectors` under a hash of the model
+  and the text, embedded lazily by the search that first needs them, compared by cosine in
+  Python, kept only above `EMBEDDING_MIN_SIMILARITY` (tuned per model — scales differ).
+- The two rankings merge by Reciprocal Rank Fusion. A failing provider degrades to words
+  (`semantic: "unavailable"`). No score is returned: a number in a tool result is evidence
+  the reply validators would accept.
+
+Search is for discovery. It always finds *something* similar, so it never decides which
+exact record a money action refers to — the places resolver stays exact.
 
 ## 7. Money safety across the boundaries
 

@@ -70,6 +70,21 @@ def test_naming_the_missing_person_as_a_guest_lets_the_proposal_through():
     assert out["per_head_preview"] == 58333  # three heads, two of them billed
 
 
+def test_a_name_given_as_the_initiator_is_accounted_for():
+    """Bench G12, *"…ăn phở với Bình, Emi rủ đi"* ("phở with Bình; Emi suggested it"):
+    Emi suggested the meal and did not eat. The model looked her up, found no
+    member, and put her in ``initiator`` — the role the message gives her — and
+    the guard refused the card as if she had been dropped from the split."""
+    d, (room_id, emi, nhim, giang) = _room()
+    tools = build_tools(ToolContext(db=d, room_id=room_id, sender_member_id=giang))
+    tools["find_members"].execute({"names": ["anh Thắng"]})
+
+    out = tools["propose_meal"].execute(
+        {"participants": [giang, nhim], "total": 200000, "initiator": "Thắng"})
+    assert out["ok"] is True
+    assert out["per_head_preview"] == 100000  # still two heads: the initiator is not a diner
+
+
 def test_adding_the_person_as_a_member_also_clears_the_hole():
     d, (room_id, emi, nhim, giang) = _room()
     tools = build_tools(ToolContext(db=d, room_id=room_id, sender_member_id=giang))

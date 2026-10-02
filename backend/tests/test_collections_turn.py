@@ -61,7 +61,7 @@ def test_generated_tools_follow_the_lunch_tools_and_convert_in_the_sidecar(db):
                       tool_config={"packs": [{"pack": "lunch_ledger"}, {"pack": "ledger_tools"}, {"pack": "room_members"},
                                              {"pack": "lunch_places"}, {"pack": "collections"}]})
     names = [t["name"] for t in tool_manifest(ctx)]
-    assert names[:19] == [t["name"] for t in tool_manifest()] and names[19:] == ["rota_find", "rota_upsert", "rota_delete"]
+    assert names[:19] == [t["name"] for t in tool_manifest()] and names[19:] == ["rota_find", "rota_upsert", "rota_delete", "rota_search"]
     tools = build_tools(ctx)
     assert "who brings what" in tools["rota_find"].description and "never a count" in tools["rota_find"].description
     assert tools["rota_upsert"].input_schema["properties"]["data"] == ROTA
@@ -122,7 +122,7 @@ def test_gate1_checks_pack_ids_and_static_override_names(db):
     k.store.publish(d["id"], actor="admin", gates=k.gates, override_reason="t")
     # …and apply at compose time
     ctx = ToolContext(db=db, room_id=room_id, tool_config={"packs": [{"pack": "collections", "tools": {"rota_find": {"enabled": False}}}]})
-    assert set(build_tools(ctx)) == {"rota_upsert", "rota_delete"}
+    assert set(build_tools(ctx)) == {"rota_upsert", "rota_delete", "rota_search"}
     with pytest.raises(PackError):
         build_tools(ToolContext(db=db, room_id=room_id, tool_config={"packs": [{"pack": "collections", "tools": {"zzz": {}}}]}))
 
@@ -141,7 +141,7 @@ async def test_a_turn_writes_a_document_and_replies_in_prose(db, monkeypatch):
 
     monkeypatch.setattr(agent_mod, "run_turn", fake)
     reply = await chat.run_bot_turn(db, room_id, m[0], "M1", "@phoenix tuần 36 M2 mang bài nhé")
-    assert seen["names"][-3:] == ["rota_find", "rota_upsert", "rota_delete"] and "propose_meal" in seen["names"]
+    assert seen["names"][-4:] == ["rota_find", "rota_upsert", "rota_delete", "rota_search"] and "propose_meal" in seen["names"]
     assert reply.kind == "bot" and reply.body == "Đã ghi: tuần 36 M2 mang bài." and reply.attachments is None
     col = k.data.get_collection(bid, "rota")
     doc = k.data.get_document(col, room_id, "2026-W36")
@@ -173,3 +173,32 @@ async def test_a_reply_that_totals_find_rows_is_caught_and_a_quoted_value_is_not
     await chat.run_bot_turn(db, room_id, m[0], "M1", "@phoenix An tuần 36")
     trace = k.store.get_trace(str(room_id), f"t-{len('Tuần 36 An ghi 60,000đ.')}")
     assert trace["summary"]["verdicts"] == []
+
+
+def test_a_journal_gets_find_append_search_and_they_convert_in_the_sidecar(db):
+    room_id, m, k, bid = _setup(db)
+    log = {"type": "object", "required": ["text"], "properties": {"text": {"type": "string"}, "who": {"type": "string"}}}
+    k.data.put_collection(bid, "log", name="Room log", schema=log, key="", mode="journal", actor="admin",
+                          reserved=k.reserved_tool_names())
+    ctx = ToolContext(db=db, room_id=room_id, sender_member_id=m[0], tool_config={"packs": [{"pack": "collections"}]})
+    tools = build_tools(ctx)
+    assert [n for n in tools if n.startswith("log_")] == ["log_find", "log_append", "log_search"]
+    assert "permanent" in tools["log_append"].description
+    first = tools["log_append"].execute({"data": {"text": "An đặt cọc 500k"}})
+    assert first == {"ok": True, "type": "log_entry", "collection": "log", "doc_id": "000001",
+                     "data": {"text": "An đặt cọc 500k"}}
+    fix = tools["log_append"].execute({"data": {"text": "Chi đặt cọc, không phải An"}, "corrects": "000001"})
+    assert fix["ok"] and fix["corrects"] == "000001"
+    assert tools["log_append"].execute({"data": {"text": "x"}, "corrects": "000009"})["ok"] is False
+    found = tools["log_search"].execute({"query": "dat coc"})
+    assert found["ok"] and found["semantic"] == "off" and {d["doc_id"] for d in found["documents"]} == {"000001", "000002"}
+    assert tools["log_search"].execute({})["ok"] is False
+    assert [d["doc_id"] for d in tools["log_find"].execute({})["documents"]] == ["000002", "000001"]
+    _require_sidecar_deps()
+    script = ('import { toTypeBoxManifest } from "./schema.js"; let s=""; process.stdin.on("data", d => s += d);'
+              'process.stdin.on("end", () => { const out = toTypeBoxManifest(JSON.parse(s)); console.log(Object.keys(out).length); });')
+    manifest = {t["name"]: t["schema"] for t in tool_manifest(ctx)}
+    run = subprocess.run(["node", "--input-type=module", "-e", script], input=json.dumps(manifest),
+                         capture_output=True, text=True, cwd=SIDECAR, timeout=60)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip() == str(len(manifest))

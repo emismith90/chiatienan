@@ -452,10 +452,10 @@ it("rejects a slug the store would refuse, before sending it", async () => {
 const ROTA = {
   id: 1, slug: "rota", name: "Rota", description: "who fetches lunch",
   schema: { type: "object", properties: { day: { type: "string" } }, required: ["day"] },
-  key: "day", indexed: ["day"], updated_at: "2026-09-08T00:00:00Z",
+  key: "day", indexed: ["day"], updated_at: "2026-09-08T00:00:00Z", mode: "table" as const, searchable: null,
 };
 
-it("shows the three tools a collection generates", async () => {
+it("shows the tools a collection generates", async () => {
   signedIn();
   m.collections.mockResolvedValue([ROTA]);
   render(<AdminPage />);
@@ -465,6 +465,34 @@ it("shows the three tools a collection generates", async () => {
   expect(await screen.findByText("rota_find")).toBeInTheDocument();
   expect(screen.getByText("rota_upsert")).toBeInTheDocument();
   expect(screen.getByText("rota_delete")).toBeInTheDocument();
+  expect(screen.getByText("rota_search")).toBeInTheDocument();
+});
+
+it("shows a journal's append-only tools and saves one without a key", async () => {
+  signedIn();
+  const LOG = { ...ROTA, slug: "log", key: "", mode: "journal" as const, searchable: ["day"] };
+  m.collections.mockResolvedValue([LOG]);
+  m.putCollection.mockResolvedValue(LOG);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<AdminPage />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Components" }));
+  expect(await screen.findByText("log_append")).toBeInTheDocument();
+  expect(screen.getByText("journal (append-only)")).toBeInTheDocument();
+  expect(screen.queryByText("log_upsert")).not.toBeInTheDocument();
+  expect(screen.queryByText("log_delete")).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("collection slug"), { target: { value: "notes" } });
+  fireEvent.change(screen.getByLabelText("collection mode"), { target: { value: "journal" } });
+  fireEvent.change(screen.getByLabelText("collection searchable"), { target: { value: "day, " } });
+  fireEvent.change(screen.getByLabelText("collection schema"), {
+    target: { value: '{"type":"object","properties":{"day":{"type":"string"}},"required":["day"]}' },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+
+  await waitFor(() => expect(m.putCollection).toHaveBeenCalled());
+  const body = m.putCollection.mock.calls[0][2];
+  expect([body.mode, body.key, body.searchable]).toEqual(["journal", "", ["day"]]);
 });
 
 it("says a collection reaches the live bot with no publish, before saving one", async () => {

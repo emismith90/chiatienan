@@ -251,12 +251,14 @@ export const registry = (): Promise<Plugin[]> => req("/registry");
 export const models = (): Promise<Model[]> => req("/catalogue/models");
 
 // ---------------------------------------------------------------- collections
-/** A document type defined *in the CMS*: its schema generates `<slug>_find|_upsert|_delete`
- * for every profile that enables the `collections` pack. The one place where saving here
- * changes a live agent's tools with no draft and no publish. */
+/** A document type defined *in the CMS*: its schema generates `<slug>_find|_upsert|_delete|_search`
+ * (a journal: `<slug>_find|_append|_search`) for every profile that enables the `collections`
+ * pack. The one place where saving here changes a live agent's tools with no draft and no
+ * publish. `searchable: null` = every top-level string field. */
 export type Collection = {
   id: number; slug: string; name: string; description: string;
   schema: any; key: string; indexed: string[]; updated_at: string;
+  mode: "table" | "journal"; searchable: string[] | null;
 };
 
 export const collections = (businessId: number): Promise<Collection[]> =>
@@ -264,7 +266,10 @@ export const collections = (businessId: number): Promise<Collection[]> =>
 export const putCollection = (
   businessId: number,
   slug: string,
-  body: { name: string; schema: any; key: string; indexed?: string[]; description?: string; force?: boolean },
+  body: {
+    name: string; schema: any; key: string; indexed?: string[]; description?: string; force?: boolean;
+    mode?: "table" | "journal"; searchable?: string[] | null;
+  },
 ): Promise<Collection> =>
   req(`/businesses/${businessId}/collections/${encodeURIComponent(slug)}`, {
     method: "PUT",

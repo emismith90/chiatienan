@@ -15,8 +15,10 @@ with anyone outside the group.
 ## Third-party processing
 When you send text or a **bill photo**, that content is sent to **OpenRouter and the LLM
 provider** to interpret the amount and participants. Don't send anything you wouldn't want
-processed by that service. Payment QR images are generated via a public **VietQR** image URL
-(bank code, account number, and amount appear in that request).
+processed by that service. Notes the bot saves for the group (places, notes, logs) are also
+sent to **OpenRouter and its embedding provider**, so they can be searched by meaning. Payment
+QR images are generated via a public **VietQR** image URL (bank code, account number, and
+amount appear in that request).
 
 ## Your choices
 Ask the admin to remove your member record and bank details at any time. Since the ledger is

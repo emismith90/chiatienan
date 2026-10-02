@@ -45,7 +45,7 @@ def _parse_iso(value) -> date | None:
 
 
 def _dropped_names(ctx, db, participants: list[int],
-                   payer: int | None, guests: list[str]) -> list[str]:
+                   payer: int | None, guests: list[str], initiator: str | None = None) -> list[str]:
     """Names the turn looked up, never pinned down, and never accounted for.
 
     WHY — production, 2026-08-13: *"nay ăn bún cá với anh Hưng chị Nhím hết
@@ -57,6 +57,9 @@ def _dropped_names(ctx, db, participants: list[int],
     label — so resolving him on a second lookup, adding him as a member, or
     listing him as a guest all clear it. Anything left is a person the split
     silently forgot.
+
+    The ``initiator`` is accounted for too (bench G12, *"Emi rủ đi"*, "Emi suggested
+    it"): the message gave that name a role, and it is not a diner.
     """
     if not ctx.unknown_names:
         return []
@@ -65,7 +68,7 @@ def _dropped_names(ctx, db, participants: list[int],
     accounted: set[str] = set()
     for mid in [*participants, *([payer] if payer else [])]:
         accounted |= tokens_by_id.get(mid, set())
-    for g in guests:
+    for g in [*guests, *([initiator] if initiator else [])]:
         accounted |= roster.name_tokens(g)
     return [raw for raw, _why in ctx.unknown_names.items()
             if not (roster.name_tokens(raw) & accounted)]
@@ -183,7 +186,7 @@ def build(ctx, *, place_resolver=None) -> dict[str, PackTool]:
         payer = args.get("payer") or ctx.sender_member_id
         if not payer:
             return _err("Could not determine the payer.")
-        dropped = _dropped_names(ctx, db, participants, payer, guests)
+        dropped = _dropped_names(ctx, db, participants, payer, guests, args.get("initiator"))
         if dropped:
             names = ", ".join(f"«{n}»" for n in dropped)
             if any(ctx.unknown_names.get(n) == "ambiguous" for n in dropped):

@@ -1,8 +1,9 @@
 /** Collections: the one component a person creates in the CMS (plan Phase 13.4).
  *
  * Everything else on this screen chooses between things the code registers. A collection
- * is different: its JSON Schema *generates* three tools — `<slug>_find`, `<slug>_upsert`,
- * `<slug>_delete` — for every profile that enables the `collections` pack. That is the
+ * is different: its JSON Schema *generates* tools — `<slug>_find`, `<slug>_upsert`,
+ * `<slug>_delete`, `<slug>_search`; for an append-only journal `<slug>_find`, `<slug>_append`,
+ * `<slug>_search` — for every profile that enables the `collections` pack. That is the
  * honest answer to "can the CMS add a tool": not by authoring code, but by declaring a
  * document type that a pack in code knows how to serve.
  *
@@ -27,7 +28,9 @@ const BLANK = {
   name: "",
   description: "",
   key: "",
+  mode: "table" as admin.Collection["mode"],
   indexed: "",
+  searchable: "",
   schema: JSON.stringify(
     { type: "object", properties: { name: { type: "string", description: "the key" } }, required: ["name"] },
     null,
@@ -74,7 +77,9 @@ export function Collections({ businessId }: { businessId: number | null }) {
       name: row.name,
       description: row.description,
       key: row.key,
+      mode: row.mode ?? "table",
       indexed: row.indexed.join(", "),
+      searchable: (row.searchable ?? []).join(", "),
       schema: JSON.stringify(row.schema, null, 1),
     });
   }
@@ -88,7 +93,9 @@ export function Collections({ businessId }: { businessId: number | null }) {
       setError("The schema is not valid JSON.");
       return;
     }
-    const names = generated(form.slug).join(", ");
+    const names = generated(form.slug, form.mode).join(", ");
+    const journal = form.mode === "journal";
+    const searchable = list(form.searchable);
     if (
       !window.confirm(
         `Save ${form.slug}?\n\n` +
@@ -101,8 +108,10 @@ export function Collections({ businessId }: { businessId: number | null }) {
       await admin.putCollection(businessId, form.slug, {
         name: form.name || form.slug,
         schema,
-        key: form.key,
-        indexed: form.indexed.split(",").map((s) => s.trim()).filter(Boolean),
+        key: journal ? "" : form.key,
+        mode: form.mode,
+        indexed: list(form.indexed),
+        searchable: searchable.length ? searchable : null,
         description: form.description,
       });
       await load(businessId);
@@ -115,7 +124,7 @@ export function Collections({ businessId }: { businessId: number | null }) {
 
   async function remove(row: admin.Collection) {
     if (businessId === null) return;
-    if (!window.confirm(`Delete the ${row.slug} definition, and the three tools it generates?`)) return;
+    if (!window.confirm(`Delete the ${row.slug} definition, and the tools it generates?`)) return;
     const done = await run(async () => {
       await admin.deleteCollection(businessId, row.slug);
       await load(businessId);
@@ -126,7 +135,7 @@ export function Collections({ businessId }: { businessId: number | null }) {
   return (
     <Section
       title="Collections"
-      hint="A document type defined here, not in code. Its schema generates three tools."
+      hint="A document type defined here, not in code. Its schema generates the tools to find, write and search it."
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
 
@@ -138,11 +147,13 @@ export function Collections({ businessId }: { businessId: number | null }) {
                 {row.slug}
               </button>
               <span className="text-[var(--text-secondary)]">{row.name}</span>
-              <span className="text-[11px] text-[var(--text-secondary)]">key: {row.key}</span>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                {row.mode === "journal" ? "journal (append-only)" : `key: ${row.key}`}
+              </span>
               <span className="ml-auto text-[11px] text-[var(--text-secondary)]">{when(row.updated_at)}</span>
             </div>
             <div className="flex flex-wrap gap-1 pt-1">
-              {generated(row.slug).map((n) => (
+              {generated(row.slug, row.mode).map((n) => (
                 <Badge key={n}>{n}</Badge>
               ))}
             </div>
@@ -177,10 +188,23 @@ export function Collections({ businessId }: { businessId: number | null }) {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </Field>
+          <Field label="Mode" hint="a journal's entries are numbered by the server and never changed or deleted">
+            <select
+              className={`${box} max-w-[10rem]`}
+              value={form.mode}
+              disabled={open !== null}
+              aria-label="collection mode"
+              onChange={(e) => setForm({ ...form, mode: e.target.value as admin.Collection["mode"] })}
+            >
+              <option value="table">table</option>
+              <option value="journal">journal</option>
+            </select>
+          </Field>
           <Field label="Key" hint="the required string property that identifies a document">
             <input
               className={`${box} max-w-[10rem]`}
-              value={form.key}
+              value={form.mode === "journal" ? "" : form.key}
+              disabled={form.mode === "journal"}
               aria-label="collection key"
               onChange={(e) => setForm({ ...form, key: e.target.value })}
             />
@@ -191,6 +215,14 @@ export function Collections({ businessId }: { businessId: number | null }) {
               value={form.indexed}
               aria-label="collection indexed"
               onChange={(e) => setForm({ ...form, indexed: e.target.value })}
+            />
+          </Field>
+          <Field label="Searchable" hint="comma-separated string fields search reads; empty = all of them">
+            <input
+              className={`${box} max-w-[12rem]`}
+              value={form.searchable}
+              aria-label="collection searchable"
+              onChange={(e) => setForm({ ...form, searchable: e.target.value })}
             />
           </Field>
         </div>
@@ -220,7 +252,7 @@ export function Collections({ businessId }: { businessId: number | null }) {
         <div className="flex gap-2">
           <button
             className={btnPrimary}
-            disabled={busy || businessId === null || !form.slug || !form.key}
+            disabled={busy || businessId === null || !form.slug || (form.mode !== "journal" && !form.key)}
             onClick={() => void save()}
           >
             Save collection
@@ -252,6 +284,13 @@ export function Collections({ businessId }: { businessId: number | null }) {
 }
 
 /** What `kernos.data.store.generated_tool_names` will build from a slug. */
-function generated(slug: string): string[] {
-  return slug ? [`${slug}_find`, `${slug}_upsert`, `${slug}_delete`] : [];
+function generated(slug: string, mode: admin.Collection["mode"] = "table"): string[] {
+  if (!slug) return [];
+  return mode === "journal"
+    ? [`${slug}_find`, `${slug}_append`, `${slug}_search`]
+    : [`${slug}_find`, `${slug}_upsert`, `${slug}_delete`, `${slug}_search`];
+}
+
+function list(csv: string): string[] {
+  return csv.split(",").map((s) => s.trim()).filter(Boolean);
 }

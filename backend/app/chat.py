@@ -347,6 +347,18 @@ def _empty_turn_body(result) -> str:
     return ("⚠️ I came back with nothing — nothing was recorded. Ask me again.")
 
 
+def _memo_card_events(db: Database, room_id: int, result) -> list[dict]:
+    ids = [r["memo_id"] for name in ("remember", "forget")
+           for r in (result.all_results(name) if result is not None else [])
+           if r.get("ok") and r.get("type") == "memo_draft"]
+    if not ids:
+        return []
+    with db.session() as s:
+        cards = s.scalars(select(RoomMessage).where(RoomMessage.id.in_(ids), RoomMessage.room_id == room_id)
+                          .order_by(RoomMessage.id)).all()
+        return [{"type": "message", **message_to_dict(m, None)} for m in cards]
+
+
 async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: str,
                         text: str, images=None, emit=None,
                         before_id: int | None = None) -> RoomMessage:
@@ -395,6 +407,12 @@ async def run_bot_turn(db: Database, room_id: int, member_id: int, member_name: 
     async with _agent_lock:
         await kernel.pipeline_for(spec).run(ctx)
 
+    # A memo card is written by its tool mid-turn (`remember` / `forget`), not as the
+    # turn's outcome, so nothing else publishes it. Queued first: the host publishes
+    # the reply after this returns, and a reply that reached an open client before
+    # the card moved its `since` cursor past it — the card then showed only after a
+    # reload (prod, room 3, 2026-10-01: "thẻ nào?", "which card?").
+    ctx.pending_events[:0] = _memo_card_events(db, room_id, ctx.result)
     # A card this turn superseded or cancelled is republished so open clients stop
     # showing its buttons — outside the lock, exactly where it was emitted before.
     if emit:

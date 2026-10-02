@@ -92,6 +92,16 @@ export function buildAgentsFiles(req) {
  */
 export const MODELS_PATH = fileURLToPath(new URL("./models.json", import.meta.url));
 
+/**
+ * The session id every turn runs under. pi 1.0 sends it to OpenRouter as
+ * `x-session-id`, which routes requests that share it to the same upstream so the
+ * prompt cache (system prompt, skills, tools — the same for every turn) is hit. A
+ * session is built per turn, so pi's default — a fresh random id each time — routed
+ * every turn cold: the 1.0 benchmark cost about twice 0.84's on the same cases,
+ * whose repeats got cheaper as the cache warmed. One constant id restores that.
+ */
+export const CACHE_AFFINITY_ID = "kernos-sidecar";
+
 export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const runtime = modelRuntime || (await ModelRuntime.create({
     modelsPath: MODELS_PATH,
@@ -132,7 +142,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     thinkingLevel: req.thinking || "medium",
     customTools,
     ...toolOptionsFor(req.builtin_tools, customTools.map((tool) => tool.name)),
-    sessionManager: SessionManager.inMemory(cwd),
+    sessionManager: SessionManager.inMemory(cwd, { id: CACHE_AFFINITY_ID }),
     ...(settingsManager ? { settingsManager } : {}),
   });
 
@@ -208,29 +218,14 @@ export function resolveModel(runtime, req) {
 }
 
 function findModel(runtime, id) {
-  // `ModelRuntime` exposes its catalogue differently across versions, so try the
-  // documented shapes in turn.
-  for (const getter of ["getModel", "findModel", "resolveModel"]) {
-    if (typeof runtime?.[getter] === "function") {
-      try {
-        const found = runtime[getter](id);
-        if (found) return found;
-      } catch {
-        /* try the next shape */
-      }
-    }
-  }
-  const list = typeof runtime?.getModels === "function" ? runtime.getModels() : runtime?.models;
-  if (Array.isArray(list)) {
-    const found = list.find((m) => m?.id === id || m?.model === id);
-    // A catalogue that exists and does not contain the id is an answer, not a
-    // gap: returning the bare string here would send a request we already know
-    // fails, and on a vision turn that reads as a dropped photo.
-    return found || null;
-  }
-  // No catalogue to check against — providers accept a bare id, so let it through
-  // rather than refusing to run on a version whose API we could not read.
-  return id;
+  // The catalogue is `getModels()` in every pi we have run (0.84, 1.0) — look the id up
+  // there and only there. This used to try methods by name (`getModel`, `findModel`,
+  // `resolveModel`); pi 1.0 added an unrelated `resolveModel(model, messages, options)`
+  // that routes virtual models, and calling it with a bare id returned `{}`, a model
+  // with no id. A catalogue that does not hold the id is an answer, not a gap: the bare
+  // string would send a request we already know fails, and on a vision turn that reads
+  // as a dropped photo.
+  return runtime.getModels().find((m) => m?.id === id) || null;
 }
 
 

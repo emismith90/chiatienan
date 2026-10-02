@@ -238,3 +238,38 @@ def test_retarget_ignores_cards_about_someone_else(env):
                      subject_label="Giang Hoàng", text="hay đổi ý")
     with db.session() as s:
         assert memos.retarget_subject(s, 1, old="place:be-bu", new="place:x") == 0
+
+
+# ------------------------------------------------------------------ live delivery
+
+async def test_a_memo_card_is_published_to_open_clients_before_the_reply(db, monkeypatch):
+    """Prod, room 3, 2026-10-01: the remember card (#624) was never sent to open
+    clients — only the turn's reply (#625, "press Confirm on the card") was. The
+    reply moved the client's `since` cursor past the card, so it appeared only after
+    a full reload, and Emi asked "thẻ nào?" ("which card?")."""
+    import app.agent as agent_mod
+    from app import chat
+    from app.agent import ToolInvocation, TurnResult
+    from tests.test_ledger import _seed_room
+
+    room_id, m = _seed_room(db, 2)
+    with db.session() as s:
+        s.add(Place(room_id=room_id, slug="bun-bo-1992", name="Bún bò Huế 1992", aliases=["1992"]))
+
+    async def fake(user_text, ctx, images=None, emit=None, memory=None, history=None):
+        args = {"about": "1992", "text": "Quán đã đóng cửa", "standing": True}
+        res = build_tools(ctx)["remember"].execute(args)
+        return TurnResult(final_text="Bạn bấm Xác nhận trên thẻ nhé.", turn_id="t-memo",
+                          tools=[ToolInvocation("remember", args, res)])
+
+    monkeypatch.setattr(agent_mod, "run_turn", fake)
+    events = []
+
+    async def emit(ev):
+        events.append(ev)
+
+    reply = await chat.run_bot_turn(db, room_id, m[0], "M1", "@phoenix quán 1992 đóng cửa rồi", emit=emit)
+    cards = [e for e in events if e.get("type") == "message" and e.get("kind") == "memo_draft"]
+    assert len(cards) == 1
+    assert cards[0]["attachments"]["status"] == "pending" and cards[0]["attachments"]["text"] == "Quán đã đóng cửa"
+    assert cards[0]["id"] < reply.id            # it is published here, the reply after: the cursor never skips it

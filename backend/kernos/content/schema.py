@@ -76,7 +76,34 @@ def sync_additive_columns(engine: Engine, metadata: MetaData) -> list[str]:
     return added
 
 
+#: The data plane's full-text index over ``kn_documents.search_text`` (SQLite FTS5, an
+#: external-content table: the text lives once, in ``kn_documents``). The triggers keep it
+#: in sync with every insert, update and delete, whoever writes the row; rows older than
+#: the index are taken in once by a ``rebuild`` when it is created, so a trigger's
+#: ``'delete'`` always removes exactly what was indexed. The text is folded in Python
+#: (``đ`` → ``d`` too, which ``remove_diacritics`` does not do), so the tokenizer only splits it.
+FTS_DDL = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS kn_documents_fts USING fts5("
+    "search_text, content='kn_documents', content_rowid='id', tokenize='unicode61')",
+    "CREATE TRIGGER IF NOT EXISTS kn_documents_fts_ai AFTER INSERT ON kn_documents BEGIN "
+    "INSERT INTO kn_documents_fts(rowid, search_text) VALUES (new.id, new.search_text); END",
+    "CREATE TRIGGER IF NOT EXISTS kn_documents_fts_ad AFTER DELETE ON kn_documents BEGIN "
+    "INSERT INTO kn_documents_fts(kn_documents_fts, rowid, search_text) VALUES ('delete', old.id, old.search_text); END",
+    "CREATE TRIGGER IF NOT EXISTS kn_documents_fts_au AFTER UPDATE OF search_text ON kn_documents BEGIN "
+    "INSERT INTO kn_documents_fts(kn_documents_fts, rowid, search_text) VALUES ('delete', old.id, old.search_text); "
+    "INSERT INTO kn_documents_fts(rowid, search_text) VALUES (new.id, new.search_text); END",
+)
+
+
 def bind(engine: Engine) -> None:
-    """Bring the ``kn_`` tables up to the models: missing tables, then missing columns."""
+    """Bring the ``kn_`` tables up to the models: missing tables, then missing columns,
+    then (on SQLite) the documents' full-text index."""
     Base.metadata.create_all(engine)
     sync_additive_columns(engine, Base.metadata)
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as conn:
+            fresh = conn.execute(text("SELECT 1 FROM sqlite_master WHERE name = 'kn_documents_fts'")).first() is None
+            for ddl in FTS_DDL:
+                conn.execute(text(ddl))
+            if fresh:
+                conn.execute(text("INSERT INTO kn_documents_fts(kn_documents_fts) VALUES ('rebuild')"))
