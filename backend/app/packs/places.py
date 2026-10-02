@@ -187,7 +187,7 @@ def build(ctx) -> dict[str, PackTool]:
 
             now = now_ict()
             notes = obs_mod.for_subjects(
-                ctx.space_id, [f"place:{p.slug}" for p, _ in pool], today=today)
+                s, ctx.space_id, [f"place:{p.slug}" for p, _ in pool], today=today)
             by_subject: dict[str, list] = {}
             for o in notes:
                 by_subject.setdefault(o.subject, []).append(o)
@@ -301,7 +301,7 @@ def build(ctx) -> dict[str, PackTool]:
             if found is None:
                 return _err(f"Not sure which place or person «{raw}» is.")
             subject, label = found
-            existing = [o for o in obs_mod.load(ctx.space_id) if o.subject == subject]
+            existing = [o for o in obs_mod.load(s, ctx.space_id) if o.subject == subject]
             if not any(o.text == text for o in existing):
                 return _err(
                     f"No note for «{label}» matches that text exactly. "

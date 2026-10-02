@@ -49,7 +49,7 @@ class PlaceError(Exception):
 
 
 #: Columns a human may edit. **`slug` is not one of them**, and neither is
-#: `former_slugs`: the slug is the `place:` subject in `observations.md` and the
+#: `former_slugs`: the slug is the `place:` subject in the room's notes and the
 #: key `seed_places` matches on, so changing it as a field would silently detach
 #: every note and standing rule about that restaurant. `name` and `aliases` carry
 #: an ordinary renaming.
@@ -96,7 +96,7 @@ def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) ->
     """Change a place's room-scoped identity, moving everything filed under it.
 
     Three live stores hold a slug and all three move here: the row, the
-    ``place:`` subjects in ``observations.md``, and the frozen subject on any
+    ``place:`` subjects in the room's notes, and the frozen subject on any
     **pending** memo card. The two *offline* stores — ``seeds/places-*.json`` and
     ``seeds/observations-local.md`` — are not rewritten (a droplet's DB has long
     since diverged from files in the repo, and an HTTP route must not edit them);
@@ -152,7 +152,7 @@ def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) ->
     place.slug = new
     session.flush()
 
-    notes = obs_mod.retarget_subject(room_id, old=f"place:{old}", new=f"place:{new}")
+    notes = obs_mod.retarget_subject(session, room_id, old=f"place:{old}", new=f"place:{new}")
     memos_moved = memos_mod.retarget_subject(
         session, room_id, old=f"place:{old}", new=f"place:{new}",
         new_label=place.name)

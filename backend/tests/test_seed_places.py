@@ -124,7 +124,8 @@ def test_main_runs_end_to_end_as_the_cli_does(db, tmp_path, monkeypatch, capsys)
     assert "backfill:" in out
     # The observations half must actually have run, not merely been reachable.
     assert "observations:" in out
-    assert len(observations.load(1)) == 42, out
+    with db.session() as s:
+        assert len(observations.load(s, 1)) == 42, out
 
 
 def test_every_public_name_main_uses_is_defined_before_the_guard():
@@ -222,13 +223,8 @@ def test_install_observations_does_not_re_add_a_note_under_a_renamed_slug(db, tm
     with db.session() as s:
         assert seed_places.install_observations(1, seed, s) == {"added": 0, "skipped": 1}
 
-    rows = obs.load(1)
+    with db.session() as s:
+        rows = obs.load(s, 1)
     assert [o.subject for o in rows] == ["place:bun-cha-huong-lien"]
 
 
-def test_install_observations_without_a_session_still_works(db, tmp_path):
-    """The canonicalisation is an improvement, not a requirement — callers that
-    have no session (the tests that predate this) keep working."""
-    seed = tmp_path / "observations-local.md"
-    seed.write_text("- always | place:x | - | Ăn được.\n", encoding="utf-8")
-    assert seed_places.install_observations(1, seed) == {"added": 1, "skipped": 0}

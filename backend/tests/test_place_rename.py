@@ -8,6 +8,8 @@ quietly merge two restaurants' history.
 """
 import pytest
 
+from tests.notes_util import notes
+
 from app import observations as obs, places
 from app.db import Database
 from app.models import Member, Place, Room
@@ -40,14 +42,14 @@ def _place(db, name, slug=None, **kw):
         return p.id
 
 
-def _write_obs(text):
-    from app.memory import room_memory_dir
-    (room_memory_dir(1) / "observations.md").write_text(text, encoding="utf-8")
+def _write_obs(db, text):
+    from tests.notes_util import seed_notes
+    seed_notes(db, 1, text)
 
 
-def _read_obs():
-    from app.memory import room_memory_dir
-    return (room_memory_dir(1) / "observations.md").read_text(encoding="utf-8")
+def _read_obs(db):
+    from tests.notes_util import note_lines
+    return "".join(line + "\n" for line in note_lines(db, 1))
 
 
 def _rename(db, place_id, slug):
@@ -108,13 +110,13 @@ def test_a_rename_to_the_same_slug_changes_nothing_at_all(db):
     """"Quán Bé Bự" → "quán bé bự" is the same identity. A rewrite would churn
     every line's content-derived `line_id` for no reason."""
     pid = _place(db, "Quán Bé Bự")
-    _write_obs("- always | place:quan-be-bu | - | Ăn được.\n")
-    before = _read_obs()
+    _write_obs(db, "- always | place:quan-be-bu | - | Ăn được.\n")
+    before = _read_obs(db)
 
     out = _rename(db, pid, "  Quán Bé Bự  ")
 
     assert out["changed"] is False
-    assert _read_obs() == before
+    assert _read_obs(db) == before
     with db.session() as s:
         assert s.get(Place, pid).former_slugs == []
 
@@ -123,7 +125,7 @@ def test_a_rename_to_the_same_slug_changes_nothing_at_all(db):
 
 def test_a_rename_moves_the_notes_and_remembers_the_old_slug(db):
     pid = _place(db, "Bún chả rửa xe Nam Đồng")
-    _write_obs("# tay viết\n"
+    _write_obs(db, "# tay viết\n"
                "- always | place:bun-cha-rua-xe-nam-dong | busy@12:00 | Đông lúc 12h.\n"
                "- 2026-08-10 | place:bun-cha-rua-xe-nam-dong | - | Hết chả.\n"
                "- always | member:emi | - | Thích bún chả.\n")
@@ -139,10 +141,9 @@ def test_a_rename_moves_the_notes_and_remembers_the_old_slug(db):
         assert p.slug == "bun-cha-huong-lien"
         assert p.former_slugs == ["bun-cha-rua-xe-nam-dong"]
 
-    lines = _read_obs().splitlines()
-    assert lines[0] == "# tay viết"                      # comment survives
-    assert lines[3] == "- always | member:emi | - | Thích bún chả."
-    assert [o.subject for o in obs.load(1)] == [
+    lines = _read_obs(db).splitlines()
+    assert lines[2] == "- always | member:emi | - | Thích bún chả."   # order kept
+    assert [o.subject for o in notes(db, 1)] == [
         "place:bun-cha-huong-lien", "place:bun-cha-huong-lien", "member:emi"]
 
 
@@ -195,18 +196,18 @@ def test_a_pending_memo_follows_the_rename_and_commits_onto_the_new_slug(db):
     with db.session() as s:
         memos.commit(s, memo_id, 1)
 
-    assert [o.subject for o in obs.load(1)] == ["place:bun-rieu-truong-sa"]
+    assert [o.subject for o in notes(db, 1)] == ["place:bun-rieu-truong-sa"]
 
 
 def test_a_moved_note_that_would_collide_is_deduped_not_duplicated(db):
     """Two byte-identical lines share a `line_id` and neither can be addressed
     again — the same rule the knowledge API enforces on POST and PATCH."""
     pid = _place(db, "Quán Bé Bự")
-    _write_obs("- always | place:quan-be-bu | - | Ăn được.\n"
+    _write_obs(db, "- always | place:quan-be-bu | - | Ăn được.\n"
                "- always | place:be-bu | - | Ăn được.\n")
 
     out = _rename(db, pid, "be-bu")
 
     assert (out["notes_moved"], out["notes_deduped"]) == (0, 1)
-    ids = [o.line_id for o in obs.load(1)]
+    ids = [o.line_id for o in notes(db, 1)]
     assert len(ids) == len(set(ids)) == 1

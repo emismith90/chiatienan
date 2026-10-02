@@ -145,7 +145,7 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def install_observations(room_id: int, path, session: Session | None = None) -> dict:
+def install_observations(room_id: int, path, session: Session) -> dict:
     """Copy a seed observations file into the room, skipping lines already there.
 
     Idempotent and non-destructive: notes the room has accumulated since the last
@@ -153,7 +153,7 @@ def install_observations(room_id: int, path, session: Session | None = None) -> 
     """
     from app import observations
 
-    existing = {(o.subject, o.text) for o in observations.load(room_id)}
+    existing = {(o.subject, o.text) for o in observations.load(session, room_id)}
     added = skipped = 0
     for i, raw in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
         o = observations._parse_line(raw, i)
@@ -163,7 +163,7 @@ def install_observations(room_id: int, path, session: Session | None = None) -> 
         if (o.subject, o.text) in existing:
             skipped += 1
             continue
-        observations.append(room_id, o)
+        observations.append(session, room_id, o)
         existing.add((o.subject, o.text))
         added += 1
     return {"added": added, "skipped": skipped}

@@ -1,8 +1,10 @@
 """Per-room lunch memory: prose that decays, and standing rules that do not.
 
-One file, ``{DATA_DIR}/rooms/{room_id}/observations.md``, sibling to
-``memory.md`` and reached through :func:`app.memory.room_memory_dir`. One line
-per fact, four pipe-separated fields::
+Stored in the ``notes`` internal collection (:mod:`app.store`, plan 2026-10-02 S2),
+one document per fact. It used to be one file per room,
+``{DATA_DIR}/rooms/{room_id}/observations.md``, one line per fact in four
+pipe-separated fields — still the format :func:`parse_file` reads, for the one-time
+import (:mod:`app.migrate_storage`) and for the seed installer::
 
     - 2026-03-03 | place:com-ga-thinh-lo | -              | Very slow, an hour before the food came.
     - always     | place:com-ga-thinh-lo | order-by@11:30 | Must order ahead — call by phone.
@@ -22,26 +24,25 @@ Why these four and not a table (design D4):
             "Nhím suggested a place, then changed her mind" is not
             table-shaped and schematising it would destroy the meaning.
 
-The file is editable two ways — the knowledge panel (:mod:`app.knowledge`) and a
-text editor on the box — so **a malformed line is skipped with a warning, never
-raised**: one stray line must cost one fact, not lunch. Every write here edits the
-raw line list in place, so the comments and unreadable lines the parser skips
-survive an edit made through the UI.
+A fact's id is still its ``line_id`` — a hash of its four fields — so identical
+facts are one fact and the knowledge panel's contract is unchanged. ``seq`` keeps
+the order the room wrote them in. Every function takes the caller's ``session``: a
+note and whatever triggered it (a memo card's status) commit together.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
+from sqlalchemy.orm import Session
+
+from app import store
 from app.memory import room_memory_dir
 
 logger = logging.getLogger("chiatienan")
-
-_FILE = "observations.md"
 
 #: How far back a dated observation still counts. Rules ignore this entirely.
 DEFAULT_SINCE_DAYS = 180
@@ -119,188 +120,183 @@ def _parse_line(raw: str, lineno: int) -> Observation | None:
     return Observation(when=when, subject=subject, gate=gate, text=text)
 
 
-def _path(room_id: int):
-    return room_memory_dir(room_id) / _FILE
+# ------------------------------------------------------------------ storage
 
-
-def _read_raw(room_id: int) -> list[str]:
-    """Every line of the file, verbatim, newlines stripped."""
-    path = _path(room_id)
-    if not path.exists():
-        return []
-    return path.read_text(encoding="utf-8").splitlines()
-
-
-def _write_raw(room_id: int, lines: list[str]) -> None:
-    """Replace the file atomically.
-
-    Every write here is a whole-file rewrite of the room's only long-term memory,
-    and :func:`retarget_subject` rewrites every line about one place at once. A
-    torn `write_text` on a full disk or a killed container would leave a truncated
-    memory file with no copy of what it held; ``os.replace`` is atomic on the same
-    filesystem, so a reader sees either the old file or the new one.
-    """
-    path = _path(room_id)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text("".join(ln + "\n" for ln in lines), encoding="utf-8")
-    os.replace(tmp, path)
-
-
-def _parse_lines(lines: list[str]) -> list[tuple[int, Observation]]:
-    """``(index into ``lines``, observation)`` for every line that parses."""
+def _docs(session: Session, room_id: int) -> list[tuple[dict, Observation]]:
+    """``(document, observation)`` in the room's order (``seq``)."""
     out = []
-    for i, raw in enumerate(lines):
-        if (o := _parse_line(raw, i + 1)) is not None:
-            out.append((i, o))
+    for doc in store.DATA.read_all(store.collection(session, "notes"), room_id, session=session):
+        d = doc["data"]
+        out.append((d, Observation(
+            when=None if d["when"] == "always" else date.fromisoformat(d["when"]),
+            subject=d["subject"], gate=d.get("gate") or None, text=d["text"])))
+    out.sort(key=lambda pair: pair[0]["seq"])
     return out
 
 
-def indexed(room_id: int) -> list[tuple[int, Observation]]:
-    """``(raw line index, observation)`` for every line that parses.
+def _put(session: Session, room_id: int, obs: Observation, seq: int) -> None:
+    data = {"id": obs.line_id, "seq": seq, "when": obs.when.isoformat() if obs.when else "always",
+            "subject": obs.subject, "text": obs.text}
+    if obs.gate:
+        data["gate"] = obs.gate
+    store.DATA.upsert_document(store.collection(session, "notes"), room_id, data,
+                               actor="notes", session=session)
 
-    The index is the anchor every edit rides on. Rewriting the file from
-    :func:`load`'s output instead — which is what :func:`remove` used to do —
-    silently deletes the comments and malformed lines :func:`_parse_line`
-    deliberately skips, turning "one stray line costs one fact" into "one edit
-    costs every line the parser didn't like".
+
+def _drop(session: Session, room_id: int, line_id: str) -> None:
+    store.DATA.delete_document(store.collection(session, "notes"), room_id, line_id,
+                               actor="notes", session=session)
+
+
+def load(session: Session, room_id: int) -> list[Observation]:
+    return [o for _d, o in _docs(session, room_id)]
+
+
+def etag(session: Session, room_id: int) -> str:
+    """Fingerprint of the room's notes as they stand, for optimistic concurrency.
+
+    The turn loop adds notes too, so an editor that writes blind loses whichever
+    change landed first. Callers hand this back on write; a mismatch is a refusal,
+    not a merge. Any add, edit (a new ``line_id``) or delete changes it.
     """
-    return _parse_lines(_read_raw(room_id))
+    raw = "|".join(f"{d['seq']}:{d['id']}" for d, _o in _docs(session, room_id))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def load(room_id: int) -> list[Observation]:
-    return [o for _i, o in indexed(room_id)]
-
-
-def file_etag(room_id: int) -> str:
-    """Fingerprint of the file as it stands, for optimistic concurrency.
-
-    The turn loop appends to this file too, so an editor that writes blind loses
-    whichever change landed first. Callers hand this back on write; a mismatch is
-    a refusal, not a merge.
-    """
-    path = _path(room_id)
-    data = path.read_bytes() if path.exists() else b""
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
-def append(room_id: int, obs: Observation) -> None:
-    path = _path(room_id)
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    prefix = "" if (not existing or existing.endswith("\n")) else "\n"
-    with path.open("a", encoding="utf-8") as f:
-        f.write(prefix + obs.to_line() + "\n")
-
-
-def _find(room_id: int, line_id: str) -> int | None:
-    for i, o in indexed(room_id):
-        if o.line_id == line_id:
-            return i
-    return None
-
-
-def replace_line(room_id: int, line_id: str, obs: Observation) -> bool:
-    """Rewrite one line in place. False when ``line_id`` is no longer present."""
-    i = _find(room_id, line_id)
-    if i is None:
+def append(session: Session, room_id: int, obs: Observation) -> bool:
+    """Add a fact at the end. False — and nothing written — when an identical fact
+    is already there (same ``line_id``: they are the same fact)."""
+    docs = _docs(session, room_id)
+    if any(d["id"] == obs.line_id for d, _o in docs):
         return False
-    lines = _read_raw(room_id)
-    lines[i] = obs.to_line()
-    _write_raw(room_id, lines)
+    _put(session, room_id, obs, max((d["seq"] for d, _o in docs), default=0) + 1)
     return True
 
 
-def delete_line(room_id: int, line_id: str) -> bool:
-    """Drop one line, leaving every other byte of the file alone."""
-    i = _find(room_id, line_id)
-    if i is None:
+def replace_line(session: Session, room_id: int, line_id: str, obs: Observation) -> bool:
+    """Rewrite one fact in place (it keeps its position). False when ``line_id`` is no
+    longer present. Rewriting it into an exact copy of another fact keeps that other
+    one — two identical facts cannot both exist."""
+    docs = _docs(session, room_id)
+    current = next((d for d, _o in docs if d["id"] == line_id), None)
+    if current is None:
         return False
-    lines = _read_raw(room_id)
-    del lines[i]
-    _write_raw(room_id, lines)
+    if obs.line_id != line_id:
+        _drop(session, room_id, line_id)
+        if any(d["id"] == obs.line_id for d, _o in docs):
+            return True
+    _put(session, room_id, obs, current["seq"])
     return True
 
 
-def remove(room_id: int, *, subject: str, text: str) -> bool:
-    """Delete the first line matching ``subject`` + ``text``. True if one went.
+def delete_line(session: Session, room_id: int, line_id: str) -> bool:
+    if not any(d["id"] == line_id for d, _o in _docs(session, room_id)):
+        return False
+    _drop(session, room_id, line_id)
+    return True
 
-    No tombstone and no history: this is a lunch note, not the ledger. Everything
-    else in the file — comments, and lines the parser could not read — survives
-    untouched; see :func:`indexed`.
+
+def remove(session: Session, room_id: int, *, subject: str, text: str) -> bool:
+    """Delete the earliest fact matching ``subject`` + ``text``. True if one went.
+
+    No tombstone and no history: this is a lunch note, not the ledger.
     """
-    for i, o in indexed(room_id):
+    for d, o in _docs(session, room_id):
         if o.subject == subject and o.text == text:
-            lines = _read_raw(room_id)
-            del lines[i]
-            _write_raw(room_id, lines)
+            _drop(session, room_id, d["id"])
             return True
     return False
 
 
-def retarget_subject(room_id: int, *, old: str, new: str) -> dict:
-    """Move every line filed under ``old`` to ``new``. ``{"moved", "deduped"}``.
+def retarget_subject(session: Session, room_id: int, *, old: str, new: str) -> dict:
+    """Move every fact filed under ``old`` to ``new``. ``{"moved", "deduped"}``.
 
-    One read and one write, over the raw line list — not N calls to
-    :func:`replace_line` (N whole-file rewrites), and never a rebuild from
-    :func:`load` (that eats comments and unparsable lines; see :func:`indexed`).
-
-    **Duplicates are dropped, not written.** ``line_id`` is a hash of the rendered
-    line, so two byte-identical lines share an id and neither can be addressed
-    again — the knowledge API already refuses to create that on POST and PATCH,
-    and a rewrite must not create it either. If a moved line would land exactly on
-    a line the file already holds, the moved one goes rather than being appended.
-    A pre-existing identical pair under ``old`` therefore collapses to one on the
-    way through, which is a repair rather than a loss: they were the same fact
-    written twice.
+    **Duplicates are dropped, not written.** A fact's id is a hash of its fields, so
+    a moved fact that lands exactly on one the room already holds *is* that fact: the
+    moved copy goes. A pre-existing identical pair under ``old`` therefore collapses
+    to one, which is a repair rather than a loss.
     """
-    lines = _read_raw(room_id)
-    parsed = _parse_lines(lines)
-    rendered = {o.to_line() for _i, o in parsed}
-    moved, drop = 0, []
-    for i, o in parsed:
+    docs = _docs(session, room_id)
+    held = {d["id"] for d, _o in docs}
+    moved = deduped = 0
+    for d, o in docs:
         if o.subject != old:
             continue
         target = replace(o, subject=new)
-        line = target.to_line()
-        if line in rendered:
-            drop.append(i)
+        _drop(session, room_id, d["id"])
+        held.discard(d["id"])
+        if target.line_id in held:
+            deduped += 1
             continue
-        rendered.discard(o.to_line())
-        rendered.add(line)
-        lines[i] = line
+        _put(session, room_id, target, d["seq"])
+        held.add(target.line_id)
         moved += 1
-    if moved or drop:
-        for i in sorted(drop, reverse=True):
-            del lines[i]
-        _write_raw(room_id, lines)
-    return {"moved": moved, "deduped": len(drop)}
+    return {"moved": moved, "deduped": deduped}
 
 
-def for_subjects(room_id: int, subjects: list[str], *,
+def for_subjects(session: Session, room_id: int, subjects: list[str], *,
                  since_days: int = DEFAULT_SINCE_DAYS, today=None) -> list[Observation]:
     """Rules for ``subjects`` (always), plus their observations inside the window.
 
-    Recency filtering applies to dated lines only — a standing rule can never be
-    aged out, which is the whole reason the two share a file but not a lifetime.
+    Recency filtering applies to dated facts only — a standing rule can never be
+    aged out, which is the whole reason the two share a store but not a lifetime.
     """
     from app.clock import today_ict
 
     today = today or today_ict()
     cutoff = today - timedelta(days=since_days)
     wanted = set(subjects)
-    return [o for o in load(room_id)
+    return [o for o in load(session, room_id)
             if o.subject in wanted and (o.is_rule or o.when >= cutoff)]
 
 
-def count_since(room_id: int, subject: str, *, since: date) -> int:
+def count_since(session: Session, room_id: int, subject: str, *, since: date) -> int:
     """How many dated observations about ``subject`` since ``since``.
 
     This is what lets Phoenix say "the 3rd time this month" without counting: Python
-    counts the lines and hands over the number. A model that tallies by eye gets
-    it wrong eventually, and a confidently wrong count poisons trust in
-    everything else it says — the same rule as money, applied to social facts.
+    counts and hands over the number. A model that tallies by eye gets it wrong
+    eventually, and a confidently wrong count poisons trust in everything else it
+    says — the same rule as money, applied to social facts.
     """
-    return sum(1 for o in load(room_id)
+    return sum(1 for o in load(session, room_id)
                if o.subject == subject and not o.is_rule and o.when >= since)
+
+
+# ------------------------------------------------------------- the old file
+
+def legacy_path(room_id: int):
+    """Where a room's notes lived before the import (``observations.md``)."""
+    return room_memory_dir(room_id) / "observations.md"
+
+
+def parse_text(text: str) -> tuple[list[Observation], dict]:
+    """Every fact in ``observations.md``-format text, in order, plus a report of what
+    was not a fact: ``{"comments", "blank", "dropped": [(lineno, line)]}``.
+
+    A malformed line was always skipped with a warning (one stray line costs one fact,
+    not lunch); the report says which, so an import loses nothing silently (review R8).
+    """
+    facts: list[Observation] = []
+    report = {"comments": 0, "blank": 0, "dropped": []}
+    for i, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            report["blank"] += 1
+        elif line.startswith("#"):
+            report["comments"] += 1
+        elif (o := _parse_line(raw, i)) is not None:
+            facts.append(o)
+        else:
+            report["dropped"].append((i, raw))
+    return facts, report
+
+
+def parse_file(path) -> tuple[list[Observation], dict]:
+    """:func:`parse_text` over a file; a missing file is empty."""
+    from pathlib import Path
+
+    path = Path(path)
+    return parse_text(path.read_text(encoding="utf-8") if path.exists() else "")
 
 
 #: Every walk-to place sits a few minutes from the office, so one room-wide

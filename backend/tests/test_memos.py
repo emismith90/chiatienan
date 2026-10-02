@@ -6,6 +6,7 @@ from app import memos, observations as obs
 from app.db import Database
 from app.models import Member, Place, Room, RoomMessage
 from app.tools import ToolContext, build_tools
+from tests.notes_util import notes
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +28,11 @@ def env():
     return db, build_tools(ToolContext(db=db, room_id=1, sender_member_id=1))
 
 
+def _append(db, room_id, o):
+    with db.session() as s:
+        obs.append(s, room_id, o)
+
+
 # ------------------------------------------------------------------ lifecycle
 
 def test_commit_writes_the_line(env):
@@ -35,7 +41,7 @@ def test_commit_writes_the_line(env):
         m = memos.create(s, 1, action="add", subject="place:be-bu",
                          subject_label="Quán Bé Bự", text="Quán mùi.")
         memos.commit(s, m.id, 1)
-    rows = obs.load(1)
+    rows = notes(env[0], 1)
     assert [(r.subject, r.text) for r in rows] == [("place:be-bu", "Quán mùi.")]
 
 
@@ -46,7 +52,7 @@ def test_commit_is_idempotent(env):
                          subject_label="X", text="Ngon")
         memos.commit(s, m.id, 1)
         memos.commit(s, m.id, 1)
-    assert len(obs.load(1)) == 1
+    assert len(notes(env[0], 1)) == 1
 
 
 def test_cancel_writes_nothing(env):
@@ -56,17 +62,17 @@ def test_cancel_writes_nothing(env):
                          subject_label="X", text="Ngon")
         memos.cancel(s, m.id, 1)
         assert s.get(RoomMessage, m.id).attachments["status"] == "cancelled"
-    assert obs.load(1) == []
+    assert notes(env[0], 1) == []
 
 
 def test_remove_action_deletes_the_line(env):
     db, _ = env
-    obs.append(1, obs.Observation(when=None, subject="place:be-bu", gate=None, text="Chậm"))
+    _append(env[0], 1, obs.Observation(when=None, subject="place:be-bu", gate=None, text="Chậm"))
     with db.session() as s:
         m = memos.create(s, 1, action="remove", subject="place:be-bu",
                          subject_label="X", text="Chậm")
         memos.commit(s, m.id, 1)
-    assert obs.load(1) == []
+    assert notes(env[0], 1) == []
 
 
 def test_a_standing_rule_round_trips_its_gate(env):
@@ -75,7 +81,7 @@ def test_a_standing_rule_round_trips_its_gate(env):
         m = memos.create(s, 1, action="add", subject="place:be-bu", subject_label="X",
                          text="Đông lúc 12h", gate="busy@12:00", when=None)
         memos.commit(s, m.id, 1)
-    o = obs.load(1)[0]
+    o = notes(env[0], 1)[0]
     assert o.gate == "busy@12:00" and o.is_rule
 
 
@@ -94,7 +100,7 @@ def test_remember_proposes_rather_than_writing(env):
     _db, tools = env
     res = tools["remember"].execute({"about": "bé bự", "text": "Hay hết cánh gà"})
     assert res["ok"] and res["subject"] == "place:be-bu"
-    assert obs.load(1) == [], "remember must not write until the card is confirmed (D7)"
+    assert notes(env[0], 1) == [], "remember must not write until the card is confirmed (D7)"
 
 
 def test_remember_dates_todays_note_but_not_a_standing_rule(env):
@@ -104,7 +110,7 @@ def test_remember_dates_todays_note_but_not_a_standing_rule(env):
     with db.session() as s:
         for m in s.query(RoomMessage).filter_by(kind="memo_draft").all():
             memos.commit(s, m.id, 1)
-    by_text = {o.text: o for o in obs.load(1)}
+    by_text = {o.text: o for o in notes(env[0], 1)}
     assert by_text["Hôm nay chậm"].when is not None
     assert by_text["Phải đi sớm"].is_rule
 
@@ -129,13 +135,13 @@ def test_forget_refuses_text_that_does_not_exist(env):
 
 def test_forget_proposes_removal_of_a_real_line(env):
     db, tools = env
-    obs.append(1, obs.Observation(when=None, subject="place:be-bu", gate=None, text="Chậm"))
+    _append(env[0], 1, obs.Observation(when=None, subject="place:be-bu", gate=None, text="Chậm"))
     res = tools["forget"].execute({"about": "bé bự", "text": "Chậm"})
     assert res["ok"]
-    assert len(obs.load(1)) == 1, "still there until confirmed"
+    assert len(notes(env[0], 1)) == 1, "still there until confirmed"
     with db.session() as s:
         memos.commit(s, res["memo_id"], 1)
-    assert obs.load(1) == []
+    assert notes(env[0], 1) == []
 
 
 # ------------------- place-vs-person, operator's explicit rule (D18) --------
