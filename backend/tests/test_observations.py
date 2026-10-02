@@ -184,3 +184,13 @@ def test_minutes_left_is_reported_for_act_now():
 def test_an_ungated_observation_is_always_ok():
     o = obs.Observation(when=None, subject="place:x", gate=None, text="Ngon")
     assert obs.gate_status(o, now=_at(23, 0)) == ("ok", None)
+
+
+def test_a_model_written_fact_is_normalised_like_the_old_file_did(db):
+    """Memo cards carry the model's text and gate verbatim; the file format used to fold a
+    newline into a split line and an unreadable gate into prose."""
+    with db.session() as s:
+        obs.append(s, 1, obs.Observation(when=None, subject="place:a", gate="order-by 11h30",
+                                         text="line one\nline   two"))
+    [o] = notes(db, 1)
+    assert (o.gate, o.text) == (None, "line one line two")

@@ -50,3 +50,15 @@ def test_only_the_newest_backups_are_kept(tmp_path, monkeypatch):
 def test_a_missing_database_is_refused(tmp_path):
     with pytest.raises(SystemExit, match="no database"):
         backup.backup(f"sqlite:///{tmp_path / 'nope.db'}", tmp_path, label="x")
+
+
+def test_a_backup_that_would_fill_the_disk_is_refused(tmp_path, monkeypatch):
+    import collections
+    data = tmp_path / "data"
+    data.mkdir()
+    _db(data / "chiatienan.db", [1])
+    Usage = collections.namedtuple("Usage", "total used free")
+    monkeypatch.setattr(backup.shutil, "disk_usage", lambda _p: Usage(100, 99, 1))
+    with pytest.raises(SystemExit, match="need"):
+        backup.backup(f"sqlite:///{data / 'chiatienan.db'}", data, label="x")
+    assert not (data / "backups").exists() or not any((data / "backups").iterdir())

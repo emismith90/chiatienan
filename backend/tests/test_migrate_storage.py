@@ -104,3 +104,60 @@ def test_a_room_without_a_file_imports_no_notes(db):
         s.add(Room(id=1, name="a", invite_token="a"))
     status, report = migrate_storage.run(db, apply=True)
     assert status == 0 and report["notes"] == {} and report["places"] == {}
+
+
+# ------------------------------------------------------------------ review of release A
+
+def test_undo_writes_everything_back_including_edits_made_since(legacy):
+    """The rollback loses nothing and needs no database restore: the old code reads the
+    legacy table and the file, so both get the store's current state."""
+    assert migrate_storage.run(legacy, apply=True)[0] == 0
+    with legacy.session() as s:                     # life goes on under the new code
+        bebu = places.get_place(s, 3, 57)
+        places.edit_place(s, bebu, {"phone": "0999999999"})
+        new = places.create_place(s, 3, name="Bún mới")
+        observations.append(s, 3, observations.Observation(when=None, subject="place:be-bu",
+                                                           gate=None, text="Mới thêm."))
+    status, report = migrate_storage.undo(legacy)
+    assert status == 0 and report["places_restored"] == 4, report      # 3 legacy + 1 new
+    with legacy.session() as s:
+        rows = {r.id: r for r in s.query(LegacyPlace).all()}
+        assert rows[57].phone == "0999999999" and rows[new.id].name == "Bún mới"
+        assert migrate_storage._done(s) is None
+        assert places.list_places(s, 3, include_inactive=True) == []      # the store is empty again
+    text = observations.legacy_path(3).read_text(encoding="utf-8")
+    assert text.splitlines() == ["- always | place:be-bu | busy@12:00 | Đông lúc 12h.",
+                                 "- 2026-08-10 | place:be-bu | - | Hết gà.",
+                                 "- always | member:nhim | - | Đề xuất rồi đổi ý.",
+                                 "- always | place:be-bu | - | Mới thêm."]
+    # and a later roll-forward imports the same data again, cleanly
+    assert migrate_storage.run(legacy, apply=True)[0] == 0
+    assert len(notes(legacy, 3)) == 4
+
+
+def test_undo_when_nothing_was_applied_is_a_no_op(legacy):
+    assert migrate_storage.undo(legacy) == (0, {"status": "nothing to undo"})
+
+
+def test_a_file_for_a_room_the_table_does_not_know_is_still_imported(legacy):
+    observations.legacy_path(9).write_text("- always | place:x | - | Phòng cũ.\n", encoding="utf-8")
+    status, report = migrate_storage.run(legacy, apply=True)
+    assert status == 0 and report["notes"]["9"]["imported"] == 1
+    assert [o.text for o in notes(legacy, 9)] == ["Phòng cũ."]
+
+
+def test_a_legacy_row_the_store_cannot_take_refuses_with_a_report_not_a_traceback(legacy):
+    with legacy.session() as s:
+        s.get(LegacyPlace, 12).aliases = [7]          # not a string: the store's schema refuses it
+    status, report = migrate_storage.run(legacy, apply=True)
+    assert status == 1 and any(p.startswith("place 12:") for p in report["problems"]), report
+
+
+def test_the_app_will_not_start_on_unimported_data(legacy):
+    assert "migrate_storage --apply" in migrate_storage.pending(legacy)
+    migrate_storage.run(legacy, apply=True)
+    assert migrate_storage.pending(legacy) is None
+
+
+def test_a_fresh_database_can_start(db):
+    assert migrate_storage.pending(db) is None
