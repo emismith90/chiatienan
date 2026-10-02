@@ -340,3 +340,44 @@ Clone: `/internal/debug/db` of 2026-10-02 (sanitised; 4 rooms, 101 places, 47 me
 (The first attempt compared new code with itself: `python3 script.py` puts the *script's* directory
 on `sys.path`, so `import app` found the editable install of the new code. Fixed by `PYTHONPATH`;
 the run above prints the old code's path.)
+
+## 8. Release B — the ledger journal (planned 2026-10-03, while A awaits review)
+
+Built on a branch stacked on A; **not merged until A has baked in production**.
+
+**B1 — Mirror by flush hook, not by editing write paths.** A SQLAlchemy `after_flush` listener on
+the app's sessionmaker turns every money-row change into a journal event, with a raw insert on the
+flush's own connection: it commits or rolls back with the row (verified: a rolled-back meal leaves
+no event). It sees inserted rows with their ids and shares, and changed columns with before/after
+values. So every writer — drafts, quick-pay, the void routes and tools, poker, seeds, and the tests
+that insert rows directly (review R1's 58 files) — is mirrored without being touched.
+
+**B2 — The hook is also the immutability guard.** Allowed post-insert changes, each its own event:
+`Meal.voided/voided_by/voided_at` → `meal_void`, `Meal.place_id` → `meal_place`,
+`Payment.voided*` → `payment_void`, `Payment.meal_id` → `payment_retarget`, `Game.voided*` →
+`game_void`. Any other change to a money row, or any delete, **raises** — today that is a
+convention; after B it is enforced.
+
+**B3 — Journals.** `ledger` (internal, journal mode, `searchable=[]`) owned by `ledger_core`, which
+declares it from `ledger_core.bind(engine)`; `games` owned by the poker pack, declared from its own
+`bind` (R9). Event shapes as D4. Ids are the tables' own autoincrement ids — dual-write needs no
+sequence (that comes in release C).
+
+**B4 — Reads come from the journal.** `ledger_core.view.LedgerView(session, room_id)` folds a
+room's events (uncapped `read_all`, doc order) into frozen records with the ORM attribute names
+(`Meal` + `.shares`, `Payment`, `Settlement`; poker `Game` + `.entries`). Every read in §1.4 and F4
+is ported to it; `build_debt_edges` / `apply_payments_fifo` / `_net_pairs` are untouched. Types
+round-trip exactly (date, naive datetimes as the tables return them, int keys — R6).
+
+**B5 — Parity, three times.** (a) The migration step imports existing rows into the journal and
+compares every projected record with its row, field by field, plus every read function over windows
+(R5); refuses on any difference. (b) A `ledger_parity` check (CLI + startup log line) compares
+journal and tables for every room. (c) A property test drives random sequences of meals, payments,
+voids, retargets and place links through the real write paths and asserts journal-read == table-read.
+
+**B6 — Rollback.** Tables stay current (B1), so rollback = deploy the previous SHA; nothing to
+restore or replay.
+
+Tasks: B-S1 hook + guard + journals; B-S2 view + port reads (lunch, then poker); B-S3 migration
+import + parity CLI; B-S4 dry run on the production clone (old code on tables vs new code on journal,
+every read function, every room, several windows — must be IDENTICAL); B-S5 docs.
