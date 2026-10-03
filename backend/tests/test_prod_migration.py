@@ -25,12 +25,14 @@ def prod_shaped(tmp_path):
     url = f"sqlite:///{tmp_path}/prod.db"
     engine = create_engine(url, future=True)
     Base.metadata.create_all(engine)
-    from ledger_core import bind as bind_ledger
-    bind_ledger(engine)
+    # The ledger's tables as `main` had them: no journal, no content plane.
+    from ledger_core.models import Base as LedgerBase
+    LedgerBase.metadata.create_all(engine)
     assert not [t for t in inspect(engine).get_table_names() if t.startswith("kn_")]
 
+    from ledger_core.journal import unmirrored
     db = Database(url)
-    with db.session() as s:
+    with unmirrored(), db.session() as s:
         room = Room(name="Lunch", invite_token="tok")
         s.add(room)
         s.flush()
@@ -49,11 +51,22 @@ def prod_shaped(tmp_path):
 
 def test_the_deploy_adds_the_content_plane_without_touching_what_was_there(prod_shaped):
     db, room_id, ids = prod_shaped
+    from ledger_core.money import build_debt_edges
+    from ledger_core.models import Meal
     with db.session() as s:
         before_messages = s.query(RoomMessage).count()
-        before_edges = sorted((e.debtor, e.creditor, e.amount) for e in ledger.meal_edges(s, room_id))
+        # what `main` computed, from its tables
+        before_edges = sorted((e.debtor, e.creditor, e.amount) for e in build_debt_edges([
+            {"meal_id": m.id, "payer_id": m.payer_member_id, "dish": m.dish, "occurred_on": m.occurred_on,
+             "shares": {sh.member_id: sh.share_amount for sh in m.shares}}
+            for m in s.query(Meal).filter_by(room_id=room_id, voided=False)]))
 
-    db.create_all()                                     # what the container does on start
+    db.create_all()                                     # what the container does on start…
+    from app import migrate_storage
+    assert "migrate_storage --apply" in migrate_storage.pending(db)     # …refusing to serve, until
+    status, report = migrate_storage.run(db, apply=True)                # the deploy's import step
+    assert status == 0 and report["ledger_step"]["ledger"] == {str(room_id): 1}, report
+    assert migrate_storage.pending(db) is None
     kernel = kernel_for(db)
 
     kn = {t for t in inspect(db.engine).get_table_names() if t.startswith("kn_")}

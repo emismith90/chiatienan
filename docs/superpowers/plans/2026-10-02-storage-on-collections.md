@@ -397,3 +397,89 @@ restore or replay.
 Tasks: B-S1 hook + guard + journals; B-S2 view + port reads (lunch, then poker); B-S3 migration
 import + parity CLI; B-S4 dry run on the production clone (old code on tables vs new code on journal,
 every read function, every room, several windows — must be IDENTICAL); B-S5 docs.
+
+### 8.1 Release B — dry run on the production clone (2026-10-03)
+
+Same clone as §7. First release A's migration **with A's code** (`feat/storage-on-collections` @
+89a626b, its own worktree): the state B deploys onto. Then two copies:
+
+1. **Old code (A)** on one copy, money from the tables.
+2. **New code (B)** on the other: `migrate_storage --apply` → storage-a `already applied`, ledger-b
+   `applied` (room 3: 181 events = 46 meals + 135 payments; room 1: 1), `problems: []`;
+   `--parity` → `identical`.
+
+Compared, for every room, over every window (all time, each month with a meal, each day with a meal —
+45 in all): `debt_breakdown`, `period_transfers`, `outstanding_pairs`, `statement_for` for every
+member, `period_timeline`, `period_balances`, `period_meal_details`, plus `last_settlement` and
+`places.stats`. **IDENTICAL** — room 3: 141 debt edges and 173 timeline events over all time, every
+window equal in content and order.
+
+### 8.2 Code review of release B (2026-10-03) — findings and dispositions
+
+| # | Finding | Disposition |
+|---|---------|-------------|
+| B1 | Roll back (previous commit writes tables only), roll forward: `--apply` said "already applied", `up -d` ran, and the new backend refused to boot — site down, no repair path (rooms with a journal were never re-imported). | **Fixed.** The ledger step runs on every deploy: empty journal → import; otherwise `reconcile` appends the tables' full state of every row that differs (a full-state event replaces the id's record in the fold), then exact parity or refuse (deploy fails, old container keeps serving). Test: `test_ledger_reconcile.py`. |
+| B2 | The journal stored the Python value at flush time; SQLite stores it coerced by affinity (`place_id="7"` → `7`). One such write → parity fails → next boot refused; the view handed back `"7"`. | **Fixed.** Every event value goes through its column's type (`_as_stored`), shares and entries included. |
+| B3 | A modifier event for a row the journal lacks crashed `fold` with `KeyError` — in `pending()` and every balance read. | **Fixed.** `fold` raises a `ValueError` naming it; parity and the migration report it as a problem and refuse. |
+| B4 | `pending()` said "not imported" for a journal that only disagreed. | **Fixed.** It now says to run `--apply`, which reconciles or names why it cannot. |
+| B5 | Declared `meal_id: integer`, but untargeted payments carry `null`. | **Fixed.** Not declared (the schema language has no nullable type). |
+| B6 | Each request folds the room's journal several times; `meal_exists` folds instead of a PK lookup. | **Accepted for now** (~200 events per room). Revisit with a per-session view cache in release C if it shows in latency. |
+| B7 | `doc_id = count+1` would collide under concurrent appends on Postgres. | **Accepted** (SQLite: the flush holds the write lock first — probed with 4 threads × 15 meals, 0 errors). Note for any Postgres move: use `kn_sequences`. |
+
+Re-verified on the production clone after the fixes: `--apply` imports 182 events (room 3: 181, room 1: 1), `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows is IDENTICAL to the old code's. Suite: 1425 passed, 1 skipped.
+
+**Release A in production (2026-10-03 00:20 UTC, deploy run 44):** backup, then `--apply` imported 101 places and 44 notes (room 3), with no problems; the app booted clean. Release B was rehearsed again on a snapshot taken right after that deploy, which is exactly the database B's deploy will meet: 182 events imported, `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows (A's code on the snapshot vs B's code on its migrated copy) is IDENTICAL.
+
+## 9. Release C — the journal alone (draft plan, 2026-10-03; **starts only after B has baked**)
+
+Gate: B in production for at least a week or two, with the startup parity clean on every boot and no
+`reconciled` deploy that was not a planned rollback. Re-review this section then; nothing is built yet.
+
+**Is C worth it?** B already gives everything users see: an append-only history, enforced
+immutability, reads from the journal, and a free rollback. C removes the duplicate copy (the tables)
+and makes the journal the only store. The cost: rollback stops being free (C5). **Shipping C is
+optional.** Leaving B as the end state (dual-write forever) is a legitimate choice. Decide at the gate.
+
+**C1 — Writes append events directly.** `record_meal`, `record_payment`, `repoint_meal_payments`,
+`void_meal`, `void_payment` and `record_settlement` (`ledger_core/ledger.py`), the draft commit paths
+(`ledger_core/drafts.py`) and poker's record/void build the event themselves (the same shapes the
+mirror writes today) and append it. Ids come from `DataStore.next_id("meal" | "payment" |
+"settlement" | "game", floor=max(table id))`. Validation that reads state (does the meal exist? is it
+already voided?) reads `LedgerView`. The `after_flush` mirror and its guard are removed: nothing
+mutable is left to guard.
+
+**C2 — Port the last ORM readers** (inventory as of B):
+- `ledger.py:165`, `ledger.py:188`, `ledger.py:224`
+- `app/main.py:619` (the void-payment route)
+- `app/drafts.py:236`, `app/drafts.py:251`
+- `app/places.py:444` (`backfill_links`; it becomes `meal_place` events)
+- `packs/poker_ledger/tools.py:110`
+
+Then the R2 test: no `select(Meal|Payment|Settlement|Game…)` and no `get(Meal…)` outside
+`ledger_core/legacy.py`.
+
+**C3 — Journal doc ids under concurrency.** Today `count+1` is safe because the ORM flush takes
+SQLite's write lock before the count (review B7). Without a flush in front, two requests can both
+read count N under WAL and collide. So every append takes its doc id from `next_id` (one atomic
+`INSERT … RETURNING`, which takes the write lock first). Alternatively, `BEGIN IMMEDIATE` around the
+append.
+
+**C4 — Retire the tables.** The migration step does a final reconcile, requires exact parity, then
+renames `meals`, `meal_shares`, `payments`, `settlements`, `games` and `game_entries` to `legacy_*`.
+Debug CSVs are served from the view.
+
+**C5 — Rollback is no longer free.** B's code writes the tables and refuses to boot when they
+disagree with the journal. After C, the tables are stale and renamed. So C ships `--undo-c`: rebuild
+the six tables from the journal (records → rows, ids kept), rename them back, and verify parity; then
+deploy B. The pre-deploy backup is the last resort. The rehearsal on the clone must include
+apply → writes → undo-c → B boots with parity clean.
+
+**C6 — Per-session view cache** (review B6): one `LedgerView` per (session, room), dropped on every
+append. This brings `meal_exists` back to O(1).
+
+Dry run, on top of B's (every read identical, old vs new): the same random write sequence is
+driven through B's code and C's code on two copies of the clone, and their journals and every read
+must match. Then rehearse undo-c.
+
+Tasks: C-S1 write paths → events + ids; C-S2 port readers + R2 test; C-S3 doc ids via sequence;
+C-S4 retire tables + `--undo-c`; C-S5 dry run + undo rehearsal on the production clone; C-S6 docs.

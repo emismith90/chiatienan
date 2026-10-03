@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ledger_core import clock
 from ledger_core import members as _members
 from ledger_core.models import Meal, MealShare, Payment, Settlement
+from ledger_core.view import LedgerView
 from ledger_core.money import (
     Transfer,
     apply_payments_fifo,
@@ -259,41 +260,26 @@ def period_balances(
     balance from the same edges the transfers and statements use means the three
     can no longer contradict each other.
     """
-    def _in_window(col):
-        conds = [Meal.room_id == room_id, Meal.voided.is_(False), col <= to_date]
-        if from_date is not None:
-            conds.append(col >= from_date)
-        return conds
-
+    view = LedgerView(session, room_id)
+    meals = view.meals(from_date=from_date, to_date=to_date)
     out: dict[int, dict[str, int]] = {}
 
     # paid: sum of meals where member is payer
-    paid_rows = session.execute(
-        select(Meal.payer_member_id, Meal.total_amount).where(*_in_window(Meal.occurred_on))
-    ).all()
-    for payer_id, total in paid_rows:
-        out.setdefault(payer_id, {"paid": 0, "consumed": 0, "balance": 0})
-        out[payer_id]["paid"] += total
+    for m in meals:
+        out.setdefault(m.payer_member_id, {"paid": 0, "consumed": 0, "balance": 0})
+        out[m.payer_member_id]["paid"] += m.total_amount
 
     # consumed: sum of shares on non-voided meals in the window
-    consumed_rows = session.execute(
-        select(MealShare.member_id, MealShare.share_amount)
-        .join(Meal, MealShare.meal_id == Meal.id)
-        .where(*_in_window(Meal.occurred_on))
-    ).all()
-    for member_id, amt in consumed_rows:
-        out.setdefault(member_id, {"paid": 0, "consumed": 0, "balance": 0})
-        out[member_id]["consumed"] += amt
+    for m in meals:
+        for sh in m.shares:
+            out.setdefault(sh.member_id, {"paid": 0, "consumed": 0, "balance": 0})
+            out[sh.member_id]["consumed"] += sh.share_amount
 
     # Anyone who only moved cash in this window still belongs in the list, even
     # though their debt position may be zero — dropping them would hide a
     # payment from the period view entirely.
-    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
-    if from_date is not None:
-        pay_conds.append(Payment.occurred_on >= from_date)
-    for from_id, to_id in session.execute(
-        select(Payment.from_member_id, Payment.to_member_id).where(*pay_conds)
-    ).all():
+    for from_id, to_id in ((p.from_member_id, p.to_member_id)
+                           for p in view.payments(from_date=from_date, to_date=to_date)):
         out.setdefault(from_id, {"paid": 0, "consumed": 0, "balance": 0})
         out.setdefault(to_id, {"paid": 0, "consumed": 0, "balance": 0})
 
@@ -322,34 +308,12 @@ def period_transfer_inputs(
     ``from_date=None`` means "from the beginning of the ledger". Same window
     semantics as :func:`period_balances`, so the two always agree.
     """
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    if from_date is not None:
-        meal_conds.append(Meal.occurred_on >= from_date)
-
-    meal_rows = session.execute(
-        select(Meal.id, Meal.payer_member_id).where(*meal_conds)
-    ).all()
-    by_id = {mid: {"payer_id": payer, "shares": {}} for mid, payer in meal_rows}
-
-    if by_id:
-        share_rows = session.execute(
-            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
-            .where(MealShare.meal_id.in_(by_id.keys()))
-        ).all()
-        for meal_id, member_id, amt in share_rows:
-            by_id[meal_id]["shares"][member_id] = amt
-
-    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
-    if from_date is not None:
-        pay_conds.append(Payment.occurred_on >= from_date)
-    payments = [
-        {"from": frm, "to": to, "amount": amt}
-        for frm, to, amt in session.execute(
-            select(Payment.from_member_id, Payment.to_member_id, Payment.amount).where(*pay_conds)
-        ).all()
-    ]
-
-    return list(by_id.values()), payments
+    view = LedgerView(session, room_id)
+    meals = [{"payer_id": m.payer_member_id, "shares": {sh.member_id: sh.share_amount for sh in m.shares}}
+             for m in view.meals(from_date=from_date, to_date=to_date)]
+    payments = [{"from": p.from_member_id, "to": p.to_member_id, "amount": p.amount}
+                for p in view.payments(from_date=from_date, to_date=to_date)]
+    return meals, payments
 
 
 #: Where the debt edges come from (design §4.2 "balance contributions"; plan Task
@@ -371,21 +335,10 @@ def set_edge_sources(sources: list[EdgeSource] | None) -> None:
 def meal_edges(session: Session, room_id: int) -> list["DebtEdge"]:
     """The meals' gross edges — one per (participant ≠ payer, non-voided meal), the
     whole ledger of ``room_id``, ``paid=0``. The lunch business's contribution."""
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False)]
-    meal_rows = session.execute(
-        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on).where(*meal_conds)
-    ).all()
-    by_id = {
-        mid: {"meal_id": mid, "payer_id": payer, "dish": dish, "occurred_on": occ, "shares": {}}
-        for mid, payer, dish, occ in meal_rows
-    }
-    if by_id:
-        for meal_id, member_id, amt in session.execute(
-            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
-            .where(MealShare.meal_id.in_(by_id.keys()))
-        ).all():
-            by_id[meal_id]["shares"][member_id] = amt
-    return build_debt_edges(list(by_id.values()))
+    return build_debt_edges([
+        {"meal_id": m.id, "payer_id": m.payer_member_id, "dish": m.dish, "occurred_on": m.occurred_on,
+         "shares": {sh.member_id: sh.share_amount for sh in m.shares}}
+        for m in LedgerView(session, room_id).meals()])
 
 
 def _all_edges(session: Session, room_id: int) -> list["DebtEdge"]:
@@ -414,11 +367,9 @@ def debt_breakdown(
     — the enabled packs' ``contributions``), the meals by default.
     """
     payments = [
-        {"from": f, "to": t, "amount": a, "meal_id": mid, "ref_kind": kind}
-        for f, t, a, mid, kind in session.execute(
-            select(Payment.from_member_id, Payment.to_member_id, Payment.amount, Payment.meal_id, Payment.ref_kind)
-            .where(Payment.room_id == room_id, Payment.voided.is_(False))
-        ).all()
+        {"from": p.from_member_id, "to": p.to_member_id, "amount": p.amount, "meal_id": p.meal_id,
+         "ref_kind": p.ref_kind}
+        for p in LedgerView(session, room_id).payments()
     ]
     edges = apply_payments_fifo(_all_edges(session, room_id), payments)
     return [e for e in edges
@@ -494,28 +445,11 @@ def set_timeline_sources(sources: list[TimelineSource] | None) -> None:
 
 def meal_timeline(session: Session, room_id: int, from_date: date | None, to_date: date) -> list[dict]:
     """The meals in the window as timeline events — the lunch business's source."""
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    if from_date is not None:
-        meal_conds.append(Meal.occurred_on >= from_date)
-    events: list[dict] = []
-    meal_rows = session.execute(
-        select(Meal.id, Meal.payer_member_id, Meal.dish, Meal.occurred_on,
-               Meal.total_amount, Meal.created_at).where(*meal_conds)
-    ).all()
-    meal_ids = [row[0] for row in meal_rows]
-    participants: dict[int, list[int]] = {mid: [] for mid in meal_ids}
-    if meal_ids:
-        for meal_id, member_id in session.execute(
-            select(MealShare.meal_id, MealShare.member_id)
-            .where(MealShare.meal_id.in_(meal_ids))
-        ).all():
-            participants[meal_id].append(member_id)
-    for mid, payer, dish, occ, total, created in meal_rows:
-        events.append({"kind": "meal", "meal_id": mid, "payer_id": payer, "dish": dish,
-                       "occurred_on": occ.isoformat(), "total": total,
-                       "participant_ids": participants.get(mid, []),
-                       "created_at": created.isoformat() if created else ""})
-    return events
+    return [{"kind": "meal", "meal_id": m.id, "payer_id": m.payer_member_id, "dish": m.dish,
+             "occurred_on": m.occurred_on.isoformat(), "total": m.total_amount,
+             "participant_ids": [sh.member_id for sh in m.shares],
+             "created_at": m.created_at.isoformat() if m.created_at else ""}
+            for m in LedgerView(session, room_id).meals(from_date=from_date, to_date=to_date)]
 
 
 def period_timeline(
@@ -523,18 +457,12 @@ def period_timeline(
 ) -> list[dict]:
     """Every registered source's events + payments in the window, as one list ordered
     by (occurred_on, created_at)."""
-    pay_conds = [Payment.room_id == room_id, Payment.voided.is_(False), Payment.occurred_on <= to_date]
-    if from_date is not None:
-        pay_conds.append(Payment.occurred_on >= from_date)
     sources = _timeline_sources if _timeline_sources is not None else [meal_timeline]
     events: list[dict] = [e for source in sources for e in source(session, room_id, from_date, to_date)]
-    for pid, f, t, amt, occ, created in session.execute(
-        select(Payment.id, Payment.from_member_id, Payment.to_member_id, Payment.amount,
-               Payment.occurred_on, Payment.created_at).where(*pay_conds)
-    ).all():
-        events.append({"kind": "payment", "payment_id": pid, "from_id": f, "to_id": t,
-                       "amount": amt, "occurred_on": occ.isoformat(),
-                       "created_at": created.isoformat() if created else ""})
+    for p in LedgerView(session, room_id).payments(from_date=from_date, to_date=to_date):
+        events.append({"kind": "payment", "payment_id": p.id, "from_id": p.from_member_id,
+                       "to_id": p.to_member_id, "amount": p.amount, "occurred_on": p.occurred_on.isoformat(),
+                       "created_at": p.created_at.isoformat() if p.created_at else ""})
     events.sort(key=lambda e: (e["occurred_on"], e["created_at"]))
     return events
 
@@ -549,36 +477,15 @@ def period_meal_details(
     transfer can be attributed to the meals a debtor took part in. Same window and
     void semantics as :func:`period_transfer_inputs`, so the two agree.
     """
-    meal_conds = [Meal.room_id == room_id, Meal.voided.is_(False), Meal.occurred_on <= to_date]
-    if from_date is not None:
-        meal_conds.append(Meal.occurred_on >= from_date)
-
-    meal_rows = session.execute(
-        select(Meal.id, Meal.payer_member_id, Meal.occurred_on, Meal.dish).where(*meal_conds)
-    ).all()
-    by_id = {
-        mid: {"payer_id": payer, "occurred_on": occurred, "dish": dish, "shares": {}}
-        for mid, payer, occurred, dish in meal_rows
-    }
-
-    if by_id:
-        share_rows = session.execute(
-            select(MealShare.meal_id, MealShare.member_id, MealShare.share_amount)
-            .where(MealShare.meal_id.in_(by_id.keys()))
-        ).all()
-        for meal_id, member_id, amt in share_rows:
-            by_id[meal_id]["shares"][member_id] = amt
-
-    return list(by_id.values())
+    return [{"payer_id": m.payer_member_id, "occurred_on": m.occurred_on, "dish": m.dish,
+             "shares": {sh.member_id: sh.share_amount for sh in m.shares}}
+            for m in LedgerView(session, room_id).meals(from_date=from_date, to_date=to_date)]
 
 
-def last_settlement(session: Session, room_id: int) -> Settlement | None:
-    return session.scalars(
-        select(Settlement)
-        .where(Settlement.room_id == room_id)
-        .order_by(Settlement.period_to.desc(), Settlement.id.desc())
-        .limit(1)
-    ).first()
+def last_settlement(session: Session, room_id: int) -> "SettlementRecord | None":
+    """The latest settlement by ``period_to``, then id — from the journal."""
+    found = sorted(LedgerView(session, room_id).settlements(), key=lambda st: (st.period_to, st.id))
+    return found[-1] if found else None
 
 
 def record_settlement(
