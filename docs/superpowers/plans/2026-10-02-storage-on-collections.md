@@ -428,6 +428,8 @@ window equal in content and order.
 
 Re-verified on the production clone after the fixes: `--apply` imports 182 events (room 3: 181, room 1: 1), `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows is IDENTICAL to the old code's. Suite: 1425 passed, 1 skipped.
 
+**Release A in production (2026-10-03 00:20 UTC, deploy run 44):** backup, then `--apply` imported 101 places and 44 notes (room 3), with no problems; the app booted clean. Release B was rehearsed again on a snapshot taken right after that deploy, which is exactly the database B's deploy will meet: 182 events imported, `pending` → `None`, a second `--apply` → `already applied`, and every money read over 49 windows (A's code on the snapshot vs B's code on its migrated copy) is IDENTICAL.
+
 ## 9. Release C — the journal alone (draft plan, 2026-10-03; **starts only after B has baked**)
 
 Gate: B in production for at least a week or two, with the startup parity clean on every boot and no
