@@ -4,7 +4,8 @@ import pytest
 
 from app import places
 from app.db import Database
-from app.models import Meal, Member, Place, Room
+from app.models import Meal, Member, Room
+from tests.places_util import add_place
 
 
 @pytest.fixture()
@@ -15,10 +16,10 @@ def db():
         s.add(Room(id=1, name="t", invite_token="t"))
         s.flush()
         s.add(Member(id=1, room_id=1, display_name="An", nickname="an"))
-        s.add(Place(room_id=1, slug="bun-cha-rua-xe", name="Bún chả rửa xe Nam Đồng",
-                    aliases=["bún chả rửa xe", "rửa xe"]))
-        s.add(Place(room_id=1, slug="banh-cuon-ba-hoanh", name="Bánh cuốn Bà Hoành"))
-        s.add(Place(room_id=1, slug="banh-cuon-ba-xuan", name="Bánh cuốn Bà Xuân"))
+        add_place(s, room_id=1, slug="bun-cha-rua-xe", name="Bún chả rửa xe Nam Đồng",
+                    aliases=["bún chả rửa xe", "rửa xe"])
+        add_place(s, room_id=1, slug="banh-cuon-ba-hoanh", name="Bánh cuốn Bà Hoành")
+        add_place(s, room_id=1, slug="banh-cuon-ba-xuan", name="Bánh cuốn Bà Xuân")
     return d
 
 

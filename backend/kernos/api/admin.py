@@ -412,7 +412,10 @@ def admin_router(get_kernel: Callable[[], Any], *, dependencies=()) -> APIRouter
         _wrap(lambda: _data(get_kernel()).delete_collection(business_id, slug, actor=_actor(x_actor)))
 
     def _space_collection(k, space_id: str, slug: str) -> dict:
-        return _data(k).get_collection(k.business_for(space_id), slug)
+        col = _data(k).get_collection(k.business_for(space_id), slug)
+        if col.get("internal"):
+            raise HTTPException(422, f"collection {slug!r} is internal")
+        return col
 
     @r.get("/spaces/{space_id}/collections/{slug}/documents")
     def documents(space_id: str, slug: str, limit: int = Query(default=100, le=500), after: str | None = None):

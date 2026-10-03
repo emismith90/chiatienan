@@ -15,14 +15,14 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Place
-from app.places import slugify
+from app import places as places_mod
+from app.places import Place, slugify
 from app.roster import _fold, _strip_honorific, _tokens
 
 logger = logging.getLogger("chiatienan")
@@ -75,7 +75,7 @@ def _by_slug(session: Session, room_id: int) -> dict[str, Place]:
     Current slugs win over former ones, so a slug that is live somewhere can never
     be captured by a row that used to hold it.
     """
-    rows = list(session.scalars(select(Place).where(Place.room_id == room_id)))
+    rows = places_mod.list_places(session, room_id, include_inactive=True)
     index: dict[str, Place] = {}
     for p in rows:
         for old in (p.former_slugs or []):
@@ -97,19 +97,15 @@ def load_file(session: Session, room_id: int, path) -> dict:
         if cu := row.get("closed_until"):
             values["closed_until"] = date.fromisoformat(cu)
         if existing is None:
-            new = Place(room_id=room_id, slug=slug, **values)
-            session.add(new)
-            index[slug] = new
+            index[slug] = places_mod.insert_place(session, room_id, slug=slug, **values)
             created += 1
         else:
             # Curated fields refresh; the slug does not (`_FIELDS` excludes it).
             # A row matched by a *former* slug keeps the slug the rename gave it —
             # the DB is the authority on identity, the file is the authority on
             # everything else.
-            for k, v in values.items():
-                setattr(existing, k, v)
+            index[existing.slug] = places_mod.save_place(session, replace(existing, **values))
             updated += 1
-    session.flush()
     return {"created": created, "updated": updated}
 
 
@@ -145,7 +141,7 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def install_observations(room_id: int, path, session: Session | None = None) -> dict:
+def install_observations(room_id: int, path, session: Session) -> dict:
     """Copy a seed observations file into the room, skipping lines already there.
 
     Idempotent and non-destructive: notes the room has accumulated since the last
@@ -153,7 +149,7 @@ def install_observations(room_id: int, path, session: Session | None = None) -> 
     """
     from app import observations
 
-    existing = {(o.subject, o.text) for o in observations.load(room_id)}
+    existing = {(o.subject, o.text) for o in observations.load(session, room_id)}
     added = skipped = 0
     for i, raw in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
         o = observations._parse_line(raw, i)
@@ -163,7 +159,7 @@ def install_observations(room_id: int, path, session: Session | None = None) -> 
         if (o.subject, o.text) in existing:
             skipped += 1
             continue
-        observations.append(room_id, o)
+        observations.append(session, room_id, o)
         existing.add((o.subject, o.text))
         added += 1
     return {"added": added, "skipped": skipped}
@@ -177,8 +173,6 @@ def _canonical_subject(session, room_id: int, o):
     re-seed re-adds it, one orphan note per run. Members and unknown places are
     passed through untouched.
     """
-    from dataclasses import replace
-
     prefix, _, rest = o.subject.partition(":")
     if prefix != "place" or session is None:
         return o

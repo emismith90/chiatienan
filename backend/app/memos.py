@@ -58,7 +58,8 @@ def _load(session: Session, memo_id: int, room_id: int) -> RoomMessage:
 
 
 def commit(session: Session, memo_id: int, room_id: int) -> RoomMessage:
-    """Apply a pending memo to the observations file. Idempotent."""
+    """Apply a pending memo to the room's notes. Idempotent. The note and the card's
+    status flip commit together (one session)."""
     m = _load(session, memo_id, room_id)
     att = dict(m.attachments or {})
     if att.get("status") == "committed":
@@ -67,9 +68,9 @@ def commit(session: Session, memo_id: int, room_id: int) -> RoomMessage:
     obs = observations.Observation(
         when=when, subject=att["subject"], gate=att.get("gate"), text=att["text"])
     if att["action"] == "add":
-        observations.append(room_id, obs)
+        observations.append(session, room_id, obs)
     else:
-        observations.remove(room_id, subject=att["subject"], text=att["text"])
+        observations.remove(session, room_id, subject=att["subject"], text=att["text"])
     att["status"] = "committed"
     m.attachments = att          # reassign so SQLAlchemy marks the JSON dirty
     session.flush()

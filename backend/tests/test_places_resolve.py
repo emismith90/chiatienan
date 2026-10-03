@@ -17,7 +17,8 @@ def test_slugify_maps_d_stroke_and_drops_punctuation():
 import pytest
 from app import places
 from app.db import Database
-from app.models import Place, Room
+from app.models import Room
+from tests.places_util import add_place
 
 
 @pytest.fixture()
@@ -35,7 +36,7 @@ def _seed(db, rows):
         s.add(Room(id=1, name="test", invite_token="t"))
         s.flush()
         for name, aliases in rows:
-            s.add(Place(room_id=1, slug=places.slugify(name), name=name, aliases=aliases))
+            add_place(s, room_id=1, slug=places.slugify(name), name=name, aliases=aliases)
     return 1
 
 

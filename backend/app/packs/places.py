@@ -11,7 +11,6 @@ import random
 from sqlalchemy import select
 
 from app import roster
-from app.models import Place
 from kernos.packs import BasePack, PackTool, err as _err
 from packs.lunch_ledger.tools import _parse_iso
 
@@ -187,7 +186,7 @@ def build(ctx) -> dict[str, PackTool]:
 
             now = now_ict()
             notes = obs_mod.for_subjects(
-                ctx.space_id, [f"place:{p.slug}" for p, _ in pool], today=today)
+                s, ctx.space_id, [f"place:{p.slug}" for p, _ in pool], today=today)
             by_subject: dict[str, list] = {}
             for o in notes:
                 by_subject.setdefault(o.subject, []).append(o)
@@ -301,7 +300,7 @@ def build(ctx) -> dict[str, PackTool]:
             if found is None:
                 return _err(f"Not sure which place or person «{raw}» is.")
             subject, label = found
-            existing = [o for o in obs_mod.load(ctx.space_id) if o.subject == subject]
+            existing = [o for o in obs_mod.load(s, ctx.space_id) if o.subject == subject]
             if not any(o.text == text for o in existing):
                 return _err(
                     f"No note for «{label}» matches that text exactly. "
@@ -326,9 +325,8 @@ def build(ctx) -> dict[str, PackTool]:
             return _err("Missing place name.")
         slug = places_mod.slugify(name)
         with db.session() as s:
-            existing = s.scalars(
-                select(Place).where(Place.room_id == ctx.space_id, Place.slug == slug)
-            ).first()
+            existing = next((p for p in places_mod.list_places(s, ctx.space_id, include_inactive=True)
+                             if p.slug == slug), None)
             if existing is not None:
                 return {"ok": True, "place_id": existing.id, "slug": existing.slug,
                         "name": existing.name, "already_existed": True}

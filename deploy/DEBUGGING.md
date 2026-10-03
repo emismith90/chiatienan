@@ -90,6 +90,44 @@ PY
 
 (`.backup` is WAL-safe — it captures committed + WAL state consistently. See also `deploy/backup.sh`.)
 
+**Every deploy now backs up by itself** (plan 2026-10-02): with the new images pulled,
+the deploy stops the backend, runs `python -m app.backup --label pre-<sha>` and then the
+storage migration, and only then starts the new backend. A backup is a directory
+`/data/backups/<UTC time>-pre-<sha>/` holding `chiatienan.db` (one self-contained file,
+no `-wal`) and a copy of `rooms/` (each room's `memory.md`, and `observations.md` before
+the notes import). The newest 10 are kept.
+
+### Rolling back the storage migration (release A: places + notes)
+
+The migration copies; it never changes the legacy `places` table, and it renames each
+imported `observations.md` to `observations.md.imported-<date>` instead of deleting it.
+If the migration *refuses* (its self-check found a difference), the deploy has already
+restarted the previous backend on untouched data — nothing to do but read the JSON report in
+the job log.
+
+To undo an applied migration — **no database restore, nothing lost**:
+
+```bash
+cd /opt/chiatienan && docker compose stop backend \
+  && docker compose run --rm --no-deps backend python -m app.migrate_storage --undo
+```
+
+`--undo` writes every place in the store back into the legacy `places` table (edits and places
+created since included) and every room's notes back into `rooms/<id>/observations.md`, then
+deletes the imported documents and the marker. Then deploy the previous commit (Actions → Deploy
+→ Run workflow on that SHA): the old code reads the table and the files and sees everything. A
+later roll-forward imports cleanly again. Money is never involved — release A does not touch the
+ledger.
+
+Last resort only — restoring a whole backup also discards every meal and payment recorded after
+it: stop the backend, copy `data/backups/<time>-pre-<sha>/chiatienan.db` over
+`data/chiatienan.db` (and delete any `-wal`/`-shm` beside it), copy the backup's `rooms/` back,
+deploy the previous commit.
+
+Reading places and notes from now on: `/internal/debug/tables/places.csv` is the **frozen
+legacy table**. The live data is in `kn_documents` (collection `places` / `notes` of the
+`_system` business): `/internal/debug/tables/kn_documents.csv`.
+
 ## 4. Schema changes / deploy
 
 **Additive columns apply themselves on startup.** `app.db.create_all()` runs
@@ -127,7 +165,9 @@ drops, renames, retypes, or reorders):
 - **Only** wipe + recreate (`rm data/chiatienan.db*` + restart) for a throwaway
   DB with no data worth keeping — never on the live group.
 
-Standard redeploy (from `README.md`): `git pull && docker compose up -d --build`.
+Standard redeploy: CI (merge to `main`). The manual fallback in `README.md` builds, then stops the
+backend, backs up, runs `python -m app.migrate_storage --apply` and starts it — a plain
+`up -d --build` now refuses to boot until the storage import has run.
 Backend/Caddy-only changes are fine as-is; **frontend changes** need the
 build-OOM handling in `README.md` §5 (swap or build-elsewhere).
 

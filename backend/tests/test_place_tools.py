@@ -1,8 +1,9 @@
 import pytest
 
 from app.db import Database
-from app.models import Place, Room
+from app.models import Room
 from app.tools import ToolContext, build_tools
+from tests.places_util import add_place
 
 
 @pytest.fixture()
@@ -12,7 +13,7 @@ def tools():
     with db.session() as s:
         s.add(Room(id=1, name="t", invite_token="t"))
         s.flush()
-        s.add(Place(room_id=1, slug="pho-vui", name="Phở Vui", aliases=["vui"]))
+        add_place(s, room_id=1, slug="pho-vui", name="Phở Vui", aliases=["vui"])
     return build_tools(ToolContext(db=db, room_id=1))
 
 

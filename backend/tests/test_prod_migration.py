@@ -57,9 +57,9 @@ def test_the_deploy_adds_the_content_plane_without_touching_what_was_there(prod_
     kernel = kernel_for(db)
 
     kn = {t for t in inspect(db.engine).get_table_names() if t.startswith("kn_")}
-    # 17 model tables, plus the documents' FTS5 index and the four shadow tables SQLite keeps for it
-    assert len(kn) == 22 and "kn_agents" in kn and "kn_change_proposals" in kn
-    assert {"kn_document_vectors", "kn_documents_fts", "kn_documents_fts_data"} <= kn
+    # 18 model tables, plus the documents' FTS5 index and the four shadow tables SQLite keeps for it
+    assert len(kn) == 23 and "kn_agents" in kn and "kn_change_proposals" in kn
+    assert {"kn_document_vectors", "kn_documents_fts", "kn_documents_fts_data", "kn_sequences"} <= kn
     # the room's own history and money are exactly as they were
     with db.session() as s:
         assert s.query(RoomMessage).count() == before_messages

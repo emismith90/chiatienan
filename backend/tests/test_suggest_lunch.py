@@ -4,8 +4,9 @@ import pytest
 
 from app import places
 from app.db import Database
-from app.models import Meal, MealShare, Member, Place, Room
+from app.models import Meal, MealShare, Member, Room
 from app.tools import ToolContext, build_tools
+from tests.places_util import add_place
 
 TODAY = date(2026, 8, 14)
 
@@ -20,7 +21,7 @@ def _mk(db_rows):
             s.add(Member(id=i, room_id=1, display_name=f"M{i}", nickname=f"m{i}"))
         s.flush()
         for row in db_rows:
-            s.add(Place(room_id=1, **row))
+            add_place(s, room_id=1, **row)
     return db
 
 
@@ -187,15 +188,15 @@ def obs_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _obs(room_id, text):
-    from app.memory import room_memory_dir
-    (room_memory_dir(room_id) / "observations.md").write_text(text, encoding="utf-8")
+def _obs(db, room_id, text):
+    from tests.notes_util import seed_notes
+    seed_notes(db, room_id, text)
 
 
 def test_a_too_late_gate_sinks_the_place_with_its_reason(obs_dir, monkeypatch):
     from datetime import datetime
     db = _mk([dict(id=10, slug="be-bu", name="Bé Bự"), dict(id=11, slug="other", name="Khác")])
-    _obs(1, "- always | place:be-bu | busy@12:00 | Đông lúc 12h, phải đi sớm.\n")
+    _obs(db, 1, "- always | place:be-bu | busy@12:00 | Đông lúc 12h, phải đi sớm.\n")
     monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 12, 30))
     res = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})
     by_name = {c["name"]: c for c in res["candidates"]}
@@ -207,7 +208,7 @@ def test_a_too_late_gate_sinks_the_place_with_its_reason(obs_dir, monkeypatch):
 def test_act_now_reports_the_minutes_left(obs_dir, monkeypatch):
     from datetime import datetime
     db = _mk([dict(id=10, slug="thinh-lo", name="Thịnh Lơ", phone="0906279398")])
-    _obs(1, "- always | place:thinh-lo | order-by@11:30 | Phải đặt trước — gọi điện thoại.\n")
+    _obs(db, 1, "- always | place:thinh-lo | order-by@11:30 | Phải đặt trước — gọi điện thoại.\n")
     monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 11, 15))
     c = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})["candidates"][0]
     assert c["status"] == "act_now" and c["minutes_left"] == 15
@@ -216,7 +217,7 @@ def test_act_now_reports_the_minutes_left(obs_dir, monkeypatch):
 
 def test_notes_carry_prose_for_the_candidates_only(obs_dir):
     db = _mk([dict(id=10, slug="a", name="A"), dict(id=11, slug="b", name="B")])
-    _obs(1, "- always | place:a | - | Quán mùi.\n- always | place:b | - | Nhạc retro.\n")
+    _obs(db, 1, "- always | place:a | - | Quán mùi.\n- always | place:b | - | Nhạc retro.\n")
     res = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})
     by_name = {c["name"]: c for c in res["candidates"]}
     assert by_name["A"]["notes"] == ["Quán mùi."]
@@ -233,7 +234,7 @@ def test_gate_note_quotes_the_rule_not_just_any_note(obs_dir, monkeypatch):
     """An explanation must cite the reason for the gate, not an unrelated note."""
     from datetime import datetime
     db = _mk([dict(id=10, slug="tuan-hung", name="Tuấn Hưng")])
-    _obs(1, "- always | place:tuan-hung | -           | Ăn được, mới sửa quán nên sạch sẽ.\n"
+    _obs(db, 1, "- always | place:tuan-hung | -           | Ăn được, mới sửa quán nên sạch sẽ.\n"
             "- always | place:tuan-hung | busy@12:00  | Thường đông lúc 12h.\n")
     monkeypatch.setattr("app.clock.now_ict", lambda: datetime(2026, 8, 14, 12, 40))
     c = _tools(db)["suggest_lunch"].execute({"today": TODAY.isoformat()})["candidates"][0]

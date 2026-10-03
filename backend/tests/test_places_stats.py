@@ -4,7 +4,8 @@ import pytest
 
 from app import places
 from app.db import Database
-from app.models import Meal, MealShare, Member, Place, Room
+from app.models import Meal, MealShare, Member, Room
+from tests.places_util import add_place, set_place
 
 TODAY = date(2026, 8, 14)          # a Friday
 
@@ -19,10 +20,10 @@ def db():
         for i in (1, 2, 3):
             s.add(Member(id=i, room_id=1, display_name=f"M{i}", nickname=f"m{i}"))
         s.flush()
-        s.add(Place(id=10, room_id=1, slug="cheap", name="Rẻ", price_hint=None))
-        s.add(Place(id=11, room_id=1, slug="mid", name="Vừa"))
-        s.add(Place(id=12, room_id=1, slug="pricey", name="Đắt"))
-        s.add(Place(id=13, room_id=1, slug="untried", name="Chưa thử", tags=["chưa-thử"]))
+        add_place(s, id=10, room_id=1, slug="cheap", name="Rẻ", price_hint=None)
+        add_place(s, id=11, room_id=1, slug="mid", name="Vừa")
+        add_place(s, id=12, room_id=1, slug="pricey", name="Đắt")
+        add_place(s, id=13, room_id=1, slug="untried", name="Chưa thử", tags=["chưa-thử"])
     return d
 
 
@@ -69,9 +70,9 @@ def test_voided_meals_are_excluded(db):
 
 def test_price_hint_supplies_a_band_with_no_history(db):
     with db.session() as s:
-        s.get(Place, 10).price_hint = 30000
-        s.get(Place, 11).price_hint = 70000
-        s.get(Place, 12).price_hint = 200000
+        set_place(s, 10, price_hint=30000)
+        set_place(s, 11, price_hint=70000)
+        set_place(s, 12, price_hint=200000)
         s.flush()
         st = places.stats(s, 1, today=TODAY)
     assert st[10]["band"] == "rẻ"
@@ -80,7 +81,7 @@ def test_price_hint_supplies_a_band_with_no_history(db):
 
 def test_ledger_overrides_the_price_hint_once_a_meal_links(db):
     with db.session() as s:
-        s.get(Place, 10).price_hint = 500000        # a wrong/stale hint
+        set_place(s, 10, price_hint=500000)        # a wrong/stale hint
         s.flush()
         _meal(s, 10, date(2026, 8, 10), 30000, [1, 2, 3])   # real: 10k/head
         st = places.stats(s, 1, today=TODAY)

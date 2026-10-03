@@ -149,6 +149,10 @@ class Database:
         _sync_additive_columns(self.engine)
         bind_ledger(self.engine)
         bind_content(self.engine)
+        # The app's internal stores (notes, places) on the data plane. Here, not in the
+        # Kernel: every database needs them, including ones no Kernel is ever built for.
+        from app import store
+        store.ensure(self)
         # A pack with tables of its own binds them here too (plan Task 6.3). Lazy: the
         # packs import the models, never this module.
         from app.packs import host_packs

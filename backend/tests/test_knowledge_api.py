@@ -1,7 +1,7 @@
 """The knowledge panel's HTTP surface: read the three stores, edit two of them.
 
-Every write route takes ``chat._agent_lock`` and — for the two file-backed stores —
-an ``etag``, because the turn loop writes the same files. The tests here pin the
+Every write route takes ``chat._agent_lock`` and — for the notes and ``memory.md`` —
+an ``etag``, because the turn loop writes them too. The tests here pin the
 refusals as hard as the successes: a stale write that silently wins is the failure
 mode this design exists to prevent.
 """
@@ -44,13 +44,32 @@ def _seed_meal(room_id, payer, participants, *, total, on, place_id=None):
 
 
 def _write_obs(room_id, text):
-    from app.memory import room_memory_dir
-    (room_memory_dir(room_id) / "observations.md").write_text(text, encoding="utf-8")
+    """Replace the room's notes with the facts in ``observations.md``-format text."""
+    from app.db import get_db
+    with get_db().session() as s:
+        for o in obs.load(s, room_id):
+            obs.delete_line(s, room_id, o.line_id)
+        for o in obs.parse_text(text)[0]:
+            obs.append(s, room_id, o)
 
 
 def _read_obs(room_id):
-    from app.memory import room_memory_dir
-    return (room_memory_dir(room_id) / "observations.md").read_text(encoding="utf-8")
+    """The room's notes, rendered one per line as the old file held them."""
+    from app.db import get_db
+    with get_db().session() as s:
+        return "".join(o.to_line() + "\n" for o in obs.load(s, room_id))
+
+
+def _etag(room_id):
+    from app.db import get_db
+    with get_db().session() as s:
+        return obs.etag(s, room_id)
+
+
+def _load(room_id):
+    from app.db import get_db
+    with get_db().session() as s:
+        return obs.load(s, room_id)
 
 
 # ============================================================== GET /knowledge
@@ -260,7 +279,7 @@ def test_create_observation_appends_a_well_formed_line(api_client_room):
     assert r.status_code == 200, r.text
     assert _read_obs(room_id).splitlines()[-1] == (
         "- always | place:quan-be-bu | order-by@11:30 | Phải gọi trước.")
-    assert r.json()["etag"] == obs.file_etag(room_id)
+    assert r.json()["etag"] == _etag(room_id)
 
 
 def test_a_dated_observation_defaults_to_today(api_client_room):
@@ -269,7 +288,7 @@ def test_a_dated_observation_defaults_to_today(api_client_room):
     client.post(f"/api/rooms/{room_id}/observations", headers=headers, json={
         "subject": "place:quan-be-bu", "text": "Hôm nay hết gà."})
     from app.clock import today_ict
-    assert obs.load(room_id)[0].when == today_ict()
+    assert _load(room_id)[0].when == today_ict()
 
 
 def test_newlines_in_a_note_cannot_split_the_line(api_client_room):
@@ -277,8 +296,8 @@ def test_newlines_in_a_note_cannot_split_the_line(api_client_room):
     _seed_place(room_id, "Quán Bé Bự")
     client.post(f"/api/rooms/{room_id}/observations", headers=headers, json={
         "subject": "place:quan-be-bu", "text": "Dòng một\nDòng hai"})
-    assert len(obs.load(room_id)) == 1
-    assert obs.load(room_id)[0].text == "Dòng một Dòng hai"
+    assert len(_load(room_id)) == 1
+    assert _load(room_id)[0].text == "Dòng một Dòng hai"
 
 
 def test_an_identical_note_is_a_no_op_not_a_second_line(api_client_room):
@@ -292,7 +311,7 @@ def test_an_identical_note_is_a_no_op_not_a_second_line(api_client_room):
     assert first.json()["already_existed"] is False
     assert second.json()["already_existed"] is True
     assert first.json()["id"] == second.json()["id"]
-    assert len(obs.load(room_id)) == 1
+    assert len(_load(room_id)) == 1
     # And the room is not told twice about one fact.
     msgs = client.get(f"/api/rooms/{room_id}/messages", headers=headers).json()["messages"]
     assert len([m for m in msgs if m["body"].startswith("📓")]) == 1
@@ -304,11 +323,11 @@ def test_editing_a_note_into_a_copy_of_another_is_refused(api_client_room):
     _write_obs(room_id,
                "- always | place:quan-be-bu | - | Ghi nhớ A.\n"
                "- always | place:quan-be-bu | - | Ghi nhớ B.\n")
-    target = next(o for o in obs.load(room_id) if o.text == "Ghi nhớ B.")
+    target = next(o for o in _load(room_id) if o.text == "Ghi nhớ B.")
     r = client.patch(f"/api/rooms/{room_id}/observations/{target.line_id}", headers=headers,
-                     json={"etag": obs.file_etag(room_id), "text": "Ghi nhớ A."})
+                     json={"etag": _etag(room_id), "text": "Ghi nhớ A."})
     assert r.status_code == 422
-    assert {o.text for o in obs.load(room_id)} == {"Ghi nhớ A.", "Ghi nhớ B."}
+    assert {o.text for o in _load(room_id)} == {"Ghi nhớ A.", "Ghi nhớ B."}
 
 
 def test_an_unresolvable_subject_is_refused(api_client_room):
@@ -316,7 +335,7 @@ def test_an_unresolvable_subject_is_refused(api_client_room):
     r = client.post(f"/api/rooms/{room_id}/observations", headers=headers, json={
         "subject": "place:khong-ton-tai", "text": "x"})
     assert r.status_code == 422
-    assert obs.load(room_id) == []
+    assert _load(room_id) == []
 
 
 def test_a_bad_gate_is_refused_not_silently_dropped(api_client_room):
@@ -326,7 +345,7 @@ def test_a_bad_gate_is_refused_not_silently_dropped(api_client_room):
         "subject": "place:quan-be-bu", "text": "x", "gate_kind": "order-by",
         "gate_at": "25:00"})
     assert r.status_code == 422
-    assert obs.load(room_id) == []
+    assert _load(room_id) == []
 
 
 def test_an_empty_note_is_refused(api_client_room):
@@ -340,24 +359,25 @@ def test_an_empty_note_is_refused(api_client_room):
 def test_patch_observation_edits_one_line(api_client_room):
     client, headers, room_id, _m = api_client_room
     _seed_place(room_id, "Quán Bé Bự")
-    _write_obs(room_id, "# tay\n- always | place:quan-be-bu | busy@12:00 | Đông lúc 12h.\n")
-    line_id = obs.load(room_id)[0].line_id
+    _write_obs(room_id, "- always | place:quan-be-bu | busy@12:00 | Đông lúc 12h.\n"
+                        "- always | place:quan-be-bu | - | Cái sau.\n")
+    line_id = _load(room_id)[0].line_id
     r = client.patch(f"/api/rooms/{room_id}/observations/{line_id}", headers=headers, json={
-        "etag": obs.file_etag(room_id), "text": "Đông từ trưa.",
+        "etag": _etag(room_id), "text": "Đông từ trưa.",
         "gate_kind": "order-by", "gate_at": "11:30"})
     assert r.status_code == 200, r.text
-    lines = _read_obs(room_id).splitlines()
-    assert lines[0] == "# tay"          # the comment survives the edit
-    assert lines[1] == "- always | place:quan-be-bu | order-by@11:30 | Đông từ trưa."
+    assert _read_obs(room_id).splitlines() == [     # edited in place: it keeps its position
+        "- always | place:quan-be-bu | order-by@11:30 | Đông từ trưa.",
+        "- always | place:quan-be-bu | - | Cái sau."]
 
 
 def test_patch_observation_can_clear_a_gate_and_flip_to_a_dated_line(api_client_room):
     client, headers, room_id, _m = api_client_room
     _seed_place(room_id, "Quán Bé Bự")
     _write_obs(room_id, "- always | place:quan-be-bu | busy@12:00 | Đông lúc 12h.\n")
-    line_id = obs.load(room_id)[0].line_id
+    line_id = _load(room_id)[0].line_id
     r = client.patch(f"/api/rooms/{room_id}/observations/{line_id}", headers=headers, json={
-        "etag": obs.file_etag(room_id), "standing": False, "when": "2026-08-10",
+        "etag": _etag(room_id), "standing": False, "when": "2026-08-10",
         "gate_kind": None})
     assert r.status_code == 200, r.text
     assert _read_obs(room_id).strip() == (
@@ -368,7 +388,7 @@ def test_a_stale_etag_refuses_the_write_and_changes_nothing(api_client_room):
     client, headers, room_id, _m = api_client_room
     _seed_place(room_id, "Quán Bé Bự")
     _write_obs(room_id, "- always | place:quan-be-bu | - | Ghi nhớ gốc.\n")
-    line_id = obs.load(room_id)[0].line_id
+    line_id = _load(room_id)[0].line_id
     before = _read_obs(room_id)
     r = client.patch(f"/api/rooms/{room_id}/observations/{line_id}", headers=headers,
                      json={"etag": "stale-etag-000", "text": "Bị ghi đè"})
@@ -385,16 +405,14 @@ def test_delete_observation_removes_one_line_and_keeps_the_rest(api_client_room)
     client, headers, room_id, _m = api_client_room
     _seed_place(room_id, "Quán Bé Bự")
     _write_obs(room_id,
-               "# tay\n"
-               "- rác không đọc được\n"
                "- always | place:quan-be-bu | - | Xoá cái này.\n"
                "- always | place:quan-be-bu | - | Giữ cái này.\n")
-    target = next(o for o in obs.load(room_id) if o.text == "Xoá cái này.")
+    target = next(o for o in _load(room_id) if o.text == "Xoá cái này.")
     r = client.delete(f"/api/rooms/{room_id}/observations/{target.line_id}",
-                      headers=headers, params={"etag": obs.file_etag(room_id)})
+                      headers=headers, params={"etag": _etag(room_id)})
     assert r.status_code == 200
+    assert r.json()["etag"] == _etag(room_id)          # the etag handed back is current
     after = _read_obs(room_id)
-    assert "# tay" in after and "- rác không đọc được" in after
     assert "Xoá cái này." not in after and "Giữ cái này." in after
 
 
@@ -402,7 +420,7 @@ def test_patching_a_vanished_line_is_a_404(api_client_room):
     client, headers, room_id, _m = api_client_room
     _write_obs(room_id, "")
     r = client.patch(f"/api/rooms/{room_id}/observations/deadbeef1234", headers=headers,
-                     json={"etag": obs.file_etag(room_id), "text": "x"})
+                     json={"etag": _etag(room_id), "text": "x"})
     assert r.status_code == 404
 
 
@@ -574,19 +592,19 @@ def test_renaming_a_slug_keeps_every_note_attached_to_the_place(api_client_room)
     assert not [o for o in after["observations"] if o["subject_kind"] == "unknown"]
 
 
-def test_a_comment_and_a_malformed_line_survive_the_rename(api_client_room):
+def test_the_rename_keeps_every_note_in_its_place(api_client_room):
     client, headers, room_id, m = api_client_room
     p = _seed_place(room_id, "Quán Bé Bự")
-    _write_obs(room_id, "# đừng xoá\n"
+    _write_obs(room_id, "- always | member:giang | - | Trước.\n"
                         "- always | place:quan-be-bu | - | Ăn được.\n"
-                        "- rubbish that does not parse\n")
+                        "- always | member:giang | - | Sau.\n")
 
     _rename(client, headers, room_id, p["id"], "be-bu")
 
-    lines = _read_obs(room_id).splitlines()
-    assert lines[0] == "# đừng xoá"
-    assert lines[2] == "- rubbish that does not parse"
-    assert lines[1] == "- always | place:be-bu | - | Ăn được."
+    assert _read_obs(room_id).splitlines() == [
+        "- always | member:giang | - | Trước.",
+        "- always | place:be-bu | - | Ăn được.",
+        "- always | member:giang | - | Sau."]
 
 
 def test_a_memo_drafted_before_the_rename_commits_onto_the_new_slug(api_client_room):

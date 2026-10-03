@@ -95,11 +95,19 @@ FTS_DDL = (
 )
 
 
+#: ``kn_documents.unique_key`` is unique per (collection, space). An index, not a model
+#: constraint, because ``create_all`` never adds a constraint to an existing table.
+UNIQUE_KEY_DDL = ("CREATE UNIQUE INDEX IF NOT EXISTS uq_kn_documents_unique_key "
+                  "ON kn_documents (collection_id, space_id, unique_key)")
+
+
 def bind(engine: Engine) -> None:
     """Bring the ``kn_`` tables up to the models: missing tables, then missing columns,
     then (on SQLite) the documents' full-text index."""
     Base.metadata.create_all(engine)
     sync_additive_columns(engine, Base.metadata)
+    with engine.begin() as conn:
+        conn.execute(text(UNIQUE_KEY_DDL))
     if engine.dialect.name == "sqlite":
         with engine.begin() as conn:
             fresh = conn.execute(text("SELECT 1 FROM sqlite_master WHERE name = 'kn_documents_fts'")).first() is None

@@ -28,7 +28,7 @@ from app.pi_smoke import run_bridge_smoke
 from app.config import settings
 from app.db import get_db
 from app.images import sanitize_images
-from app.models import Member, Payment, Place, Room, RoomMessage
+from app.models import Member, Payment, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
 
@@ -104,9 +104,16 @@ app.include_router(debug_api.router)
 @app.on_event("startup")
 async def _boot_kernel() -> None:
     """Build the kernos kernel at boot (plan Task 2.4): seeds or re-syncs the default
-    profile and surfaces a bad plugin config at deploy rather than on the first turn."""
-    from app.kernel import kernel_for
+    profile and surfaces a bad plugin config at deploy rather than on the first turn.
 
+    First, refuse to serve a database whose places and notes have not been imported
+    into the stores (plan 2026-10-02): the rooms would show no places and no notes, and
+    the bot would re-create places the import then collides with."""
+    from app.kernel import kernel_for
+    from app.migrate_storage import pending
+
+    if reason := pending(get_db()):
+        raise RuntimeError(reason)
     report = kernel_for(get_db()).seed_report
     if report.get("actions"):
         log.info("[kernos] boot: %s", "; ".join(report["actions"]))
@@ -819,10 +826,10 @@ async def commit_draft_route(room_id: int, draft_id: int,
 @app.post("/api/rooms/{room_id}/memos/{memo_id}/commit")
 async def commit_memo_route(room_id: int, memo_id: int,
                             ctx: AuthCtx = Depends(require_session)):
-    """Write a proposed lunch note to the room's observations file.
+    """Write a proposed lunch note to the room's notes.
 
-    Serialized under the same agent lock as the money drafts: `observations.md`
-    is a read-modify-write file and the turn loop is the other writer.
+    Serialized under the same agent lock as the money drafts: a note's position
+    (``seq``) is read-then-written and the turn loop is the other writer.
     """
     _check_room(ctx, room_id)
     db = get_db()
@@ -834,7 +841,7 @@ async def commit_memo_route(room_id: int, memo_id: int,
                 raise HTTPException(404, str(e))
             payload = chat.message_to_dict(m, None)
     await hub.publish(room_id, {"type": "message", **payload})
-    # This wrote observations.md, so an open knowledge panel is now stale.
+    # This wrote the notes, so an open knowledge panel is now stale.
     await hub.publish(room_id, {"type": "knowledge:changed"})
     return {"ok": True}
 
@@ -885,8 +892,8 @@ async def _publish_knowledge(room_id: int, trail: dict | None) -> None:
 
 
 def _one_line(text: str) -> str:
-    """Collapse whitespace: ``observations.md`` is one line per fact, so a newline
-    pasted into a note would split it into two malformed lines."""
+    """Collapse whitespace: a note is one line of prose (it was one line per fact in
+    ``observations.md``, and the seed and export formats still are)."""
     return " ".join((text or "").split())
 
 
@@ -923,14 +930,13 @@ async def patch_place_route(room_id: int, place_id: int, body: PlacePatchIn,
     db = get_db()
     async with chat._agent_lock:
         with db.session() as s:
-            p = s.get(Place, place_id)
-            if p is None or p.room_id != room_id:
+            p = places.get_place(s, room_id, place_id)
+            if p is None:
                 raise HTTPException(404, "No such place.")
             try:
-                changed = places.apply_edits(p, body.model_dump(exclude_unset=True))
+                p, changed = places.edit_place(s, p, body.model_dump(exclude_unset=True))
             except places.PlaceError as exc:
                 raise HTTPException(422, str(exc))
-            s.flush()
             # A save that changed nothing announces nothing.
             trail = (_knowledge_trail(s, room_id, ctx, f"edited place «{p.name}».")
                      if changed else None)
@@ -947,13 +953,12 @@ async def delete_place_route(room_id: int, place_id: int,
     db = get_db()
     async with chat._agent_lock:
         with db.session() as s:
-            p = s.get(Place, place_id)
-            if p is None or p.room_id != room_id:
+            p = places.get_place(s, room_id, place_id)
+            if p is None:
                 raise HTTPException(404, "No such place.")
             trail = None
             if p.active:
-                p.active = False
-                s.flush()
+                places.edit_place(s, p, {"active": False})
                 trail = _knowledge_trail(s, room_id, ctx, f"hid place «{p.name}».")
     await _publish_knowledge(room_id, trail)
     return {"ok": True}
@@ -969,10 +974,10 @@ async def rename_place_slug_route(room_id: int, place_id: int, body: PlaceSlugIn
     ``places.EDITABLE`` stays literally true and no existing client can rename by
     round-tripping a form.
 
-    Under ``chat._agent_lock`` like every knowledge write — ``observations.md`` is
+    Under ``chat._agent_lock`` like every knowledge write — the notes are
     read-modify-write and the turn loop is the other writer. No ``etag``: the
-    request names a place, not a line, and the whole point is that it rewrites
-    whatever the file currently says about that place.
+    request names a place, not a note, and the whole point is that it rewrites
+    whatever the notes currently say about that place.
     """
     _check_room(ctx, room_id)
     db = get_db()
@@ -990,7 +995,7 @@ async def rename_place_slug_route(room_id: int, place_id: int, body: PlaceSlugIn
                                     else 422, text)
             trail = None
             if out["changed"]:
-                p = s.get(Place, place_id)
+                p = places.get_place(s, room_id, place_id)
                 moved = []
                 if out["notes_moved"]:
                     moved.append(f"{out['notes_moved']} note"
@@ -1045,13 +1050,11 @@ async def create_observation_route(room_id: int, body: ObservationIn,
             # ids from content), so appending one would make the pair impossible to
             # tell apart in the UI — and the second one carries no information
             # anyway. Same shape as `add_place` on a duplicate slug.
-            existing = {o.line_id for o in observations.load(room_id)}
-            if obs.line_id in existing:
+            if not observations.append(s, room_id, obs):
                 return {"ok": True, "id": obs.line_id, "already_existed": True,
-                        "etag": observations.file_etag(room_id)}
-            observations.append(room_id, obs)
+                        "etag": observations.etag(s, room_id)}
             out = {"ok": True, "id": obs.line_id, "already_existed": False,
-                   "etag": observations.file_etag(room_id)}
+                   "etag": observations.etag(s, room_id)}
             trail = _knowledge_trail(
                 s, room_id, ctx,
                 f"added a note about «{resolved['subject_label']}»: {text}")
@@ -1066,39 +1069,39 @@ async def patch_observation_route(room_id: int, line_id: str, body: ObservationP
     db = get_db()
     fields = body.model_dump(exclude_unset=True)
     async with chat._agent_lock:
-        if observations.file_etag(room_id) != body.etag:
-            raise HTTPException(409, "Someone just changed the notes — reload.")
-        current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
-        if current is None:
-            raise HTTPException(404, "No such note.")
-        text = _one_line(fields.get("text", current.text))
-        if not text:
-            raise HTTPException(422, "A note needs some text.")
-        standing = fields.get("standing", current.is_rule)
-        # A rule has no date; a dated line that never had one takes today's.
-        when = None if standing else (fields.get("when") or current.when or today_ict())
-        if "gate_kind" in fields or "gate_at" in fields:
-            try:
-                gate = observations.parse_gate(
-                    fields.get("gate_kind", observations.gate_kind(current)),
-                    fields.get("gate_at") or observations.gate_at(current))
-            except ValueError as exc:
-                raise HTTPException(422, str(exc))
-        else:
-            gate = current.gate
-        updated = observations.Observation(
-            when=when, subject=current.subject, gate=gate, text=text)
-        # Editing one line into an exact copy of another would give the pair the
-        # same content-derived id, so neither could be addressed again.
-        if updated.line_id != line_id and any(
-                o.line_id == updated.line_id for o in observations.load(room_id)):
-            raise HTTPException(422, "An identical note already exists.")
-        if not observations.replace_line(room_id, line_id, updated):
-            raise HTTPException(404, "No such note.")
         with db.session() as s:
+            if observations.etag(s, room_id) != body.etag:
+                raise HTTPException(409, "Someone just changed the notes — reload.")
+            current = next((o for o in observations.load(s, room_id) if o.line_id == line_id), None)
+            if current is None:
+                raise HTTPException(404, "No such note.")
+            text = _one_line(fields.get("text", current.text))
+            if not text:
+                raise HTTPException(422, "A note needs some text.")
+            standing = fields.get("standing", current.is_rule)
+            # A rule has no date; a dated line that never had one takes today's.
+            when = None if standing else (fields.get("when") or current.when or today_ict())
+            if "gate_kind" in fields or "gate_at" in fields:
+                try:
+                    gate = observations.parse_gate(
+                        fields.get("gate_kind", observations.gate_kind(current)),
+                        fields.get("gate_at") or observations.gate_at(current))
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc))
+            else:
+                gate = current.gate
+            updated = observations.Observation(
+                when=when, subject=current.subject, gate=gate, text=text)
+            # Editing one line into an exact copy of another would give the pair the
+            # same content-derived id, so neither could be addressed again.
+            if updated.line_id != line_id and any(
+                    o.line_id == updated.line_id for o in observations.load(s, room_id)):
+                raise HTTPException(422, "An identical note already exists.")
+            if not observations.replace_line(s, room_id, line_id, updated):
+                raise HTTPException(404, "No such note.")
             label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
             out = {"ok": True, "id": updated.line_id,
-                   "etag": observations.file_etag(room_id)}
+                   "etag": observations.etag(s, room_id)}
             trail = _knowledge_trail(s, room_id, ctx,
                                      f"edited a note about «{label}»: {text}")
     await _publish_knowledge(room_id, trail)
@@ -1111,18 +1114,19 @@ async def delete_observation_route(room_id: int, line_id: str, etag: str = Query
     _check_room(ctx, room_id)
     db = get_db()
     async with chat._agent_lock:
-        if observations.file_etag(room_id) != etag:
-            raise HTTPException(409, "Someone just changed the notes — reload.")
-        current = next((o for o in observations.load(room_id) if o.line_id == line_id), None)
-        if current is None:
-            raise HTTPException(404, "No such note.")
-        observations.delete_line(room_id, line_id)
         with db.session() as s:
+            if observations.etag(s, room_id) != etag:
+                raise HTTPException(409, "Someone just changed the notes — reload.")
+            current = next((o for o in observations.load(s, room_id) if o.line_id == line_id), None)
+            if current is None:
+                raise HTTPException(404, "No such note.")
+            observations.delete_line(s, room_id, line_id)
             label = knowledge.SubjectIndex(s, room_id).resolve(current.subject)["subject_label"]
             trail = _knowledge_trail(
                 s, room_id, ctx, f"deleted the note about «{label}»: {current.text}")
+            new_etag = observations.etag(s, room_id)
     await _publish_knowledge(room_id, trail)
-    return {"ok": True, "etag": observations.file_etag(room_id)}
+    return {"ok": True, "etag": new_etag}
 
 
 @app.patch("/api/rooms/{room_id}/memory/sections/{index}")

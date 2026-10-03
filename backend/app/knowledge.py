@@ -3,9 +3,9 @@
 Three stores back the panel, and they are deliberately not one store (design D4,
 D6, D7):
 
-- **Places** — :class:`app.models.Place` rows, plus the counts
+- **Places** — :class:`app.places.Place` records, plus the counts
   :func:`app.places.stats` derives from the ledger.
-- **Observations & standing rules** — ``observations.md``, one line per fact.
+- **Observations & standing rules** — the ``notes`` store, one document per fact.
 - **Conversation memory** — ``memory.md``, LLM roll-ups in dated sections.
 
 This module is the read side (:func:`snapshot`) plus the label resolution that
@@ -25,7 +25,8 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app import memory, observations as obs_mod, places as places_mod, roster
-from app.models import Member, Place
+from app.models import Member
+from app.places import Place
 
 
 def _member_key(raw: str) -> str:
@@ -108,9 +109,9 @@ class SubjectIndex:
 
 def observation_rows(session: Session, room_id: int, *, today=None,
                      index: SubjectIndex | None = None) -> list[dict]:
-    """Every parsed line of ``observations.md``, labelled and flagged.
+    """Every note of the room, labelled and flagged.
 
-    ``stale`` means the line is still in the file but past
+    ``stale`` means the note is still stored but past
     :data:`app.observations.DEFAULT_SINCE_DAYS`, so ``for_subjects`` no longer
     feeds it to the model. Shown rather than hidden — and never auto-deleted: a bot
     that prunes its own memory on a timer is a worse failure than a long file.
@@ -121,7 +122,7 @@ def observation_rows(session: Session, room_id: int, *, today=None,
     index = index or SubjectIndex(session, room_id)
     cutoff = today - timedelta(days=obs_mod.DEFAULT_SINCE_DAYS)
     rows = []
-    for o in obs_mod.load(room_id):
+    for o in obs_mod.load(session, room_id):
         rows.append({
             "id": o.line_id,
             "when": o.when.isoformat() if o.when else None,
@@ -247,7 +248,7 @@ def snapshot(session: Session, room_id: int, *, today=None) -> dict:
         counts[r["subject_key"]] = counts.get(r["subject_key"], 0) + 1
     return {
         "etags": {
-            "observations": obs_mod.file_etag(room_id),
+            "observations": obs_mod.etag(session, room_id),
             "memory": memory.file_etag(room_id),
         },
         "places": place_rows(session, room_id, today=today, note_counts=counts),

@@ -5,16 +5,26 @@ module and a separate namespace: a place name must never resolve to a person
 (design D18). ``roster._NameIndex`` searches **bank account holders**, so this
 room's Nhím is reachable as "Trang" while the room eats at "Bún riêu cô Trang".
 Keeping the indexes apart is what stops one being answered with the other.
+
+Stored in the ``places`` internal collection (:mod:`app.store`, plan 2026-10-02 S3),
+one document per place, its id the integer ``meals.place_id`` points at (as text).
+A :class:`Place` is a frozen record: a write is :func:`create_place`,
+:func:`edit_place`, :func:`rename_slug` or :func:`insert_place` (the seed CLI),
+never an attribute assignment — a missed save raises instead of silently doing
+nothing. The old ``places`` table (:class:`app.models.LegacyPlace`) is read only by
+the one-time import.
 """
 from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Place
+from app import store
 from app.roster import _fold, _tokens
 
 logger = logging.getLogger("chiatienan")
@@ -48,8 +58,113 @@ class PlaceError(Exception):
     """A place write that cannot be applied."""
 
 
+@dataclass(frozen=True)
+class Place:
+    """One restaurant of one room — the attribute names of the old ``places`` row.
+
+    Identity for the free text in ``meals.dish``: "bún chả rửa xe", "Bún chả" and
+    "bun cha" are three strings for one business, and nothing can be counted until
+    they point at one place. ``slug`` is that identity — stable, ASCII, and used
+    verbatim as the ``place:`` subject in the notes. ``former_slugs`` is every slug
+    it was known by, oldest first, appended by :func:`rename_slug` only.
+
+    No price field on purpose (design D8): ``meals.total_amount ÷ heads`` is what
+    the group actually paid. ``price_hint`` is only a seed-time fallback.
+    """
+    id: int
+    room_id: int
+    slug: str
+    name: str
+    former_slugs: list = field(default_factory=list)
+    aliases: list = field(default_factory=list)
+    tags: list = field(default_factory=list)
+    delivery: list = field(default_factory=list)
+    address: str | None = None
+    #: Walkability is a property of the seed list (D17): the room's list IS the walk-to set.
+    walkable: bool = True
+    #: Optional override of the room-wide default used by the clock gates.
+    walk_minutes: int | None = None
+    #: Passed through verbatim, never retyped by the model (D10).
+    phone: str | None = None
+    price_hint: int | None = None          # VND per head
+    #: Temporary closures self-expire (D11); ``active=False`` is for permanent ones.
+    closed_until: date | None = None
+    active: bool = True
+    created_at: datetime | None = None
+
+
+def _from_doc(room_id: int, doc: dict) -> Place:
+    d = doc["data"]
+    return Place(
+        id=int(d["id"]), room_id=int(room_id), slug=d["slug"], name=d["name"],
+        former_slugs=list(d.get("former_slugs") or []), aliases=list(d.get("aliases") or []),
+        tags=list(d.get("tags") or []), delivery=list(d.get("delivery") or []),
+        address=d.get("address"), walkable=bool(d["walkable"]), walk_minutes=d.get("walk_minutes"),
+        phone=d.get("phone"), price_hint=d.get("price_hint"),
+        closed_until=date.fromisoformat(d["closed_until"]) if d.get("closed_until") else None,
+        active=bool(d["active"]),
+        created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else None)
+
+
+def _to_data(p: Place) -> dict:
+    data = {"id": str(p.id), "slug": p.slug, "name": p.name, "former_slugs": list(p.former_slugs),
+            "aliases": list(p.aliases), "tags": list(p.tags), "delivery": list(p.delivery),
+            "walkable": bool(p.walkable), "active": bool(p.active)}
+    for key in ("address", "phone", "walk_minutes", "price_hint"):
+        if getattr(p, key) is not None:
+            data[key] = getattr(p, key)
+    if p.closed_until is not None:
+        data["closed_until"] = p.closed_until.isoformat()
+    if p.created_at is not None:
+        data["created_at"] = p.created_at.isoformat()
+    return data
+
+
+def _save(session: Session, p: Place, *, create: bool = False) -> Place:
+    """Write ``p``. The slug is the document's ``unique_key``, so the database refuses
+    two places of one room on one slug even from a writer outside the app's lock."""
+    from kernos.content.errors import Conflict
+
+    write = store.DATA.insert_document if create else store.DATA.upsert_document
+    try:
+        write(store.collection(session, "places"), p.room_id, _to_data(p), actor="places",
+              session=session, unique_key=p.slug)
+    except Conflict as exc:
+        raise PlaceError(f"«{p.slug}» is already taken in this room.") from exc
+    return p
+
+
+def _next_id(session: Session) -> int:
+    """A place id above every id the old table ever used, so ``meals.place_id``
+    can never come to mean two places."""
+    from app.models import LegacyPlace
+
+    floor = session.scalar(select(func.max(LegacyPlace.id))) or 0
+    return store.DATA.next_id("place", session=session, floor=floor)
+
+
+def get_place(session: Session, room_id: int, place_id: int) -> Place | None:
+    doc = store.DATA.get_document(store.collection(session, "places"), room_id, str(place_id),
+                                  session=session)
+    return _from_doc(room_id, doc) if doc else None
+
+
+def insert_place(session: Session, room_id: int, *, slug: str, **values) -> Place:
+    """Create a place with a pinned slug and values taken verbatim — the seed CLI's
+    path (its files are curated; nothing is renormalised)."""
+    from app.clock import now_ict
+
+    p = Place(id=_next_id(session), room_id=room_id, slug=slug, created_at=now_ict(), **values)
+    return _save(session, p, create=True)
+
+
+def save_place(session: Session, place: Place) -> Place:
+    """Write a place back after ``dataclasses.replace`` — the seed CLI's update path."""
+    return _save(session, place)
+
+
 #: Columns a human may edit. **`slug` is not one of them**, and neither is
-#: `former_slugs`: the slug is the `place:` subject in `observations.md` and the
+#: `former_slugs`: the slug is the `place:` subject in the room's notes and the
 #: key `seed_places` matches on, so changing it as a field would silently detach
 #: every note and standing rule about that restaurant. `name` and `aliases` carry
 #: an ordinary renaming.
@@ -80,23 +195,22 @@ def create_place(session: Session, room_id: int, *, name: str, **fields) -> Plac
     slug = slugify(name)
     if not slug:
         raise PlaceError(f"Cannot build an identifier from «{name}».")
-    existing = session.scalars(
-        select(Place).where(Place.room_id == room_id, Place.slug == slug)
-    ).first()
+    existing = next((p for p in list_places(session, room_id, include_inactive=True)
+                     if p.slug == slug), None)
     if existing is not None:
         raise PlaceError(f"«{existing.name}» is already on the list.")
-    p = Place(room_id=room_id, slug=slug, name=name)
-    apply_edits(p, fields)
-    session.add(p)
-    session.flush()
-    return p
+    from app.clock import now_ict
+
+    p, _changed = _edited(Place(id=_next_id(session), room_id=room_id, slug=slug, name=name,
+                                created_at=now_ict()), fields)
+    return _save(session, p, create=True)
 
 
 def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) -> dict:
     """Change a place's room-scoped identity, moving everything filed under it.
 
     Three live stores hold a slug and all three move here: the row, the
-    ``place:`` subjects in ``observations.md``, and the frozen subject on any
+    ``place:`` subjects in the room's notes, and the frozen subject on any
     **pending** memo card. The two *offline* stores — ``seeds/places-*.json`` and
     ``seeds/observations-local.md`` — are not rewritten (a droplet's DB has long
     since diverged from files in the repo, and an HTTP route must not edit them);
@@ -121,8 +235,8 @@ def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) ->
     # risk a cycle. `observations` is only needed on the write path.
     from app import memos as memos_mod, observations as obs_mod
 
-    place = session.get(Place, place_id)
-    if place is None or place.room_id != room_id:
+    place = get_place(session, room_id, place_id)
+    if place is None:
         raise PlaceError("No such place.")
 
     new = slugify(raw_slug or "")
@@ -148,11 +262,9 @@ def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) ->
     # former list: two rows must never both answer to one slug, and that includes
     # one row answering to it twice.
     formers = [f for f in (place.former_slugs or []) if f not in (new, old)]
-    place.former_slugs = [*formers, old]
-    place.slug = new
-    session.flush()
+    place = _save(session, replace(place, former_slugs=[*formers, old], slug=new))
 
-    notes = obs_mod.retarget_subject(room_id, old=f"place:{old}", new=f"place:{new}")
+    notes = obs_mod.retarget_subject(session, room_id, old=f"place:{old}", new=f"place:{new}")
     memos_moved = memos_mod.retarget_subject(
         session, room_id, old=f"place:{old}", new=f"place:{new}",
         new_label=place.name)
@@ -164,13 +276,22 @@ def rename_slug(session: Session, room_id: int, place_id: int, raw_slug: str) ->
             "memos_moved": memos_moved}
 
 
-def apply_edits(place: Place, fields: dict) -> bool:
-    """Assign the editable subset of ``fields`` onto ``place``. True if anything moved.
+def edit_place(session: Session, place: Place, fields: dict) -> tuple[Place, bool]:
+    """Apply the editable subset of ``fields`` and save. ``(place, changed)``.
 
     Returning "did something change" is what lets the caller stay quiet about a
-    no-op save instead of announcing an edit that edited nothing.
+    no-op save instead of announcing an edit that edited nothing — and a no-op
+    writes nothing.
     """
-    changed = False
+    updated, changed = _edited(place, fields)
+    if changed:
+        _save(session, updated)
+    return updated, changed
+
+
+def _edited(place: Place, fields: dict) -> tuple[Place, bool]:
+    """``place`` with the editable subset of ``fields`` applied, and whether it moved."""
+    changes = {}
     for key in EDITABLE:
         if key not in fields:
             continue
@@ -188,17 +309,21 @@ def apply_edits(place: Place, fields: dict) -> bool:
             if value is None:
                 continue                  # a flag has no "unset"
             value = bool(value)
+        if key == "closed_until" and isinstance(value, str):
+            value = date.fromisoformat(value)
         if getattr(place, key) != value:
-            setattr(place, key, value)
-            changed = True
-    return changed
+            changes[key] = value
+    return (replace(place, **changes), True) if changes else (place, False)
 
 
 def list_places(session: Session, room_id: int, *, include_inactive: bool = False) -> list[Place]:
-    stmt = select(Place).where(Place.room_id == room_id)
+    """The room's places by name (code-point order, as the old ``ORDER BY name``),
+    then id."""
+    rows = [_from_doc(room_id, d) for d in
+            store.DATA.read_all(store.collection(session, "places"), room_id, session=session)]
     if not include_inactive:
-        stmt = stmt.where(Place.active.is_(True))
-    return list(session.scalars(stmt.order_by(Place.name)))
+        rows = [p for p in rows if p.active]
+    return sorted(rows, key=lambda p: (p.name, p.id))
 
 
 def _strip_place_prefix(tokens: list[str]) -> list[str]:
