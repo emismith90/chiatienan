@@ -31,6 +31,7 @@ from app.images import sanitize_images
 from app.models import Member, Payment, Room, RoomMessage
 from app.money import MoneyError
 from app.realtime import hub
+from kernos.data.actions import KIND as RECORD_KIND
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("chiatienan")
@@ -820,6 +821,9 @@ async def commit_draft_route(room_id: int, draft_id: int,
     await hub.publish(room_id, {"type": "message", **draft_payload})
     await hub.publish(room_id, {"type": "message", **meal_payload})
     await hub.publish(room_id, {"type": "ledger:changed"})
+    if draft_payload["kind"] == RECORD_KIND:
+        # confirmed place changes: an open knowledge panel is now stale
+        await hub.publish(room_id, {"type": "knowledge:changed"})
     return {"ok": True, "meal_id": meal_id}
 
 
@@ -1049,7 +1053,7 @@ async def create_observation_route(room_id: int, body: ObservationIn,
             # byte-identical lines share a `line_id` (that is the price of deriving
             # ids from content), so appending one would make the pair impossible to
             # tell apart in the UI — and the second one carries no information
-            # anyway. Same shape as `add_place` on a duplicate slug.
+            # anyway.
             if not observations.append(s, room_id, obs):
                 return {"ok": True, "id": obs.line_id, "already_existed": True,
                         "etag": observations.etag(s, room_id)}

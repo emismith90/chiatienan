@@ -38,7 +38,8 @@ def system_business_id(session_factory: Callable[[], Any]) -> int:
 def ensure_internal(data, session_factory: Callable[[], Any], specs: list[dict]) -> dict[str, dict]:
     """Create or update each declared internal collection; ``{slug: collection}``.
 
-    A spec is ``{slug, name, schema, key, mode?, searchable?, indexed?, description?}``.
+    A spec is ``{slug, name, schema, key, mode?, searchable?, indexed?, description?,
+    options?}`` (``options``: :func:`kernos.data.actions.check_options`).
     """
     from kernos.data.search import default_searchable
 
@@ -49,7 +50,8 @@ def ensure_internal(data, session_factory: Callable[[], Any], specs: list[dict])
                 "indexed": list(spec.get("indexed", ())), "description": spec.get("description", ""),
                 "mode": spec.get("mode", "table"),
                 "searchable": (default_searchable(spec["schema"]) if spec.get("searchable") is None
-                               else list(spec["searchable"]))}
+                               else list(spec["searchable"])),
+                "options": spec.get("options")}
         try:
             have = data.get_collection(bid, spec["slug"])
         except NotFound:
@@ -63,7 +65,7 @@ def ensure_internal(data, session_factory: Callable[[], Any], specs: list[dict])
             bid, spec["slug"], name=spec["name"], schema=spec["schema"], key=spec["key"],
             indexed=spec.get("indexed", ()), description=spec.get("description", ""),
             mode=spec.get("mode", "table"), searchable=spec.get("searchable"),
-            internal=True, force=True, actor=SYSTEM_ACTOR)
+            internal=True, force=True, options=spec.get("options"), actor=SYSTEM_ACTOR)
     return out
 
 

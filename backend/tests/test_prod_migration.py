@@ -87,7 +87,7 @@ async def test_after_the_deploy_the_room_runs_exactly_as_before(prod_shaped, mon
     async def emit(e):
         pass
     reply = await chat.run_bot_turn(db, room_id, ids[0], "M1", "@phoenix ai nợ ai", emit=emit)
-    assert _tool_names(fake.runs[0]) == legacy and len(legacy) == 19
+    assert _tool_names(fake.runs[0]) == legacy and len(legacy) == 22
     assert not any(n.startswith(("cms_", "ask_")) for n in legacy)
     assert reply.kind == "bot" and reply.body == "Cả nhóm chia đều 100,000đ mỗi người."
     # and the turn is now traced, which is the one thing that is new and additive

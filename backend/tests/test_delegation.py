@@ -90,7 +90,7 @@ async def test_the_manager_asks_and_gets_results_but_never_the_text_as_evidence(
 
     # the manifests: the manager has `ask_auditor`, the sub (depth 1 of max_depth 2) has no ask_*
     assert len(fake.runs) == 2
-    assert "ask_auditor" in _tool_names(fake.runs[0]) and _tool_names(fake.runs[0])[:19] == _tool_names(fake.runs[1])[:19]
+    assert "ask_auditor" in _tool_names(fake.runs[0]) and _tool_names(fake.runs[0])[:22] == _tool_names(fake.runs[1])[:22]
     assert not any(n.startswith("ask_") for n in _tool_names(fake.runs[1]))
     ask = next(t for t in fake.runs[0]["tools"] if t["name"] == "ask_auditor")
     assert "Auditor" in ask["description"] and "checks who owes whom" in ask["description"]
@@ -346,4 +346,4 @@ async def test_a_room_without_delegation_runs_exactly_as_before(db, monkeypatch)
     room_id, m = _seed_room(db, 2)
     fake = _install(monkeypatch, [_turn_done("Chào.")])
     await _run(db, room_id, m, "@phoenix chào")
-    assert not any(n.startswith("ask_") for n in _tool_names(fake.runs[0])) and len(_tool_names(fake.runs[0])) == 19
+    assert not any(n.startswith("ask_") for n in _tool_names(fake.runs[0])) and len(_tool_names(fake.runs[0])) == 22

@@ -16,13 +16,14 @@ from packs.poker_ledger import POKER_TOOLS, PokerLedgerPack  # noqa: F401
 #: The money tools, as the two packs that provide them.
 MONEY_TOOLS = LUNCH_TOOLS | LEDGER_TOOLS
 
-#: The 19 tools in the order `app.tools` has always listed them — pinned by
+#: The tools in the order `app.tools` has always listed them — pinned by
 #: `test_tools_manifest.py` and the sidecar's schema fixture (review F7).
 LEGACY_ORDER = (
     "find_members", "propose_meal", "void_meal", "cancel_draft", "pick_random",
     "resolve_period", "resolve_date", "member_statement", "get_period_summary",
     "settle_period", "add_member", "update_member", "delete_member",
-    "find_places", "suggest_lunch", "remember", "forget", "add_place", "propose_payment",
+    "find_places", "suggest_lunch", "remember", "forget",
+    "places_search", "places_create", "places_update", "places_delete", "propose_payment",
 )
 assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
 

@@ -4,6 +4,7 @@ import { DraftCard } from "./draft-card";
 import { ExpenseDraftCard } from "./expense-draft-card";
 import { MemoCard } from "./memo-card";
 import { PaymentDraftCard } from "./payment-draft-card";
+import { RecordDraftCard } from "./record-draft-card";
 import { AgentTimeline } from "./agent-timeline";
 import type { TimelineStep } from "@/hooks/use-room";
 
@@ -135,6 +136,14 @@ export function MessageList({
               Phoenix
             </span>
             <MemoCard message={m} roomId={roomId} />
+          </div>
+        ) : m.kind === "record_draft" ? (
+          <div key={m.id} className="flex flex-col items-start">
+            <span className="mb-1 px-1 text-xs font-medium text-[var(--accent-text)]">
+              Phoenix
+            </span>
+            {turnSteps && <AgentTimeline steps={turnSteps} live={false} />}
+            <RecordDraftCard message={m} roomId={roomId} />
           </div>
         ) : m.kind?.endsWith("_draft") ? (
           // Any other registered draft kind (a poker `game_draft`, …) gets the

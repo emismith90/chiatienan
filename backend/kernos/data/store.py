@@ -73,7 +73,7 @@ def _cap(collection: dict) -> int:
 def generated_tool_names(slug: str, mode: str = "table") -> tuple[str, ...]:
     if mode == "journal":
         return f"{slug}_find", f"{slug}_append", f"{slug}_search"
-    return f"{slug}_find", f"{slug}_upsert", f"{slug}_delete", f"{slug}_search"
+    return f"{slug}_find", f"{slug}_create", f"{slug}_update", f"{slug}_delete", f"{slug}_search"
 
 
 def _hit(row: m.Document) -> dict:
@@ -119,7 +119,8 @@ class DataStore:
     def put_collection(self, business_id: int, slug: str, *, name: str, schema: dict, key: str,
                        indexed: Iterable[str] = (), description: str = "", actor: str,
                        reserved: Iterable[str] = (), force: bool = False, mode: str = "table",
-                       searchable: Iterable[str] | None = None, internal: bool = False) -> dict:
+                       searchable: Iterable[str] | None = None, internal: bool = False,
+                       options: dict | None = None) -> dict:
         """Create or update a definition. Refused for an ``agent:*`` actor, a slug outside
         ``[a-z][a-z0-9_]{0,56}``, a schema outside the sidecar-safe subset, a generated
         tool name another pack owns, a ``mode`` change once documents exist, or — with
@@ -135,6 +136,8 @@ class DataStore:
             check_collection_schema(schema, key=key, indexed=indexed, mode=mode, searchable=searchable)
         except SchemaError as exc:
             raise Invalid(str(exc)) from exc
+        from kernos.data.actions import check_options
+        options = check_options(options, schema=schema, key=key, mode=mode)
         clash = sorted(set(generated_tool_names(slug, mode)) & set(reserved))
         if clash:
             raise Conflict(f"collection {slug!r} would generate tool names another pack owns: {clash}")
@@ -165,12 +168,13 @@ class DataStore:
                 s.execute(m.Document.__table__.update().where(m.Document.collection_id == row.id)
                           .values(search_text=None))
             row.name, row.description, row.schema, row.key, row.indexed = name, description, schema, key, indexed
-            row.mode, row.searchable, row.internal = mode, searchable, internal
+            row.mode, row.searchable, row.internal, row.options = mode, searchable, internal, options
             row.updated_at = m.utcnow()
             s.flush()
             self._log(s, actor, "put", "collection", f"{business_id}/{slug}",
                       before={k: before[k] for k in ("schema", "key", "indexed", "mode", "searchable")} if before else None,
-                      after={"schema": schema, "key": key, "indexed": indexed, "mode": mode, "searchable": searchable})
+                      after={"schema": schema, "key": key, "indexed": indexed, "mode": mode, "searchable": searchable,
+                             "options": options})
             return _row(row)
 
     def _collection(self, s: Session, business_id: int, slug: str) -> m.Collection:
@@ -316,7 +320,8 @@ class DataStore:
             return _row(row) if row else None
 
     def find_documents(self, collection: dict, space_id: Any, *, where: dict | None = None,
-                       limit: int = FIND_LIMIT, session: Session | None = None) -> dict:
+                       limit: int = FIND_LIMIT, session: Session | None = None,
+                       hide: str | None = None) -> dict:
         """``{"documents": [...], "more": bool}`` — equality on ``indexed`` fields only, in
         ``doc_id`` order (a journal's newest first), at most ``limit`` (≤ FIND_LIMIT). Never
         a count."""
@@ -330,7 +335,8 @@ class DataStore:
             rows = s.scalars(select(m.Document).where(m.Document.collection_id == collection["id"],
                                                       m.Document.space_id == str(space_id))
                              .order_by(order)).all()
-        hits = [r for r in rows if all(r.data.get(k) == v for k, v in where.items())]
+        hits = [r for r in rows if all(r.data.get(k) == v for k, v in where.items())
+                and not (hide and r.data.get(hide) is False)]
         return {"documents": [_hit(r) for r in hits[:limit]], "more": len(hits) > limit}
 
     def list_documents(self, collection: dict, space_id: Any, *, limit: int = 100, after: str | None = None,
@@ -383,7 +389,8 @@ class DataStore:
 
     # ------------------------------------------------------------------ search
 
-    def search_documents(self, collection: dict, space_id: Any, query: str, *, limit: int = SEARCH_LIMIT) -> dict:
+    def search_documents(self, collection: dict, space_id: Any, query: str, *, limit: int = SEARCH_LIMIT,
+                         hide: str | None = None) -> dict:
         """Hybrid search of one space's documents: words (FTS5, BM25) and meaning
         (embeddings, cosine ≥ the embedder's ``min_similarity``), merged by rank (RRF).
 
@@ -402,8 +409,8 @@ class DataStore:
         space_id = str(space_id)
         with self._session() as s:
             self._fill_search_text(s, collection, space_id, fields)
-            by_text = self._text_hits(s, collection, space_id, query)
-        state, by_meaning = self._semantic_hits(collection, space_id, query, fields)
+            by_text = self._text_hits(s, collection, space_id, query, hide)
+        state, by_meaning = self._semantic_hits(collection, space_id, query, fields, hide)
         merged = rrf(by_text, by_meaning)[:limit]
         with self._session() as s:
             rows = {r.id: r for r in s.scalars(select(m.Document).where(m.Document.id.in_([i for i, _ in merged])))}
@@ -423,7 +430,8 @@ class DataStore:
             row.search_text = search_text(fields, row.data)
         s.flush()
 
-    def _text_hits(self, s: Session, collection: dict, space_id: str, query: str) -> list[int]:
+    def _text_hits(self, s: Session, collection: dict, space_id: str, query: str,
+                   hide: str | None = None) -> list[int]:
         """Rows with any of the words, those with more of the distinct words first, then by
         BM25 — which alone can put a short row repeating one word above a row with all of them."""
         tokens = query_tokens(query)
@@ -432,12 +440,16 @@ class DataStore:
         rows = s.execute(text(
             "SELECT d.id, d.search_text FROM kn_documents_fts JOIN kn_documents d ON d.id = kn_documents_fts.rowid "
             "WHERE kn_documents_fts MATCH :q AND d.collection_id = :c AND d.space_id = :s "
-            "ORDER BY bm25(kn_documents_fts) LIMIT :n"),
-            {"q": fts_query(query), "c": collection["id"], "s": space_id, "n": TEXT_SCAN}).all()
+            # a soft-deleted record is skipped here, before the cut — never after it
+            + ("AND coalesce(json_extract(d.data, :hide), 1) != 0 " if hide else "")
+            + "ORDER BY bm25(kn_documents_fts) LIMIT :n"),
+            {"q": fts_query(query), "c": collection["id"], "s": space_id, "n": TEXT_SCAN,
+             "hide": f"$.{hide}" if hide else None}).all()
         covered = [(-len(tokens & query_tokens(row.search_text)), rank, row.id) for rank, row in enumerate(rows)]
         return [doc for _, _, doc in sorted(covered)[:CANDIDATES]]
 
-    def _semantic_hits(self, collection: dict, space_id: str, query: str, fields: list[str]) -> tuple[str, list[int]]:
+    def _semantic_hits(self, collection: dict, space_id: str, query: str, fields: list[str],
+                       hide: str | None = None) -> tuple[str, list[int]]:
         """Embed what is missing or stale (at most ``EMBED_PER_SEARCH``), then rank by
         cosine. The provider is called with no database session open."""
         embedder = self._embedder
@@ -445,7 +457,7 @@ class DataStore:
             return "off", []
         with self._session() as s:
             texts = {r.id: t for r in s.scalars(select(m.Document).where(*self._scope(collection, space_id)))
-                     if (t := labelled_text(fields, r.data))}
+                     if (t := labelled_text(fields, r.data)) and not (hide and r.data.get(hide) is False)}
             cached = {v.document_id: v for v in s.scalars(select(m.DocumentVector).where(
                 m.DocumentVector.document_id.in_(list(texts))))}
             hashes = {i: content_hash(embedder.model, t) for i, t in texts.items()}

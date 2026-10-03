@@ -463,7 +463,8 @@ it("shows the tools a collection generates", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Components" }));
 
   expect(await screen.findByText("rota_find")).toBeInTheDocument();
-  expect(screen.getByText("rota_upsert")).toBeInTheDocument();
+  expect(screen.getByText("rota_create")).toBeInTheDocument();
+  expect(screen.getByText("rota_update")).toBeInTheDocument();
   expect(screen.getByText("rota_delete")).toBeInTheDocument();
   expect(screen.getByText("rota_search")).toBeInTheDocument();
 });
@@ -479,7 +480,7 @@ it("shows a journal's append-only tools and saves one without a key", async () =
   fireEvent.click(await screen.findByRole("button", { name: "Components" }));
   expect(await screen.findByText("log_append")).toBeInTheDocument();
   expect(screen.getByText("journal (append-only)")).toBeInTheDocument();
-  expect(screen.queryByText("log_upsert")).not.toBeInTheDocument();
+  expect(screen.queryByText("log_update")).not.toBeInTheDocument();
   expect(screen.queryByText("log_delete")).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("collection slug"), { target: { value: "notes" } });
