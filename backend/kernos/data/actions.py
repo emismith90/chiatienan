@@ -16,7 +16,9 @@ A collection says how it may be changed in its ``options`` (:func:`check_options
 * ``ids`` — ``"client"`` (the default: the create names its key) or ``"server"``
   (the key is the next number, drawn when the action is applied);
 * ``editable`` — the fields create and update may set (default: every property but
-  the key);
+  the key; a create never sets the ``soft_delete`` field — a new record is visible);
+* ``defaults`` — values a create takes when the agent leaves them out (so the tool does
+  not make the model guess them);
 * ``agent_tools`` — for an internal collection only: which generated tools its
   owner hands the agent (``find``, ``search``, ``create``, ``update``, ``delete``).
 
@@ -38,7 +40,8 @@ from kernos.content.errors import Conflict, ContentError, Invalid, NotFound
 
 OPS = ("create", "update", "delete", "append")
 TOOLS = ("find", "search", "create", "update", "delete")
-DEFAULT_OPTIONS = {"confirm": True, "soft_delete": None, "ids": "client", "editable": None, "agent_tools": None}
+DEFAULT_OPTIONS = {"confirm": True, "soft_delete": None, "ids": "client", "editable": None, "agent_tools": None,
+                   "defaults": None}
 #: The card kind a turn's proposed actions become.
 KIND = "record_draft"
 #: The tool-result ``type`` of a proposed (not yet applied) action.
@@ -80,6 +83,10 @@ def check_options(options: dict | None, *, schema: dict, key: str, mode: str) ->
         bad = sorted(set(editable) - set(props)) + sorted({key} & set(editable))
         if bad:
             raise Invalid(f"options.editable: not editable properties: {bad}")
+    defaults = options.get("defaults")
+    if defaults is not None:
+        if not isinstance(defaults, dict) or set(defaults) - set(props) or key in defaults:
+            raise Invalid("options.defaults must map non-key properties to their default values")
     tools = options.get("agent_tools")
     if tools is not None:
         if not isinstance(tools, list) or set(tools) - set(TOOLS):
@@ -98,10 +105,18 @@ def editable_fields(collection: dict) -> list[str]:
     return [f for f in (collection["schema"].get("properties") or {}) if f != collection["key"]]
 
 
-def hidden(collection: dict, data: dict) -> bool:
-    """Is this record soft-deleted?"""
-    soft = options_of(collection)["soft_delete"]
-    return bool(soft) and data.get(soft) is False
+def create_fields(collection: dict) -> list[str]:
+    """What a create may set: the editable fields (and the key, for client ids), never the
+    ``soft_delete`` field."""
+    opts = options_of(collection)
+    fields = [f for f in editable_fields(collection) if f != opts["soft_delete"]]
+    return fields + ([collection["key"]] if opts["ids"] == "client" else [])
+
+
+def create_required(collection: dict) -> list[str]:
+    defaults = options_of(collection)["defaults"] or {}
+    return [f for f in collection["schema"].get("required") or []
+            if f in create_fields(collection) and f not in defaults]
 
 
 # ------------------------------------------------------------------- writers
@@ -113,9 +128,12 @@ class Writer:
     ``check(session, space_id, op, before, payload) -> after`` normalises and validates a
     proposal (raising :class:`ContentError`); ``after`` is the record as it would be, or
     ``None`` for a removal. ``apply(session, space_id, op, before, payload, actor) -> doc_id``
-    performs it inside the caller's transaction."""
+    performs it inside the caller's transaction (``before`` is the record as it is *now*).
+    ``identity(after) -> str`` names what a create makes, so one card never creates the
+    same thing twice (the places' slug); default: the key."""
     check: Callable[..., dict | None]
     apply: Callable[..., str]
+    identity: Callable[[dict], str] | None = None
 
 
 _writers: dict[str, Writer] = {}
@@ -156,10 +174,14 @@ def propose(data, collection: dict, space_id: Any, op: str, *, doc_id: str | Non
     if op in ("create", "update"):
         if not isinstance(payload, dict):
             raise Invalid("the fields must be an object")
-        allowed = set(editable_fields(collection)) | ({key} if op == "create" and opts["ids"] == "client" else set())
+        allowed = set(create_fields(collection) if op == "create" else editable_fields(collection))
         refused = sorted(set(payload) - allowed)
         if refused:
             raise Invalid(f"{collection['slug']}: {refused} cannot be set here; you may set {sorted(allowed)}")
+    if op == "create":
+        payload = {**(opts["defaults"] or {}), **payload}
+        if opts["soft_delete"]:
+            payload[opts["soft_delete"]] = True
     before = None
     if op in ("update", "delete"):
         if not doc_id:
@@ -203,7 +225,11 @@ def propose(data, collection: dict, space_id: Any, op: str, *, doc_id: str | Non
             raise Invalid(f"corrects={corrects!r}: no such entry")
     if op == "update" and after == before:
         raise Invalid(f"that would not change «{_label(collection, before, doc_id)}»")
+    identity = None
+    if op == "create":
+        identity = writer.identity(after) if writer is not None and writer.identity else after.get(key)
     action = {"collection_id": collection["id"], "collection": collection["slug"],
+              "internal": bool(collection.get("internal")), "identity": None if identity is None else str(identity),
               "collection_name": collection["name"], "space_id": str(space_id), "op": op,
               "doc_id": None if doc_id is None else str(doc_id), "payload": payload,
               "before": before, "after": after, "label": _label(collection, after or before, doc_id),
@@ -231,32 +257,42 @@ def changes(action: dict) -> list[dict]:
 
 # ------------------------------------------------------------------- apply
 
-def apply(data, action: dict, *, actor: str, session: Session) -> dict:
+def apply(data, action: dict, *, actor: str, session: Session, chained: bool = False) -> dict:
     """Perform one confirmed action in the caller's transaction. Raises
     :class:`ActionRefused` when its record changed since it was proposed, or a rule now
-    refuses it — the caller rolls the whole card back."""
+    refuses it — the caller rolls the whole card back.
+
+    ``chained``: an earlier action of the same card already changed this record (phone,
+    then address; change, then hide). Its staleness was checked by that first action and
+    nothing else can write inside this transaction, so it is not checked again — and every
+    action applies its *own* fields onto the record as it is now, never onto the copy it
+    saw when proposed, so an earlier action's change is never undone."""
     row = session.get(m.Collection, action["collection_id"])
-    if row is None:
+    if row is None or row.slug != action["collection"] or bool(row.internal) != bool(action.get("internal")):
         raise ActionRefused(f"the {action['collection']} collection no longer exists")
     from kernos.data.store import _row
     collection = _row(row)
     space_id, op, label = action["space_id"], action["op"], action.get("label") or ""
+    now = None
     if op in ("update", "delete"):
         now = data.get_document(collection, space_id, action["doc_id"], session=session)
-        if now is None or now["data"] != action["before"]:
+        if now is None or (not chained and now["data"] != action["before"]):
             raise ActionRefused(f"«{label}» changed since this was proposed — nothing was saved; ask again")
+        now = now["data"]
     writer = _writer(collection)
+    soft = options_of(collection)["soft_delete"]
     try:
         if writer is not None:
-            doc_id = writer.apply(session, space_id, op, action.get("before"), action["payload"], actor)
+            doc_id = writer.apply(session, space_id, op, now, action["payload"], actor)
         elif op == "create":
             doc = copy.deepcopy(action["after"])
             if options_of(collection)["ids"] == "server":
                 floor = _max_numeric_id(session, collection, space_id)
                 doc[collection["key"]] = str(data.next_id(f"kn:{collection['id']}", session=session, floor=floor))
             doc_id = data.insert_document(collection, space_id, doc, actor=actor, session=session)["doc_id"]
-        elif op == "update" or (op == "delete" and action.get("soft")):
-            doc_id = data.upsert_document(collection, space_id, action["after"], actor=actor, session=session)["doc_id"]
+        elif op == "update" or (op == "delete" and soft):
+            doc = {**now, **action["payload"]} if op == "update" else {**now, soft: False}
+            doc_id = data.upsert_document(collection, space_id, doc, actor=actor, session=session)["doc_id"]
         elif op == "delete":
             doc_id = data.delete_document(collection, space_id, action["doc_id"], actor=actor, session=session)["doc_id"]
         else:
@@ -279,12 +315,19 @@ def proposed(result) -> list[dict]:
     proposal is data for the manager, never this turn's card (as ``last_result``)."""
     if result is None:
         return []
-    out = []
+    out, made = [], set()
     for inv in getattr(result, "tools", None) or []:
         res = getattr(inv, "result", None)
         if getattr(inv, "from_agent", None) is None and isinstance(res, dict) and res.get("ok") \
                 and res.get("type") == PROPOSED and res["action"] not in out:
-            out.append(res["action"])
+            a = res["action"]
+            if a["op"] == "create" and a.get("identity") is not None:
+                # "Cơm Tấm" and "Com tam" in one turn are one place: the second create
+                # would fail on Confirm and leave a card nobody can ever confirm
+                if (a["collection_id"], a["identity"]) in made:
+                    continue
+                made.add((a["collection_id"], a["identity"]))
+            out.append(a)
     return out
 
 
@@ -299,7 +342,8 @@ def headline(action: dict) -> str:
 def body(payload: dict) -> str:
     """The pending card's text: every change, field by field, so a person sees exactly
     what they confirm."""
-    lines = ["📝 **Confirm these changes?**", ""]
+    lines = ([payload["reply"].strip(), ""] if (payload.get("reply") or "").strip() else []) + \
+        ["📝 **Confirm these changes?**", ""]
     for a in payload.get("actions") or []:
         lines.append(f"• {a['headline']}")
         for c in a["changes"]:
@@ -326,7 +370,13 @@ def draft_kind(data):
         actions = payload.get("actions") or []
         if any(str(a["space_id"]) != str(space_id) for a in actions):
             raise ActionRefused("these changes belong to another room")
-        return {"applied": [apply(data, a, actor=actor, session=session) for a in actions], "by": actor}
+        applied, touched = [], set()
+        for a in actions:
+            target = (a["collection_id"], a.get("doc_id"))
+            applied.append(apply(data, a, actor=actor, session=session,
+                                 chained=a.get("doc_id") is not None and target in touched))
+            touched.add(target)
+        return {"applied": applied, "by": actor}
 
     def card(session, space_id, payload: dict, result: dict) -> tuple[str, dict]:
         done = result.get("applied") or []
@@ -346,4 +396,8 @@ def render(result):
     from kernos.kernel.context import Draft
 
     actions = proposed(result)
-    return Draft(KIND, {"actions": actions}) if actions else None
+    if not actions:
+        return None
+    # the model's own words (a lunch suggestion, an explanation) stay on the card: a turn
+    # that ends on a card posts no other message
+    return Draft(KIND, {"actions": actions, "reply": getattr(result, "final_text", "") or ""})

@@ -44,11 +44,16 @@ class PackRender(BasePlugin):
     async def run(self, ctx: TurnContext, config: dict) -> None:
         result = ctx.result
         tool_packs = ctx.profile.tool_packs if ctx.profile is not None else []
+        kinds = set()
+        ctx.outcome, ctx.more_drafts = None, []
         for pack, _overrides in self._packs.enabled(tool_packs):
             outcome = pack.render(result)
             if outcome is None:
                 continue
             if isinstance(outcome, Draft):
+                if outcome.kind in kinds:           # two packs serving one kind (record_draft)
+                    continue
+                kinds.add(outcome.kind)
                 stamps = pack.draft_kinds()[outcome.kind].stamps
                 payload = dict(outcome.payload)
                 if "raw_input" in stamps:
@@ -58,7 +63,13 @@ class PackRender(BasePlugin):
                 if "turn_id" in stamps:
                     payload["turn_id"] = result.turn_id
                 outcome = Draft(outcome.kind, payload)
-            ctx.outcome = outcome
+            if ctx.outcome is None:
+                ctx.outcome = outcome
+            elif isinstance(outcome, Draft):
+                # the first pack's outcome is the turn's; another pack's proposal is still a
+                # card of its own (a Body from a later pack stays dropped, as before)
+                ctx.more_drafts.append(outcome)
+        if ctx.outcome is not None:
             return
         text = result.final_text if result is not None else ""
         ctx.outcome = Body(text or empty_turn_body(result, config.get("empty")), None,

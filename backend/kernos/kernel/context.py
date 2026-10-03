@@ -123,6 +123,10 @@ class TurnContext:
     # what run/render/persist produce
     result: Any = None                   # kernos.engine.base.TurnResult
     outcome: Outcome | None = None
+    #: Cards other packs proposed in the same turn (the outcome is the first pack's):
+    #: each is persisted as its own card, never dropped — a place change proposed beside
+    #: a meal must not vanish while the reply tells the user to confirm it.
+    more_drafts: list = field(default_factory=list)
     persisted: Any = None
     superseded: list = field(default_factory=list)
     pending_events: list = field(default_factory=list)   # emitted by the caller, after its lock

@@ -37,6 +37,10 @@ class Cards(BasePlugin):
         else:
             ctx.persisted = self._a.messages.post(
                 ctx.space_id, author=None, kind="bot", body=outcome.text, attachments=outcome.attachments)
+        for more in ctx.more_drafts:
+            card, superseded = self._a.cards.create(ctx.space_id, more.kind, more.payload)
+            ctx.pending_events.append({"type": "message", **self._a.messages.to_payload(card)})
+            superseded_payloads += [self._a.messages.to_payload(m) for m in superseded]
 
         if ctx.result is not None:
             for name in sorted(self._cancel_tools(ctx)):

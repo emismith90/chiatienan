@@ -43,7 +43,7 @@ PLACES = {
     # The agent changes places only by proposing (a card a person confirms), through
     # `places.py`'s rules (its `Writer`): delete hides, ids come from the counter, and
     # the slug is not editable (a rename keeps the identity; `rename_slug` moves it).
-    "options": {"confirm": True, "soft_delete": "active", "ids": "server",
+    "options": {"confirm": True, "soft_delete": "active", "ids": "server", "defaults": {"walkable": True},
                 "editable": ["name", "aliases", "tags", "delivery", "address", "phone",
                              "walkable", "walk_minutes", "price_hint", "closed_until", "active"],
                 "agent_tools": ["search", "create", "update", "delete"]},

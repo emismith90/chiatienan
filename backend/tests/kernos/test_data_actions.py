@@ -41,8 +41,11 @@ def test_server_ids_are_drawn_when_applied_and_soft_delete_hides(db):
     room_id, k, col, tools = _todo(db, {"ids": "server", "soft_delete": "open"})
     assert "id" not in tools["todo_create"].input_schema["properties"]["data"]["properties"]
     assert "Hide" in tools["todo_delete"].description
-    p1 = tools["todo_create"].execute({"data": {"text": "mua bia", "open": True}})
-    p2 = tools["todo_create"].execute({"data": {"text": "đặt bàn", "open": True}})
+    assert "open" not in tools["todo_create"].input_schema["properties"]["data"]["properties"]
+    assert tools["todo_create"].execute({"data": {"text": "x", "open": False}})["ok"] is False    # never born hidden
+    p1 = tools["todo_create"].execute({"data": {"text": "mua bia"}})
+    p2 = tools["todo_create"].execute({"data": {"text": "đặt bàn"}})
+    assert p1["action"]["after"]["open"] is True
     with db.session() as s:
         ids = [actions.apply(k.data, p["action"], actor="member:1", session=s)["doc_id"] for p in (p1, p2)]
     assert ids == ["1", "2"]

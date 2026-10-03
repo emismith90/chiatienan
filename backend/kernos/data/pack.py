@@ -73,9 +73,6 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
     def live() -> dict:
         return resolve() if resolve is not None else collection
 
-    def _visible(docs: list[dict]) -> list[dict]:
-        return [d for d in docs if not actions.hidden(collection, d["data"])]
-
     def find(args, _tool_ctx=None) -> dict:
         args = args or {}
         where = args.get("where") or {}
@@ -83,22 +80,20 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
             return err("where must be an object of field: value pairs.")
         try:
             with sessions() as s:
-                out = data.find_documents(live(), space_id, where=where,
+                out = data.find_documents(live(), space_id, where=where, hide=soft,
                                           limit=args.get("limit") or FIND_LIMIT, session=s)
-        except ContentError as exc:
+        except (ContentError, ValueError) as exc:
             return err(str(exc))
-        out["documents"] = _visible(out["documents"])
         return {"ok": True, "type": f"{slug}_documents", "collection": slug, **out}
 
     def search(args, _tool_ctx=None) -> dict:
         args = args or {}
         try:
             # its own sessions: the embedder is called with none open (store.search_documents)
-            out = data.search_documents(live(), space_id, args.get("query"),
+            out = data.search_documents(live(), space_id, args.get("query"), hide=soft,
                                         limit=args.get("limit") or SEARCH_LIMIT)
-        except ContentError as exc:
+        except (ContentError, ValueError) as exc:
             return err(str(exc))
-        out["documents"] = _visible(out["documents"])
         return {"ok": True, "type": f"{slug}_search_results", "collection": slug, **out}
 
     def _write(op: str, *, doc_id=None, payload=None, corrects=None) -> dict:
@@ -180,8 +175,8 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
             append)
     else:
         editable = actions.editable_fields(collection)
-        create_fields = editable + ([key] if opts["ids"] == "client" else [])
-        required = [f for f in collection["schema"].get("required") or [] if f in create_fields]
+        create_fields = actions.create_fields(collection)
+        required = actions.create_required(collection)
         tools["create"] = PackTool(
             names["create"],
             f"Add one new record to {about}. {how}"

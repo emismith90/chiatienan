@@ -610,9 +610,7 @@ def resolve_best(session: Session, room_id: int, text: str, *, today=None
 # the panel can never disagree about what a valid place is.
 
 def _action_fields(payload: dict) -> dict:
-    fields = {k: v for k, v in payload.items() if k != "name"}
-    fields.setdefault("walkable", True)
-    return fields
+    return {k: v for k, v in payload.items() if k != "name"}
 
 
 def _check_action(session: Session, room_id, op: str, before: dict | None, payload: dict) -> dict:
@@ -668,7 +666,8 @@ def _apply_action(session: Session, room_id, op: str, before: dict | None, paylo
 def _register_writer() -> None:
     from kernos.data.actions import Writer, register_writer
 
-    register_writer("places", Writer(check=_check_action, apply=_apply_action))
+    register_writer("places", Writer(check=_check_action, apply=_apply_action,
+                                     identity=lambda after: after["slug"]))
 
 
 _register_writer()

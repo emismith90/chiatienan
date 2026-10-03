@@ -151,9 +151,6 @@
     "properties": {
       "data": {
         "properties": {
-          "active": {
-            "type": "boolean"
-          },
           "address": {
             "type": "string"
           },
@@ -196,9 +193,7 @@
           }
         },
         "required": [
-          "name",
-          "walkable",
-          "active"
+          "name"
         ],
         "type": "object"
       }
