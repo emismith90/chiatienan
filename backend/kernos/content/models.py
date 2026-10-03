@@ -263,6 +263,10 @@ class Collection(Base):
     #: agent tools, refuses admin writes, and its documents are read and written only
     #: inside the caller's transaction. See :mod:`kernos.data.system`.
     internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    #: How the agent may change documents — see :data:`kernos.data.actions.DEFAULT_OPTIONS`.
+    #: ``None`` (a row from before the column) means the defaults: every write is a
+    #: proposal a person confirms on a card.
+    options: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[str] = mapped_column(String(32), default=utcnow, nullable=False)
 
 

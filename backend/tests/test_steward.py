@@ -1,7 +1,7 @@
 """The steward: seeded on every boot, off until an operator connects it (plan Phase 10.2).
 
 The two halves that matter are proved separately, because they are the whole risk of
-shipping this to a live room: **off**, a room's manifest is the 19 tools it has always
+shipping this to a live room: **off**, a room's manifest is the 22 tools it has always
 had; **on**, the manager gains exactly one tool, and asking it produces a proposal
 against the profile the steward reviews — which no agent can publish for itself.
 """
@@ -75,7 +75,7 @@ async def test_off_by_default_a_room_sees_the_same_nineteen_tools(db, monkeypatc
     kernel_for(db)                                            # boots and seeds the steward
     fake, _ = await _turn(monkeypatch, db, room_id, mm, "@phoenix chào", [_turn_done("Chào.")])
     names = _tool_names(fake.runs[0])
-    assert len(names) == 19 and not any(n.startswith(("ask_", "cms_")) for n in names)
+    assert len(names) == 22 and not any(n.startswith(("ask_", "cms_")) for n in names)
 
 
 # ---------------------------------------------------------------------------- on
@@ -106,7 +106,7 @@ async def test_asking_the_steward_drafts_against_the_profile_it_reviews_and_prop
     fake, reply = await _turn(monkeypatch, db, room_id, mm, "@phoenix nhờ steward xem lại", manager, sub)
 
     # the manager gained exactly one tool; the steward's own manifest is the CMS
-    assert len(_tool_names(fake.runs[0])) == 20 and "ask_steward" in _tool_names(fake.runs[0])
+    assert len(_tool_names(fake.runs[0])) == 23 and "ask_steward" in _tool_names(fake.runs[0])
     assert set(_tool_names(fake.runs[1])) == READ_AND_DRAFT           # read + draft, no eval, no publish
     assert "cms_publish" not in _tool_names(fake.runs[1])
     ask = next(t for t in fake.runs[0]["tools"] if t["name"] == "ask_steward")
