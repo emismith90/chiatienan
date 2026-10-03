@@ -284,7 +284,7 @@ packs/lunch_ledger    meals, drafts, the outcome decision and reply bodies   ─
 packs/ledger_tools    statements, settlement, payments, the random draw      ─┼─ over ledger_core
 packs/poker_ledger    game nights: buy-ins, cash-outs, house, debt edges    ─┘
 app/packs/            lunch_places (restaurants, memos), room_members (member CRUD)
-kernos/data           collections: {slug}_find / _upsert / _delete / _search (a journal: _find / _append / _search)
+kernos/data           collections: {slug}_find / _search / _create / _update / _delete (a journal: _find / _append / _search)
 kernos/agents         delegation: ask_<sub_slug> for every sub in the agent's delegates_to
 kernos/osadmin        os_admin: the CMS as tools (§5)
 ```
@@ -297,10 +297,23 @@ frontend renders its `game_draft` through the generic `DraftCard`.
 
 A **collection** is a schema-validated document type defined through the admin API. A
 profile that enables the `collections` pack gets tools per collection generated from the
-definition; the schema stays in the sidecar-safe JSON Schema subset. Writes are immediate
-because these are facts the room asked the agent to remember, not money.
+definition; the schema stays in the sidecar-safe JSON Schema subset.
 
-A collection has a **mode**. A `table` is upserted and deleted by its `key` (places, notes).
+**The agent never writes a collection directly** (`kernos/data/actions.py`). A write tool
+turns the request into an *action* — checked against the schema and the collection's
+rules now, with the record as it stands (`before`) and as it would be (`after`) — and the
+turn ends on one `record_draft` card listing every change, field by field. Nothing is
+saved until a person presses Confirm; then every action applies in one transaction, and
+any whose record changed since it was proposed refuses the whole card. A collection
+declares how it may be changed in its `options`: `confirm` (default on; off writes at once,
+for low-stakes data), `soft_delete` (a boolean field: delete hides, and find/search skip
+hidden records), `ids` (`client`, or `server`: the next number, drawn on confirm),
+`editable` (what create/update may set; update patches only the fields given), and, for an
+internal collection, `agent_tools`. A store with rules in code registers a `Writer` that
+checks and applies its actions (places: `places._check_action` / `_apply_action`, the same
+functions the panel uses).
+
+A collection has a **mode**. A `table` is created, updated and deleted by its `key`.
 A `journal` is append-only: the server numbers the entries (`000001`, …), nothing replaces
 or deletes one, and a fix is a new entry whose `corrects` names the wrong one — the storage
 shape a log needs, and the one a ledger would build on.
@@ -323,7 +336,8 @@ exact record a money action refers to — the places resolver stays exact.
 
 **Internal collections** are stores the host builds on the same engine (plan
 2026-10-02). They belong to a reserved `_system` business — never the room's, so
-re-binding a room cannot hide its data — generate no agent tools, refuse admin writes,
+re-binding a room cannot hide its data — generate no agent tools unless their owner
+opts in (`agent_tools`; the places pack does), refuse admin writes,
 and are declared in code (`app/store.py`) and created by `Database.create_all()`. Their
 reads and writes take the caller's session, so a store write commits or rolls back with
 whatever triggered it. Two stores live there today:
@@ -332,7 +346,8 @@ whatever triggered it. Two stores live there today:
   A note's id is still its content hash (`line_id`); `seq` keeps the room's order.
 - `places` — formerly the `places` table (`app/places.py`). The id is the integer
   `meals.place_id` points at; the slug is a database-enforced `unique_key`. A `Place` is a
-  frozen record: every write goes through the module.
+  frozen record: every write goes through the module. The agent gets `places_search`,
+  `places_create`, `places_update` and `places_delete` (a hide), all confirmed on a card.
 
 The legacy table and files were imported once by `python -m app.migrate_storage`, a
 deploy step that runs with the backend stopped after `python -m app.backup`, verifies

@@ -1,4 +1,4 @@
-"""Dump the 19 live tool schemas into the sidecar's test fixture.
+"""Dump the live tool schemas into the sidecar's test fixture.
 
     python -m bench.dump_schemas
 

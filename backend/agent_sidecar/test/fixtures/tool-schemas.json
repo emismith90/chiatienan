@@ -25,47 +25,6 @@
     ],
     "type": "object"
   },
-  "add_place": {
-    "properties": {
-      "address": {
-        "type": "string"
-      },
-      "aliases": {
-        "description": "Other spellings the group uses, including tone-free forms.",
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
-      },
-      "delivery": {
-        "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
-      },
-      "name": {
-        "type": "string"
-      },
-      "phone": {
-        "type": "string"
-      },
-      "tags": {
-        "items": {
-          "type": "string"
-        },
-        "type": "array"
-      },
-      "walkable": {
-        "description": "Can the group walk there from the office?",
-        "type": "boolean"
-      }
-    },
-    "required": [
-      "name"
-    ],
-    "type": "object"
-  },
   "cancel_draft": {
     "properties": {
       "draft_id": {
@@ -186,6 +145,156 @@
         "type": "string"
       }
     },
+    "type": "object"
+  },
+  "places_create": {
+    "properties": {
+      "data": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "closed_until": {
+            "description": "ISO date",
+            "type": "string"
+          },
+          "delivery": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "price_hint": {
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "walk_minutes": {
+            "type": "integer"
+          },
+          "walkable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "walkable",
+          "active"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "data"
+    ],
+    "type": "object"
+  },
+  "places_delete": {
+    "properties": {
+      "doc_id": {
+        "description": "The record's id.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "doc_id"
+    ],
+    "type": "object"
+  },
+  "places_search": {
+    "properties": {
+      "limit": {
+        "description": "1–20.",
+        "type": "integer"
+      },
+      "query": {
+        "description": "What to look for.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  "places_update": {
+    "properties": {
+      "changes": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "closed_until": {
+            "description": "ISO date",
+            "type": "string"
+          },
+          "delivery": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "price_hint": {
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "walk_minutes": {
+            "type": "integer"
+          },
+          "walkable": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "doc_id": {
+        "description": "The record's id.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "doc_id",
+      "changes"
+    ],
     "type": "object"
   },
   "propose_meal": {

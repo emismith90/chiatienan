@@ -62,6 +62,20 @@ description: Suggest a place for lunch — "trưa nay ăn gì", "ăn gì bây gi
 - A wrong/outdated memory → `forget` with EXACTLY the verbatim old sentence.
 - Both create a CARD for the user to press to confirm. Don't record anything yourself.
 
+## Changing the list of places (places_create / places_update / places_delete)
+
+- Get the place's `id` with `find_places` first; these tools take `doc_id` = that id.
+- "Xoá quán X", "quán X đóng cửa rồi", "đừng gợi ý X nữa" (delete X / X has closed / stop suggesting X)
+  → `places_delete`. It HIDES the place (meals eaten there stay); don't `remember` a "closed" note instead.
+- Closed for a while ("nghỉ Tết đến 10/2" — closed for Tết until 10 Feb) → `places_update` with `closed_until`.
+- Rename, phone, address, another spelling (alias), delivery apps, price band → `places_update` with ONLY
+  the fields that change.
+- A new place → `places_create`. If a meal at that new place is also being recorded, propose the place
+  first and record the meal after it is confirmed — one card per turn.
+- Looking for a place by description ("quán nào có điều hòa", "chỗ ăn chay gần đây" — which place has
+  air-con / somewhere vegetarian nearby) → `places_search`.
+- Each one creates a CARD; nothing changes until someone presses Confirm. Say so — NEVER say it is done.
+
 ## Replying
 
 - Suggest the top 1–3 places on the list, each with a short reason taken from the tool's returned

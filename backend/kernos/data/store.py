@@ -73,7 +73,7 @@ def _cap(collection: dict) -> int:
 def generated_tool_names(slug: str, mode: str = "table") -> tuple[str, ...]:
     if mode == "journal":
         return f"{slug}_find", f"{slug}_append", f"{slug}_search"
-    return f"{slug}_find", f"{slug}_upsert", f"{slug}_delete", f"{slug}_search"
+    return f"{slug}_find", f"{slug}_create", f"{slug}_update", f"{slug}_delete", f"{slug}_search"
 
 
 def _hit(row: m.Document) -> dict:
@@ -119,7 +119,8 @@ class DataStore:
     def put_collection(self, business_id: int, slug: str, *, name: str, schema: dict, key: str,
                        indexed: Iterable[str] = (), description: str = "", actor: str,
                        reserved: Iterable[str] = (), force: bool = False, mode: str = "table",
-                       searchable: Iterable[str] | None = None, internal: bool = False) -> dict:
+                       searchable: Iterable[str] | None = None, internal: bool = False,
+                       options: dict | None = None) -> dict:
         """Create or update a definition. Refused for an ``agent:*`` actor, a slug outside
         ``[a-z][a-z0-9_]{0,56}``, a schema outside the sidecar-safe subset, a generated
         tool name another pack owns, a ``mode`` change once documents exist, or — with
@@ -135,6 +136,8 @@ class DataStore:
             check_collection_schema(schema, key=key, indexed=indexed, mode=mode, searchable=searchable)
         except SchemaError as exc:
             raise Invalid(str(exc)) from exc
+        from kernos.data.actions import check_options
+        options = check_options(options, schema=schema, key=key, mode=mode)
         clash = sorted(set(generated_tool_names(slug, mode)) & set(reserved))
         if clash:
             raise Conflict(f"collection {slug!r} would generate tool names another pack owns: {clash}")
@@ -165,12 +168,13 @@ class DataStore:
                 s.execute(m.Document.__table__.update().where(m.Document.collection_id == row.id)
                           .values(search_text=None))
             row.name, row.description, row.schema, row.key, row.indexed = name, description, schema, key, indexed
-            row.mode, row.searchable, row.internal = mode, searchable, internal
+            row.mode, row.searchable, row.internal, row.options = mode, searchable, internal, options
             row.updated_at = m.utcnow()
             s.flush()
             self._log(s, actor, "put", "collection", f"{business_id}/{slug}",
                       before={k: before[k] for k in ("schema", "key", "indexed", "mode", "searchable")} if before else None,
-                      after={"schema": schema, "key": key, "indexed": indexed, "mode": mode, "searchable": searchable})
+                      after={"schema": schema, "key": key, "indexed": indexed, "mode": mode, "searchable": searchable,
+                             "options": options})
             return _row(row)
 
     def _collection(self, s: Session, business_id: int, slug: str) -> m.Collection:

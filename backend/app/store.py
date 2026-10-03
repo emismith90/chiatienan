@@ -40,6 +40,13 @@ PLACES = {
     "slug": "places", "name": "Places",
     "description": "Restaurants a room eats at. id is the integer meals.place_id points at.",
     "key": "id", "indexed": ["slug"], "searchable": ["name", "aliases", "tags", "address"],
+    # The agent changes places only by proposing (a card a person confirms), through
+    # `places.py`'s rules (its `Writer`): delete hides, ids come from the counter, and
+    # the slug is not editable (a rename keeps the identity; `rename_slug` moves it).
+    "options": {"confirm": True, "soft_delete": "active", "ids": "server",
+                "editable": ["name", "aliases", "tags", "delivery", "address", "phone",
+                             "walkable", "walk_minutes", "price_hint", "closed_until", "active"],
+                "agent_tools": ["search", "create", "update", "delete"]},
     "schema": {"type": "object", "required": ["id", "slug", "name", "walkable", "active"],
                "properties": {
                    "id": {"type": "string", "description": "the integer id, as text"},
@@ -78,6 +85,19 @@ def ensure(db) -> None:
     """Declare the stores in ``db`` (idempotent). Called by ``Database.create_all``."""
     ensure_internal(DataStore(db.session), db.session, SPECS)
     _collections.pop(db.engine, None)
+
+
+def declared(slug: str) -> dict:
+    """The code declaration of ``slug`` shaped like a stored definition, without its
+    database id — enough to describe its tools before any database exists."""
+    from kernos.data.search import default_searchable
+
+    spec = next(sp for sp in SPECS if sp["slug"] == slug)
+    return {"id": None, "slug": slug, "name": spec["name"], "description": spec.get("description", ""),
+            "schema": spec["schema"], "key": spec["key"], "indexed": list(spec.get("indexed", ())),
+            "mode": spec.get("mode", "table"), "internal": True, "options": spec.get("options"),
+            "searchable": (default_searchable(spec["schema"]) if spec.get("searchable") is None
+                           else list(spec["searchable"]))}
 
 
 def collection(session: Session, slug: str) -> dict:

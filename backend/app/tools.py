@@ -68,7 +68,7 @@ class ToolContext:
     system_override: str | None = None
     message_override: str | None = None
     # Which packs/tools the resolved profile enables (`spec.tool_packs`, dumped), set
-    # by the pipeline's run plugin (plan Task 3.1). `None` = today's 19 tools.
+    # by the pipeline's run plugin (plan Task 3.1). `None` = today's legacy tools (LEGACY_ORDER).
     tool_config: dict | None = None
     # What the framework's packs need from this host (plan Task 3.3): the card
     # store (pending drafts, cancel), the local date, and the uniform draw. Filled
@@ -124,7 +124,7 @@ def _from_pack(tool) -> CustomTool:
 
 
 def _legacy_build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
-    """All 19 tools, in the order this module has always listed them: the three
+    """All the legacy tools, in the order this module has always listed them: the three
     host packs composed with no profile — every test fake, the bench, the probe."""
     from app.packs import LEGACY_ORDER, host_packs
 
@@ -139,7 +139,7 @@ def build_tools(ctx: ToolContext) -> dict[str, CustomTool]:
     """The tools this turn may call.
 
     With no ``tool_config`` on the context — every test fake, the bench, the probe —
-    this is today's 19 tools in today's order. With one, the enabled packs are asked,
+    this is today's legacy tools in today's order. With one, the enabled packs are asked,
     the per-tool overrides applied, and the result put back into legacy order so the
     manifest the sidecar receives is stable (review F7).
     """

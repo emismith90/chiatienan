@@ -7,6 +7,7 @@ tool bodies are those of ``app/tools.py`` before Task 3.3, unchanged.
 from __future__ import annotations
 
 import random
+import weakref
 
 from sqlalchemy import select
 
@@ -14,7 +15,10 @@ from app import roster
 from kernos.packs import BasePack, PackTool, err as _err
 from packs.lunch_ledger.tools import _parse_iso
 
-PLACES_TOOLS = frozenset({"find_places", "suggest_lunch", "remember", "forget", "add_place"})
+#: The generated data-plane tools the agent gets for places (`app.store.PLACES`'s
+#: `agent_tools`): they propose, a person confirms on the card.
+GENERATED_PLACE_TOOLS = ("places_search", "places_create", "places_update", "places_delete")
+PLACES_TOOLS = frozenset({"find_places", "suggest_lunch", "remember", "forget", *GENERATED_PLACE_TOOLS})
 
 _FIND_PLACES_SCHEMA = {
     "type": "object",
@@ -25,27 +29,6 @@ _FIND_PLACES_SCHEMA = {
         },
         "all": {"type": "boolean", "description": "Return every place in the room."},
     },
-}
-
-_ADD_PLACE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "aliases": {
-            "type": "array", "items": {"type": "string"},
-            "description": "Other spellings the group uses, including tone-free forms.",
-        },
-        "tags": {"type": "array", "items": {"type": "string"}},
-        "delivery": {
-            "type": "array", "items": {"type": "string"},
-            "description": "Ordering apps, e.g. ['shopeefood', 'grab'].",
-        },
-        "address": {"type": "string"},
-        "phone": {"type": "string"},
-        "walkable": {"type": "boolean",
-                     "description": "Can the group walk there from the office?"},
-    },
-    "required": ["name"],
 }
 
 _SUGGEST_LUNCH_SCHEMA = {
@@ -275,7 +258,7 @@ def build(ctx) -> dict[str, PackTool]:
             if found is None:
                 return _err(
                     f"Not sure which place or person «{raw}» is. Call `find_places` or "
-                    "`find_members` to pin it down first, or `add_place` if it is a new place."
+                    "`find_members` to pin it down first, or `places_create` if it is a new place."
                 )
             subject, label = found
             try:
@@ -310,39 +293,6 @@ def build(ctx) -> dict[str, PackTool]:
                              subject_label=label, text=text)
             return {"ok": True, "type": "memo_draft", "memo_id": m.id,
                     "subject": subject, "subject_label": label, "text": text}
-
-    def add_place(args, _tool_ctx=None) -> dict:
-        """Create a restaurant row. Writes immediately, like ``add_member``.
-
-        A place is inert until someone eats there (design D7) — nothing about it
-        asserts anything, so it needs no confirm card. Observations do.
-        """
-        args = args or {}
-        from app import places as places_mod
-
-        name = (args.get("name") or "").strip()
-        if not name:
-            return _err("Missing place name.")
-        slug = places_mod.slugify(name)
-        with db.session() as s:
-            existing = next((p for p in places_mod.list_places(s, ctx.space_id, include_inactive=True)
-                             if p.slug == slug), None)
-            if existing is not None:
-                return {"ok": True, "place_id": existing.id, "slug": existing.slug,
-                        "name": existing.name, "already_existed": True}
-            try:
-                p = places_mod.create_place(
-                    s, ctx.space_id, name=name,
-                    aliases=args.get("aliases") or [],
-                    tags=args.get("tags") or [],
-                    delivery=args.get("delivery") or [],
-                    address=args.get("address"), phone=args.get("phone"),
-                    walkable=bool(args.get("walkable", True)),
-                )
-            except places_mod.PlaceError as exc:
-                return _err(str(exc))
-            return {"ok": True, "place_id": p.id, "slug": p.slug, "name": p.name,
-                    "already_existed": False}
 
     specs = {
         "find_places": dict(
@@ -381,26 +331,68 @@ def build(ctx) -> dict[str, PackTool]:
             ),
             input_schema=_FORGET_SCHEMA,
         ),
-        "add_place": dict(
-            execute=add_place,
-            description=(
-                "Add a restaurant the group has started going to. Writes immediately "
-                "(a place row is inert until someone eats there). Seed `aliases` with "
-                "every spelling the group actually types, including tone-free ones."
-            ),
-            input_schema=_ADD_PLACE_SCHEMA,
-        ),
     }
 
-    return {name: PackTool(name, spec["description"], spec["input_schema"], spec["execute"])
-            for name, spec in specs.items()}
+    out = {name: PackTool(name, spec["description"], spec["input_schema"], spec["execute"])
+           for name, spec in specs.items()}
+    out.update(_generated_tools(ctx))
+    return out
+
+
+_stores: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+
+def _data_for(db):
+    """The data plane over ``db`` with the search embedder — one per database."""
+    data = _stores.get(db)
+    if data is None:
+        from app.config import settings
+        from app.kernel import build_embedder
+        from kernos.data import DataStore
+
+        data = _stores[db] = DataStore(db.session, embedder=build_embedder(settings))
+    return data
+
+
+def _generated_tools(ctx) -> dict[str, PackTool]:
+    """``places_search`` / ``_create`` / ``_update`` / ``_delete`` — the generic tools of the
+    places store, limited to its ``agent_tools``. Writes propose; `places.py` checks and
+    applies them (its `Writer`)."""
+    from app import places as _places  # noqa: F401 — registers the places Writer
+    from app import store
+    from kernos.data import tools_for
+    from kernos.data.actions import options_of
+
+    db = ctx.db
+
+    def stored() -> dict:
+        with db.session() as s:
+            return store.collection(s, "places")
+
+    spec = store.declared("places")
+    return tools_for(spec, _data_for(db), ctx.space_id, getattr(ctx, "sender_member_id", None),
+                     session_factory=db.session, only=options_of(spec)["agent_tools"], resolve=stored)
 
 
 class LunchPlacesPack(BasePack):
     id, version, handles_money = "lunch_places", "1", False
+    #: a reply saying a place was added/changed/hidden needs one of these behind it
+    commit_tools = frozenset({"places_create", "places_update", "places_delete"})
 
     def tools(self, ctx) -> dict[str, PackTool]:
         return build(ctx)
+
+    def draft_kinds(self) -> dict:
+        from app import store
+        from kernos.data import actions
+
+        return {actions.KIND: actions.draft_kind(store.DATA)}
+
+    def render(self, result):
+        """A turn that proposed place changes ends on their confirm card."""
+        from kernos.data import actions
+
+        return actions.render(result)
 
     # `seed()` stays the no-op default: `seed_places.load_file` needs a seed file path,
     # which is a deployment decision, not a pack default. Phase 5 decides where it lives.

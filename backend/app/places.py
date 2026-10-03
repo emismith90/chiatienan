@@ -184,10 +184,9 @@ _LIST_FIELDS = ("aliases", "tags", "delivery")
 def create_place(session: Session, room_id: int, *, name: str, **fields) -> Place:
     """Insert a place, or raise if its slug is taken.
 
-    Shared by the ``add_place`` tool and the panel so the slug rule has one home.
-    The tool treats a collision as success (it wanted the place to exist, and it
-    does); the panel needs the collision surfaced, so this raises and the callers
-    differ.
+    Shared by the agent's ``places_create`` (through :func:`_apply_action`) and the
+    panel so the slug rule has one home. A collision raises: the panel surfaces it,
+    and the agent's proposal is refused before its card is shown (:func:`_check_action`).
     """
     name = (name or "").strip()
     if not name:
@@ -600,3 +599,76 @@ def resolve_best(session: Session, room_id: int, text: str, *, today=None
     if rank(ordered[0]) > rank(ordered[1]):
         return ordered[0], "best"
     return None, "ambiguous"
+
+
+# ------------------------------------------------------------ the agent's actions
+#
+# The agent changes places through the generic data-plane tools (`places_create`,
+# `places_update`, `places_delete`), which only *propose*: a person confirms the card
+# (kernos.data.actions). These two functions are the places' rules for that path —
+# the same `create_place` / `_edited` / `edit_place` the panel uses, so the chat and
+# the panel can never disagree about what a valid place is.
+
+def _action_fields(payload: dict) -> dict:
+    fields = {k: v for k, v in payload.items() if k != "name"}
+    fields.setdefault("walkable", True)
+    return fields
+
+
+def _check_action(session: Session, room_id, op: str, before: dict | None, payload: dict) -> dict:
+    """The place as the action would leave it (``Writer.check``)."""
+    from kernos.content.errors import Invalid
+
+    room_id = int(room_id)
+    try:
+        if op == "create":
+            name = (payload.get("name") or "").strip()
+            slug = slugify(name)
+            if not name or not slug:
+                raise PlaceError("A place needs a name.")
+            existing = next((p for p in list_places(session, room_id, include_inactive=True)
+                             if p.slug == slug), None)
+            if existing is not None:
+                hint = " It is hidden: update it with active=true to bring it back." if not existing.active else ""
+                raise PlaceError(f"«{existing.name}» is already on the list (id {existing.id}).{hint}")
+            p, _ = _edited(Place(id=0, room_id=room_id, slug=slug, name=name), _action_fields(payload))
+            data = _to_data(p)
+            del data["id"]                      # drawn from the counter when confirmed
+            return data
+        place = _from_doc(room_id, {"data": before})
+        if op == "update":
+            p, changed = _edited(place, payload)
+            if not changed:
+                raise PlaceError(f"That would not change «{place.name}».")
+            return _to_data(p)
+        if op == "delete":
+            if not place.active:
+                raise PlaceError(f"«{place.name}» is already hidden.")
+            return _to_data(replace(place, active=False))
+    except (PlaceError, ValueError) as exc:
+        raise Invalid(str(exc)) from exc
+    raise Invalid(f"places cannot {op}")
+
+
+def _apply_action(session: Session, room_id, op: str, before: dict | None, payload: dict, actor: str) -> str:
+    """Perform a confirmed action (``Writer.apply``); the place's id."""
+    from kernos.content.errors import Invalid
+
+    room_id = int(room_id)
+    try:
+        if op == "create":
+            return str(create_place(session, room_id, name=payload["name"], **_action_fields(payload)).id)
+        place = _from_doc(room_id, {"data": before})
+        edit_place(session, place, payload if op == "update" else {"active": False})
+        return str(place.id)
+    except (PlaceError, ValueError) as exc:
+        raise Invalid(str(exc)) from exc
+
+
+def _register_writer() -> None:
+    from kernos.data.actions import Writer, register_writer
+
+    register_writer("places", Writer(check=_check_action, apply=_apply_action))
+
+
+_register_writer()

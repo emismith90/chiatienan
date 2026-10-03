@@ -1,9 +1,10 @@
 /** Collections: the one component a person creates in the CMS (plan Phase 13.4).
  *
  * Everything else on this screen chooses between things the code registers. A collection
- * is different: its JSON Schema *generates* tools — `<slug>_find`, `<slug>_upsert`,
- * `<slug>_delete`, `<slug>_search`; for an append-only journal `<slug>_find`, `<slug>_append`,
- * `<slug>_search` — for every profile that enables the `collections` pack. That is the
+ * is different: its JSON Schema *generates* tools — `<slug>_find`, `<slug>_create`,
+ * `<slug>_update`, `<slug>_delete`, `<slug>_search`; for an append-only journal `<slug>_find`,
+ * `<slug>_append`, `<slug>_search` — for every profile that enables the `collections` pack.
+ * Their writes propose: the room confirms each change on a card before it is saved. That is the
  * honest answer to "can the CMS add a tool": not by authoring code, but by declaring a
  * document type that a pack in code knows how to serve.
  *
@@ -171,7 +172,7 @@ export function Collections({ businessId }: { businessId: number | null }) {
           {open ? `Editing ${open}` : "New collection"}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Field label="Slug" hint="lowercase; `<slug>_upsert` must stay under 64 characters">
+          <Field label="Slug" hint="lowercase; `<slug>_update` must stay under 64 characters">
             <input
               className={`${box} max-w-[12rem]`}
               value={form.slug}
@@ -288,7 +289,7 @@ function generated(slug: string, mode: admin.Collection["mode"] = "table"): stri
   if (!slug) return [];
   return mode === "journal"
     ? [`${slug}_find`, `${slug}_append`, `${slug}_search`]
-    : [`${slug}_find`, `${slug}_upsert`, `${slug}_delete`, `${slug}_search`];
+    : [`${slug}_find`, `${slug}_create`, `${slug}_update`, `${slug}_delete`, `${slug}_search`];
 }
 
 function list(csv: string): string[] {
