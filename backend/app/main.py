@@ -202,6 +202,14 @@ class QrRequestIn(BaseModel):
     to: int
 
 
+class DrawIn(BaseModel):
+    label: str | None = Field(default=None, max_length=80)
+
+
+class DrawPoolIn(BaseModel):
+    member_ids: list[int]
+
+
 class DraftPatchIn(BaseModel):
     payer_member_id: int | None = None
     member_participants: list[int] | None = None
@@ -710,6 +718,43 @@ async def qr_request(room_id: int, body: QrRequestIn, ctx: AuthCtx = Depends(req
                        "date": e.occurred_on.isoformat(), "amount": e.outstanding}
                       for e in sorted(edges, key=lambda e: (e.occurred_on, e.meal_id))],
         }
+
+
+@app.post("/api/rooms/{room_id}/draw")
+async def lucky_draw(room_id: int, body: DrawIn, ctx: AuthCtx = Depends(require_session)):
+    """The Lucky Draw button: the same draw as the bot's `pick_random`, with no LLM
+    turn. The server picks before any reel spins — the animation only lands on
+    `chosen` — and the result is posted to the room, so a draw nobody liked can't
+    be quietly re-rolled until it comes out right."""
+    import random
+    from packs.ledger_tools.tools import random_pick
+
+    _check_room(ctx, room_id)
+    with get_db().session() as s:
+        pool = {m.id: m.display_name
+                for m in roster.list_members(s, room_id, default_only=True)}
+        att = random_pick(pool, random.choice, body.label)
+        if not att.get("ok"):
+            raise HTTPException(409, att.get("error") or "nobody to draw from")
+        att["drawn_by"] = {"id": ctx.member_id, "name": ctx.display_name}
+        msg = chat.post_message(s, room_id, None, chat._random_pick_body(att),
+                                attachments=att, kind="bot")
+        msg_payload = chat.message_to_dict(msg, None)
+    await hub.publish(room_id, {"type": "message", **msg_payload})
+    return {**att, "message_id": msg_payload["id"]}
+
+
+@app.put("/api/rooms/{room_id}/draw/pool")
+async def set_draw_pool(room_id: int, body: DrawPoolIn, ctx: AuthCtx = Depends(require_session)):
+    """Replace the room's saved draw list (the members' `default_participant`
+    flags) — the dialog's chips. The bot edits the same list with `edit_draw_list`."""
+    _check_room(ctx, room_id)
+    with get_db().session() as s:
+        try:
+            members = accounts.set_draw_list(s, room_id, only=body.member_ids)
+        except accounts.AccountError as exc:
+            raise HTTPException(400, str(exc))
+        return {"ok": True, "in_draw": [m.id for m in members if m.default_participant]}
 
 
 @app.post("/api/rooms/{room_id}/messages")

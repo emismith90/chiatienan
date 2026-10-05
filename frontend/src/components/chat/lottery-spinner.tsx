@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { LuckyCard } from "./lucky-draw";
 
 /** Trigger words that mark a chat message as a random-pick request. Matched
  * diacritic-insensitively (so "bốc thăm" and "boc tham" both hit) against the
@@ -39,38 +39,17 @@ export function looksLikeRandomRequest(text: string | undefined | null): boolean
   return TRIGGERS.some((t) => norm.includes(t));
 }
 
-/** Slot-machine style placeholder shown while a random pick is in flight: the
- * dice spins and a name rapidly cycles through the roster until the tool result
- * arrives and the RandomPickCard replaces it. Purely cosmetic — it never
- * decides or reveals the winner. */
+/** Slot-machine placeholder shown while the bot's random pick is in flight: the
+ * Lucky Draw reel rolls through the roster at full speed until the tool result
+ * arrives and the RandomPickCard (which lands the same reel on the winner)
+ * replaces it. Purely cosmetic — it never decides or reveals the winner. */
 export function LotterySpinner({ names }: { names: string[] }) {
-  const [i, setI] = useState(0);
-
-  useEffect(() => {
-    if (names.length < 2) return;
-    const id = setInterval(() => setI((n) => n + 1), 90);
-    return () => clearInterval(id);
-  }, [names.length]);
-
-  const current = names.length ? names[i % names.length] : "…";
-
   return (
-    <div
-      role="status"
-      aria-label="Drawing at random…"
-      className="mt-4 flex justify-start"
-    >
-      <div className="w-full max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center shadow-sm">
-        <div className="text-2xl motion-safe:animate-spin" aria-hidden>
-          🎲
-        </div>
-        <div
-          aria-hidden
-          className="mt-1 text-lg font-semibold text-[var(--accent-text)] tabular-nums transition-none"
-        >
-          {current}
-        </div>
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">Drawing…</div>
+    <div role="status" aria-label="Drawing at random…" className="mt-4 flex justify-start">
+      <div className="w-full max-w-[85%]">
+        <LuckyCard names={names} winner={null} spinning>
+          <div className="mt-3 text-xs font-semibold">Drawing…</div>
+        </LuckyCard>
       </div>
     </div>
   );

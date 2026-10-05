@@ -30,6 +30,8 @@ interface Message {
   pending?: boolean;
   queued?: boolean;
   error?: boolean;
+  /** A draw that arrived over the stream just now (set by `mergeEvent`). */
+  live?: boolean;
 }
 
 function HumanMessage({ message }: { message: Message }) {
@@ -162,7 +164,7 @@ export function MessageList({
               Phoenix
             </span>
             <BotMessage body={m.body} attachments={m.attachments} roomId={roomId}
-                        members={members} onOpenLedger={onOpenLedger} />
+                        members={members} onOpenLedger={onOpenLedger} live={m.live} />
           </div>
         ) : (
           <HumanMessage key={m.id} message={m} />

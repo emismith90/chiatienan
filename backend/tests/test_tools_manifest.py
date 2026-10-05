@@ -7,7 +7,7 @@ def test_tool_manifest_covers_every_tool_with_a_schema(db):
     names = set(build_tools(ToolContext(db=db, room_id=1)))
     manifest = {t["name"] for t in tool_manifest()}
     assert manifest == names
-    assert len(manifest) == 22
+    assert len(manifest) == 23
     assert all(t["description"] and t["schema"]["type"] == "object" for t in tool_manifest())
 
 

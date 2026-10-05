@@ -10,6 +10,7 @@ import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
 import { LotterySpinner, looksLikeRandomRequest } from "./lottery-spinner";
+import { LuckyDrawDialog } from "./lucky-draw";
 import { RoomSwitcher } from "./room-switcher";
 import { SidePanel, type PanelTab } from "./side-panel";
 import { MemberNotes } from "./member-notes";
@@ -454,6 +455,8 @@ export function RoomView({ roomId }: { roomId: number }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawOpen, setDrawOpen] = useState(false);
+  const reloadMembers = () => api.getMembers(roomId).then((m: Member[]) => setMembers(m)).catch(() => {});
   // A history answer in the chat can scope the ledger panel to its own period;
   // on a phone that also has to open the drawer, or the scoping is invisible.
   const [ledgerRange, setLedgerRange] = useState<{ from: string; to: string } | null>(null);
@@ -548,6 +551,15 @@ export function RoomView({ roomId }: { roomId: number }) {
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <InstallButton />
               <ThemeToggle />
+              <button
+                type="button"
+                onClick={() => setDrawOpen(true)}
+                aria-label="Lucky Draw"
+                title="Lucky Draw"
+                className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)]"
+              >
+                <span aria-hidden>🎰</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setDrawerOpen(true)}
@@ -655,6 +667,15 @@ export function RoomView({ roomId }: { roomId: number }) {
         </div>
       )}
 
+      {drawOpen && (
+        <LuckyDrawDialog
+          roomId={roomId}
+          members={members}
+          onClose={() => setDrawOpen(false)}
+          onListChanged={reloadMembers}
+        />
+      )}
+
       {selectedMember &&
         (selectedMember.id === memberId ? (
           <ProfileDialog
@@ -662,7 +683,7 @@ export function RoomView({ roomId }: { roomId: number }) {
             roomId={roomId}
             knowledgeVersion={knowledgeVersion}
             onClose={() => setSelectedMember(null)}
-            onSaved={() => api.getMembers(roomId).then((m: Member[]) => setMembers(m)).catch(() => {})}
+            onSaved={reloadMembers}
           />
         ) : (
           <MemberInfoDialog

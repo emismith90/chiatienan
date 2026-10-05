@@ -64,6 +64,15 @@ export const updateMe = (b: any) => req(`/api/me`, { method: "PUT", body: JSON.s
 
 export const getMembers = (roomId: number) => req(`/api/rooms/${roomId}/members`);
 
+/** The Lucky Draw button: the server draws from the room's saved list and posts
+ * the result to the room. Returns the `random_pick` card's attachments. */
+export const luckyDraw = (roomId: number, label?: string) =>
+  req(`/api/rooms/${roomId}/draw`, { method: "POST", body: JSON.stringify({ label }) });
+
+/** Replace the room's saved draw list (member ids). */
+export const setDrawPool = (roomId: number, memberIds: number[]) =>
+  req(`/api/rooms/${roomId}/draw/pool`, { method: "PUT", body: JSON.stringify({ member_ids: memberIds }) });
+
 /** One open debt, one direction. There is no net/balance figure anywhere in the
  * API: if A owes B and B owes A, both rows are here and neither cancels. */
 export type OutstandingRow = {

@@ -52,6 +52,25 @@
     ],
     "type": "object"
   },
+  "edit_draw_list": {
+    "properties": {
+      "add": {
+        "description": "member_ids to put on the draw list (from find_members).",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "remove": {
+        "description": "member_ids to take off the draw list (from find_members).",
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      }
+    },
+    "type": "object"
+  },
   "find_members": {
     "properties": {
       "all_active": {

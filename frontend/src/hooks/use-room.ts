@@ -122,7 +122,11 @@ export function mergeEvent(s: RoomState, e: any): RoomState {
           (m.author?.id == null || m.author?.id === e.author?.id)
         ),
     );
-    return { ...s, messages: [...withoutPending, msg] };
+    // A draw that arrives over the stream is happening now: `live` makes its
+    // card play the reel on every open screen. History from the API has no
+    // flag, so scrolling back past an old draw doesn't spin it again.
+    const fresh = msg.attachments?.type === "random_pick" ? { ...msg, live: true } : msg;
+    return { ...s, messages: [...withoutPending, fresh] };
   }
   return s;
 }
