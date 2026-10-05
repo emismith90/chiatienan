@@ -243,6 +243,45 @@ def itemized_adjustments(total: int, shares: dict[int, int]) -> dict[int, int]:
     return {m: s - base for m, s in shares.items() if s != base}
 
 
+def fixed_then_even(total: int, participants: list[int], fixed: dict[int, int], *,
+                    payer_id: int | None = None) -> dict[int, int]:
+    """"A pays X, the rest split evenly": the people in ``fixed`` owe exactly their amount,
+    and what is left (``total − Σ fixed``) is divided evenly over the other participants.
+
+    Production, 2026-10-05: "cơm tấm 335k, emi 110k, linh, gh, nhím" — Emi's share was
+    said, the other three split the rest. The model may not compute 225,000 ÷ 3 (money
+    rules), so the tool does: the model passes only the amounts the user said.
+
+    The rest's integer remainder goes 1đ at a time to the others — the payer first when
+    the payer is one of them, then in participant order — so ``Σ shares == total`` exactly.
+
+    Raises :class:`MoneyError` when a fixed member is not a participant, an amount is
+    negative, nobody is left to share the rest, or the fixed amounts exceed the total.
+    """
+    if total <= 0:
+        raise MoneyError(f"Total must be greater than 0 (got {total}).")
+    if not fixed:
+        raise MoneyError("Say whose amount is fixed.")
+    outsiders = sorted(set(fixed) - set(participants))
+    if outsiders:
+        raise MoneyError(f"Members {outsiders} have a fixed amount but are not among the participants.")
+    if any(a < 0 for a in fixed.values()):
+        raise MoneyError("A fixed amount cannot be negative.")
+    others = [p for p in participants if p not in fixed]
+    if not others:
+        raise MoneyError("Everyone has a fixed amount — nobody is left to split the rest. "
+                         "Use `items` for per-person amounts.")
+    rest = total - sum(fixed.values())
+    if rest < 0:
+        raise MoneyError(f"The fixed amounts ({sum(fixed.values()):,}đ) are more than the bill ({total:,}đ).")
+    base, remainder = divmod(rest, len(others))
+    order = ([payer_id] if payer_id in others else []) + [p for p in others if p != payer_id]
+    shares = {p: fixed[p] for p in participants if p in fixed}
+    for i, p in enumerate(order):
+        shares[p] = base + (1 if i < remainder else 0)
+    return {p: shares[p] for p in participants}
+
+
 def per_payer_transfers(
     meals: list[dict],
     payments: list[dict] | None = None,

@@ -45,4 +45,11 @@ CASES = [
      "shares": {1: 100_000, 2: 100_000},
      "balances": {1: 100_000, 2: -100_000}, "tracked": 200_000,
      "expect_meta": {"dish": "phở", "initiator": "Emi", "note": "An đổi ý"}},
+    # Production 2026-10-05: one share said, the other three split the rest — the tool
+    # does 225,000 ÷ 3, the model only passes the 110k it was told.
+    {"id": "G13", "desc": "One share said, the rest split evenly",
+     "payer": 1, "participants": [1, 2, 3, 4], "total": 335_000, "guests": [],
+     "fixed": [{"member": 1, "amount": 110_000}],
+     "shares": {1: 110_000, 2: 75_000, 3: 75_000, 4: 75_000},
+     "balances": {1: 225_000, 2: -75_000, 3: -75_000, 4: -75_000}, "tracked": 335_000},
 ]

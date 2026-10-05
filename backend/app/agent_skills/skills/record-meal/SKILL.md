@@ -20,8 +20,8 @@ description: Record a group meal — "840k cả nhóm trừ An", "bún bò 300k 
      (the tool takes the sender) or pass exactly that id.
    - "Tôi với Bình ăn" (Bình and I ate) = `participants` contains BOTH ids. The sender is also an eater —
      don't drop them from `participants` just because they are the payer.
-2. `propose_meal` with payer, participants (ids), total (bill total), and `items` OR `adjustments`,
-   plus guests/dish/initiator/note if any.
+2. `propose_meal` with payer, participants (ids), total (bill total), and `items` OR `fixed` OR
+   `adjustments`, plus guests/dish/initiator/note if any.
    - 'trừ An' (except An) = An is NOT in participants.
    - Only saying "trừ An" / "An không ăn" (An didn't eat) without saying who ate → default to **THE WHOLE GROUP except An**
      (`find_members all_active:true` then drop An). DON'T ask "so who ate?".
@@ -31,6 +31,10 @@ description: Record a group meal — "840k cả nhóm trừ An", "bún bò 300k 
      ask twice.
    - 'An trả nhưng không ăn' (An paid but didn't eat) = An is the payer but not in participants.
    - 'Bình +50k' = adjustment {member: <Bình's id>, amount: 50000}.
+   - **Some amounts said, the rest split evenly** ("cơm tấm 335k, emi 110k, linh, gh, nhím";
+     "Emi 110k, còn lại chia đều" — Emi 110k, the rest split evenly) → `fixed: [{member: <Emi's id>, amount: 110000}]`,
+     with EVERYONE who ate in `participants` (Emi too). The tool splits `total` − 110k over the others —
+     NEVER work out their amounts yourself, and NEVER say the tool can't do it.
    - "X rủ đi" / "X rủ" (X invited us) = `initiator` (the organiser), NOT an eater: only add X
      to `participants` when the user says X also ate.
    - Someone from outside the group ate too ("+ 1 khách", "2 đứa bạn nữa", "có khách") → pass

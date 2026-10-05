@@ -19,6 +19,8 @@ def _payload(case, ids):
                         for a in case.get("adjustments", [])],
         "dish": case.get("dish"), "initiator": case.get("initiator"),
         "note": case.get("note"), "per_head_preview": 0, "raw_input": "golden",
+        **({"fixed": [{"member": idx[f["member"]], "amount": f["amount"]} for f in case["fixed"]]}
+           if case.get("fixed") else {}),
     }
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 
 from ledger_core import ledger
-from ledger_core.money import MoneyError, itemized_adjustments, normalize_items, prorate_items
+from ledger_core.money import MoneyError, fixed_then_even, itemized_adjustments, normalize_items, prorate_items
 
 DRAFT_KINDS = ("expense_draft", "payment_draft")
 
@@ -33,10 +33,15 @@ def sync_items(att: dict) -> dict:
     (or the model) sent. Editing a total, a price, or the guest list on the card
     therefore re-prorates the discount instead of leaving a stale split behind.
 
+    The same for a ``fixed`` draft ("Emi 110k, the rest split evenly"): the fixed
+    amounts are the truth, and editing the total or the participants re-splits the rest.
+
     No-op for an ordinary equal-split draft. Raises :class:`MoneyError` if the
     items no longer describe a valid split (e.g. a participant was added on the
     card without a price).
     """
+    if att.get("fixed"):
+        return _sync_fixed(att)
     items = att.get("items")
     if not items:
         return att
@@ -53,6 +58,18 @@ def sync_items(att: dict) -> dict:
     att["items"] = items
     att["adjustments"] = [{"member": m, "amount": a}
                           for m, a in itemized_adjustments(int(att["bill_total"]), shares).items()]
+    return att
+
+
+def _sync_fixed(att: dict) -> dict:
+    if att.get("guests"):
+        raise MoneyError("A fixed share does not support cash guests yet — drop the guests or split evenly.")
+    participants = [int(x) for x in att.get("member_participants") or []]
+    fixed = {int(f["member"]): int(f["amount"]) for f in att["fixed"]}
+    total = int(att.get("bill_total") or 0)
+    shares = fixed_then_even(total, participants, fixed, payer_id=int_or_none(att.get("payer_member_id")))
+    att["fixed"] = [{"member": m, "amount": a} for m, a in fixed.items()]
+    att["adjustments"] = [{"member": m, "amount": a} for m, a in itemized_adjustments(total, shares).items()]
     return att
 
 

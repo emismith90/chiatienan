@@ -41,5 +41,8 @@ def decide(result) -> Draft | None:
     meal proposal only; ``ledger_tools`` decides the rest, next in profile order."""
     proposal = result.last_result("propose_meal")
     if proposal:
-        return Draft("expense_draft", {k: proposal.get(k) for k in _DRAFT_FIELDS})
+        payload = {k: proposal.get(k) for k in _DRAFT_FIELDS}
+        if proposal.get("fixed"):             # only when used: an even split's card is unchanged
+            payload["fixed"] = proposal["fixed"]
+        return Draft("expense_draft", payload)
     return None

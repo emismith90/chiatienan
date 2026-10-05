@@ -32,7 +32,8 @@ from datetime import date
 
 from kernos.packs import PackTool, err as _err
 from ledger_core import ledger, roster
-from ledger_core.money import MoneyError, itemized_adjustments, normalize_items, prorate_items, split_with_guests
+from ledger_core.money import (MoneyError, fixed_then_even, itemized_adjustments, normalize_items, prorate_items,
+                               split_with_guests)
 from ledger_core.periods import resolve_date
 
 
@@ -129,6 +130,20 @@ _PROPOSE_SCHEMA = {
                 "required": ["member", "amount"],
             },
         },
+        "fixed": {
+            "type": "array",
+            "description": (
+                "Some people's share is SAID and the rest split the remainder evenly ('cơm tấm 335k,"
+                " Emi 110k, Linh GH Nhím chia đều phần còn lại'). Pass ONLY the amounts the user"
+                " said, e.g. [{member: Emi, amount: 110000}]; everyone else in `participants`"
+                " splits `total` minus those amounts evenly — the TOOL does that arithmetic, never"
+                " you. Not with `items` or `adjustments`."
+            ),
+            "items": {"type": "object",
+                      "properties": {"member": {"type": "integer"}, "amount": {"type": "integer",
+                                     "description": "The amount the user said for this person, integer VND."}},
+                      "required": ["member", "amount"]},
+        },
         "discount_split": {
             "type": "string",
             "enum": ["proportional", "equal"],
@@ -222,6 +237,28 @@ def build(ctx, *, place_resolver=None) -> dict[str, PackTool]:
 
         items = args.get("items") or []
         discount_split = (args.get("discount_split") or "proportional").strip().lower()
+        fixed_in = args.get("fixed") or []
+        fixed = []
+        if fixed_in:
+            if items or adjustments:
+                return _err("Use `fixed` alone — not with `items` or `adjustments`.")
+            if guests:
+                return _err("A fixed share does not support cash guests yet. Leave the guests out, "
+                            "or give the guest's amount to the member paying for them.")
+            try:
+                fixed_map = {}
+                for f in fixed_in:
+                    m = int(f["member"])
+                    if m in fixed_map:
+                        return _err(f"Member {m} has more than one fixed amount — give one.")
+                    fixed_map[m] = int(f["amount"])
+                shares = fixed_then_even(total, participants, fixed_map, payer_id=int(payer))
+                adjustments = itemized_adjustments(total, shares)
+            except MoneyError as exc:          # a ValueError too: it must come first
+                return _err(str(exc))
+            except (KeyError, TypeError, ValueError):
+                return _err("Each fixed entry needs numeric {member, amount}.")
+            fixed = [{"member": m, "amount": a} for m, a in fixed_map.items()]
         if items:
             if adjustments:
                 return _err(
@@ -271,6 +308,7 @@ def build(ctx, *, place_resolver=None) -> dict[str, PackTool]:
             "bill_total": total,
             "adjustments": [{"member": m, "amount": a} for m, a in adjustments.items()],
             "items": items,
+            "fixed": fixed,
             "discount_split": discount_split if items else None,
             "dish": args.get("dish"),
             "place_id": place_id,
