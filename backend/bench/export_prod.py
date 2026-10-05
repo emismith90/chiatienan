@@ -562,6 +562,8 @@ def _money_args_from_attachment(tool: str, attachments: dict) -> dict | None:
             args["guests"] = list(attachments["guests"])
         if attachments.get("adjustments"):
             args["adjustments"] = [dict(a) for a in attachments["adjustments"]]
+        if attachments.get("fixed"):
+            args["fixed"] = [dict(a) for a in attachments["fixed"]]
         if attachments.get("items"):
             args["items"] = [dict(i) for i in attachments["items"]]
         return args if args["total"] and args["participants"] else None
@@ -697,7 +699,7 @@ def build_cases(rows: list[dict], *, image_lookback: int = 10,
                     args[name] = to_key(args[name])
             if "participants" in args:
                 args["participants"] = [to_key(p) for p in args["participants"]]
-            for name in ("items", "adjustments"):
+            for name in ("items", "adjustments", "fixed"):
                 if name in args:
                     args[name] = [dict(e, member=to_key(e.get("member"))) for e in args[name]]
             case["expect"]["args"] = {tool: args}

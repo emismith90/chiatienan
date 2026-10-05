@@ -14,7 +14,7 @@ import pytest
 def test_meals_corpus_pairs_every_golden_case_with_a_message():
     from bench.corpus import load
     cases = load("meals")
-    assert [c.id for c in cases] == ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G12"]
+    assert [c.id for c in cases] == ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G12", "G13"]
     # meals.py has no messages — corpus.py must supply one per case
     assert all(c.message and c.message.startswith("@bot") for c in cases)
 

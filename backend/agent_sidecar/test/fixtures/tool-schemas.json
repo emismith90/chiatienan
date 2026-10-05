@@ -328,6 +328,26 @@
         "description": "Dish (if the user mentioned it).",
         "type": "string"
       },
+      "fixed": {
+        "description": "Some people's share is SAID and the rest split the remainder evenly ('cơm tấm 335k, Emi 110k, Linh GH Nhím chia đều phần còn lại'). Pass ONLY the amounts the user said, e.g. [{member: Emi, amount: 110000}]; everyone else in `participants` splits `total` minus those amounts evenly — the TOOL does that arithmetic, never you. Not with `items` or `adjustments`.",
+        "items": {
+          "properties": {
+            "amount": {
+              "description": "The amount the user said for this person, integer VND.",
+              "type": "integer"
+            },
+            "member": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "member",
+            "amount"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
       "guests": {
         "description": "Guest names (non-members who pay cash).",
         "items": {

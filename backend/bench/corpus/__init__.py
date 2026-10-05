@@ -124,6 +124,8 @@ def _money_args(spec: dict, kind: str) -> dict:
             args["guests"] = list(spec["guests"])
         if spec.get("adjustments"):
             args["adjustments"] = [dict(a) for a in spec["adjustments"]]
+        if spec.get("fixed"):
+            args["fixed"] = [dict(a) for a in spec["fixed"]]
         return {"propose_meal": args}
     if kind == "payment":
         return {"propose_payment": {"from": spec["from"], "to": spec["to"],
@@ -145,7 +147,9 @@ def _meal_case(case: dict) -> Case:
             "participants": [key(p) for p in case["participants"]],
             "guests": case.get("guests") or [],
             "adjustments": [{"member": key(a["member"]), "amount": a["amount"]}
-                            for a in case.get("adjustments") or []]}
+                            for a in case.get("adjustments") or []],
+            "fixed": [{"member": key(a["member"]), "amount": a["amount"]}
+                      for a in case.get("fixed") or []]}
     expect = {
         "tools": ["propose_meal"],
         "args": _money_args(spec, "meal_confirmed"),
@@ -322,7 +326,7 @@ def resolve_args(case: Case, ids: dict[str, int]) -> Case:
         for name in _MEMBER_LIST_ARGS:
             if name in out:
                 out[name] = [member_id(k) for k in out[name]]
-        for name in ("items", "adjustments"):
+        for name in ("items", "adjustments", "fixed"):
             if name in out:
                 out[name] = [dict(i, member=member_id(i["member"])) for i in out[name]]
         resolved[tool_name] = out

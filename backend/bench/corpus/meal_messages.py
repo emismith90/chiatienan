@@ -40,4 +40,6 @@ MESSAGES = {
     "G8": "@bot tôi trả 100k, tôi với Bình và khách Z ăn",
     # Metadata round-trip: dish, initiator, note.
     "G12": "@bot tôi trả 200k ăn phở với Bình, Emi rủ đi, ghi chú An đổi ý",
+    # One share said, the rest split evenly (the 2026-10-05 production message, renamed).
+    "G13": "@bot trưa ăn cơm tấm 335k, tôi 110k, Bình, Cường, Dung chia đều phần còn lại. tôi trả",
 }

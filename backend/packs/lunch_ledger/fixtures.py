@@ -20,7 +20,7 @@ from __future__ import annotations
 def draft_payload(step: dict, ids: dict[str, int]) -> dict:
     """The draft a prior step creates.
 
-    `items` / `adjustments` / `discount_split` are passed through when the step has
+    `items` / `fixed` / `adjustments` / `discount_split` are passed through when the step has
     them — a production meal seeded without its `items` splits evenly instead of
     per dish, so the ledger the next turn reads would be a *different* room's. The
     shares themselves are never copied: the host's draft store recomputes them from
@@ -41,6 +41,8 @@ def draft_payload(step: dict, ids: dict[str, int]) -> dict:
                             for entry in step["items"]]
     if step.get("discount_split"):
         payload["discount_split"] = step["discount_split"]
+    if step.get("fixed"):
+        payload["fixed"] = [{**entry, "member": ids[entry["member"]]} for entry in step["fixed"]]
     return payload
 
 

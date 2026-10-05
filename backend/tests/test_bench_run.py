@@ -154,7 +154,7 @@ def test_a_case_that_raises_is_recorded_not_fatal():
 
     recs = run_corpus("meals", repeat=1, run_turn=boom)
     # one bad case must never kill the run
-    assert len(recs) == 9
+    assert len(recs) == 10
     assert sum(1 for r in recs if r["error"]) == 1
     assert any("model exploded" in (r["error"] or "") for r in recs)
 
@@ -255,7 +255,7 @@ def _oracle(case):
                 args[key] = by_key[args[key]]
         if "participants" in args:
             args["participants"] = [by_key[k] for k in args["participants"]]
-        for list_arg in ("items", "adjustments"):
+        for list_arg in ("items", "adjustments", "fixed"):
             if list_arg in args:
                 args[list_arg] = [dict(i, member=by_key[i["member"]]) for i in args[list_arg]]
         if name == "settle_period":
