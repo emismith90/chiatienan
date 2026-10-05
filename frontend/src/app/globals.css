@@ -65,3 +65,48 @@ html,body{overflow-x:clip;max-width:100%;}
    zero insets. */
 .pt-safe{padding-top:env(safe-area-inset-top);}
 .pb-safe{padding-bottom:env(safe-area-inset-bottom);}
+
+/* Lucky Draw — the slot-machine stage (lucky-draw.tsx). A fixed palette in both
+   themes, like a game board: red sunburst stage, yellow marquee with light bulbs,
+   white reel window. Text on the yellow is dark brown, not white: white on #FBBF24
+   is 1.7:1 and unreadable in sunlight. */
+/* No `position`/`overflow` here: unlayered CSS beats Tailwind's utilities, and
+   the dialog needs `fixed` + `overflow-y-auto` where the card needs `relative`. */
+.lucky-stage{isolation:isolate;color:#fff;
+  background:linear-gradient(135deg,#FF1749 0%,#FF3B30 55%,#FF5A2C 100%);}
+.lucky-stage::before{content:"";position:absolute;inset:-60%;z-index:-1;
+  background:repeating-conic-gradient(from 0deg,rgba(255,255,255,.17) 0deg 8deg,transparent 8deg 22.5deg);
+  -webkit-mask-image:radial-gradient(circle at center,#000 0,transparent 55%);
+  mask-image:radial-gradient(circle at center,#000 0,transparent 55%);}
+.lucky-stage.is-spinning::before{animation:lucky-rays 14s linear infinite;}
+@keyframes lucky-rays{to{transform:rotate(360deg);}}
+.lucky-title{font-weight:900;color:#FFD43B;letter-spacing:.02em;line-height:1.1;
+  -webkit-text-stroke:2px #F59E0B;paint-order:stroke fill;
+  text-shadow:0 3px 0 rgba(150,30,0,.35);}
+/* The bulbs are a dot pattern behind the window, so only the ring shows them.
+   `space` lays whole dots edge to edge, so every side's row is centred and none
+   is cut off whatever the frame's width. */
+.lucky-frame{position:relative;border-radius:16px;padding:16px;background:#FBBF24;
+  box-shadow:0 6px 0 rgba(120,20,10,.28);}
+.lucky-frame::before{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:radial-gradient(circle,#fff 0 3px,transparent 3.5px) 0 0/16px 16px space;}
+.lucky-frame--sm{border-radius:12px;padding:10px;box-shadow:0 4px 0 rgba(120,20,10,.28);}
+.lucky-frame--sm::before{background:radial-gradient(circle,#fff 0 2px,transparent 2.5px) 0 0/10px 10px space;}
+.lucky-frame.is-spinning::before{animation:lucky-bulbs .45s steps(1) infinite;}
+@keyframes lucky-bulbs{50%{opacity:.35}}
+.lucky-window{position:relative;z-index:1;overflow:hidden;border-radius:10px;color:#111;
+  background:linear-gradient(#fff 55%,#e9e9e9);}
+.lucky-button{background:#FBBF24;color:#5B1A06;font-weight:800;border-radius:8px;
+  box-shadow:0 4px 0 rgba(120,20,10,.28);transition:transform .1s,box-shadow .1s;}
+.lucky-button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 rgba(120,20,10,.28);}
+.lucky-button:disabled{opacity:.6;}
+.lucky-confetti{pointer-events:none;position:absolute;inset:0;overflow:hidden;z-index:3;}
+.lucky-confetti i{position:absolute;top:-16px;width:7px;height:11px;border-radius:2px;opacity:0;
+  animation:lucky-fall var(--dur) var(--delay) cubic-bezier(.25,.6,.45,1) forwards;}
+@keyframes lucky-fall{
+  0%{opacity:1;transform:translate3d(0,0,0) rotate(0deg);}
+  100%{opacity:0;transform:translate3d(var(--dx),var(--fall),0) rotate(var(--spin));}}
+@media (prefers-reduced-motion: reduce){
+  .lucky-stage::before,.lucky-frame::before{animation:none !important;}
+  .lucky-confetti{display:none;}
+}

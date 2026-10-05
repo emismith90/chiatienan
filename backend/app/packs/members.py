@@ -11,7 +11,7 @@ from __future__ import annotations
 from app import accounts, rooms, roster
 from kernos.packs import BasePack, PackTool, err as _err
 
-MEMBER_TOOLS = frozenset({"add_member", "update_member", "delete_member"})
+MEMBER_TOOLS = frozenset({"add_member", "update_member", "delete_member", "edit_draw_list"})
 
 _ADD_MEMBER_SCHEMA = {
     "type": "object",
@@ -48,6 +48,16 @@ _UPDATE_MEMBER_SCHEMA = {
         },
     },
     "required": ["target"],
+}
+
+_EDIT_DRAW_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "add": {"type": "array", "items": {"type": "integer"},
+                "description": "member_ids to put on the draw list (from find_members)."},
+        "remove": {"type": "array", "items": {"type": "integer"},
+                   "description": "member_ids to take off the draw list (from find_members)."},
+    },
 }
 
 _DELETE_MEMBER_SCHEMA = {
@@ -138,6 +148,24 @@ def build(ctx) -> dict[str, PackTool]:
                 "ok": True, "member_id": m.id, "nickname": m.nickname,
                 "display_name": m.display_name,
             }
+    def edit_draw_list(args, _tool_ctx=None) -> dict:
+        args = args or {}
+        add, remove = args.get("add") or [], args.get("remove") or []
+        if not all(isinstance(i, int) and not isinstance(i, bool) for i in [*add, *remove]):
+            return _err("add/remove take member_ids (integers) — call find_members first.")
+        with db.session() as s:
+            try:
+                roster_ = accounts.set_draw_list(s, ctx.space_id, add=add, remove=remove)
+            except accounts.AccountError as exc:
+                return _err(str(exc))
+            return {
+                "ok": True,
+                "in_draw": [{"id": m.id, "name": m.display_name}
+                            for m in roster_ if m.default_participant],
+                "not_in_draw": [{"id": m.id, "name": m.display_name}
+                                for m in roster_ if not m.default_participant],
+            }
+
     specs = {
         "add_member": dict(
             execute=add_member,
@@ -148,6 +176,16 @@ def build(ctx) -> dict[str, PackTool]:
             execute=update_member,
             description="Update a member's details (display_name, nickname, bank, aliases), restore a removed one (active:true), or exclude/include them from random draws (default_participant:false/true — draws only, never splits).",
             input_schema=_UPDATE_MEMBER_SCHEMA,
+        ),
+        "edit_draw_list": dict(
+            execute=edit_draw_list,
+            description=(
+                "View or change the room's saved draw list — who `pick_random` and the "
+                "Lucky Draw button can pick. No arguments = just view it. Changes stay "
+                "for every later draw until someone changes them back. Draws only, "
+                "never splits."
+            ),
+            input_schema=_EDIT_DRAW_LIST_SCHEMA,
         ),
         "delete_member": dict(
             execute=delete_member,

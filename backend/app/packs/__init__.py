@@ -24,6 +24,7 @@ LEGACY_ORDER = (
     "settle_period", "add_member", "update_member", "delete_member",
     "find_places", "suggest_lunch", "remember", "forget",
     "places_search", "places_create", "places_update", "places_delete", "propose_payment",
+    "edit_draw_list",
 )
 assert MONEY_TOOLS | PLACES_TOOLS | MEMBER_TOOLS == set(LEGACY_ORDER)
 

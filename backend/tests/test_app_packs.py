@@ -18,7 +18,7 @@ def test_the_four_packs_partition_the_legacy_tools_in_legacy_order(db):
     room_id, m = _seed_room(db, 2)
     ctx = ToolContext(db=db, room_id=room_id)
     legacy = _legacy_build_tools(ctx)
-    assert tuple(legacy) == LEGACY_ORDER and len(LEGACY_ORDER) == 22
+    assert tuple(legacy) == LEGACY_ORDER and len(LEGACY_ORDER) == 23
     lunch, shared = lunch_ledger_pack().tools(ctx), ledger_tools_pack().tools(ctx)
     places, members = LunchPlacesPack().tools(ctx), RoomMembersPack().tools(ctx)
     assert set(lunch) == LUNCH_TOOLS and set(shared) == LEDGER_TOOLS and LUNCH_TOOLS | LEDGER_TOOLS == MONEY_TOOLS

@@ -66,7 +66,7 @@ async def test_registered_but_not_enabled_or_not_granted_means_no_cms_tools(db, 
     assert k.packs.get("os_admin").evidence is False and k.static_tool_names(k.packs.get("os_admin")) == set(ALL_TOOLS)
     assert ALL_TOOLS <= k.reserved_tool_names()
     fake, _ = await _turn(monkeypatch, db, room_id, mm, "@phoenix chào", [_turn_done("Chào.")])
-    assert len(_tool_names(fake.runs[0])) == 22                                  # the seeded room, untouched
+    assert len(_tool_names(fake.runs[0])) == 23                                  # the seeded room, untouched
     _enable(k)                                                                    # pack on, no verbs
     fake, _ = await _turn(monkeypatch, db, room_id, mm, "@phoenix chào", [_turn_done("Chào.")])
     assert not any(n.startswith("cms_") for n in _tool_names(fake.runs[0]))

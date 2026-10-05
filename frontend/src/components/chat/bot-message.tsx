@@ -1,10 +1,12 @@
 "use client";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ZoomableImage } from "./zoomable-image";
 import { StatementCard } from "./statement-card";
 import { SummaryCard } from "./summary-card";
 import { PayActions } from "./pay-actions";
+import { LuckyCard } from "./lucky-draw";
 import { fmt } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -37,6 +39,9 @@ interface BotMessageProps {
    * so nothing extra is fetched. */
   members?: { id: number; bank_code?: string | null }[];
   onOpenLedger?: (range: { from: string; to: string }) => void;
+  /** Arrived over the stream just now (see `mergeEvent`): a draw card plays its
+   * reel once instead of opening on the result. */
+  live?: boolean;
 }
 
 function SettlementCard({ attachments, members }: {
@@ -156,26 +161,41 @@ function MealCard({ attachments }: { attachments: any }) {
   );
 }
 
-function RandomPickCard({ attachments }: { attachments: any }) {
+function RandomPickCard({ attachments, live }: { attachments: any; live?: boolean }) {
   const chosen = attachments.chosen ?? {};
   const candidates: { id: number; name: string }[] = attachments.candidates ?? [];
+  // The winner is in the attachments from the start; a live card just rolls the
+  // reel to it, so everyone watching the room sees the same draw land.
+  const [spinning, setSpinning] = useState(!!live);
+  const [landed, setLanded] = useState(false);
   return (
-    <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--bg-base)] p-4 text-center">
-      <div className="text-2xl" aria-hidden>🎲</div>
-      <div className="mt-1 text-lg font-semibold text-[var(--accent-text)]">{chosen.name ?? "?"}</div>
-      {attachments.label && (
-        <div className="text-xs text-[var(--text-secondary)]">{attachments.label}</div>
-      )}
-      {candidates.length > 0 && (
-        <div className="mt-2 text-xs text-[var(--text-secondary)]">
-          picked from {candidates.length}: {candidates.map((c) => c.name).join(", ")}
-        </div>
-      )}
+    <div className="mt-3">
+      <LuckyCard
+        names={candidates.map((c) => c.name)}
+        winner={chosen.name ?? "?"}
+        spinning={spinning}
+        confetti={landed}
+        onLanded={() => {
+          setSpinning(false);
+          setLanded(true);
+        }}
+      >
+        {!spinning && <div className="sr-only">Picked: {chosen.name ?? "?"}</div>}
+        {attachments.label && <div className="mt-3 text-sm font-semibold">{attachments.label}</div>}
+        {candidates.length > 0 && (
+          <div className="mt-2 text-xs text-white/90">
+            picked from {candidates.length}: {candidates.map((c) => c.name).join(", ")}
+          </div>
+        )}
+        {attachments.drawn_by?.name && (
+          <div className="mt-1 text-xs text-white/80">drawn by {attachments.drawn_by.name} with the Draw button</div>
+        )}
+      </LuckyCard>
     </div>
   );
 }
 
-export function BotMessage({ body, attachments, roomId, members, onOpenLedger }: BotMessageProps) {
+export function BotMessage({ body, attachments, roomId, members, onOpenLedger, live }: BotMessageProps) {
   const type = attachments?.type;
   return (
     <div className="max-w-[85%] rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-sm">
@@ -186,7 +206,7 @@ export function BotMessage({ body, attachments, roomId, members, onOpenLedger }:
       {type === "meal" && <MealCard attachments={attachments} />}
       {type === "statement" && <StatementCard attachments={attachments} roomId={roomId} />}
       {type === "summary" && <SummaryCard attachments={attachments} onOpenLedger={onOpenLedger} />}
-      {type === "random_pick" && <RandomPickCard attachments={attachments} />}
+      {type === "random_pick" && <RandomPickCard attachments={attachments} live={live} />}
     </div>
   );
 }

@@ -194,6 +194,11 @@ What that buys, in one line each:
 - Preview who-owes-whom: `@phoenix ai trả tuần này` ("who pays this week")
 - Lock it in (the only thing that closes a period): `@phoenix chốt tuần này` ("close out this week")
 - Display-only spend: `@phoenix tháng này tôi tiêu bao nhiêu` ("how much did I spend this month")
+- Lucky Draw (pick one person): `@phoenix bốc thăm ai trả` ("draw who pays"), or tap the **slot-machine** button in the
+  header and press **Draw** (no LLM turn). The server picks; the slot reel only lands on its
+  choice, and the result card is posted to the room, where every open screen watches it spin.
+  Both draw from the room's saved **draw list** — toggle names in that dialog, or
+  `@phoenix bỏ An ra khỏi danh sách bốc thăm` ("take An off the draw list"; tool `edit_draw_list`).
 - Manage members: `@phoenix thêm thành viên Dũng` ("add member Dũng"), `@phoenix đổi tên An thành Anh`
   ("rename An to Anh"), `@phoenix xoá thành viên Cường` ("remove member Cường"; soft-delete),
   `@phoenix khôi phục Cường` ("restore Cường").

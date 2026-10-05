@@ -39,6 +39,22 @@ def _names_for(session, space_id, ids) -> dict[int, str]:
 
 
 
+def random_pick(members: dict[int, str], choice, label=None) -> dict:
+    """Draw one of ``members`` (id → name) with ``choice``. The one draw both the
+    bot's ``pick_random`` and the Lucky Draw button run, so the two can't differ."""
+    pool_ids = list(members)
+    if not pool_ids:
+        return _err("There is nobody in the group to draw from.")
+    chosen_id = choice(pool_ids)
+    return {
+        "ok": True,
+        "type": "random_pick",
+        "chosen": {"id": chosen_id, "name": members[chosen_id]},
+        "candidates": [{"id": i, "name": members[i]} for i in pool_ids],
+        "label": (label or "").strip() or None,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Schemas
 # --------------------------------------------------------------------------- #
@@ -188,22 +204,10 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
                 m.id: m.display_name
                 for m in roster.list_members(s, ctx.space_id, default_only=True)
             }
-        # The pool is every default-participant member of the group — no
-        # per-request subsetting (the tool takes no participant list), but a
-        # member flagged out of default group activities (default_participant
-        # = false) is skipped here.
-        pool_ids = list(members)
-        if not pool_ids:
-            return _err("There is nobody in the group to draw from.")
-        chosen_id = ctx.choice(pool_ids)
-        label = (args.get("label") or "").strip() or None
-        return {
-            "ok": True,
-            "type": "random_pick",
-            "chosen": {"id": chosen_id, "name": members[chosen_id]},
-            "candidates": [{"id": i, "name": members[i]} for i in pool_ids],
-            "label": label,
-        }
+        # The pool is the room's saved draw list — the default-participant
+        # members — with no per-request subsetting (the tool takes no
+        # participant list). `edit_draw_list` and the Lucky Draw dialog change it.
+        return random_pick(members, ctx.choice, args.get("label"))
 
     def resolve_period_tool(args, _tool_ctx=None) -> dict:
         args = args or {}
@@ -518,7 +522,7 @@ def build(ctx, *, qr, fallback_note, describe_pending) -> dict[str, PackTool]:
         ),
         "pick_random": dict(
             execute=pick_random,
-            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Draws from default-participant members only (see update_member's default_participant flag) — no per-request subsetting. The tool does the draw — never pick yourself.",
+            description="Randomly pick ONE member of the group ('bốc thăm', 'random ai trả', 'chọn đại một người'). Draws from the room's saved draw list only (see `edit_draw_list`) — no per-request subsetting. The tool does the draw — never pick yourself.",
             input_schema=_RANDOM_PICK_SCHEMA,
         ),
         "resolve_period": dict(

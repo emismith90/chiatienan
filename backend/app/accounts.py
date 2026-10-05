@@ -139,6 +139,30 @@ def update_member(session: Session, member: Member, *, display_name=None, nickna
     return member
 
 
+def set_draw_list(session: Session, room_id: int, *, add=(), remove=(),
+                  only=None) -> list[Member]:
+    """Edit the room's saved draw list — its members' ``default_participant`` flag —
+    and return the active roster. ``only`` replaces the list outright; otherwise
+    ``add`` / ``remove`` (member ids) adjust it. An id from another room or of a
+    removed member is refused, so a typo can't silently do nothing."""
+    active = {m.id: m for m in session.scalars(
+        select(Member).where(Member.room_id == room_id, Member.active.is_(True))
+        .order_by(Member.display_name))}
+    asked = set(add) | set(remove) | set(only or ())
+    unknown = sorted(i for i in asked if i not in active)
+    if unknown:
+        raise AccountError(f"Not active members of this room: {unknown}")
+    if only is not None:
+        for mid, m in active.items():
+            m.default_participant = mid in set(only)
+    for mid in add:
+        active[mid].default_participant = True
+    for mid in remove:
+        active[mid].default_participant = False
+    session.flush()
+    return list(active.values())
+
+
 def member_for_token(session: Session, token: str) -> Member | None:
     us = session.scalars(select(UserSession).where(UserSession.token == token)).first()
     return session.get(Member, us.member_id) if us else None
