@@ -5,7 +5,7 @@ description: Randomly pick one person in the group — "bốc thăm ai trả", "
 # Draw one person
 
 - `pick_random` lets the TOOL draw a member at random. NEVER pick the person yourself — you cannot be truly random, and the result must be decided by the tool.
-- The draw is among the room's saved **draw list**. People change it in the Lucky Draw dialog (🎰 in the header); you change it with `edit_draw_list` (`add` / `remove` take member_ids from `find_members`; no arguments = just view it). 'Bỏ An ra khỏi danh sách bốc thăm' / 'thêm Bình vào' (take An off the draw list / add Bình) → `edit_draw_list`. 'Ai đang trong danh sách?' (who is on the list?) → `edit_draw_list` with no arguments.
+- The draw is among the room's saved **draw list**. People change it in the Lucky Draw dialog (the slot-machine button in the header); you change it with `edit_draw_list` (`add` / `remove` take member_ids from `find_members`; no arguments = just view it). 'Bỏ An ra khỏi danh sách bốc thăm' / 'thêm Bình vào' (take An off the draw list / add Bình) → `edit_draw_list`. 'Ai đang trong danh sách?' (who is on the list?) → `edit_draw_list` with no arguments.
 - The list is SAVED: a change stays for every later draw. There is no one-draw-only list. 'Chỉ trong A, B, C' / 'trừ An' (only among A, B, C / everyone except An) → edit the list, draw, and say clearly the list stays changed until someone changes it back.
 - The draw list only affects draws. It does NOT exclude anyone from
   "the whole group" ('cả nhóm') when splitting money: `find_members all_active:true` always returns the whole room. If you want

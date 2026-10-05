@@ -127,6 +127,23 @@ export function SlotReel({
   );
 }
 
+/** A slot machine — the header's Lucky Draw button: the cabinet with its sign,
+ * three reels in the window, a coin slot, and the lever on the side. */
+export function SlotMachineIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="16" height="15" rx="2" />
+      <path d="M5 6V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2" />
+      <rect x="5" y="9.5" width="10" height="5.5" rx="1" />
+      <path d="M8.33 9.5v5.5M11.67 9.5v5.5" />
+      <path d="M7 18h6" />
+      <path d="M18 15h2a1 1 0 0 0 1-1V7.5" />
+      <circle cx="21" cy="5" r="1.5" />
+    </svg>
+  );
+}
+
 const CONFETTI_COLORS = ["#FFD43B", "#22D3EE", "#A3E635", "#F472B6", "#FFFFFF", "#818CF8"];
 
 /** A burst of falling confetti over the stage. `fall` is how far a piece drops. */
@@ -163,7 +180,7 @@ interface DrawMember {
   default_participant?: boolean;
 }
 
-/** The Lucky Draw screen behind the header's 🎰 button: the room's saved draw
+/** The Lucky Draw screen behind the header's slot-machine button: the room's saved draw
  * list as toggles, and a Draw button. The server picks the winner (same draw as
  * the bot's `pick_random`) and posts it to the room; the reel only lands on it. */
 export function LuckyDrawDialog({
@@ -290,8 +307,8 @@ export function LuckyDrawDialog({
             In the draw · {pool.length} of {members.length}
           </h3>
           <p className="mt-0.5 text-xs text-white/85">
-            Tap a name to take it off or put it back. The list is saved for every later
-            draw, and @phoenix uses it too.
+            Tap a name to include or exclude them. This is the room&apos;s setting, not one
+            draw&apos;s: it stays for every later draw, by this button or @phoenix.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {members.map((m) => {

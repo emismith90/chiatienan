@@ -10,7 +10,7 @@ import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
 import { LotterySpinner, looksLikeRandomRequest } from "./lottery-spinner";
-import { LuckyDrawDialog } from "./lucky-draw";
+import { LuckyDrawDialog, SlotMachineIcon } from "./lucky-draw";
 import { RoomSwitcher } from "./room-switcher";
 import { SidePanel, type PanelTab } from "./side-panel";
 import { MemberNotes } from "./member-notes";
@@ -556,9 +556,9 @@ export function RoomView({ roomId }: { roomId: number }) {
                 onClick={() => setDrawOpen(true)}
                 aria-label="Lucky Draw"
                 title="Lucky Draw"
-                className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-sm shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)]"
+                className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-secondary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-base)]"
               >
-                <span aria-hidden>🎰</span>
+                <SlotMachineIcon />
               </button>
               <button
                 type="button"
