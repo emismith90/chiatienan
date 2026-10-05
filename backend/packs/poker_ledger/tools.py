@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import select
 
 from kernos.packs import PackTool, err as _err
 from ledger_core import roster
@@ -129,10 +128,10 @@ def build(ctx) -> dict[str, PackTool]:
                                         last_settlement_to=last.period_to if last else None)
             except ValueError as exc:
                 return _err(str(exc))
-            conds = [Game.room_id == int(ctx.space_id), Game.voided.is_(False), Game.played_on <= period["to"]]
-            if period["from"] is not None:
-                conds.append(Game.played_on >= period["from"])
-            games = s.scalars(select(Game).where(*conds).order_by(Game.played_on, Game.id)).all()
+            from packs.poker_ledger.view import games as games_of
+
+            games = sorted(games_of(s, ctx.space_id, from_date=period["from"], to_date=period["to"]),
+                           key=lambda g: (g.played_on, g.id))
             rows = []
             for g in games:
                 names = _names_for(s, ctx.space_id, [e.member_id for e in g.entries])

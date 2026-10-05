@@ -55,9 +55,9 @@ def meal_card(session, space_id, att: dict, res: dict) -> tuple[str, dict]:
 def meal_exists(session, space_id, meal_id) -> bool:
     """Is ``meal_id`` a live (non-voided) meal of this space? Room-scoped and void-aware
     on purpose: "Đã ghi #14" ("Recorded #14") is a claim about *this* room's ledger."""
-    from ledger_core.models import Meal
-    meal = session.get(Meal, int(meal_id))
-    return meal is not None and meal.room_id == int(space_id) and not meal.voided
+    from ledger_core.view import LedgerView
+    meal = LedgerView(session, int(space_id)).meal(int(meal_id))
+    return meal is not None and not meal.voided
 
 
 def meal_summary(session, space_id, att: dict) -> dict:

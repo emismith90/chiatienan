@@ -2,7 +2,6 @@ import logging
 
 from app import chat, moneyguard
 from app.db import Database
-from app.models import Meal
 from kernos.kernel import BasePlugin, Body, Stage, TurnContext, Verdict
 
 log = logging.getLogger("chiatienan")
@@ -37,9 +36,11 @@ def _meal_exists(db: Database, room_id: int, meal_id: int) -> bool:
     Room-scoped and void-aware on purpose: "Đã ghi #14" ("Recorded #14") is a claim about *this*
     room's ledger, and a voided meal is one the room decided never happened.
     """
+    from ledger_core.view import LedgerView
+
     with db.session() as s:
-        meal = s.get(Meal, meal_id)
-        return meal is not None and meal.room_id == room_id and not meal.voided
+        meal = LedgerView(s, room_id).meal(int(meal_id))
+        return meal is not None and not meal.voided
 
 
 #: What the room sees instead of a forged confirmation. It has to say the thing
