@@ -46,7 +46,9 @@ async def test_confirm_over_http_applies_two_changes_to_one_place_and_refreshes_
         ("places_update", {"doc_id": pid, "changes": {"phone": "0901"}}),
         ("places_update", {"doc_id": pid, "changes": {"address": "9 Hàng Bông"}}),
         ("places_delete", {"doc_id": pid})])
-    assert card.kind == "record_draft" and len(card.attachments["actions"]) == 3
+    acts = card.attachments["actions"]
+    assert card.kind == "record_draft" and len(acts) == 2                      # the two updates are one item
+    assert sorted(c["field"] for c in acts[0]["changes"]) == ["address", "phone"]
     events = []
     orig = hub.publish
 
@@ -159,3 +161,49 @@ def test_hidden_places_do_not_crowd_out_search_or_find(db):
     assert found == ["Quán bún thang bà Đức ngõ chợ Hàng Hành phố cổ"]
     assert [p["name"] for p in tools["find_places"].execute({"all": True})["places"]] == [
         "Quán bún thang bà Đức ngõ chợ Hàng Hành phố cổ"]
+
+
+# prod 2026-10-07, "update sdt quán gà koko": the model sent every editable field, empty
+# where it had nothing to say, then corrected itself with the whole record in the same turn
+_KOKO = dict(aliases=["koko", "chicken", "gà rán"], tags=["gần", "gà"], phone="0865869862",
+             walk_minutes=5, price_hint=100000)
+
+
+def _koko(room_id):
+    with get_db().session() as s:
+        return str(add_place(s, room_id=room_id, slug="koko-chicken", name="koko chicken", **_KOKO).id)
+
+
+def _everything(**over):
+    return {"name": "koko chicken", "aliases": _KOKO["aliases"], "tags": _KOKO["tags"], "delivery": [],
+            "address": "", "phone": "0564434567", "walkable": True, "walk_minutes": 5,
+            "price_hint": 100000, "closed_until": "", "active": True, **over}
+
+
+def test_an_update_that_would_erase_a_field_is_refused_and_says_how_to_clear(api_client_room):
+    from app.tools import ToolContext
+    _, _, room_id, _ = api_client_room
+    pid = _koko(room_id)
+    tools = build_tools(ToolContext(db=get_db(), room_id=room_id))
+    out = tools["places_update"].execute({"doc_id": pid, "changes": _everything(tags=[])})
+    assert not out.get("ok") and "['tags']" in out["error"] and "clear" in out["error"]
+    # empty over empty (delivery, address, closed_until) is no change, not an erase
+    ok = tools["places_update"].execute({"doc_id": pid, "changes": _everything()})
+    assert [c["field"] for c in ok["action"]["changes"]] == ["phone"]
+    cleared = tools["places_update"].execute({"doc_id": pid, "clear": ["tags"]})
+    assert cleared["action"]["changes"] == [{"field": "tags", "before": ["gần", "gà"], "after": []}]
+    assert "cannot be cleared" in tools["places_update"].execute({"doc_id": pid, "clear": ["walk_minutes"]})["error"]
+
+
+async def test_a_corrected_update_in_one_turn_is_one_card_item_and_confirms_right(api_client_room, monkeypatch):
+    client, h, room_id, m = api_client_room
+    pid = _koko(room_id)
+    card = await _card(monkeypatch, room_id, m["Linh"], [
+        ("places_update", {"doc_id": pid, "changes": _everything(aliases=["gà koko"], walk_minutes=0, price_hint=0)}),
+        ("places_update", {"doc_id": pid, "changes": _everything()})])
+    acts = card.attachments["actions"]
+    assert len(acts) == 1 and acts[0]["changes"] == [{"field": "phone", "before": "0865869862", "after": "0564434567"}]
+    assert client.post(f"/api/rooms/{room_id}/drafts/{card.id}/commit", headers=h).status_code == 200
+    p = _place(room_id, int(pid))
+    assert (p.phone, p.aliases, p.walk_minutes, p.price_hint) == ("0564434567", _KOKO["aliases"], 5, 100000)
+

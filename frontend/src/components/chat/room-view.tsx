@@ -9,7 +9,7 @@ import { InstallButton } from "@/components/install-button";
 import { MessageList } from "./message-list";
 import { Composer } from "./composer";
 import { AgentTimeline } from "./agent-timeline";
-import { LotterySpinner, looksLikeRandomRequest } from "./lottery-spinner";
+import { LotterySpinner, awaitingRandomPick } from "./lottery-spinner";
 import { LuckyDrawDialog, SlotMachineIcon } from "./lucky-draw";
 import { RoomSwitcher } from "./room-switcher";
 import { SidePanel, type PanelTab } from "./side-panel";
@@ -500,12 +500,7 @@ export function RoomView({ roomId }: { roomId: number }) {
   // reply replaces it.
   const lastMsg = messages.length ? messages[messages.length - 1] : null;
   const lastId = lastMsg ? lastMsg.id : null;
-  const awaitingRandom =
-    !!lastMsg &&
-    !["bot", "expense_draft", "payment_draft", "context_reset"].includes(lastMsg.kind ?? "") &&
-    !lastMsg.error &&
-    !lastMsg.queued &&
-    looksLikeRandomRequest(lastMsg.body);
+  const awaitingRandom = awaitingRandomPick(lastMsg);
 
   // Auto-scroll to the newest message / typing indicator. Keyed on the LAST
   // message id (not the array) so prepending older history via "load earlier"

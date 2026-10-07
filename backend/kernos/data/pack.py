@@ -96,19 +96,22 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
             return err(str(exc))
         return {"ok": True, "type": f"{slug}_search_results", "collection": slug, **out}
 
-    def _write(op: str, *, doc_id=None, payload=None, corrects=None) -> dict:
+    def _write(op: str, *, doc_id=None, payload=None, corrects=None, clear=None) -> dict:
         try:
             with sessions() as s:
                 action = actions.propose(data, live(), space_id, op, doc_id=doc_id, payload=payload,
-                                         corrects=corrects, session=s)
+                                         corrects=corrects, clear=clear, session=s)
                 if not confirm:
                     done = actions.apply(data, action, actor=who, session=s)
                     return {"ok": True, "type": f"{slug}_saved", "collection": slug, **done}
         except (ContentError, actions.ActionRefused) as exc:
             return err(str(exc))
-        return {"ok": True, "type": actions.PROPOSED, "action": action,
-                "note": f"Proposed, NOT saved: {action['headline']}. It is saved only when "
-                        "someone presses Confirm on the card — say so; never say it is done."}
+        note = (f"Proposed, NOT saved: {action['headline']}. It is saved only when "
+                "someone presses Confirm on the card — say so; never say it is done.")
+        if op == "update":
+            note += (" Another update of this record in this turn merges into the same card item "
+                     "(the fields you send again win) — there is one card, never a first and a second.")
+        return {"ok": True, "type": actions.PROPOSED, "action": action, "note": note}
 
     def create(args, _tool_ctx=None) -> dict:
         doc = (args or {}).get("data")
@@ -118,10 +121,13 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
 
     def update(args, _tool_ctx=None) -> dict:
         args = args or {}
-        changes = args.get("changes")
-        if not isinstance(changes, dict) or not changes:
-            return err("changes must be an object of the fields to change, with their new values.")
-        return _write("update", doc_id=args.get("doc_id"), payload=changes)
+        changes = args.get("changes") or {}
+        clear = args.get("clear") or []
+        if not isinstance(changes, dict) or not isinstance(clear, list) \
+                or not all(isinstance(f, str) for f in clear) or not (changes or clear):
+            return err("changes must be an object of the fields to change, with their new values "
+                       "(and clear a list of field names to empty).")
+        return _write("update", doc_id=args.get("doc_id"), payload=changes, clear=clear)
 
     def delete(args, _tool_ctx=None) -> dict:
         doc_id = (args or {}).get("doc_id")
@@ -190,11 +196,14 @@ def tools_for(collection: dict, data: DataStore, space_id: Any, actor: str | Non
         tools["update"] = PackTool(
             names["update"],
             f"Change some fields of one {about} record, found first with find/search. Pass only the fields "
-            f"that change; the rest stay as they are. {how} Editable: {', '.join(editable)}.",
+            f"that change — never an empty value for a field you are not changing; the rest stay as they "
+            f"are. To add to a list, send the whole new list. {how} Editable: {', '.join(editable)}.",
             {"type": "object", "properties": {
                 "doc_id": {"type": "string", "description": f"The record's {key}."},
-                "changes": {"type": "object", "properties": _props(collection, editable)}},
-             "required": ["doc_id", "changes"]},
+                "changes": {"type": "object", "properties": _props(collection, editable)},
+                "clear": {"type": "array", "items": {"type": "string"},
+                          "description": "Fields to empty on purpose (text or list fields only)."}},
+             "required": ["doc_id"]},
             update)
         tools["delete"] = PackTool(
             names["delete"],

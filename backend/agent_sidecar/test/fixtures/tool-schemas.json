@@ -300,14 +300,20 @@
         },
         "type": "object"
       },
+      "clear": {
+        "description": "Fields to empty on purpose (text or list fields only).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "doc_id": {
         "description": "The record's id.",
         "type": "string"
       }
     },
     "required": [
-      "doc_id",
-      "changes"
+      "doc_id"
     ],
     "type": "object"
   },
