@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
-import { LotterySpinner, looksLikeRandomRequest } from "../lottery-spinner";
+import { LotterySpinner, awaitingRandomPick, looksLikeRandomRequest } from "../lottery-spinner";
 
 describe("looksLikeRandomRequest", () => {
   it("matches random-pick phrasing, with or without diacritics", () => {
@@ -20,6 +20,23 @@ describe("looksLikeRandomRequest", () => {
     for (const s of ["An trả tiền hôm nay", "chia tiền bữa trưa", "hello", "", null, undefined]) {
       expect(looksLikeRandomRequest(s)).toBe(false);
     }
+  });
+});
+
+describe("awaitingRandomPick", () => {
+  it("spins for a person's unanswered random-pick request", () => {
+    expect(awaitingRandomPick({ author: { id: 3 }, body: "bốc thăm ai trả" })).toBe(true);
+  });
+
+  it("never spins under a bot message, whatever its text", () => {
+    // prod 2026-10-07: a record_draft card listing the alias "bock bock" ("boc")
+    expect(awaitingRandomPick({ author: null, body: "aliases: koko, gà rán, bock bock → gà koko" })).toBe(false);
+  });
+
+  it("does not spin for a failed or queued message, or no message", () => {
+    expect(awaitingRandomPick({ author: { id: 3 }, body: "random", error: "x" })).toBe(false);
+    expect(awaitingRandomPick({ author: { id: 3 }, body: "random", queued: true })).toBe(false);
+    expect(awaitingRandomPick(null)).toBe(false);
   });
 });
 

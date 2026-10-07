@@ -158,11 +158,40 @@ def _label(collection: dict, doc: dict | None, doc_id: str | None) -> str:
     return str(doc_id or doc.get(collection["key"]) or "new")
 
 
+def _blank(v: Any) -> bool:
+    """An empty field; an update may only write one over a value through ``clear``."""
+    return v is None or v == "" or v == []
+
+
+def _blanked(collection: dict, before: dict, payload: dict, clear: list[str]) -> dict:
+    """An update's payload with its empty values sorted out. A model given an object of
+    optional fields tends to send every one of them, empty where it has nothing to say
+    — and ``{**before, **payload}`` turns that into a wipe (prod 2026-10-07: "update the
+    phone" also cleared a place's tags). So an empty value over an empty field is
+    dropped, an empty value over a filled one is refused unless the field is in
+    ``clear``, and a field in ``clear`` is emptied."""
+    props = collection["schema"].get("properties", {})
+    allowed = set(editable_fields(collection))
+    out = {f: v for f, v in payload.items() if not (_blank(v) and _blank(before.get(f)))}
+    for f in clear:
+        kind = props.get(f, {}).get("type")
+        if f not in allowed or kind not in ("string", "array"):
+            raise Invalid(f"{collection['slug']}: {f!r} cannot be cleared; you may clear "
+                          f"{sorted(k for k in allowed if props.get(k, {}).get('type') in ('string', 'array'))}")
+        out[f] = [] if kind == "array" else ""
+    erased = sorted(f for f, v in out.items() if _blank(v) and f not in clear)
+    if erased:
+        raise Invalid(f"that would erase {erased}. Send only the fields that change, with their new "
+                      "values; to empty a field on purpose, name it in `clear`.")
+    return out
+
+
 def propose(data, collection: dict, space_id: Any, op: str, *, doc_id: str | None = None,
-            payload: dict | None = None, corrects: str | None = None, session: Session) -> dict:
+            payload: dict | None = None, corrects: str | None = None,
+            clear: list[str] | None = None, session: Session) -> dict:
     """Check one write and describe it, writing nothing. Raises :class:`ContentError` with
     a message the agent can act on (a schema error, a field it may not set, no such record,
-    a change that changes nothing)."""
+    a change that changes nothing, an update that would erase a field it did not ``clear``)."""
     if op not in OPS:
         raise Invalid(f"unknown action {op!r}")
     journal = collection.get("mode") == "journal"
@@ -190,6 +219,8 @@ def propose(data, collection: dict, space_id: Any, op: str, *, doc_id: str | Non
         if row is None:
             raise NotFound(f"no {collection['slug']} record {doc_id!r} here")
         before = row["data"]
+    if op == "update":
+        payload = _blanked(collection, before, payload, list(clear or ()))
     writer = _writer(collection)
     if writer is not None:
         after = writer.check(session, space_id, op, before, payload)
@@ -310,12 +341,31 @@ def _max_numeric_id(session: Session, collection: dict, space_id: Any) -> int:
 
 # ------------------------------------------------------------------- the card
 
+def _merged(first: dict, later: dict) -> dict:
+    """Two updates of one record in one turn as one: the fields ``later`` sends win.
+    Both were checked against the same stored record (nothing is applied until Confirm),
+    so each one's ``after`` is that record with its own fields changed. A model that
+    corrects itself sends the whole record again — two items on the card would show its
+    mistake next to the fix, with one Confirm applying both (prod 2026-10-07)."""
+    after = dict(first["after"])
+    for f in later["payload"]:
+        if f in later["after"]:
+            after[f] = later["after"][f]
+        else:
+            after.pop(f, None)
+    out = {**first, "payload": {**first["payload"], **later["payload"]}, "after": after,
+           "label": _label({"key": None}, after, first["doc_id"])}
+    out["headline"], out["changes"] = headline(out), changes(out)
+    return out
+
+
 def proposed(result) -> list[dict]:
-    """Every action this agent proposed in the turn, in order, each once. A sub-agent's
-    proposal is data for the manager, never this turn's card (as ``last_result``)."""
+    """Every action this agent proposed in the turn, in order, each once; updates of one
+    record merged into one (:func:`_merged`). A sub-agent's proposal is data for the
+    manager, never this turn's card (as ``last_result``)."""
     if result is None:
         return []
-    out, made = [], set()
+    out, made, updating = [], set(), {}
     for inv in getattr(result, "tools", None) or []:
         res = getattr(inv, "result", None)
         if getattr(inv, "from_agent", None) is None and isinstance(res, dict) and res.get("ok") \
@@ -327,6 +377,13 @@ def proposed(result) -> list[dict]:
                 if (a["collection_id"], a["identity"]) in made:
                     continue
                 made.add((a["collection_id"], a["identity"]))
+            if a["op"] == "update":
+                target = (a["collection_id"], a["doc_id"])
+                if target in updating:
+                    i = updating[target]
+                    out[i] = _merged(out[i], a)
+                    continue
+                updating[target] = len(out)
             out.append(a)
     return out
 

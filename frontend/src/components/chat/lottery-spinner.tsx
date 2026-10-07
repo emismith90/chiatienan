@@ -39,6 +39,17 @@ export function looksLikeRandomRequest(text: string | undefined | null): boolean
   return TRIGGERS.some((t) => norm.includes(t));
 }
 
+/** Is the room waiting on a random pick — is the newest message a person's
+ * random-pick request the bot has not answered yet? Only a message a person
+ * wrote counts: a bot message (a card, a reply) has no author, and its text can
+ * hold a trigger word by accident — a place alias "bock bock" folds to "boc" —
+ * which left the reel spinning under a confirm card forever. */
+export function awaitingRandomPick(
+  msg: { author?: unknown; body?: string | null; error?: unknown; queued?: boolean } | null | undefined,
+): boolean {
+  return !!msg && msg.author != null && !msg.error && !msg.queued && looksLikeRandomRequest(msg.body);
+}
+
 /** Slot-machine placeholder shown while the bot's random pick is in flight: the
  * Lucky Draw reel rolls through the roster at full speed until the tool result
  * arrives and the RandomPickCard (which lands the same reel on the winner)
