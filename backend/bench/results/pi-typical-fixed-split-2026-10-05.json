@@ -1,0 +1,2078 @@
+{
+  "version": 1,
+  "engine": "pi",
+  "corpus": "typical",
+  "repeat": 3,
+  "judge_model": null,
+  "partial": true,
+  "cases_run": 5,
+  "records": [
+    {
+      "version": 1,
+      "case_id": "G1",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 400k cả nhóm",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 400000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 400000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              },
+              {
+                "member": 3,
+                "amount": 100000
+              },
+              {
+                "member": 4,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất An trả, chia đều cả nhóm. Bạn bấm **Xác nhận** trên thẻ nhé!",
+      "error": null,
+      "elapsed_s": 14.667009764,
+      "stats": {
+        "tokens": 19208,
+        "cost": 0.041192,
+        "tool_calls": 2,
+        "elapsed_s": 13.714
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G1",
+      "rep": 1,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 400k cả nhóm",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 400000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 400000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              },
+              {
+                "member": 3,
+                "amount": 100000
+              },
+              {
+                "member": 4,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất bạn trả, chia đều cả nhóm. Bạn bấm **Xác nhận** trên thẻ nhé!",
+      "error": null,
+      "elapsed_s": 33.345943680999994,
+      "stats": {
+        "tokens": 10041,
+        "cost": 0.022778,
+        "tool_calls": 2,
+        "elapsed_s": 33.318
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G1",
+      "rep": 2,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 400k cả nhóm",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 400000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 400000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 100000
+              },
+              {
+                "member": 3,
+                "amount": 100000
+              },
+              {
+                "member": 4,
+                "amount": 100000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất bạn trả, chia đều cho cả nhóm. Bạn bấm **Xác nhận** trên thẻ nhé!",
+      "error": null,
+      "elapsed_s": 16.233979309999995,
+      "stats": {
+        "tokens": 960,
+        "cost": 0.004656,
+        "tool_calls": 2,
+        "elapsed_s": 16.195
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G4",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 250k, tôi với Bình ăn, Bình gọi thêm 50k",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2
+            ],
+            "total": 250000,
+            "guests": [],
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 250000,
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 150000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất cho bạn và Bình, tính phần gọi thêm cho Bình. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 20.702940812999998,
+      "stats": {
+        "tokens": 28367,
+        "cost": 0.059685999999999996,
+        "tool_calls": 2,
+        "elapsed_s": 20.669
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G4",
+      "rep": 1,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 250k, tôi với Bình ăn, Bình gọi thêm 50k",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2
+            ],
+            "total": 250000,
+            "guests": [],
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 250000,
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 150000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo bản nháp cho bạn và Bình, tính phần gọi thêm vào phần của Bình. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 21.974237167000013,
+      "stats": {
+        "tokens": 10107,
+        "cost": 0.02323,
+        "tool_calls": 2,
+        "elapsed_s": 21.923
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G4",
+      "rep": 2,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 250k, tôi với Bình ăn, Bình gọi thêm 50k",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2
+            ],
+            "total": 250000,
+            "guests": [],
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2
+            ],
+            "guests": [],
+            "bill_total": 250000,
+            "adjustments": [
+              {
+                "member": 2,
+                "amount": 50000
+              }
+            ],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 100000,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 100000
+              },
+              {
+                "member": 2,
+                "amount": 150000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Mình đã tạo đề xuất: bạn trả, hai bạn cùng ăn và phần gọi thêm tính cho Bình. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 16.124548441,
+      "stats": {
+        "tokens": 10110,
+        "cost": 0.023244,
+        "tool_calls": 2,
+        "elapsed_s": 16.097
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G5",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 100k, tôi với Bình và Cường ăn",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3
+            ],
+            "total": 100000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3
+            ],
+            "guests": [],
+            "bill_total": 100000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 33333,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 33334
+              },
+              {
+                "member": 2,
+                "amount": 33333
+              },
+              {
+                "member": 3,
+                "amount": 33333
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất bạn trả, chia đều cho bạn, Bình và Cường. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 18.73150945499998,
+      "stats": {
+        "tokens": 28359,
+        "cost": 0.06002999999999999,
+        "tool_calls": 2,
+        "elapsed_s": 18.705
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G5",
+      "rep": 1,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 100k, tôi với Bình và Cường ăn",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3
+            ],
+            "total": 100000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3
+            ],
+            "guests": [],
+            "bill_total": 100000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 33333,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 33334
+              },
+              {
+                "member": 2,
+                "amount": 33333
+              },
+              {
+                "member": 3,
+                "amount": 33333
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất An trả, chia đều cho An, Bình và Cường. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 23.34794526899998,
+      "stats": {
+        "tokens": 19270,
+        "cost": 0.041668,
+        "tool_calls": 2,
+        "elapsed_s": 23.322
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G5",
+      "rep": 2,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả 100k, tôi với Bình và Cường ăn",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3
+            ],
+            "total": 100000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3
+            ],
+            "guests": [],
+            "bill_total": 100000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 33333,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 33334
+              },
+              {
+                "member": 2,
+                "amount": 33333
+              },
+              {
+                "member": 3,
+                "amount": 33333
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo bản nháp: bạn trả, chia đều cho bạn, Bình và Cường. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 15.07913284,
+      "stats": {
+        "tokens": 19291,
+        "cost": 0.041854,
+        "tool_calls": 2,
+        "elapsed_s": 15.049
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G13",
+      "rep": 0,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot trưa ăn cơm tấm 335k, tôi 110k, Bình, Cường, Dung chia đều phần còn lại. tôi trả",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường",
+              "Dung"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 335000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": "proportional",
+            "dish": "cơm tấm",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 335000,
+            "adjustments": [
+              {
+                "member": 1,
+                "amount": 26250
+              },
+              {
+                "member": 2,
+                "amount": -8750
+              },
+              {
+                "member": 3,
+                "amount": -8750
+              },
+              {
+                "member": 4,
+                "amount": -8750
+              }
+            ],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": null,
+            "dish": "cơm tấm",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 83750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 110000
+              },
+              {
+                "member": 2,
+                "amount": 75000
+              },
+              {
+                "member": 3,
+                "amount": 75000
+              },
+              {
+                "member": 4,
+                "amount": 75000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo bản nháp: bạn trả, phần bạn giữ như đã nói; Bình, Cường và Dung chia đều phần còn lại. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 29.01105983299999,
+      "stats": {
+        "tokens": 28597,
+        "cost": 0.060434,
+        "tool_calls": 2,
+        "elapsed_s": 28.988
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G13",
+      "rep": 1,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot trưa ăn cơm tấm 335k, tôi 110k, Bình, Cường, Dung chia đều phần còn lại. tôi trả",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường",
+              "Dung"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 335000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": "proportional",
+            "dish": "cơm tấm",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 335000,
+            "adjustments": [
+              {
+                "member": 1,
+                "amount": 26250
+              },
+              {
+                "member": 2,
+                "amount": -8750
+              },
+              {
+                "member": 3,
+                "amount": -8750
+              },
+              {
+                "member": 4,
+                "amount": -8750
+              }
+            ],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": null,
+            "dish": "cơm tấm",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 83750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 110000
+              },
+              {
+                "member": 2,
+                "amount": 75000
+              },
+              {
+                "member": 3,
+                "amount": 75000
+              },
+              {
+                "member": 4,
+                "amount": 75000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất: bạn trả, phần của bạn giữ như đã nói; Bình, Cường và Dung chia đều phần còn lại. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 15.884504600000014,
+      "stats": {
+        "tokens": 19403,
+        "cost": 0.042246,
+        "tool_calls": 2,
+        "elapsed_s": 15.855
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "G13",
+      "rep": 2,
+      "source": "meals",
+      "day": "2026-07-20",
+      "message": "@bot trưa ăn cơm tấm 335k, tôi 110k, Bình, Cường, Dung chia đều phần còn lại. tôi trả",
+      "had_images": false,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [
+              "Bình",
+              "Cường",
+              "Dung"
+            ],
+            "all_active": false
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 335000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": "proportional",
+            "dish": "cơm tấm",
+            "initiator": "",
+            "note": "",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 335000,
+            "adjustments": [
+              {
+                "member": 1,
+                "amount": 26250
+              },
+              {
+                "member": 2,
+                "amount": -8750
+              },
+              {
+                "member": 3,
+                "amount": -8750
+              },
+              {
+                "member": 4,
+                "amount": -8750
+              }
+            ],
+            "items": [],
+            "fixed": [
+              {
+                "member": 1,
+                "amount": 110000
+              }
+            ],
+            "discount_split": null,
+            "dish": "cơm tấm",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "",
+            "per_head_preview": 83750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 110000
+              },
+              {
+                "member": 2,
+                "amount": 75000
+              },
+              {
+                "member": 3,
+                "amount": 75000
+              },
+              {
+                "member": 4,
+                "amount": 75000
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo bản nháp: bạn trả, phần bạn giữ như đã nói; Bình, Cường và Dung chia đều phần còn lại. Bạn bấm **Xác nhận** trên thẻ nhé.",
+      "error": null,
+      "elapsed_s": 81.89019867999997,
+      "stats": {
+        "tokens": 19379,
+        "cost": 0.042046,
+        "tool_calls": 2,
+        "elapsed_s": 81.864
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "B1",
+      "rep": 0,
+      "source": "bills",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả bill này, cả nhóm ăn",
+      "had_images": true,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 215000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "Cơm tấm – Quán Cơm Tấm 68",
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 215000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "Cơm tấm – Quán Cơm Tấm 68",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "per_head_preview": 53750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 53750
+              },
+              {
+                "member": 2,
+                "amount": 53750
+              },
+              {
+                "member": 3,
+                "amount": 53750
+              },
+              {
+                "member": 4,
+                "amount": 53750
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất: bạn trả, cả nhóm chia đều. Bạn bấm **Xác nhận** trên thẻ để ghi nhé.",
+      "error": null,
+      "elapsed_s": 24.565519389999963,
+      "stats": {
+        "tokens": 28520,
+        "cost": 0.060368000000000005,
+        "tool_calls": 2,
+        "elapsed_s": 24.53
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "B1",
+      "rep": 1,
+      "source": "bills",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả bill này, cả nhóm ăn",
+      "had_images": true,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 215000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "Cơm tấm — Quán Cơm Tấm 68",
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 215000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "Cơm tấm — Quán Cơm Tấm 68",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "per_head_preview": 53750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 53750
+              },
+              {
+                "member": 2,
+                "amount": 53750
+              },
+              {
+                "member": 3,
+                "amount": 53750
+              },
+              {
+                "member": 4,
+                "amount": 53750
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất An trả, chia đều cho cả nhóm. Bạn bấm **Xác nhận** trên thẻ để lưu nhé!",
+      "error": null,
+      "elapsed_s": 18.20825523100001,
+      "stats": {
+        "tokens": 19388,
+        "cost": 0.041856000000000004,
+        "tool_calls": 2,
+        "elapsed_s": 18.181
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    },
+    {
+      "version": 1,
+      "case_id": "B1",
+      "rep": 2,
+      "source": "bills",
+      "day": "2026-07-20",
+      "message": "@bot tôi trả bill này, cả nhóm ăn",
+      "had_images": true,
+      "room_id": 1,
+      "tools": [
+        {
+          "name": "find_members",
+          "args": {
+            "names": [],
+            "all_active": true
+          },
+          "result": {
+            "ok": true,
+            "matched": [
+              {
+                "id": 1,
+                "display_name": "An"
+              },
+              {
+                "id": 2,
+                "display_name": "Bình"
+              },
+              {
+                "id": 3,
+                "display_name": "Cường"
+              },
+              {
+                "id": 4,
+                "display_name": "Dung"
+              }
+            ],
+            "unresolved": [],
+            "ambiguous": []
+          }
+        },
+        {
+          "name": "propose_meal",
+          "args": {
+            "payer": 1,
+            "participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "total": 215000,
+            "guests": [],
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": "proportional",
+            "dish": "Cơm tấm — Quán Cơm Tấm 68",
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "day_word": "",
+            "occurred_on": ""
+          },
+          "result": {
+            "ok": true,
+            "type": "expense_draft",
+            "payer_member_id": 1,
+            "member_participants": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guests": [],
+            "bill_total": 215000,
+            "adjustments": [],
+            "items": [],
+            "fixed": [],
+            "discount_split": null,
+            "dish": "Cơm tấm — Quán Cơm Tấm 68",
+            "place_id": null,
+            "place_guess": null,
+            "initiator": "",
+            "note": "Chia đều cho cả nhóm.",
+            "per_head_preview": 53750,
+            "shares_preview": [
+              {
+                "member": 1,
+                "amount": 53750
+              },
+              {
+                "member": 2,
+                "amount": 53750
+              },
+              {
+                "member": 3,
+                "amount": 53750
+              },
+              {
+                "member": 4,
+                "amount": 53750
+              }
+            ],
+            "occurred_on": ""
+          }
+        }
+      ],
+      "final_text": "Đã tạo đề xuất An trả, chia đều cho cả nhóm. Bạn bấm **Xác nhận** trên thẻ để lưu nhé!",
+      "error": null,
+      "elapsed_s": 21.92401286100005,
+      "stats": {
+        "tokens": 19406,
+        "cost": 0.042115999999999994,
+        "tool_calls": 2,
+        "elapsed_s": 21.896
+      },
+      "grades": {
+        "tool_selection": {
+          "passed": true,
+          "reason": "called ['propose_meal'] with matching money args"
+        },
+        "ledger_state": {
+          "passed": true,
+          "reason": "ledger matches on ['balances', 'shares', 'tracked']"
+        },
+        "prose_quality": {
+          "passed": null,
+          "reason": "not graded: the room saw an expense draft card, not the model's prose"
+        }
+      },
+      "sender_member_id": 1,
+      "member_ids": {
+        "m1": 1,
+        "m2": 2,
+        "m3": 3,
+        "m4": 4
+      }
+    }
+  ]
+}
