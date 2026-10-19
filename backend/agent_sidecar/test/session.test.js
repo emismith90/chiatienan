@@ -8,7 +8,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAgentsFiles, disposeSession, proxyTool, resolveModel,
+import { fstatSync, mkdtempSync, openSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { buildAgentsFiles, disposeSession, loadProviderKey, proxyTool, resolveModel,
   toolOptionsFor } from "../session.js";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } } };
@@ -225,4 +229,15 @@ test("a registered extension resolves to an inline factory that receives its con
   ext.factory("PI");
   assert.deepEqual(seen, [["PI", { max: 3 }]]);
   _resetExtensions();
+});
+
+test("the provider key is read once from PI_KEY_FD, which is then closed and forgotten", () => {
+  // The model's shell inherits this environment; the key must never be in it.
+  const file = join(mkdtempSync(join(tmpdir(), "key-")), "key");
+  writeFileSync(file, "sk-real\n");
+  const fd = openSync(file, "r");
+  const env = { PI_KEY_FD: String(fd) };
+  assert.equal(loadProviderKey(env), "sk-real");
+  assert.equal(env.PI_KEY_FD, undefined);
+  assert.throws(() => fstatSync(fd), { code: "EBADF" });
 });

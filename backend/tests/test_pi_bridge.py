@@ -169,30 +169,40 @@ async def _record(sink):
     sink.append(True)
 
 
-def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
-    # Two names for one secret on openrouter: we standardise on OPEN_ROUTER_KEY, pi
-    # reads OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:93). Without the mapping
-    # the sidecar says "No API key found for openrouter. Use /login…", which reads
-    # like a setup mistake rather than a naming mismatch.
-    from app.config import PROVIDERS
-    from kernos.engine.pi.bridge import PiBridge
-    row = PROVIDERS["openrouter"]
-    monkeypatch.setenv(row["key_env"], "sk-real")
-    monkeypatch.delenv(row["pi_key_env"], raising=False)
-    bridge = PiBridge(entry=tmp_path / "x.js", key_env=row["key_env"], pi_key_env=row["pi_key_env"])
-    assert bridge._child_env()[row["pi_key_env"]] == "sk-real"
+async def test_the_key_reaches_the_child_over_a_pipe_never_its_environment(tmp_path, monkeypatch):
+    # The model in the sidecar has a shell. Whatever is in the child's environment
+    # — now or at exec, which /proc/$PPID/environ keeps — it can print into the room.
+    monkeypatch.setenv(pi_bridge.KEY_ENV, "sk-real")
+    bridge = _bridge(tmp_path, """
+        import json, os, sys
+        fd = int(os.environ["PI_KEY_FD"])
+        key = os.read(fd, 4096).decode()
+        os.close(fd)
+        with open("/proc/self/environ", "rb") as f:
+            environ = f.read()
+        leaked = b"sk-real" in environ or b"test-key" in environ
+        for line in sys.stdin:
+            command = json.loads(line)
+            print(json.dumps({"type": "pong", "req_id": command["req_id"],
+                              "text": f"{key} leaked={leaked}"}), flush=True)
+    """)
+    try:
+        reply = [m async for m in bridge.request({"type": "ping", "req_id": "r1"})]
+        assert reply[0]["text"] == "test-key leaked=False"
+    finally:
+        await bridge.aclose()
 
 
 def test_the_default_provider_is_cursor_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
-    # pi-cursor-sdk reads CURSOR_API_KEY itself, so nothing is translated.
-    # PI_PROVIDER must reach the child: it is what loads the extension there, and
+    # PI_PROVIDER must reach the child: it is what loads the extension there and
+    # names the provider the piped key is for, and
     # `grok-4.7` is listed under several providers in pi's catalogue — the sidecar
     # would otherwise pick the first (github-copilot).
     assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("CURSOR_API_KEY", "CURSOR_API_KEY")
     monkeypatch.setenv("CURSOR_API_KEY", "cursor-real")
     monkeypatch.delenv("PI_PROVIDER", raising=False)
     child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
-    assert child["CURSOR_API_KEY"] == "cursor-real" and child["PI_PROVIDER"] == "cursor"
+    assert "CURSOR_API_KEY" not in child and child["PI_PROVIDER"] == "cursor"
 
 
 def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkeypatch, tmp_path):
@@ -202,9 +212,8 @@ def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkey
                  "OPENROUTER_API_KEY", "CURSOR_API_KEY"):
         monkeypatch.setenv(name, f"secret-{name}")
     child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
-    assert child[pi_bridge.KEY_ENV] == f"secret-{pi_bridge.KEY_ENV}"
     leaked = {n for n in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
-                          "OPENROUTER_API_KEY") if n in child}
+                          "OPENROUTER_API_KEY", "CURSOR_API_KEY") if n in child}
     assert not leaked
 
 
@@ -220,3 +229,90 @@ def test_an_unknown_provider_names_the_valid_ones():
     from app.config import provider
     with pytest.raises(ValueError, match="cursor.*openrouter.*xai"):
         provider("grok")
+
+
+def _with_sidecar_user(monkeypatch, tmp_path, user: str):
+    import dataclasses
+    data = tmp_path / "data"
+    data.mkdir(mode=0o755)
+    monkeypatch.setattr(pi_bridge, "settings", dataclasses.replace(
+        pi_bridge.settings, pi_sidecar_user=user, data_dir=str(data)))
+    return data
+
+
+def test_without_a_sidecar_user_the_child_runs_as_the_backend(tmp_path):
+    assert pi_bridge.settings.pi_sidecar_user == ""
+    assert pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options() == {}
+
+
+def test_a_sidecar_user_gets_its_own_home_and_data_dir_is_closed_to_it(monkeypatch, tmp_path):
+    # The model's shell inherits the sidecar's user: DATA_DIR must not be
+    # traversable by it, and HOME must be its own (Cursor writes ~/.cursor).
+    import pwd
+    me = pwd.getpwuid(os.getuid())
+    data = _with_sidecar_user(monkeypatch, tmp_path, me.pw_name)
+    monkeypatch.setattr(pi_bridge.os, "geteuid", lambda: 0)
+    bridge = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js",
+                                env={pi_bridge.KEY_ENV: "k"})
+    assert bridge._spawn_options() == {"user": me.pw_uid, "group": me.pw_gid, "extra_groups": []}
+    assert data.stat().st_mode & 0o777 == 0o700
+    assert bridge._child_env()["HOME"] == me.pw_dir
+
+
+def test_a_sidecar_user_needs_a_root_backend(monkeypatch, tmp_path):
+    # Silently running the shell as the backend's own user would be the unconfined
+    # setup the operator asked to leave.
+    import pwd
+    _with_sidecar_user(monkeypatch, tmp_path, pwd.getpwuid(os.getuid()).pw_name)
+    monkeypatch.setattr(pi_bridge.os, "geteuid", lambda: 1000)
+    with pytest.raises(pi_bridge.BridgeError, match="root"):
+        pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options()
+
+
+def test_an_unknown_sidecar_user_is_named(monkeypatch, tmp_path):
+    _with_sidecar_user(monkeypatch, tmp_path, "no-such-user-here")
+    with pytest.raises(pi_bridge.BridgeError, match="no-such-user-here"):
+        pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="dropping to another user needs root")
+async def test_the_dropped_sidecar_cannot_reach_data_dir(monkeypatch):
+    # End to end: the child really runs as the other user, and the ledger's
+    # directory is closed to it while the rest of the tree is not. pytest's own
+    # tmp dirs are root-only, so this builds a tree "nobody" can walk.
+    import pwd
+    import shutil
+    import tempfile
+    from pathlib import Path
+    base = Path(tempfile.mkdtemp())
+    try:
+        os.chmod(base, 0o755)
+        data = _with_sidecar_user(monkeypatch, base, "nobody")
+        (data / "chiatienan.db").write_text("ledger")
+        (base / "public.txt").write_text("public")
+        entry = _fake_node(base, """
+            import json, os, sys
+            def can_read(path):
+                try:
+                    open(path).read()
+                    return "read"
+                except PermissionError:
+                    return "denied"
+            for line in sys.stdin:
+                command = json.loads(line)
+                text = " ".join([str(os.getuid()), can_read(command["public"]),
+                                 can_read(command["db"])])
+                print(json.dumps({"type": "pong", "req_id": command["req_id"],
+                                  "text": text}), flush=True)
+        """)
+        bridge = pi_bridge.PiBridge(node=os.path.realpath(sys.executable), entry=entry,
+                                    env={pi_bridge.KEY_ENV: "test-key"})
+        try:
+            reply = [m async for m in bridge.request({
+                "type": "ping", "req_id": "r1", "public": str(base / "public.txt"),
+                "db": str(data / "chiatienan.db")})]
+            assert reply[0]["text"] == f"{pwd.getpwnam('nobody').pw_uid} read denied"
+        finally:
+            await bridge.aclose()
+    finally:
+        shutil.rmtree(base)

@@ -7,6 +7,7 @@ singleton ``settings`` is created on import; tests build fresh instances via
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass
 
 
@@ -66,6 +67,9 @@ def provider(name: str) -> dict:
         raise ValueError(f"PI_PROVIDER={name!r} is not one of {sorted(PROVIDERS)}") from None
 
 
+_PI_WORK_DIR = os.path.join(tempfile.gettempdir(), "kernos-pi")
+
+
 @dataclass(frozen=True)
 class Settings:
     # Cursor SDK
@@ -113,6 +117,14 @@ class Settings:
     # sit on a different scale for each one, so change both together.
     embedding_model: str = ""
     embedding_min_similarity: float = 0.65
+    # The sidecar's model has a shell (Cursor's own on PI_PROVIDER=cursor, which no
+    # profile can turn off). Set to a local user and the sidecar runs as it — it
+    # then cannot read or write DATA_DIR (`app.pi_bridge`). Needs the backend to run
+    # as root; the Docker image sets it. Empty = same user as the backend.
+    pi_sidecar_user: str = ""
+    # The turn's cwd and pi's config dir live under here — outside DATA_DIR, so
+    # whatever the shell writes there is throwaway and nowhere near the ledger.
+    pi_work_dir: str = _PI_WORK_DIR
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -163,6 +175,8 @@ class Settings:
             qr_base_url=((os.environ.get("QR_BASE_URL") or "").strip() or "https://img.vietqr.io/image").rstrip("/"),
             qr_template=(os.environ.get("QR_TEMPLATE") or "").strip() or "compact2",
             caddy_domain=(os.environ.get("CADDY_DOMAIN") or "").strip(),
+            pi_sidecar_user=(os.environ.get("PI_SIDECAR_USER") or "").strip(),
+            pi_work_dir=(os.environ.get("PI_WORK_DIR") or "").strip() or _PI_WORK_DIR,
         )
 
 

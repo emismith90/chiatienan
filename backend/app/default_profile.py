@@ -42,8 +42,8 @@ def build_default_spec(settings: Settings | None = None) -> ProfileSpec:
                       window_weeks=s.memory_window_weeks,
                       image_lookback_messages=s.image_lookback_messages,
                       image_lookback_minutes=s.image_lookback_minutes),
-        runtime=Runtime(cwd=str(Path(s.data_dir) / "pi-cwd"),
-                        agent_dir=str(Path(s.data_dir) / "pi-agent")),
+        runtime=Runtime(cwd=str(Path(s.pi_work_dir) / "pi-cwd"),
+                        agent_dir=str(Path(s.pi_work_dir) / "pi-agent")),
         pipeline={
             "context": [
                 e(id="kernos.context.rollover", version="1",

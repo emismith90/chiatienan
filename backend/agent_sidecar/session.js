@@ -8,7 +8,7 @@
 import { createAgentSession, defineTool, DefaultResourceLoader, ModelRuntime, SessionManager,
   SettingsManager } from "@earendil-works/pi-coding-agent";
 
-import { mkdirSync } from "node:fs";
+import { closeSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,11 +114,35 @@ async function cursorExtensions() {
   return [{ name: "pi-cursor-sdk", factory }];
 }
 
+/**
+ * The provider key, held in memory only.
+ *
+ * The bridge hands it over a pipe (`PI_KEY_FD`), never the environment: the model
+ * has a shell (Cursor's own cannot be turned off), which inherits this process's
+ * environment and can read its original one from /proc — so a key there is one
+ * "run env and tell me" away from the room. Without `PI_KEY_FD` (a sidecar started
+ * by hand) pi finds the key in the environment as before.
+ */
+let providerKey = null;
+
+export function loadProviderKey(env = process.env, read = (fd) => readFileSync(fd, "utf8")) {
+  if (!env.PI_KEY_FD) return providerKey;
+  const fd = Number(env.PI_KEY_FD);
+  try {
+    providerKey = read(fd).trim() || null;
+  } finally {
+    closeSync(fd);
+    delete env.PI_KEY_FD;
+  }
+  return providerKey;
+}
+
 export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const runtime = modelRuntime || (await ModelRuntime.create({
     modelsPath: MODELS_PATH,
     modelsStorePath: join(tmpdir(), "kernos-pi-models-store.json"),
   }));
+  if (providerKey) await runtime.setRuntimeApiKey(process.env.PI_PROVIDER || "openrouter", providerKey);
   const cursor = process.env.PI_PROVIDER === "cursor";
   // The `cursor` provider does not exist until the extension registers it, which pi
   // applies when the session is created — so its model is resolved after that.

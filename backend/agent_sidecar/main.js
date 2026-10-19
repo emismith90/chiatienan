@@ -16,7 +16,7 @@
  * One malformed line must never take the process down: the bot would then be dead
  * until the next deploy over a single bad turn.
  */
-import { buildSession } from "./session.js";
+import { buildSession, loadProviderKey } from "./session.js";
 import { runTurn } from "./turn.js";
 
 /**
@@ -185,6 +185,7 @@ export function createLineReader(onLine, onMalformed) {
 }
 
 export function main() {
+  loadProviderKey();
   const write = (message) => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
   };

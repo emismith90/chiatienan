@@ -1,14 +1,14 @@
-/** A sun — "sol" — for the GPT-6.1 Sol engine. A neutral glyph drawn here, not
- * OpenAI's artwork: swap in the official mark if one is licensed for this use.
+/** A ring cut by a slash, for the Grok engine. A neutral glyph drawn here, not
+ * xAI's artwork: swap in the official mark if one is licensed for this use.
  *
  * Inlined rather than served from `public/`: its first job is the boot splash,
  * which paints before anything has been fetched, and a logo that pops in a
  * beat late is worse than no logo. `fill` accepts `currentColor` where the
  * surrounding text should own the colour.
  */
-export function SolMark({
+export function GrokMark({
   className = "",
-  fill = "#F5A524",
+  fill = "currentColor",
   width,
   height,
 }: {
@@ -17,22 +17,22 @@ export function SolMark({
   width?: number;
   height?: number;
 }) {
-  const rays = Array.from({ length: 8 }, (_, i) => i * 45);
   return (
     <svg
       viewBox="0 0 24 24"
       role="img"
-      aria-label="Sol"
+      aria-label="Grok"
       className={className}
-      fill={fill}
+      fill="none"
+      stroke={fill}
+      strokeWidth={2.2}
+      strokeLinecap="round"
       width={width}
       height={height}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <circle cx="12" cy="12" r="5" />
-      {rays.map((deg) => (
-        <rect key={deg} x="11" y="1" width="2" height="4" rx="1" transform={`rotate(${deg} 12 12)`} />
-      ))}
+      <circle cx="12" cy="12" r="7.5" />
+      <path d="M4 20 20 4" />
     </svg>
   );
 }

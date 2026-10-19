@@ -2,14 +2,16 @@
 
 The bridge itself moved to the framework (plan Task 1.4). What stays here is
 everything host-specific: where the sidecar lives, what our credential is called
-for ``PI_PROVIDER`` (``XAI_API_KEY`` for xai; ``OPEN_ROUTER_KEY``, not the
-``OPENROUTER_API_KEY`` pi reads, for openrouter — the bridge translates), the
+for ``PI_PROVIDER`` (``XAI_API_KEY`` for xai; ``OPEN_ROUTER_KEY`` for openrouter —
+handed to the sidecar over a pipe, never in its environment), the
 ``PI_*`` defaults the child inherits from ``settings``, and the
 one-per-process singleton ``chat._agent_lock`` and ``/internal/bridge-smoke``
 share.
 """
 from __future__ import annotations
 
+import os
+import pwd
 from pathlib import Path
 
 from app.config import PROVIDERS, provider, settings
@@ -24,9 +26,9 @@ SIDECAR_ENTRY = SIDECAR_DIR / "main.js"
 #: 401 mid-turn.
 KEY_ENV = provider(settings.pi_provider)["key_env"]
 
-#: The name **pi** reads it from. Where the two differ (openrouter) the boundary
-#: translates: one canonical variable in our env and deploy config, mapped to pi's
-#: expectation for the child process only.
+#: The name **pi** would read it from (openrouter's differs from ours). The key
+#: reaches pi in memory now, so this is only scrubbed from the child's environment
+#: in case the deploy config also sets it.
 PI_KEY_ENV = provider(settings.pi_provider)["pi_key_env"]
 
 #: Never handed to the sidecar. The model there has a shell (pi's `bash` when a
@@ -51,9 +53,10 @@ class PiBridge(_PiBridge):
             child_env_defaults={"PI_MODEL": settings.pi_model,
                                 "PI_VISION_MODEL": settings.pi_vision_model,
                                 "PI_PROVIDER": settings.pi_provider},
-            # Not PI_CURSOR_SANDBOX=1: Cursor's sandbox does confine its shell's
-            # writes, but its network block also cuts the loopback MCP bridge, so
-            # every money tool call is refused and no turn can record anything.
+            # Not PI_CURSOR_SANDBOX=1. Cursor's sandbox puts every MCP call behind an
+            # interactive approval a local run cannot give, so all money tools are
+            # refused; and it needs user namespaces, which Docker's default seccomp
+            # profile denies. The OS user below is the confinement instead.
             env=env,
         )
 
@@ -61,7 +64,35 @@ class PiBridge(_PiBridge):
         env = super()._child_env()
         for name in CHILD_ENV_DENY:
             env.pop(name, None)
+        if settings.pi_sidecar_user:
+            user = _sidecar_user()
+            env.update(HOME=user.pw_dir, USER=user.pw_name, LOGNAME=user.pw_name)
         return env
+
+    def _spawn_options(self) -> dict:
+        """Run the sidecar as ``PI_SIDECAR_USER``, with DATA_DIR closed to it.
+
+        The model's shell runs as that user too, so it can write only what that
+        user owns (its home, where the image puts ``PI_WORK_DIR``) and /tmp — never
+        the ledger, which only this process may open. Nothing here touches the work
+        dir: the sidecar owns it, so it could be a symlink planted by the shell.
+        """
+        if not settings.pi_sidecar_user:
+            return {}
+        user = _sidecar_user()
+        if os.geteuid() != 0:
+            raise BridgeError(f"PI_SIDECAR_USER={user.pw_name} needs the backend to run as root")
+        # Owner-only, so the sidecar can neither list nor traverse it. A bind mount
+        # keeps the host's mode, so the image cannot set this once for all.
+        os.chmod(settings.data_dir, 0o700)
+        return {"user": user.pw_uid, "group": user.pw_gid, "extra_groups": []}
+
+
+def _sidecar_user() -> pwd.struct_passwd:
+    try:
+        return pwd.getpwnam(settings.pi_sidecar_user)
+    except KeyError:
+        raise BridgeError(f"PI_SIDECAR_USER={settings.pi_sidecar_user} is not a user here") from None
 
 
 #: One bridge per process. `chat._agent_lock` already serializes turns, and

@@ -1,26 +1,50 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
 import { RoomView } from "@/components/chat/room-view";
 import { PoweredBy } from "@/components/powered-by";
 
-export default function Home() {
-  const { token, roomId, ready } = useSession();
+/** How long the boot splash stays up at least. Hydration alone takes a few
+ * milliseconds — a flash nobody can read. */
+export const SPLASH_MIN_MS = 2000;
 
-  // Session hydration used to render nothing at all — a blank page for as long
-  // as it took, which on a cold PWA launch is the first thing anyone sees. It
-  // is the natural place for the engine credit: the one moment the app has
-  // nothing else to say.
-  if (!ready) {
-    return (
-      <main
-        role="status"
-        aria-label="Loading chiatienan"
-        className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-[var(--bg-base)] p-8"
-      >
-        <PoweredBy variant="splash" />
-      </main>
-    );
-  }
+export default function Home() {
+  const { ready } = useSession();
+  const [held, setHeld] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHeld(false), SPLASH_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const splash = held || !ready;
+
+  // The splash is laid over the app rather than in place of it: the room view
+  // mounts underneath as soon as the session is ready, so its history and
+  // balances load while the splash is still showing. `inert` keeps the hidden
+  // view out of focus and the accessibility tree until the splash lifts.
+  return (
+    <>
+      {ready && (
+        <div className="contents" inert={splash}>
+          <Content />
+        </div>
+      )}
+      {splash && (
+        <main
+          role="status"
+          aria-label="Loading chiatienan"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 bg-[var(--bg-base)] p-8"
+        >
+          <PoweredBy variant="splash" />
+        </main>
+      )}
+    </>
+  );
+}
+
+function Content() {
+  const { token, roomId } = useSession();
 
   if (!token || !roomId) {
     return (
