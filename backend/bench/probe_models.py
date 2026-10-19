@@ -323,6 +323,10 @@ def main(argv=None) -> int:
                         help="also read a real bill image and end in propose_meal")
     args = parser.parse_args(argv)
 
+    if not CHAT_URL:
+        print("this provider has no chat endpoint to probe; run bench.run against the "
+              "model instead", file=sys.stderr)
+        return 2
     key = os.environ.get(KEY_ENV)
     if not key:
         print(f"{KEY_ENV} is not set", file=sys.stderr)

@@ -152,6 +152,6 @@ def test_catalogue_and_probe_without_key_is_501(admin, monkeypatch):
     client, _, _ = admin
     models = client.get("/api/admin/catalogue/models", headers=ADMIN).json()
     assert any(m["probe"].get("ok") for m in models)
-    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
     r = client.post("/api/admin/catalogue/models/x%2Fy/probe", headers=ADMIN)
     assert r.status_code == 501

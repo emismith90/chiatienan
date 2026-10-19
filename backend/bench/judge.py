@@ -30,7 +30,8 @@ from urllib.request import Request, urlopen
 
 from app.config import provider, settings
 
-#: The configured provider's chat endpoint, and the variable its key lives in.
+#: The configured provider's chat endpoint (``None`` on cursor, which has none),
+#: and the variable its key lives in.
 CHAT_URL = provider(settings.pi_provider)["chat_url"]
 KEY_ENV = provider(settings.pi_provider)["key_env"]
 
@@ -81,6 +82,8 @@ def chat_judge(model: str, *, api_key: str | None = None, post=_post,
     key = api_key if api_key is not None else os.environ.get(KEY_ENV, "")
 
     def judge(case, record, rubric):
+        if not CHAT_URL:
+            return {"error": f"{settings.pi_provider} has no chat endpoint to judge with"}
         if not key:
             return {"error": f"{KEY_ENV} is not set"}
         payload = {"model": model, "max_tokens": MAX_TOKENS, "temperature": 0,

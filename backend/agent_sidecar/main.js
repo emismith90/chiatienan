@@ -106,7 +106,7 @@ export function createDispatcher({ write, buildSessionFn = buildSession, runTurn
           });
         } finally {
           try {
-            built?.dispose?.();
+            await built?.dispose?.();
           } catch {
             /* disposing a half-built session is best effort */
           }
@@ -141,7 +141,7 @@ export function createDispatcher({ write, buildSessionFn = buildSession, runTurn
                  error: String((err && err.message) || err) });
         } finally {
           try {
-            built?.dispose?.();
+            await built?.dispose?.();
           } catch {
             /* best effort */
           }

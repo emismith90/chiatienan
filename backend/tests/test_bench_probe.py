@@ -139,9 +139,12 @@ def test_unparseable_arguments_fail(monkeypatch):
     assert rows[0]["ok"] is False and "not JSON" in rows[0]["detail"]
 
 
-def test_a_rate_limit_is_retried_rather_than_recorded_as_a_capability_failure():
+def test_a_rate_limit_is_retried_rather_than_recorded_as_a_capability_failure(monkeypatch):
     from urllib.error import HTTPError
+    from app.config import PROVIDERS
     from bench import probe_models
+    # The default provider (cursor) has no chat API; the retry logic is xai's.
+    monkeypatch.setattr(probe_models, "CHAT_URL", PROVIDERS["xai"]["chat_url"])
     calls = {"n": 0}
 
     def flaky(url, data=None, headers=None, timeout=None):

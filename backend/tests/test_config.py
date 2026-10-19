@@ -19,10 +19,11 @@ def test_defaults_when_env_absent(monkeypatch):
     for k in _REQUIRED_UNSET:
         monkeypatch.delenv(k, raising=False)
     s = Settings.from_env()
-    assert s.pi_model == "grok-4.7"
+    assert s.pi_model == "grok-4.7@256k:slow"
     # Every bill photo routes here; by default the same multimodal model.
-    assert s.pi_vision_model == "grok-4.7"
-    assert s.pi_provider == "xai" and s.pi_thinking == "medium"
+    assert s.pi_vision_model == "grok-4.7@256k:slow"
+    # medium is not just a default on Cursor Plus: it is the only effort it serves.
+    assert s.pi_provider == "cursor" and s.pi_thinking == "medium"
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 600
     assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]

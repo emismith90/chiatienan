@@ -20,6 +20,9 @@ class BenchModelProbe:
             from bench.judge import KEY_ENV
         except ImportError as exc:
             raise NotImplementedError("bench.probe_models is not available on this host") from exc
+        if not probe_models.CHAT_URL:
+            raise NotImplementedError("the provider has no chat endpoint to probe; "
+                                      "run bench.run against the model instead")
         key = os.environ.get(KEY_ENV)
         if not key:
             raise NotImplementedError(f"{KEY_ENV} is not set; cannot probe")

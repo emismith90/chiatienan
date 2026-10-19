@@ -183,18 +183,19 @@ def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
     assert bridge._child_env()[row["pi_key_env"]] == "sk-real"
 
 
-def test_the_default_provider_is_xai_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
-    # pi reads XAI_API_KEY itself, so nothing is translated. PI_PROVIDER must reach
-    # the child: `grok-4.7` is listed under five providers in pi's catalogue, and the
-    # sidecar would otherwise pick the first (github-copilot).
-    assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("XAI_API_KEY", "XAI_API_KEY")
-    monkeypatch.setenv("XAI_API_KEY", "xai-real")
+def test_the_default_provider_is_cursor_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
+    # pi-cursor-sdk reads CURSOR_API_KEY itself, so nothing is translated.
+    # PI_PROVIDER must reach the child: it is what loads the extension there, and
+    # `grok-4.7` is listed under several providers in pi's catalogue — the sidecar
+    # would otherwise pick the first (github-copilot).
+    assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("CURSOR_API_KEY", "CURSOR_API_KEY")
+    monkeypatch.setenv("CURSOR_API_KEY", "cursor-real")
     monkeypatch.delenv("PI_PROVIDER", raising=False)
     child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
-    assert child["XAI_API_KEY"] == "xai-real" and child["PI_PROVIDER"] == "xai"
+    assert child["CURSOR_API_KEY"] == "cursor-real" and child["PI_PROVIDER"] == "cursor"
 
 
 def test_an_unknown_provider_names_the_valid_ones():
     from app.config import provider
-    with pytest.raises(ValueError, match="openrouter.*xai"):
+    with pytest.raises(ValueError, match="cursor.*openrouter.*xai"):
         provider("grok")

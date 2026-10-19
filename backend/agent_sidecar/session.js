@@ -102,12 +102,27 @@ export const MODELS_PATH = fileURLToPath(new URL("./models.json", import.meta.ur
  */
 export const CACHE_AFFINITY_ID = "kernos-sidecar";
 
+/**
+ * `PI_PROVIDER=cursor` runs the turn on Cursor through the `pi-cursor-sdk`
+ * extension: Cursor's own agent loop (`@cursor/sdk`) answers, and our tools reach
+ * it over the extension's loopback MCP bridge as `pi__<name>`, each call coming
+ * back here as an ordinary pi tool call. Imported only for that provider.
+ */
+async function cursorExtensions() {
+  if (process.env.PI_PROVIDER !== "cursor") return [];
+  const { default: factory } = await import("pi-cursor-sdk/dist/index.js");
+  return [{ name: "pi-cursor-sdk", factory }];
+}
+
 export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const runtime = modelRuntime || (await ModelRuntime.create({
     modelsPath: MODELS_PATH,
     modelsStorePath: join(tmpdir(), "kernos-pi-models-store.json"),
   }));
-  const model = resolveModel(runtime, req);
+  const cursor = process.env.PI_PROVIDER === "cursor";
+  // The `cursor` provider does not exist until the extension registers it, which pi
+  // applies when the session is created — so its model is resolved after that.
+  let model = cursor ? null : resolveModel(runtime, req);
 
   // Both paths are required and must exist: `DefaultResourceLoader` resolves them
   // in its constructor and throws on undefined. `agentDir` is pi's own config
@@ -121,7 +136,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   // profile's `settings` become an in-memory SettingsManager (nothing on disk to
   // drift), and its `extensions` resolve against the sidecar's registry.
   const settingsManager = buildSettingsManager(req.settings);
-  const extensionFactories = resolveExtensions(req.extensions);
+  const extensionFactories = [...resolveExtensions(req.extensions), ...(await cursorExtensions())];
 
   const loader = new DefaultResourceLoader({
     cwd,
@@ -138,7 +153,7 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   const { session } = await createAgentSession({
     resourceLoader: loader,
     modelRuntime: runtime,
-    model,
+    ...(model ? { model } : {}),
     thinkingLevel: req.thinking || "medium",
     customTools,
     ...toolOptionsFor(req.builtin_tools, customTools.map((tool) => tool.name)),
@@ -146,7 +161,37 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
     ...(settingsManager ? { settingsManager } : {}),
   });
 
-  return { session, model, dispose: () => session.dispose() };
+  if (cursor) {
+    try {
+      // The extension's provider refuses to run until the session's extensions are
+      // bound — the step pi's own print mode takes.
+      await session.bindExtensions({ mode: "print" });
+      model = resolveModel(runtime, req);
+      await session.setModel(model);
+      // setModel may pick a per-model level; the turn's level is the one we asked for.
+      session.setThinkingLevel(req.thinking || "medium");
+    } catch (err) {
+      await disposeSession(session);
+      throw err;
+    }
+  }
+
+  return { session, model, dispose: () => disposeSession(session) };
+}
+
+/**
+ * End a session the way pi's own runtime does: `session_shutdown` first, then
+ * `dispose()`. A bare `dispose()` skips the event, and this process is long-lived —
+ * `pi-cursor-sdk` releases the Cursor agent a turn created on that event.
+ */
+async function disposeSession(session) {
+  try {
+    if (session.extensionRunner?.hasHandlers("session_shutdown")) {
+      await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+    }
+  } finally {
+    session.dispose();
+  }
 }
 
 /**

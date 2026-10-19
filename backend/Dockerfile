@@ -7,11 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Node runs the agent sidecar (agent_sidecar/main.js). >=22.19 is what its
-# package.json requires; NodeSource is used because Debian slim ships an older one.
+# Node runs the agent sidecar (agent_sidecar/main.js). >=24 is what its
+# package.json requires (pi-cursor-sdk); NodeSource is used because Debian slim
+# ships an older one.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && node --version \
     && apt-get purge -y gnupg && apt-get autoremove -y \

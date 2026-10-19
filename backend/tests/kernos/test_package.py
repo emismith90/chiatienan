@@ -34,6 +34,7 @@ def test_export_is_a_pi_package_with_a_lossless_kernos_json(db):
     blob = "\n".join(text.values()).lower()
     assert "open_router_key" not in blob and "test-openrouter-key" not in blob
     assert "xai_api_key" not in blob and "test-xai-key" not in blob
+    assert "cursor_api_key" not in blob and "test-cursor-key" not in blob
     assert "pi -e ." in text["README.md"]
     # a specific version, and a profile with nothing published
     assert export_profile(k.store, pid, version_id=k.seed_report["version_id"]) == files

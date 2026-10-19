@@ -37,9 +37,12 @@ def _int_env(name: str, default: int) -> int:
 
 
 #: What each ``PI_PROVIDER`` needs: the variable *we* keep its key in, the name
-#: *pi* reads it from (`pi-ai/dist/env-api-keys.js`), and its OpenAI-compatible
-#: chat endpoint (the bench judge and the model probe call it directly).
+#: *pi* reads it from (`pi-ai/dist/env-api-keys.js`, or the `pi-cursor-sdk`
+#: extension), and its OpenAI-compatible chat endpoint (the bench judge and the
+#: model probe call it directly). Cursor sells its agent, not raw completions, so
+#: it has none: the turn runs Cursor's own loop with our tools bridged in.
 PROVIDERS = {
+    "cursor": {"key_env": "CURSOR_API_KEY", "pi_key_env": "CURSOR_API_KEY", "chat_url": None},
     "xai": {"key_env": "XAI_API_KEY", "pi_key_env": "XAI_API_KEY",
             "chat_url": "https://api.x.ai/v1/chat/completions"},
     "openrouter": {"key_env": "OPEN_ROUTER_KEY", "pi_key_env": "OPENROUTER_API_KEY",
@@ -109,14 +112,18 @@ class Settings:
             data_dir=(os.environ.get("DATA_DIR") or "").strip() or "/data",
             # Probe a new model against the real tool schemas before relying on it
             # (bench/probe_models.py): a catalogue's `supported_parameters` is a claim.
+            # On Cursor the id carries its variant: Cursor Plus serves Grok 4.7 only
+            # at its fixed settings (256k context, medium effort, fast off), and any
+            # other combination is refused as "model unavailable" — `:slow` sends
+            # fast=false, PI_THINKING=medium sends the effort.
             pi_model=(os.environ.get("PI_MODEL") or "").strip()
-            or "grok-4.7",
+            or "grok-4.7@256k:slow",
             # Every bill photo routes here. The default is the same multimodal model
             # as the primary; an image turn with this unset fails loudly rather than
             # dropping the photo.
             pi_vision_model=(os.environ.get("PI_VISION_MODEL") or "").strip()
-            or "grok-4.7",
-            pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "xai",
+            or "grok-4.7@256k:slow",
+            pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "cursor",
             pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
             pi_max_tools=_int_env("PI_MAX_TOOLS", 40),
             pi_max_seconds=_int_env("PI_MAX_SECONDS", 600),
