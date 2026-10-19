@@ -1,4 +1,4 @@
-"""Prove a model can call **our** tools, with **our** schemas, over OpenRouter.
+"""Prove a model can call **our** tools, with **our** schemas, on `PI_PROVIDER`'s API.
 
     python -m bench.probe_models                       # both configured models
     python -m bench.probe_models --model some/model
@@ -39,15 +39,16 @@ from urllib.error import HTTPError, URLError
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from bench.judge import KEY_ENV, OPENROUTER_URL
+from bench.judge import CHAT_URL, KEY_ENV
+from app.config import settings
 
 _HERE = Path(__file__).resolve().parent
 
 #: The TỔNG CỘNG (grand total) printed on `bench/corpus/bills/bill-itemized.png`.
 BILL_TOTAL = 154_000
 
-#: The configured model (text and vision since 2026-10-01).
-DEFAULT_MODELS = ("openai/gpt-6.1-sol-pro",)
+#: The configured models (text and vision; the same one by default).
+DEFAULT_MODELS = tuple(dict.fromkeys((settings.pi_model, settings.pi_vision_model)))
 
 #: Models that failed this probe and must not be configured. Kept by name so a
 #: future reader does not repeat the measurement to learn it.
@@ -104,7 +105,7 @@ def _post(payload: dict, key: str, timeout: float = 90.0, *, sleep=None) -> dict
     request_body = json.dumps(payload).encode()
     last: Exception | None = None
     for attempt in range(_RETRIES):
-        request = Request(OPENROUTER_URL, data=request_body,
+        request = Request(CHAT_URL, data=request_body,
                           headers={"Authorization": f"Bearer {key}",
                                    "Content-Type": "application/json"})
         try:

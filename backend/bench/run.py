@@ -242,8 +242,8 @@ def main(argv=None) -> int:
 
     judge = None
     if args.judge_model:
-        from bench.judge import openrouter_judge
-        judge = openrouter_judge(args.judge_model)
+        from bench.judge import chat_judge
+        judge = chat_judge(args.judge_model)
 
     cases = corpus.load(args.corpus)
     if args.cases:

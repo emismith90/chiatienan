@@ -170,12 +170,31 @@ async def _record(sink):
 
 
 def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
-    # Two names for one secret: we standardise on OPEN_ROUTER_KEY, pi reads
-    # OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:87). Without the mapping the
-    # sidecar says "No API key found for openrouter. Use /login…", which reads
+    # Two names for one secret on openrouter: we standardise on OPEN_ROUTER_KEY, pi
+    # reads OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:93). Without the mapping
+    # the sidecar says "No API key found for openrouter. Use /login…", which reads
     # like a setup mistake rather than a naming mismatch.
-    monkeypatch.setenv(pi_bridge.KEY_ENV, "sk-real")
-    monkeypatch.delenv(pi_bridge.PI_KEY_ENV, raising=False)
-    bridge = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})
-    child = bridge._child_env()
-    assert child[pi_bridge.PI_KEY_ENV] == "sk-real"
+    from app.config import PROVIDERS
+    from kernos.engine.pi.bridge import PiBridge
+    row = PROVIDERS["openrouter"]
+    monkeypatch.setenv(row["key_env"], "sk-real")
+    monkeypatch.delenv(row["pi_key_env"], raising=False)
+    bridge = PiBridge(entry=tmp_path / "x.js", key_env=row["key_env"], pi_key_env=row["pi_key_env"])
+    assert bridge._child_env()[row["pi_key_env"]] == "sk-real"
+
+
+def test_the_default_provider_is_xai_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
+    # pi reads XAI_API_KEY itself, so nothing is translated. PI_PROVIDER must reach
+    # the child: `grok-4.7` is listed under five providers in pi's catalogue, and the
+    # sidecar would otherwise pick the first (github-copilot).
+    assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("XAI_API_KEY", "XAI_API_KEY")
+    monkeypatch.setenv("XAI_API_KEY", "xai-real")
+    monkeypatch.delenv("PI_PROVIDER", raising=False)
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child["XAI_API_KEY"] == "xai-real" and child["PI_PROVIDER"] == "xai"
+
+
+def test_an_unknown_provider_names_the_valid_ones():
+    from app.config import provider
+    with pytest.raises(ValueError, match="openrouter.*xai"):
+        provider("grok")

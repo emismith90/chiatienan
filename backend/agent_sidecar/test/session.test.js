@@ -133,6 +133,17 @@ test("a missing PI_MODEL is an error, not a default", () => {
   assert.throws(() => resolveModel(RUNTIME, {}), /PI_MODEL is not set/);
 });
 
+test("PI_PROVIDER picks the provider whose key we hold, not the first id match", (t) => {
+  const runtime = { getModels: () => [{ id: "grok-4.7", provider: "github-copilot" },
+                                      { id: "grok-4.7", provider: "xai" }] };
+  const saved = process.env.PI_PROVIDER;
+  t.after(() => { if (saved === undefined) delete process.env.PI_PROVIDER; else process.env.PI_PROVIDER = saved; });
+  process.env.PI_PROVIDER = "xai";
+  assert.equal(resolveModel(runtime, { model: "grok-4.7" }).provider, "xai");
+  process.env.PI_PROVIDER = "openrouter";
+  assert.throws(() => resolveModel(runtime, { model: "grok-4.7" }), /not available from this provider/);
+});
+
 // --------------------------------------------------------------------------- //
 // builtin tools
 // --------------------------------------------------------------------------- //

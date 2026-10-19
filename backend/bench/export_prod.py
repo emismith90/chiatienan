@@ -928,8 +928,8 @@ def main(argv=None) -> int:
     if args.baseline:
         judge = None
         if args.judge_model:
-            from bench.judge import openrouter_judge
-            judge = openrouter_judge(args.judge_model)
+            from bench.judge import chat_judge
+            judge = chat_judge(args.judge_model)
         baseline = build_baseline(cases, room=args.room, judge=judge,
                                   keep_bodies=args.keep_bodies)
         args.baseline.parent.mkdir(parents=True, exist_ok=True)

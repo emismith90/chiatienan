@@ -2,6 +2,8 @@ from app.config import Settings
 
 _REQUIRED_UNSET = (
     "PI_MODEL",
+    "PI_VISION_MODEL",
+    "PI_PROVIDER",
     "PI_BUILTIN_TOOLS",
     "PI_MAX_TOOLS",
     "PI_MAX_SECONDS",
@@ -17,10 +19,10 @@ def test_defaults_when_env_absent(monkeypatch):
     for k in _REQUIRED_UNSET:
         monkeypatch.delenv(k, raising=False)
     s = Settings.from_env()
-    assert s.pi_model == "openai/gpt-6.1-sol-pro"
+    assert s.pi_model == "grok-4.7"
     # Every bill photo routes here; by default the same multimodal model.
-    assert s.pi_vision_model == "openai/gpt-6.1-sol-pro"
-    assert s.pi_provider == "openrouter" and s.pi_thinking == "medium"
+    assert s.pi_vision_model == "grok-4.7"
+    assert s.pi_provider == "xai" and s.pi_thinking == "medium"
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 600
     assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]

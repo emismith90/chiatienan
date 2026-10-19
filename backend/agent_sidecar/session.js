@@ -225,7 +225,12 @@ function findModel(runtime, id) {
   // with no id. A catalogue that does not hold the id is an answer, not a gap: the bare
   // string would send a request we already know fails, and on a vision turn that reads
   // as a dropped photo.
-  return runtime.getModels().find((m) => m?.id === id) || null;
+  //
+  // The id alone is not enough: pi's catalogue lists `grok-4.7` under five providers
+  // (github-copilot first), so the turn would go to whichever comes first rather than
+  // to the one whose key we hold. `PI_PROVIDER` (set by the bridge) narrows it.
+  const provider = process.env.PI_PROVIDER;
+  return runtime.getModels().find((m) => m?.id === id && (!provider || m.provider === provider)) || null;
 }
 
 
