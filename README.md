@@ -230,9 +230,9 @@ Run the full stack locally — the Next.js dev server rewrites `/api/*` and
 `/internal/*` to the backend (mirroring Caddy), so the browser only talks to `:3000`:
 
 ```bash
-# terminal 1 — backend (OPEN_ROUTER_KEY only needed for actual @phoenix turns)
+# terminal 1 — backend (CURSOR_API_KEY only needed for actual @phoenix turns; Node 24+)
 cd backend && cp ../.env.example ../.env   # then edit ../.env
-OPEN_ROUTER_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
+CURSOR_API_KEY=… ADMIN_PASSWORD=… uvicorn app.main:app --reload
 
 # terminal 2 — frontend
 cd frontend && npm install && npm run dev   # http://localhost:3000
@@ -262,9 +262,12 @@ Copy `.env.example` → `.env` and fill it in. Key vars:
 
 | Var | Purpose |
 |-----|---------|
-| `OPEN_ROUTER_KEY` | OpenRouter key for the sidecar (note the name — not `OPENROUTER_API_KEY`) |
-| `PI_MODEL` | default `openai/gpt-6.1-sol-pro` (text + image) |
-| `PI_VISION_MODEL` | default `openai/gpt-6.1-sol-pro` (same model). Every bill photo routes here |
+| `PI_PROVIDER` | `cursor` (default), `xai` or `openrouter` — picks the key below, and the provider pi calls |
+| `CURSOR_API_KEY` | Cursor user or service-account key, on `PI_PROVIDER=cursor`: Cursor's own agent runs the turn (`pi-cursor-sdk`) and calls our tools over a local MCP bridge. No chat API, so no bench judge or model probe |
+| `XAI_API_KEY` | xAI (Grok) key for the sidecar, the bench judge and the model probe, on `PI_PROVIDER=xai` |
+| `OPEN_ROUTER_KEY` | OpenRouter key (note the name — not `OPENROUTER_API_KEY`): the sidecar's key on `PI_PROVIDER=openrouter`, and always the one collection search embeds with |
+| `PI_MODEL` | default `grok-4.7@256k:slow` (text + image) — the only Grok 4.7 settings Cursor Plus serves, with `PI_THINKING=medium`. Ids are the provider's own — change it with `PI_PROVIDER` |
+| `PI_VISION_MODEL` | default `grok-4.7@256k:slow` (same model). Every bill photo routes here |
 | `PI_MAX_TOOLS` / `PI_MAX_SECONDS` | per-turn runaway caps (40 / 120 s). A breach is a partial answer, not an error |
 | `BOT_HANDLE` | the `@`-handle the bot answers to in chat (default `bot`) |
 | `DATABASE_URL` | `sqlite:////data/chiatienan.db` (absolute, on the volume) |

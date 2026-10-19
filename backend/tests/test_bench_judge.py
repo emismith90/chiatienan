@@ -5,9 +5,21 @@ silently passed on error would turn an outage into a clean bill of health, and o
 that failed on error would blame the engine for the harness's own problem. Both
 routes must land on "not graded".
 """
+import pytest
+
+from app.config import PROVIDERS
+from bench import judge as judge_module
 from bench.corpus import Case
 from bench.graders import PROSE_RUBRIC, grade_prose
-from bench.judge import openrouter_judge
+from bench.judge import chat_judge
+
+
+@pytest.fixture(autouse=True)
+def _a_provider_with_a_chat_endpoint(monkeypatch):
+    # The default provider (cursor) has no chat API, so the judge's own logic is
+    # exercised against xai's endpoint and key name.
+    monkeypatch.setattr(judge_module, "CHAT_URL", PROVIDERS["xai"]["chat_url"])
+    monkeypatch.setattr(judge_module, "KEY_ENV", PROVIDERS["xai"]["key_env"])
 
 
 def _case(message="@bot ghi bữa trưa"):
@@ -25,56 +37,64 @@ def _reply(content):
 
 
 def test_a_clean_json_verdict_passes_through():
-    judge = openrouter_judge("m/1", api_key="k", post=_reply('{"ok": true, "reason": "fine"}'))
+    judge = chat_judge("m/1", api_key="k", post=_reply('{"ok": true, "reason": "fine"}'))
     v = grade_prose(_case(), _record(), judge=judge)
     assert v.passed is True and v.reason == "fine"
 
 
 def test_a_rejecting_verdict_fails_the_case():
-    judge = openrouter_judge("m/1", api_key="k",
+    judge = chat_judge("m/1", api_key="k",
                              post=_reply('{"ok": false, "reason": "English"}'))
     assert grade_prose(_case(), _record(), judge=judge).passed is False
 
 
 def test_a_fenced_or_chatty_reply_is_still_parsed():
-    judge = openrouter_judge("m/1", api_key="k", post=_reply(
+    judge = chat_judge("m/1", api_key="k", post=_reply(
         'Sure!\n```json\n{"ok": true, "reason": "ổn"}\n```\n'))
     assert grade_prose(_case(), _record(), judge=judge).passed is True
 
 
 def test_a_missing_key_is_ungraded_not_passed():
-    judge = openrouter_judge("m/1", api_key="", post=_reply('{"ok": true}'))
+    judge = chat_judge("m/1", api_key="", post=_reply('{"ok": true}'))
     v = grade_prose(_case(), _record(), judge=judge)
-    assert v.passed is None and "OPEN_ROUTER_KEY" in v.reason
+    assert v.passed is None and "XAI_API_KEY" in v.reason
 
 
 def test_the_key_is_read_from_the_environment_name_the_env_actually_uses(monkeypatch):
-    from bench.judge import KEY_ENV
-    assert KEY_ENV == "OPEN_ROUTER_KEY"
-    monkeypatch.setenv(KEY_ENV, "from-env")
+    monkeypatch.setenv("XAI_API_KEY", "from-env")
     seen = {}
     def capture(url, payload, headers, timeout):
+        seen["url"] = url
         seen["auth"] = headers["Authorization"]
         return {"choices": [{"message": {"content": '{"ok": true}'}}]}
-    grade_prose(_case(), _record(), judge=openrouter_judge("m/1", post=capture))
+    grade_prose(_case(), _record(), judge=chat_judge("m/1", post=capture))
     assert seen["auth"] == "Bearer from-env"
+    assert seen["url"] == "https://api.x.ai/v1/chat/completions"
+
+
+def test_a_provider_without_a_chat_endpoint_is_ungraded_not_passed(monkeypatch):
+    monkeypatch.setattr(judge_module, "CHAT_URL", None)
+    called = []
+    v = grade_prose(_case(), _record(), judge=chat_judge(
+        "m/1", api_key="k", post=lambda *a: called.append(a)))
+    assert v.passed is None and "no chat endpoint" in v.reason and not called
 
 
 def test_a_transport_failure_is_ungraded_not_passed():
     def boom(*_a, **_k):
         raise OSError("connection reset")
-    v = grade_prose(_case(), _record(), judge=openrouter_judge("m/1", api_key="k", post=boom))
+    v = grade_prose(_case(), _record(), judge=chat_judge("m/1", api_key="k", post=boom))
     assert v.passed is None and "connection reset" in v.reason
 
 
 def test_an_unparseable_reply_is_ungraded_not_passed():
-    judge = openrouter_judge("m/1", api_key="k", post=_reply("looks fine to me"))
+    judge = chat_judge("m/1", api_key="k", post=_reply("looks fine to me"))
     v = grade_prose(_case(), _record(), judge=judge)
     assert v.passed is None and "looks fine to me" in v.reason
 
 
 def test_an_unexpected_body_shape_is_ungraded_not_passed():
-    judge = openrouter_judge("m/1", api_key="k",
+    judge = chat_judge("m/1", api_key="k",
                              post=lambda *_a, **_k: {"error": "rate limited"})
     assert grade_prose(_case(), _record(), judge=judge).passed is None
 
@@ -84,7 +104,7 @@ def test_the_request_pins_the_model_and_zero_temperature():
     def capture(url, payload, headers, timeout):
         seen.update(payload=payload, headers=headers, url=url)
         return {"choices": [{"message": {"content": '{"ok": true}'}}]}
-    grade_prose(_case(), _record(), judge=openrouter_judge("vendor/judge-1", api_key="k",
+    grade_prose(_case(), _record(), judge=chat_judge("vendor/judge-1", api_key="k",
                                                           post=capture))
     assert seen["payload"]["model"] == "vendor/judge-1"
     assert seen["payload"]["temperature"] == 0        # a drifting judge is not a judge

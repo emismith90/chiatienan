@@ -2,6 +2,8 @@ from app.config import Settings
 
 _REQUIRED_UNSET = (
     "PI_MODEL",
+    "PI_VISION_MODEL",
+    "PI_PROVIDER",
     "PI_BUILTIN_TOOLS",
     "PI_MAX_TOOLS",
     "PI_MAX_SECONDS",
@@ -17,10 +19,11 @@ def test_defaults_when_env_absent(monkeypatch):
     for k in _REQUIRED_UNSET:
         monkeypatch.delenv(k, raising=False)
     s = Settings.from_env()
-    assert s.pi_model == "openai/gpt-6.1-sol-pro"
+    assert s.pi_model == "grok-4.7@256k:slow"
     # Every bill photo routes here; by default the same multimodal model.
-    assert s.pi_vision_model == "openai/gpt-6.1-sol-pro"
-    assert s.pi_provider == "openrouter" and s.pi_thinking == "medium"
+    assert s.pi_vision_model == "grok-4.7@256k:slow"
+    # medium is not just a default on Cursor Plus: it is the only effort it serves.
+    assert s.pi_provider == "cursor" and s.pi_thinking == "medium"
     assert s.pi_max_tools == 40 and s.pi_max_seconds == 600
     assert s.pi_builtin_tools == ("read", "write", "bash")
     assert not [a for a in vars(s) if a.startswith("cursor_")]
@@ -29,6 +32,21 @@ def test_defaults_when_env_absent(monkeypatch):
     assert s.timezone == "Asia/Ho_Chi_Minh"
     assert s.qr_base_url == "https://img.vietqr.io/image"
     assert s.qr_template == "compact2"
+
+
+def test_the_default_model_follows_the_provider(monkeypatch):
+    # Model ids are the provider's own: a stale PI_PROVIDER with no PI_MODEL must
+    # not name a model that provider does not have.
+    for name in ("PI_MODEL", "PI_VISION_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    for provider_name, model in (("openrouter", "openai/gpt-6.1-sol-pro"), ("xai", "grok-4.7"),
+                                 ("cursor", "grok-4.7@256k:slow")):
+        monkeypatch.setenv("PI_PROVIDER", provider_name)
+        s = Settings.from_env()
+        assert (s.pi_model, s.pi_vision_model) == (model, model)
+    monkeypatch.setenv("PI_PROVIDER", "openrouter")
+    monkeypatch.setenv("PI_MODEL", "")          # deploy writes it empty when unset
+    assert Settings.from_env().pi_model == "openai/gpt-6.1-sol-pro"
 
 
 def test_env_overrides(monkeypatch):

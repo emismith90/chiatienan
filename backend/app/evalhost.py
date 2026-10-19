@@ -148,8 +148,8 @@ def judge_for(suite: dict):
     model = (suite.get("judge") or {}).get("model")
     if not model:
         return None
-    from bench.judge import openrouter_judge  # dev/job-only, like the importer
-    return openrouter_judge(model)
+    from bench.judge import chat_judge  # dev/job-only, like the importer
+    return chat_judge(model)
 
 
 def suite_cases(store, business_id: int, suite: dict) -> list[EvalCase]:

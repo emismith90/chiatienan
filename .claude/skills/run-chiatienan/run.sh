@@ -10,8 +10,9 @@
 # Leaves both servers running after it exits. Stop them with stop.sh.
 # Re-running run.sh stops any instance it previously started, then starts fresh.
 #
-# Env overrides: ADMIN_PASSWORD (default "devpass"), OPEN_ROUTER_KEY (default empty;
-# without it @phoenix replies error out, everything else works).
+# Env overrides: ADMIN_PASSWORD (default "devpass"), CURSOR_API_KEY (default empty;
+# without it @phoenix replies error out, everything else works — or
+# PI_PROVIDER=xai with XAI_API_KEY, PI_PROVIDER=openrouter with OPEN_ROUTER_KEY).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +21,7 @@ DATA="$ROOT/data"
 mkdir -p "$DATA"
 
 # Load .env if present, exporting each var so the backend inherits it
-# (OPEN_ROUTER_KEY, PI_MODEL, ADMIN_PASSWORD, QR_*, …). The local-only
+# (CURSOR_API_KEY, XAI_API_KEY, OPEN_ROUTER_KEY, PI_MODEL, ADMIN_PASSWORD, QR_*, …). The local-only
 # paths DATABASE_URL and DATA_DIR are overridden below to writable
 # spots, since .env points them at the container's /data volume.
 if [ -f "$ROOT/.env" ]; then
@@ -29,6 +30,8 @@ fi
 
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-devpass}"
 OPEN_ROUTER_KEY="${OPEN_ROUTER_KEY:-}"
+XAI_API_KEY="${XAI_API_KEY:-}"
+CURSOR_API_KEY="${CURSOR_API_KEY:-}"
 
 log() { printf '\033[36m» %s\033[0m\n' "$*"; }
 
@@ -74,6 +77,8 @@ log "Starting backend on :$BACKEND_PORT"
 DATABASE_URL="sqlite:///$DATA/chiatienan.db" \
 DATA_DIR="$DATA" \
 OPEN_ROUTER_KEY="$OPEN_ROUTER_KEY" \
+XAI_API_KEY="$XAI_API_KEY" \
+CURSOR_API_KEY="$CURSOR_API_KEY" \
 ADMIN_PASSWORD="$ADMIN_PASSWORD" \
 TZ="Asia/Ho_Chi_Minh" \
 nohup "$ROOT/backend/.venv/bin/uvicorn" app.main:app \
@@ -118,8 +123,8 @@ cat <<EOF
 
   Logs : $DATA/backend.log   $DATA/frontend.log
   Stop : bash $HERE/stop.sh
-$( [ -z "$OPEN_ROUTER_KEY" ] && echo "
-  NOTE: OPEN_ROUTER_KEY unset -> @phoenix mentions will error. Everything
+$( [ -z "$CURSOR_API_KEY" ] && [ "${PI_PROVIDER:-cursor}" = cursor ] && echo "
+  NOTE: CURSOR_API_KEY unset -> @phoenix mentions will error. Everything
         else (join, chat, drafts, profile, live updates) works." )
 ────────────────────────────────────────────────────────────
 EOF

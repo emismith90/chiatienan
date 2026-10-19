@@ -15,10 +15,17 @@ name: Deploy
 #     DEPLOY_HOST      – droplet hostname or IP
 #   Secrets (required to (re)generate .env from GitHub; if unset the deploy
 #   keeps the existing .env on the droplet untouched):
-#     OPEN_ROUTER_KEY  – OpenRouter key for the agent sidecar (note the name:
-#                        OPEN_ROUTER_KEY, not OPENROUTER_API_KEY)
+#     CURSOR_API_KEY   – Cursor user or service-account API key (not a Team
+#                        Admin key) for the agent sidecar, when PI_PROVIDER is
+#                        "cursor" (the default)
+#     XAI_API_KEY      – xAI (Grok) key, instead, when PI_PROVIDER is "xai"
+#     OPEN_ROUTER_KEY  – OpenRouter key, instead, when PI_PROVIDER is
+#                        "openrouter" (note the name: OPEN_ROUTER_KEY, not
+#                        OPENROUTER_API_KEY)
 #     ADMIN_PASSWORD   – admin password guarding POST /api/rooms etc.
 #   Secrets (optional):
+#     OPEN_ROUTER_KEY  – on any other provider, still what collections' semantic
+#                        search embeds with. Unset ⇒ search by words only.
 #     DEPLOY_USER      – SSH user (defaults to "root")
 #     DEBUG_API_KEY    – guards the read-only /internal/debug/* export API
 #                        (deploy/DEBUGGING.md §6). Unset ⇒ written empty ⇒ the
@@ -28,18 +35,25 @@ name: Deploy
 #   .env.example default when unset):
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
 #     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
-#     PI_MODEL                 – default "openai/gpt-6.1-sol-pro"
-#     PI_VISION_MODEL          – default "openai/gpt-6.1-sol-pro" (the same multimodal model).
+#     PI_MODEL                 – default: unset, which the app reads as
+#                                PI_PROVIDER's own default model (app/config.py
+#                                PROVIDERS: cursor "grok-4.7@256k:slow", xai
+#                                "grok-4.7", openrouter "openai/gpt-6.1-sol-pro").
+#                                Ids are the provider's own, so set it only
+#                                together with PI_PROVIDER. Cursor Plus serves
+#                                Grok 4.7 only at its fixed settings, with
+#                                PI_THINKING=medium.
+#     PI_VISION_MODEL          – default: unset, the same per-provider model.
 #                                Every bill photo routes here; kept separate so a
 #                                photo model can differ from the text one.
-#     PI_PROVIDER              – default "openrouter"
+#     PI_PROVIDER              – default "cursor" ("cursor" | "xai" | "openrouter")
 #     PI_THINKING              – default "medium"
 #     DATA_DIR                 – default "/data". MUST stay under the mounted
 #                                volume: it holds SQLite and every room's
 #                                long-term memory.
 #     PI_MAX_TOOLS             – default "40"
 #     PI_MAX_SECONDS           – default "600"
-#     (no base-URL variable: the OpenRouter URL is a constant in the sidecar)
+#     (no base-URL variable: each provider's URL is a constant in pi or its extension)
 #     BOT_HANDLE               – default "bot"
 #     DATABASE_URL             – default "sqlite:////data/chiatienan.db" (keep it
 #                                under /data so the SQLite file persists)
@@ -125,6 +139,9 @@ jobs:
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
+          PI_PROVIDER: ${{ vars.PI_PROVIDER || 'cursor' }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
@@ -134,11 +151,18 @@ jobs:
             exit 0
           fi
           echo "configured=true" >> "$GITHUB_OUTPUT"
-          if [ -n "$OPEN_ROUTER_KEY" ] && [ -n "$ADMIN_PASSWORD" ]; then
+          # The key the configured provider needs (app/config.py PROVIDERS).
+          case "$PI_PROVIDER" in
+            cursor) KEY_NAME=CURSOR_API_KEY; PROVIDER_KEY="$CURSOR_API_KEY" ;;
+            xai) KEY_NAME=XAI_API_KEY; PROVIDER_KEY="$XAI_API_KEY" ;;
+            openrouter) KEY_NAME=OPEN_ROUTER_KEY; PROVIDER_KEY="$OPEN_ROUTER_KEY" ;;
+            *) echo "::error::PI_PROVIDER='$PI_PROVIDER' is not one of cursor, xai, openrouter."; exit 1 ;;
+          esac
+          if [ -n "$PROVIDER_KEY" ] && [ -n "$ADMIN_PASSWORD" ]; then
             echo "provision_env=true" >> "$GITHUB_OUTPUT"
           else
             echo "provision_env=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::OPEN_ROUTER_KEY/ADMIN_PASSWORD not set — keeping the existing .env on the droplet."
+            echo "::notice::$KEY_NAME/ADMIN_PASSWORD not set — keeping the existing .env on the droplet."
           fi
 
       - name: Set up SSH
@@ -159,13 +183,16 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/chiatienan' }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
-          PI_MODEL: ${{ vars.PI_MODEL || 'openai/gpt-6.1-sol-pro' }}
-          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL || 'openai/gpt-6.1-sol-pro' }}
-          PI_PROVIDER: ${{ vars.PI_PROVIDER || 'openrouter' }}
+          # Empty unless set: the app picks PI_PROVIDER's own default model.
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL }}
+          PI_PROVIDER: ${{ vars.PI_PROVIDER || 'cursor' }}
           PI_THINKING: ${{ vars.PI_THINKING || 'medium' }}
           PI_MAX_TOOLS: ${{ vars.PI_MAX_TOOLS || '40' }}
           PI_MAX_SECONDS: ${{ vars.PI_MAX_SECONDS || '600' }}
@@ -208,6 +235,8 @@ jobs:
           # the ${VARS} once, writing their literal values.
           cat > env.generated <<EOF
           # Managed by .github/workflows/deploy.yml — edits here are overwritten on deploy.
+          CURSOR_API_KEY=${CURSOR_API_KEY}
+          XAI_API_KEY=${XAI_API_KEY}
           OPEN_ROUTER_KEY=${OPEN_ROUTER_KEY}
           PI_MODEL=${PI_MODEL}
           PI_VISION_MODEL=${PI_VISION_MODEL}

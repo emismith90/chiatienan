@@ -36,6 +36,36 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+#: What each ``PI_PROVIDER`` needs: the variable *we* keep its key in, the name
+#: *pi* reads it from (`pi-ai/dist/env-api-keys.js`, or the `pi-cursor-sdk`
+#: extension), and its OpenAI-compatible chat endpoint (the bench judge and the
+#: model probe call it directly). Cursor sells its agent, not raw completions, so
+#: it has none: the turn runs Cursor's own loop with our tools bridged in.
+#: ``default_model`` is what an unset PI_MODEL / PI_VISION_MODEL means: model ids
+#: are the provider's own, so a default that ignored the provider would name a
+#: model the provider does not have.
+PROVIDERS = {
+    # Cursor Plus serves Grok 4.7 only at its fixed settings (256k context, medium
+    # effort, fast off) and refuses any other combination as "model unavailable":
+    # `:slow` sends fast=false, PI_THINKING=medium sends the effort.
+    "cursor": {"key_env": "CURSOR_API_KEY", "pi_key_env": "CURSOR_API_KEY", "chat_url": None,
+               "default_model": "grok-4.7@256k:slow"},
+    "xai": {"key_env": "XAI_API_KEY", "pi_key_env": "XAI_API_KEY",
+            "chat_url": "https://api.x.ai/v1/chat/completions", "default_model": "grok-4.7"},
+    "openrouter": {"key_env": "OPEN_ROUTER_KEY", "pi_key_env": "OPENROUTER_API_KEY",
+                   "chat_url": "https://openrouter.ai/api/v1/chat/completions",
+                   "default_model": "openai/gpt-6.1-sol-pro"},
+}
+
+
+def provider(name: str) -> dict:
+    """The ``PROVIDERS`` row for ``name``, or a ``ValueError`` naming the valid ones."""
+    try:
+        return PROVIDERS[name]
+    except KeyError:
+        raise ValueError(f"PI_PROVIDER={name!r} is not one of {sorted(PROVIDERS)}") from None
+
+
 @dataclass(frozen=True)
 class Settings:
     # Cursor SDK
@@ -86,18 +116,20 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        pi_provider = (os.environ.get("PI_PROVIDER") or "").strip() or "cursor"
+        # An unknown provider has no default; `provider()` names the valid ones where
+        # the key is looked up, rather than failing every import of the settings.
+        default_model = PROVIDERS.get(pi_provider, {}).get("default_model", "")
         return cls(
             data_dir=(os.environ.get("DATA_DIR") or "").strip() or "/data",
-            # Probed against the real tool schemas, not taken from a catalogue's
-            # `supported_parameters` — see bench/probe_models.py.
-            pi_model=(os.environ.get("PI_MODEL") or "").strip()
-            or "openai/gpt-6.1-sol-pro",
+            # Probe a new model against the real tool schemas before relying on it
+            # (bench/probe_models.py): a catalogue's `supported_parameters` is a claim.
+            pi_model=(os.environ.get("PI_MODEL") or "").strip() or default_model,
             # Every bill photo routes here. The default is the same multimodal model
             # as the primary; an image turn with this unset fails loudly rather than
             # dropping the photo.
-            pi_vision_model=(os.environ.get("PI_VISION_MODEL") or "").strip()
-            or "openai/gpt-6.1-sol-pro",
-            pi_provider=(os.environ.get("PI_PROVIDER") or "").strip() or "openrouter",
+            pi_vision_model=(os.environ.get("PI_VISION_MODEL") or "").strip() or default_model,
+            pi_provider=pi_provider,
             pi_thinking=(os.environ.get("PI_THINKING") or "").strip() or "medium",
             pi_max_tools=_int_env("PI_MAX_TOOLS", 40),
             pi_max_seconds=_int_env("PI_MAX_SECONDS", 600),

@@ -170,12 +170,53 @@ async def _record(sink):
 
 
 def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
-    # Two names for one secret: we standardise on OPEN_ROUTER_KEY, pi reads
-    # OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:87). Without the mapping the
-    # sidecar says "No API key found for openrouter. Use /login…", which reads
+    # Two names for one secret on openrouter: we standardise on OPEN_ROUTER_KEY, pi
+    # reads OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:93). Without the mapping
+    # the sidecar says "No API key found for openrouter. Use /login…", which reads
     # like a setup mistake rather than a naming mismatch.
-    monkeypatch.setenv(pi_bridge.KEY_ENV, "sk-real")
-    monkeypatch.delenv(pi_bridge.PI_KEY_ENV, raising=False)
-    bridge = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})
-    child = bridge._child_env()
-    assert child[pi_bridge.PI_KEY_ENV] == "sk-real"
+    from app.config import PROVIDERS
+    from kernos.engine.pi.bridge import PiBridge
+    row = PROVIDERS["openrouter"]
+    monkeypatch.setenv(row["key_env"], "sk-real")
+    monkeypatch.delenv(row["pi_key_env"], raising=False)
+    bridge = PiBridge(entry=tmp_path / "x.js", key_env=row["key_env"], pi_key_env=row["pi_key_env"])
+    assert bridge._child_env()[row["pi_key_env"]] == "sk-real"
+
+
+def test_the_default_provider_is_cursor_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
+    # pi-cursor-sdk reads CURSOR_API_KEY itself, so nothing is translated.
+    # PI_PROVIDER must reach the child: it is what loads the extension there, and
+    # `grok-4.7` is listed under several providers in pi's catalogue — the sidecar
+    # would otherwise pick the first (github-copilot).
+    assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("CURSOR_API_KEY", "CURSOR_API_KEY")
+    monkeypatch.setenv("CURSOR_API_KEY", "cursor-real")
+    monkeypatch.delenv("PI_PROVIDER", raising=False)
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child["CURSOR_API_KEY"] == "cursor-real" and child["PI_PROVIDER"] == "cursor"
+
+
+def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkeypatch, tmp_path):
+    # The model there has a shell (Cursor's own cannot be turned off), so anything in
+    # the child's environment is one prompt away from a room.
+    for name in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
+                 "OPENROUTER_API_KEY", "CURSOR_API_KEY"):
+        monkeypatch.setenv(name, f"secret-{name}")
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child[pi_bridge.KEY_ENV] == f"secret-{pi_bridge.KEY_ENV}"
+    leaked = {n for n in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
+                          "OPENROUTER_API_KEY") if n in child}
+    assert not leaked
+
+
+def test_an_empty_default_variable_is_filled_not_kept(monkeypatch, tmp_path):
+    # Settings reads PI_PROVIDER="" as the default provider; the sidecar must agree,
+    # or it loads no Cursor extension and finds no model.
+    monkeypatch.setenv("PI_PROVIDER", "")
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child["PI_PROVIDER"] == "cursor"
+
+
+def test_an_unknown_provider_names_the_valid_ones():
+    from app.config import provider
+    with pytest.raises(ValueError, match="cursor.*openrouter.*xai"):
+        provider("grok")

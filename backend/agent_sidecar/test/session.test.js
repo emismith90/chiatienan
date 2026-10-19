@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAgentsFiles, proxyTool, resolveModel,
+import { buildAgentsFiles, disposeSession, proxyTool, resolveModel,
   toolOptionsFor } from "../session.js";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } } };
@@ -131,6 +131,39 @@ test("an unavailable vision model does not silently fall back to text", () => {
 
 test("a missing PI_MODEL is an error, not a default", () => {
   assert.throws(() => resolveModel(RUNTIME, {}), /PI_MODEL is not set/);
+});
+
+test("a session_shutdown that never settles still ends in dispose()", async () => {
+  // pi-cursor-sdk releases the turn's Cursor agent on session_shutdown with no
+  // deadline; the long-lived sidecar must not keep the session forever on it.
+  let disposed = false;
+  const session = {
+    extensionRunner: { hasHandlers: () => true, emit: () => new Promise(() => {}) },
+    dispose: () => { disposed = true; },
+  };
+  await disposeSession(session, 20);
+  assert.equal(disposed, true);
+});
+
+test("a session with no shutdown handlers is disposed straight away", async () => {
+  let emitted = false;
+  let disposed = false;
+  await disposeSession({
+    extensionRunner: { hasHandlers: () => false, emit: async () => { emitted = true; } },
+    dispose: () => { disposed = true; },
+  });
+  assert.deepEqual([emitted, disposed], [false, true]);
+});
+
+test("PI_PROVIDER picks the provider whose key we hold, not the first id match", (t) => {
+  const runtime = { getModels: () => [{ id: "grok-4.7", provider: "github-copilot" },
+                                      { id: "grok-4.7", provider: "xai" }] };
+  const saved = process.env.PI_PROVIDER;
+  t.after(() => { if (saved === undefined) delete process.env.PI_PROVIDER; else process.env.PI_PROVIDER = saved; });
+  process.env.PI_PROVIDER = "xai";
+  assert.equal(resolveModel(runtime, { model: "grok-4.7" }).provider, "xai");
+  process.env.PI_PROVIDER = "openrouter";
+  assert.throws(() => resolveModel(runtime, { model: "grok-4.7" }), /not available from this provider/);
 });
 
 // --------------------------------------------------------------------------- //

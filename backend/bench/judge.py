@@ -1,21 +1,22 @@
-"""The prose judge: one pinned model, called over OpenRouter, engine-independent.
+"""The prose judge: one pinned model, called on the provider's chat API, engine-independent.
 
 `grade_prose` takes its judge as an argument and never builds one, so the graders
 stay offline and testable. This is where the real one is built.
 
 **Deliberately not the engine under test.** The judge has to be pinned across the
 Cursor baseline *and* the Pi run — a baseline graded with no judge, or a different
-one, is not a comparison (design §11.5). Routing it through OpenRouter rather than
-through whichever engine is in the tree means the same `BENCH_JUDGE_MODEL` answers
-both runs, before and after the cutover.
+one, is not a comparison (design §11.5). Calling the provider's chat endpoint
+directly rather than through whichever engine is in the tree means the same
+`BENCH_JUDGE_MODEL` answers both runs, before and after the cutover.
 
 `urllib` rather than a client library: this is one POST, and `bench/` must not add
 a production dependency for a development tool.
 
-The key lives in **`OPEN_ROUTER_KEY`**. That is the name the environment actually
-uses; design §10's `OPENROUTER_API_KEY` was an assumption and is wrong. One
-canonical name, no aliases — the sidecar (Task 13) needs the same variable, and a
-second accepted spelling is how half a deployment ends up unauthenticated.
+The provider is `PI_PROVIDER`, and so is the key: `XAI_API_KEY` for xai,
+**`OPEN_ROUTER_KEY`** for openrouter (design §10's `OPENROUTER_API_KEY` was an
+assumption and is wrong). One canonical name per provider, no aliases — the sidecar
+(Task 13) needs the same variable, and a second accepted spelling is how half a
+deployment ends up unauthenticated.
 """
 from __future__ import annotations
 
@@ -27,10 +28,12 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+from app.config import provider, settings
 
-#: The environment's actual name for the OpenRouter credential.
-KEY_ENV = "OPEN_ROUTER_KEY"
+#: The configured provider's chat endpoint (``None`` on cursor, which has none),
+#: and the variable its key lives in.
+CHAT_URL = provider(settings.pi_provider)["chat_url"]
+KEY_ENV = provider(settings.pi_provider)["key_env"]
 
 #: Roughly two sentences of reply. The rubric asks for JSON, not an essay.
 MAX_TOKENS = 200
@@ -66,7 +69,7 @@ def build_prompt(case, record: dict, rubric: str) -> str:
             f"--- Bot ---\n{record.get('final_text') or ''}\n")
 
 
-def openrouter_judge(model: str, *, api_key: str | None = None, post=_post,
+def chat_judge(model: str, *, api_key: str | None = None, post=_post,
                      timeout: float = 60.0):
     """Return a `judge(case, record, rubric)` callable for `grade_prose`.
 
@@ -79,6 +82,8 @@ def openrouter_judge(model: str, *, api_key: str | None = None, post=_post,
     key = api_key if api_key is not None else os.environ.get(KEY_ENV, "")
 
     def judge(case, record, rubric):
+        if not CHAT_URL:
+            return {"error": f"{settings.pi_provider} has no chat endpoint to judge with"}
         if not key:
             return {"error": f"{KEY_ENV} is not set"}
         payload = {"model": model, "max_tokens": MAX_TOKENS, "temperature": 0,
@@ -86,7 +91,7 @@ def openrouter_judge(model: str, *, api_key: str | None = None, post=_post,
                                  "content": build_prompt(case, record, rubric)}]}
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         try:
-            body = post(OPENROUTER_URL, payload, headers, timeout)
+            body = post(CHAT_URL, payload, headers, timeout)
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
             return {"error": f"judge transport failed: {exc}"}
         try:
@@ -104,7 +109,7 @@ def openrouter_judge(model: str, *, api_key: str | None = None, post=_post,
 # The agent as judge
 # --------------------------------------------------------------------------- #
 #
-# `openrouter_judge` above is the unattended path. It is not the *best* path, and
+# `chat_judge` above is the unattended path. It is not the *best* path, and
 # the first baseline showed why: `gemini-2.5-flash-lite` failed correct replies for
 # "restating an amount already present in the user's message" when the message
 # contained no amount at all. A flash-tier judge is the weakest link in a chain

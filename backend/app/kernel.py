@@ -160,6 +160,18 @@ _RECORDED_PROBES = {
                   "source": "bench.probe_models 3/3 (empty replies on some re-runs); "
                             "bench.run bills 11/12"},
     },
+    # Cursor has no chat API for bench.probe_models, so this one is the real turn
+    # path instead: Cursor's agent through pi-cursor-sdk, calling the live tools over
+    # its MCP bridge, every ledger graded by bench.run.
+    "grok-4.7@256k:slow": {
+        "provider": "cursor", "name": "Grok 4.7 (Cursor, 256k, fast off)", "input": ["text", "image"],
+        "context_window": 256_000, "reasoning": True,
+        "probe": {"ok": True, "checked_at": "2026-10-19T00:00:00+00:00", "seed": True,
+                  "schemas": ["propose_meal", "propose_payment", "settle_period", "add_member",
+                              "find_members", "bill image"],
+                  "source": "bench.run via pi-cursor-sdk 0.5.3, repeat 1: typical tool_selection "
+                            "25/25, ledger_state 22/22; bills 4/4, 4/4"},
+    },
 }
 
 
