@@ -169,30 +169,40 @@ async def _record(sink):
     sink.append(True)
 
 
-def test_our_key_is_translated_to_the_name_pi_reads(monkeypatch, tmp_path):
-    # Two names for one secret on openrouter: we standardise on OPEN_ROUTER_KEY, pi
-    # reads OPENROUTER_API_KEY (pi-ai/dist/env-api-keys.js:93). Without the mapping
-    # the sidecar says "No API key found for openrouter. Use /login…", which reads
-    # like a setup mistake rather than a naming mismatch.
-    from app.config import PROVIDERS
-    from kernos.engine.pi.bridge import PiBridge
-    row = PROVIDERS["openrouter"]
-    monkeypatch.setenv(row["key_env"], "sk-real")
-    monkeypatch.delenv(row["pi_key_env"], raising=False)
-    bridge = PiBridge(entry=tmp_path / "x.js", key_env=row["key_env"], pi_key_env=row["pi_key_env"])
-    assert bridge._child_env()[row["pi_key_env"]] == "sk-real"
+async def test_the_key_reaches_the_child_over_a_pipe_never_its_environment(tmp_path, monkeypatch):
+    # The model in the sidecar has a shell. Whatever is in the child's environment
+    # — now or at exec, which /proc/$PPID/environ keeps — it can print into the room.
+    monkeypatch.setenv(pi_bridge.KEY_ENV, "sk-real")
+    bridge = _bridge(tmp_path, """
+        import json, os, sys
+        fd = int(os.environ["PI_KEY_FD"])
+        key = os.read(fd, 4096).decode()
+        os.close(fd)
+        with open("/proc/self/environ", "rb") as f:
+            environ = f.read()
+        leaked = b"sk-real" in environ or b"test-key" in environ
+        for line in sys.stdin:
+            command = json.loads(line)
+            print(json.dumps({"type": "pong", "req_id": command["req_id"],
+                              "text": f"{key} leaked={leaked}"}), flush=True)
+    """)
+    try:
+        reply = [m async for m in bridge.request({"type": "ping", "req_id": "r1"})]
+        assert reply[0]["text"] == "test-key leaked=False"
+    finally:
+        await bridge.aclose()
 
 
 def test_the_default_provider_is_cursor_and_the_sidecar_is_told_so(monkeypatch, tmp_path):
-    # pi-cursor-sdk reads CURSOR_API_KEY itself, so nothing is translated.
-    # PI_PROVIDER must reach the child: it is what loads the extension there, and
+    # PI_PROVIDER must reach the child: it is what loads the extension there and
+    # names the provider the piped key is for, and
     # `grok-4.7` is listed under several providers in pi's catalogue — the sidecar
     # would otherwise pick the first (github-copilot).
     assert (pi_bridge.KEY_ENV, pi_bridge.PI_KEY_ENV) == ("CURSOR_API_KEY", "CURSOR_API_KEY")
     monkeypatch.setenv("CURSOR_API_KEY", "cursor-real")
     monkeypatch.delenv("PI_PROVIDER", raising=False)
     child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
-    assert child["CURSOR_API_KEY"] == "cursor-real" and child["PI_PROVIDER"] == "cursor"
+    assert "CURSOR_API_KEY" not in child and child["PI_PROVIDER"] == "cursor"
 
 
 def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkeypatch, tmp_path):
@@ -202,9 +212,8 @@ def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkey
                  "OPENROUTER_API_KEY", "CURSOR_API_KEY"):
         monkeypatch.setenv(name, f"secret-{name}")
     child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
-    assert child[pi_bridge.KEY_ENV] == f"secret-{pi_bridge.KEY_ENV}"
     leaked = {n for n in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
-                          "OPENROUTER_API_KEY") if n in child}
+                          "OPENROUTER_API_KEY", "CURSOR_API_KEY") if n in child}
     assert not leaked
 
 

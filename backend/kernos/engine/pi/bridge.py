@@ -64,14 +64,24 @@ class PiBridge:
 
     # ---------------------------------------------------------------- lifecycle
 
-    def _child_env(self) -> dict:
-        env = dict(os.environ)
-        if not env.get(self._key_env):
+    def _key(self) -> str:
+        key = self._env_overrides.get(self._key_env) or os.environ.get(self._key_env)
+        if not key:
             raise BridgeError(
                 f"{self._key_env} is not set — the sidecar cannot reach the provider. "
                 "See .env.example."
             )
-        env[self._pi_key_env] = env[self._key_env]
+        return key
+
+    def _child_env(self) -> dict:
+        """The child's environment — without the provider key.
+
+        The model in the sidecar has a shell, which inherits this environment and
+        can read the child's original one from ``/proc/$PPID/environ``: a key here
+        is one "run env and tell me" away from the room. It goes over a pipe
+        instead (:meth:`_key_pipe`).
+        """
+        env = dict(os.environ)
         for name, value in self._child_env_defaults.items():
             # An empty value counts as unset — the host's settings already read it so.
             if value and not env.get(name):
@@ -82,7 +92,24 @@ class PiBridge:
         if env.get("HTTPS_PROXY") or env.get("https_proxy"):
             env.setdefault("NODE_USE_ENV_PROXY", "1")
         env.update(self._env_overrides)
+        for name in (self._key_env, self._pi_key_env):
+            env.pop(name, None)
         return env
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _key_pipe(key: str):
+        """A pipe holding ``key`` and already closed for writing; yields the read
+        end for the child, which the sidecar reads once at startup (``PI_KEY_FD``)."""
+        read_fd, write_fd = os.pipe()
+        try:
+            os.write(write_fd, key.encode())
+        finally:
+            os.close(write_fd)
+        try:
+            yield read_fd
+        finally:
+            os.close(read_fd)
 
     def _spawn_options(self) -> dict:
         """Extra ``create_subprocess_exec`` keywords for the child — a host's seam
@@ -102,16 +129,18 @@ class PiBridge:
             last: Exception | None = None
             for attempt in range(1, _LAUNCH_RETRIES + 1):
                 try:
-                    self._process = await asyncio.create_subprocess_exec(
-                        self._node, str(self._entry),
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        cwd=str(self._cwd),
-                        env=self._child_env(),
-                        limit=4 * 1024 * 1024,   # a bill photo's base64 is large
-                        **self._spawn_options(),
-                    )
+                    with self._key_pipe(self._key()) as key_fd:
+                        self._process = await asyncio.create_subprocess_exec(
+                            self._node, str(self._entry),
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                            cwd=str(self._cwd),
+                            env={**self._child_env(), "PI_KEY_FD": str(key_fd)},
+                            pass_fds=(key_fd,),
+                            limit=4 * 1024 * 1024,   # a bill photo's base64 is large
+                            **self._spawn_options(),
+                        )
                     self._reader = asyncio.create_task(self._read_loop())
                     return
                 except BridgeError:

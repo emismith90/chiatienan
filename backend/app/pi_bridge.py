@@ -2,8 +2,8 @@
 
 The bridge itself moved to the framework (plan Task 1.4). What stays here is
 everything host-specific: where the sidecar lives, what our credential is called
-for ``PI_PROVIDER`` (``XAI_API_KEY`` for xai; ``OPEN_ROUTER_KEY``, not the
-``OPENROUTER_API_KEY`` pi reads, for openrouter — the bridge translates), the
+for ``PI_PROVIDER`` (``XAI_API_KEY`` for xai; ``OPEN_ROUTER_KEY`` for openrouter —
+handed to the sidecar over a pipe, never in its environment), the
 ``PI_*`` defaults the child inherits from ``settings``, and the
 one-per-process singleton ``chat._agent_lock`` and ``/internal/bridge-smoke``
 share.
@@ -26,9 +26,9 @@ SIDECAR_ENTRY = SIDECAR_DIR / "main.js"
 #: 401 mid-turn.
 KEY_ENV = provider(settings.pi_provider)["key_env"]
 
-#: The name **pi** reads it from. Where the two differ (openrouter) the boundary
-#: translates: one canonical variable in our env and deploy config, mapped to pi's
-#: expectation for the child process only.
+#: The name **pi** would read it from (openrouter's differs from ours). The key
+#: reaches pi in memory now, so this is only scrubbed from the child's environment
+#: in case the deploy config also sets it.
 PI_KEY_ENV = provider(settings.pi_provider)["pi_key_env"]
 
 #: Never handed to the sidecar. The model there has a shell (pi's `bash` when a

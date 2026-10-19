@@ -36,6 +36,10 @@ RUN cd agent_sidecar && npm ci --omit=dev --ignore-scripts
 # cwd and config live in its own home. Not Cursor's sandbox: that needs user
 # namespaces, which Docker's default seccomp profile denies.
 RUN useradd --system --create-home --home-dir /home/pi --shell /usr/sbin/nologin pi
+# Execute-only node: a process started from a binary its user cannot read is
+# non-dumpable, so its /proc/<pid>/mem and environ are closed to that user. The
+# provider key lives in the sidecar's memory, and its shell runs as `pi` too.
+RUN chmod 0711 "$(readlink -f "$(command -v node)")"
 ENV PI_SIDECAR_USER=pi \
     PI_WORK_DIR=/home/pi
 
