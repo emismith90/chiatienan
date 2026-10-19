@@ -195,6 +195,27 @@ def test_the_default_provider_is_cursor_and_the_sidecar_is_told_so(monkeypatch, 
     assert child["CURSOR_API_KEY"] == "cursor-real" and child["PI_PROVIDER"] == "cursor"
 
 
+def test_the_sidecar_never_gets_our_admin_secrets_or_other_providers_keys(monkeypatch, tmp_path):
+    # The model there has a shell (Cursor's own cannot be turned off), so anything in
+    # the child's environment is one prompt away from a room.
+    for name in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
+                 "OPENROUTER_API_KEY", "CURSOR_API_KEY"):
+        monkeypatch.setenv(name, f"secret-{name}")
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child[pi_bridge.KEY_ENV] == f"secret-{pi_bridge.KEY_ENV}"
+    leaked = {n for n in ("ADMIN_PASSWORD", "DEBUG_API_KEY", "XAI_API_KEY", "OPEN_ROUTER_KEY",
+                          "OPENROUTER_API_KEY") if n in child}
+    assert not leaked
+
+
+def test_an_empty_default_variable_is_filled_not_kept(monkeypatch, tmp_path):
+    # Settings reads PI_PROVIDER="" as the default provider; the sidecar must agree,
+    # or it loads no Cursor extension and finds no model.
+    monkeypatch.setenv("PI_PROVIDER", "")
+    child = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js", env={})._child_env()
+    assert child["PI_PROVIDER"] == "cursor"
+
+
 def test_an_unknown_provider_names_the_valid_ones():
     from app.config import provider
     with pytest.raises(ValueError, match="cursor.*openrouter.*xai"):

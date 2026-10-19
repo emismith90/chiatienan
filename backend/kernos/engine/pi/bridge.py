@@ -73,8 +73,9 @@ class PiBridge:
             )
         env[self._pi_key_env] = env[self._key_env]
         for name, value in self._child_env_defaults.items():
-            if value:
-                env.setdefault(name, value)
+            # An empty value counts as unset — the host's settings already read it so.
+            if value and not env.get(name):
+                env[name] = value
         # A Node child does not honour HTTPS_PROXY on its own: `fetch`/undici
         # ignores it, so behind a proxy every outbound call fails in a way that
         # reads like a bad key. Opt the child in explicitly when a proxy is set.

@@ -34,6 +34,21 @@ def test_defaults_when_env_absent(monkeypatch):
     assert s.qr_template == "compact2"
 
 
+def test_the_default_model_follows_the_provider(monkeypatch):
+    # Model ids are the provider's own: a stale PI_PROVIDER with no PI_MODEL must
+    # not name a model that provider does not have.
+    for name in ("PI_MODEL", "PI_VISION_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    for provider_name, model in (("openrouter", "openai/gpt-6.1-sol-pro"), ("xai", "grok-4.7"),
+                                 ("cursor", "grok-4.7@256k:slow")):
+        monkeypatch.setenv("PI_PROVIDER", provider_name)
+        s = Settings.from_env()
+        assert (s.pi_model, s.pi_vision_model) == (model, model)
+    monkeypatch.setenv("PI_PROVIDER", "openrouter")
+    monkeypatch.setenv("PI_MODEL", "")          # deploy writes it empty when unset
+    assert Settings.from_env().pi_model == "openai/gpt-6.1-sol-pro"
+
+
 def test_env_overrides(monkeypatch):
     monkeypatch.setenv("PI_MODEL", "qwen/qwen3-vl-30b-a3b-instruct")
     monkeypatch.setenv("PI_MAX_TOOLS", "5")

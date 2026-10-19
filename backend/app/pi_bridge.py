@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.config import provider, settings
+from app.config import PROVIDERS, provider, settings
 from kernos.engine.pi.bridge import BridgeError  # noqa: F401  (re-exported)
 from kernos.engine.pi.bridge import PiBridge as _PiBridge
 
@@ -29,6 +29,14 @@ KEY_ENV = provider(settings.pi_provider)["key_env"]
 #: expectation for the child process only.
 PI_KEY_ENV = provider(settings.pi_provider)["pi_key_env"]
 
+#: Never handed to the sidecar. The model there has a shell (pi's `bash` when a
+#: profile enables it; Cursor's own on PI_PROVIDER=cursor, which no profile can
+#: turn off), so anything in the child's environment is one prompt away from a room.
+#: Neither our admin secrets nor another provider's key is needed by it.
+CHILD_ENV_DENY = frozenset({"ADMIN_PASSWORD", "DEBUG_API_KEY"} | {
+    name for row in PROVIDERS.values() for name in (row["key_env"], row["pi_key_env"])
+} - {KEY_ENV, PI_KEY_ENV})
+
 
 class PiBridge(_PiBridge):
     """The framework bridge, configured for this host."""
@@ -43,8 +51,17 @@ class PiBridge(_PiBridge):
             child_env_defaults={"PI_MODEL": settings.pi_model,
                                 "PI_VISION_MODEL": settings.pi_vision_model,
                                 "PI_PROVIDER": settings.pi_provider},
+            # Not PI_CURSOR_SANDBOX=1: Cursor's sandbox does confine its shell's
+            # writes, but its network block also cuts the loopback MCP bridge, so
+            # every money tool call is refused and no turn can record anything.
             env=env,
         )
+
+    def _child_env(self) -> dict:
+        env = super()._child_env()
+        for name in CHILD_ENV_DENY:
+            env.pop(name, None)
+        return env
 
 
 #: One bridge per process. `chat._agent_lock` already serializes turns, and

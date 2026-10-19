@@ -35,11 +35,15 @@ name: Deploy
 #   .env.example default when unset):
 #     CADDY_DOMAIN             – your domain (REQUIRED when .env is regenerated; Caddy TLS)
 #     DEPLOY_PATH              – checkout dir on the droplet (default /opt/chiatienan)
-#     PI_MODEL                 – default "grok-4.7@256k:slow" (ids are the
-#                                provider's own: change it together with
-#                                PI_PROVIDER). Cursor Plus serves Grok 4.7 only at
-#                                these fixed settings, with PI_THINKING=medium.
-#     PI_VISION_MODEL          – default "grok-4.7@256k:slow" (the same multimodal model).
+#     PI_MODEL                 – default: unset, which the app reads as
+#                                PI_PROVIDER's own default model (app/config.py
+#                                PROVIDERS: cursor "grok-4.7@256k:slow", xai
+#                                "grok-4.7", openrouter "openai/gpt-6.1-sol-pro").
+#                                Ids are the provider's own, so set it only
+#                                together with PI_PROVIDER. Cursor Plus serves
+#                                Grok 4.7 only at its fixed settings, with
+#                                PI_THINKING=medium.
+#     PI_VISION_MODEL          – default: unset, the same per-provider model.
 #                                Every bill photo routes here; kept separate so a
 #                                photo model can differ from the text one.
 #     PI_PROVIDER              – default "cursor" ("cursor" | "xai" | "openrouter")
@@ -185,8 +189,9 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           DEBUG_API_KEY: ${{ secrets.DEBUG_API_KEY }}
           CADDY_DOMAIN: ${{ vars.CADDY_DOMAIN }}
-          PI_MODEL: ${{ vars.PI_MODEL || 'grok-4.7@256k:slow' }}
-          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL || 'grok-4.7@256k:slow' }}
+          # Empty unless set: the app picks PI_PROVIDER's own default model.
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_VISION_MODEL: ${{ vars.PI_VISION_MODEL }}
           PI_PROVIDER: ${{ vars.PI_PROVIDER || 'cursor' }}
           PI_THINKING: ${{ vars.PI_THINKING || 'medium' }}
           PI_MAX_TOOLS: ${{ vars.PI_MAX_TOOLS || '40' }}

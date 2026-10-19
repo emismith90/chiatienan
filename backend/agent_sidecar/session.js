@@ -179,17 +179,26 @@ export async function buildSession(req, { callTool, modelRuntime } = {}) {
   return { session, model, dispose: () => disposeSession(session) };
 }
 
+/** How long `session_shutdown` may take before the session is disposed anyway. */
+export const SHUTDOWN_TIMEOUT_MS = 15_000;
+
 /**
  * End a session the way pi's own runtime does: `session_shutdown` first, then
  * `dispose()`. A bare `dispose()` skips the event, and this process is long-lived —
- * `pi-cursor-sdk` releases the Cursor agent a turn created on that event.
+ * `pi-cursor-sdk` releases the Cursor agent a turn created on that event. That
+ * release has no deadline of its own, so the wait is bounded here.
  */
-async function disposeSession(session) {
+export async function disposeSession(session, timeoutMs = SHUTDOWN_TIMEOUT_MS) {
+  let timer;
   try {
     if (session.extensionRunner?.hasHandlers("session_shutdown")) {
-      await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+      await Promise.race([
+        session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }),
+        new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); }),
+      ]);
     }
   } finally {
+    clearTimeout(timer);
     session.dispose();
   }
 }
