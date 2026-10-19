@@ -173,7 +173,9 @@ export function StatementSections({ owe, owed, roomId, onPaid }: {
         <div className="mt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">You owe</p>
           <ul className="mt-1 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
-            {owe.map((r) => <OweRow key={`o${r.meal_id}`} r={r} roomId={roomId} onPaid={onPaid} />)}
+            {/* A meal has a row per counterparty, so the meal alone is not a key:
+                a shared one made React reuse the wrong rows after a refetch. */}
+            {owe.map((r) => <OweRow key={`o${r.meal_id}-${r.creditor_id ?? r.other_id}`} r={r} roomId={roomId} onPaid={onPaid} />)}
           </ul>
         </div>
       )}
@@ -181,7 +183,7 @@ export function StatementSections({ owe, owed, roomId, onPaid }: {
         <div className="mt-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Owed to you</p>
           <ul className="mt-1 divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--bg-base)]">
-            {owed.map((r) => <OwedRow key={`d${r.meal_id}`} r={r} roomId={roomId} onPaid={onPaid} />)}
+            {owed.map((r) => <OwedRow key={`d${r.meal_id}-${r.debtor_id ?? r.other_id}`} r={r} roomId={roomId} onPaid={onPaid} />)}
           </ul>
         </div>
       )}
