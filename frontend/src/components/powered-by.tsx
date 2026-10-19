@@ -1,16 +1,16 @@
-import { SolMark } from "./sol-mark";
+import { GrokMark } from "./grok-mark";
 
 /** The engine the room is actually talking to.
  *
  * Kept as a constant rather than fetched: this renders on the boot splash,
  * before there is a session or a reachable API. It must track `pi_model` in
- * `backend/app/config.py` (`PI_MODEL`, default `openai/gpt-6.1-sol-pro`)
- * — if that default moves, move this with it.
+ * `backend/app/config.py` (`PROVIDERS[PI_PROVIDER]["default_model"]`, `grok-4.7`
+ * on the default `cursor` provider) — if that default moves, move this with it.
  */
-export const ENGINE_NAME = "GPT-6.1 Sol Pro";
+export const ENGINE_NAME = "Grok 4.7";
 
-/** chiatienan × Sol, as a lockup: the app's own icon, a multiplication
- * sign, the sun. The `?v=2` matches the cache-busting suffix `layout.tsx`
+/** chiatienan × Grok, as a lockup: the app's own icon, a multiplication
+ * sign, the Grok mark. The `?v=2` matches the cache-busting suffix `layout.tsx`
  * uses on the same file — without it this would be a second URL for the same
  * bytes, and the service worker would cache the icon twice.
  */
@@ -22,7 +22,7 @@ function Lockup({ px }: { px: number }) {
       <span className="text-[var(--text-secondary)]" style={{ fontSize: px * 0.5 }}>
         ×
       </span>
-      <SolMark className="shrink-0" width={px} height={px} />
+      <GrokMark className="shrink-0 text-[var(--text-primary)]" width={px} height={px} />
     </span>
   );
 }

@@ -11,11 +11,11 @@ describe("PoweredBy", () => {
   });
 
   it("keeps the logo lockup out of the accessibility tree", () => {
-    // "chiatienan × Sol" is a picture of a sentence the text already says.
+    // "chiatienan × Grok" is a picture of a sentence the text already says.
     // Exposing it would make a screen reader announce the app icon, a stray
-    // multiplication sign and the sun before reaching the words.
+    // multiplication sign and the mark before reaching the words.
     const { container } = render(<PoweredBy variant="splash" />);
-    expect(screen.queryByRole("img", { name: "Sol" })).toBeNull();
+    expect(screen.queryByRole("img", { name: "Grok" })).toBeNull();
     expect(container.querySelector("[aria-hidden]")).toContainElement(
       container.querySelector("svg"),
     );
