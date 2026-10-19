@@ -56,8 +56,8 @@ def build_steward_spec(settings: Settings | None = None) -> ProfileSpec:
         # left (Phase 7 review F1), so this is the cap for a directly-bound ops room.
         caps=Caps(max_tools=20, max_seconds=180),
         builtin_tools=[],
-        runtime=Runtime(cwd=str(Path(s.data_dir) / "pi-cwd"),
-                        agent_dir=str(Path(s.data_dir) / "pi-agent")),
+        runtime=Runtime(cwd=str(Path(s.pi_work_dir) / "pi-cwd"),
+                        agent_dir=str(Path(s.pi_work_dir) / "pi-agent")),
         pipeline={
             # No memory or history: the steward's input is the friction report, not the
             # room's conversation, and loading a lunch thread would only cost tokens.

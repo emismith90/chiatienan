@@ -220,3 +220,90 @@ def test_an_unknown_provider_names_the_valid_ones():
     from app.config import provider
     with pytest.raises(ValueError, match="cursor.*openrouter.*xai"):
         provider("grok")
+
+
+def _with_sidecar_user(monkeypatch, tmp_path, user: str):
+    import dataclasses
+    data = tmp_path / "data"
+    data.mkdir(mode=0o755)
+    monkeypatch.setattr(pi_bridge, "settings", dataclasses.replace(
+        pi_bridge.settings, pi_sidecar_user=user, data_dir=str(data)))
+    return data
+
+
+def test_without_a_sidecar_user_the_child_runs_as_the_backend(tmp_path):
+    assert pi_bridge.settings.pi_sidecar_user == ""
+    assert pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options() == {}
+
+
+def test_a_sidecar_user_gets_its_own_home_and_data_dir_is_closed_to_it(monkeypatch, tmp_path):
+    # The model's shell inherits the sidecar's user: DATA_DIR must not be
+    # traversable by it, and HOME must be its own (Cursor writes ~/.cursor).
+    import pwd
+    me = pwd.getpwuid(os.getuid())
+    data = _with_sidecar_user(monkeypatch, tmp_path, me.pw_name)
+    monkeypatch.setattr(pi_bridge.os, "geteuid", lambda: 0)
+    bridge = pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js",
+                                env={pi_bridge.KEY_ENV: "k"})
+    assert bridge._spawn_options() == {"user": me.pw_uid, "group": me.pw_gid, "extra_groups": []}
+    assert data.stat().st_mode & 0o777 == 0o700
+    assert bridge._child_env()["HOME"] == me.pw_dir
+
+
+def test_a_sidecar_user_needs_a_root_backend(monkeypatch, tmp_path):
+    # Silently running the shell as the backend's own user would be the unconfined
+    # setup the operator asked to leave.
+    import pwd
+    _with_sidecar_user(monkeypatch, tmp_path, pwd.getpwuid(os.getuid()).pw_name)
+    monkeypatch.setattr(pi_bridge.os, "geteuid", lambda: 1000)
+    with pytest.raises(pi_bridge.BridgeError, match="root"):
+        pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options()
+
+
+def test_an_unknown_sidecar_user_is_named(monkeypatch, tmp_path):
+    _with_sidecar_user(monkeypatch, tmp_path, "no-such-user-here")
+    with pytest.raises(pi_bridge.BridgeError, match="no-such-user-here"):
+        pi_bridge.PiBridge(node="python3", entry=tmp_path / "x.js")._spawn_options()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="dropping to another user needs root")
+async def test_the_dropped_sidecar_cannot_reach_data_dir(monkeypatch):
+    # End to end: the child really runs as the other user, and the ledger's
+    # directory is closed to it while the rest of the tree is not. pytest's own
+    # tmp dirs are root-only, so this builds a tree "nobody" can walk.
+    import pwd
+    import shutil
+    import tempfile
+    from pathlib import Path
+    base = Path(tempfile.mkdtemp())
+    try:
+        os.chmod(base, 0o755)
+        data = _with_sidecar_user(monkeypatch, base, "nobody")
+        (data / "chiatienan.db").write_text("ledger")
+        (base / "public.txt").write_text("public")
+        entry = _fake_node(base, """
+            import json, os, sys
+            def can_read(path):
+                try:
+                    open(path).read()
+                    return "read"
+                except PermissionError:
+                    return "denied"
+            for line in sys.stdin:
+                command = json.loads(line)
+                text = " ".join([str(os.getuid()), can_read(command["public"]),
+                                 can_read(command["db"])])
+                print(json.dumps({"type": "pong", "req_id": command["req_id"],
+                                  "text": text}), flush=True)
+        """)
+        bridge = pi_bridge.PiBridge(node=os.path.realpath(sys.executable), entry=entry,
+                                    env={pi_bridge.KEY_ENV: "test-key"})
+        try:
+            reply = [m async for m in bridge.request({
+                "type": "ping", "req_id": "r1", "public": str(base / "public.txt"),
+                "db": str(data / "chiatienan.db")})]
+            assert reply[0]["text"] == f"{pwd.getpwnam('nobody').pw_uid} read denied"
+        finally:
+            await bridge.aclose()
+    finally:
+        shutil.rmtree(base)

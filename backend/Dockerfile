@@ -31,6 +31,14 @@ RUN pip install .
 COPY agent_sidecar ./agent_sidecar
 RUN cd agent_sidecar && npm ci --omit=dev --ignore-scripts
 
+# The sidecar runs as its own user (app/pi_bridge.py): its model has a shell that
+# cannot be turned off on Cursor, and as `pi` that shell cannot reach /data. Its
+# cwd and config live in its own home. Not Cursor's sandbox: that needs user
+# namespaces, which Docker's default seccomp profile denies.
+RUN useradd --system --create-home --home-dir /home/pi --shell /usr/sbin/nologin pi
+ENV PI_SIDECAR_USER=pi \
+    PI_WORK_DIR=/home/pi
+
 # Curated place/observation seeds, so `python -m app.seed_places` runs inside the
 # container as the runbook documents. They are versioned data, not config: the
 # loader is idempotent precisely because re-seeding after adding aliases is an

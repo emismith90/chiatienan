@@ -84,6 +84,11 @@ class PiBridge:
         env.update(self._env_overrides)
         return env
 
+    def _spawn_options(self) -> dict:
+        """Extra ``create_subprocess_exec`` keywords for the child — a host's seam
+        for running it as another user. None by default."""
+        return {}
+
     async def ensure_started(self) -> None:
         """Start the sidecar if it is not running. Safe to call every turn."""
         async with self._lock:
@@ -105,6 +110,7 @@ class PiBridge:
                         cwd=str(self._cwd),
                         env=self._child_env(),
                         limit=4 * 1024 * 1024,   # a bill photo's base64 is large
+                        **self._spawn_options(),
                     )
                     self._reader = asyncio.create_task(self._read_loop())
                     return
