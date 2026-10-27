@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rea": {
+      "command": "sh",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/.claude/cloud/rea-mcp.sh"]
+    }
+  }
+}
